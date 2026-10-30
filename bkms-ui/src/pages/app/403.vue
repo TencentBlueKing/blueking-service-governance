@@ -30,7 +30,7 @@
         class="h-[152px] w-[308px]"
         src="@/assets/permissions.png"
       />
-      <h2 class="mb-[24px] mt-[24px] text-[20px] font-normal leading-[28px] text-[#979ba5]">
+      <h2 class="mb-[24px] mt-[24px] text-[20px] font-normal leading-[28px] text-[#8F9FBD]">
         {{ t('您没有访问当前空间的权限') }}
       </h2>
       <div class="flex justify-center gap-[12px]">

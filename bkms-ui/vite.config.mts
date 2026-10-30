@@ -29,6 +29,8 @@ import VueDevTools from 'vite-plugin-vue-devtools';
 import Layouts from 'vite-plugin-vue-layouts';
 import SvgLoader from 'vite-svg-loader';
 
+import { aidevComponentStylePlugin, aidevExceptionEsbuildPlugin, aidevLessPlugin } from './scripts/aidev-css-rewrite.mjs';
+
 export default ({ mode }: { mode: string }) => {
   const env = loadEnv(mode, process.cwd(), 'BK_');
   const isDev = mode === 'development';
@@ -97,6 +99,17 @@ export default ({ mode }: { mode: string }) => {
 
     optimizeDeps: {
       include: ['monaco-editor/esm/vs/language/json/json.worker', 'monaco-editor/esm/vs/editor/editor.worker'],
+      esbuildOptions: {
+        plugins: [aidevExceptionEsbuildPlugin()],
+      },
+    },
+
+    css: {
+      preprocessorOptions: {
+        less: {
+          plugins: [aidevLessPlugin()],
+        },
+      },
     },
 
     // 环境变量前缀
@@ -116,6 +129,8 @@ export default ({ mode }: { mode: string }) => {
     },
 
     plugins: [
+      aidevComponentStylePlugin(),
+
       // https://github.com/vitejs/vite-plugin-vue/tree/main/packages/plugin-vue
       Vue(),
 

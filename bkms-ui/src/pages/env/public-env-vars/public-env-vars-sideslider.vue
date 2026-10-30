@@ -43,14 +43,14 @@
             {{ $t('新增环境变量') }}
           </Button>
           <Button @click="showImportSlider = true">
-            <i class="bkms-icon bkms-icon-daoru mr-[6px] text-[#979BA5]"></i>
+            <i class="bkms-icon bkms-icon-daoru mr-[6px] text-[#8F9FBD]"></i>
             {{ $t('导入') }}
           </Button>
           <Button
             :loading="isExporting"
             @click="handleExport"
           >
-            <i class="bkms-icon bkms-icon-daochu mr-[6px] text-[#979BA5]"></i>
+            <i class="bkms-icon bkms-icon-daochu mr-[6px] text-[#8F9FBD]"></i>
             {{ $t('导出') }}
           </Button>
         </div>
@@ -65,13 +65,7 @@
           >
             <div class="flex items-center justify-center">
               {{ tab.label }}
-              <span
-                :class="[
-                  'h-[16px] leading-[16px] ml-[4px] px-[6px] rounded-[8px]',
-                  tab.key === activeTab ? 'bg-[#E1ECFF] text-[#3A84FF]' : 'bg-[#fff]',
-                ]"
-                >{{ tab.count }}</span
-              >
+              <span class="aidev-capsule-count">{{ tab.count }}</span>
             </div>
           </Radio.Button>
         </Radio.Group>
@@ -126,14 +120,14 @@
           <template #header>
             <span
               v-bk-tooltips="$t('敏感环境变量的值将在页面上以脱敏形式展示，只有应用进程内能够获取到这些变量的明文值。')"
-              class="border-b border-dashed border-[#979ba5]"
+              class="border-b border-dashed border-[#8F9FBD]"
             >
               {{ $t('是否敏感') }}
             </span>
           </template>
           <template #default="{ row }">
             <Tag
-              :class="row.isSensitive ? 'text-[#2CAF5E] bg-[#DAF6E5]' : 'text-[#979BA5] bg-[#F0F1F5]'"
+              :class="row.isSensitive ? 'text-[#2CAF5E] bg-[#DAF6E5]' : 'text-[#8F9FBD] bg-[#E9EDF5]'"
               :theme="row.isSensitive ? 'success' : 'default'"
             >
               {{ row.isSensitive ? $t('是') : $t('否') }}
@@ -151,7 +145,7 @@
             <SensitiveValuePlaceholder v-if="row.isSensitive" />
             <HoverCopy
               v-else
-              :class="{ 'text-[#DCDEE5]': !row.value }"
+              :class="{ 'text-[#E4E9F2]': !row.value }"
               :copy-value="row.value"
               :text="row.value"
             />
@@ -192,7 +186,7 @@
         >
           <template #default="{ row }">
             <template v-if="row.isBuiltin">
-              <span class="text-[12px] text-[#979ba5]">{{ $t('内置环境变量，不能操作') }}</span>
+              <span class="text-[12px] text-[#8F9FBD]">{{ $t('内置环境变量，不能操作') }}</span>
             </template>
             <template v-else>
               <Button

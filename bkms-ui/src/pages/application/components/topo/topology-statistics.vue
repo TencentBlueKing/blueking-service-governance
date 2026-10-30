@@ -19,7 +19,7 @@
 <template>
   <div class="h-full py-[12px] px-[16px] flex flex-col bg-[#fff]">
     <div class="leading-[40px] flex items-center justify-between px-[10px]">
-      <span class="text-[#313238] font-bold">{{ $t('状态') }}</span>
+      <span class="text-[#111214] font-bold">{{ $t('状态') }}</span>
       <Button
         text
         theme="primary"
@@ -37,8 +37,8 @@
       <template #trigger>
         <div
           :class="[
-            'px-[12px] flex items-center justify-between group text-[#4D4F56] border-[1px] h-full text-[14px] cursor-pointer rounded-[2px]',
-            isStatusPopoverShow ? 'bg-[#fff] border-[#3A84FF]' : 'bg-[#F0F1F5] border-[transparent] hover:bg-[#EAEBF0]',
+            'px-[12px] flex items-center justify-between group text-[#4A5973] border-[1px] h-full text-[14px] cursor-pointer rounded-[6px]',
+            isStatusPopoverShow ? 'bg-[#fff] border-[#3B6EF5]' : 'bg-[#E9EDF5] border-[transparent] hover:bg-[#C1CDE5]',
           ]"
         >
           <div class="flex items-center gap-[8px]">
@@ -46,12 +46,12 @@
               :size="12"
               :type="status"
             />
-            <span class="whitespace-nowrap text-[#4D4F56] text-[12px]">
+            <span class="whitespace-nowrap text-[#4A5973] text-[12px]">
               {{ statusLabel[status] }} ( {{ statusCounts[status] }} )
             </span>
           </div>
           <AngleDownFill
-            :class="['text-[#C4C6CC] group-hover:text-[#979BA5]', isStatusPopoverShow ? '' : 'rotate-180']"
+            :class="['text-[#C1CDE5] group-hover:text-[#8F9FBD]', isStatusPopoverShow ? '' : 'rotate-180']"
           />
         </div>
       </template>
@@ -77,14 +77,14 @@
         :key="item.id"
         class="mt-[4px]"
       >
-        <div class="flex items-center h-[40px] px-[10px] text-[#313238] font-bold">{{ $t(item.label) }}</div>
+        <div class="flex items-center h-[40px] px-[10px] text-[#111214] font-bold">{{ $t(item.label) }}</div>
 
         <FlexRow
           v-for="resource in item.kinds"
           :key="resource.kind"
-          class="h-[32px] px-[10px] text-[#979BA5] hover:bg-[#F5F7FA] cursor-pointer"
+          class="h-[32px] px-[10px] text-[#8F9FBD] hover:bg-[#F0F4FA] cursor-pointer"
           :class="{
-            '!bg-[#F0F5FF] !text-[#3A84FF]': visibleResourceKinds.includes(resource.kind),
+            '!bg-[#F0F4FF] !text-[#3B6EF5]': visibleResourceKinds.includes(resource.kind),
           }"
           lclass="flex items-center gap-[8px]"
           @click="toggleResourceNodes(resource)"
@@ -93,7 +93,7 @@
             <template v-if="KIND_ICON_ASIDE_MAP[resource.kind]">
               <component
                 :is="KIND_ICON_ASIDE_MAP[resource.kind]"
-                :class="['w-[16px] h-[16px]', visibleResourceKinds.includes(resource.kind) ? '' : 'text-[#979BA5]']"
+                :class="['w-[16px] h-[16px]', visibleResourceKinds.includes(resource.kind) ? '' : 'text-[#8F9FBD]']"
               />
               <span
                 class="max-w-[150px] ellipsis"
@@ -105,7 +105,7 @@
               <span
                 :class="[
                   'bkms-icon bkms-icon-space-basic text-[16px]',
-                  visibleResourceKinds.includes(resource.kind) ? '' : 'text-[#979BA5]',
+                  visibleResourceKinds.includes(resource.kind) ? '' : 'text-[#8F9FBD]',
                 ]"
               ></span>
               <span
@@ -117,9 +117,9 @@
           </template>
           <template #right>
             <span
-              class="bg-[#F0F1F5] px-[8px] py-[2px] rounded-[2px]"
+              class="bg-[#E9EDF5] px-[8px] py-[2px] rounded-[6px]"
               :class="{
-                '!bg-[#E1ECFF] !text-[#3A84FF]': visibleResourceKinds.includes(resource.kind),
+                '!bg-[#E5EDFF] !text-[#3B6EF5]': visibleResourceKinds.includes(resource.kind),
               }"
               >{{ resource.nodes.length }}</span
             >

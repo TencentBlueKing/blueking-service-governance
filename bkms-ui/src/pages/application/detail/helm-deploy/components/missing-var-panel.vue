@@ -17,7 +17,7 @@
 -->
 
 <template>
-  <div class="rounded-[2px] border border-[#F9D090] bg-[#FDF4E8] px-[12px]">
+  <div class="rounded-[6px] border border-[#F9D090] bg-[#FDF4E8] px-[12px]">
     <!-- Header -->
     <div
       class="flex cursor-pointer items-center justify-between py-[8px]"
@@ -30,7 +30,7 @@
           {{ title }}
         </span>
 
-        <span class="rounded-[2px] bg-[#FCE5C0] px-[8px] py-[2px] text-[12px] text-[#E38B02]">
+        <span class="rounded-[6px] bg-[#FCE5C0] px-[8px] py-[2px] text-[12px] text-[#E38B02]">
           <i18n-t keypath="{0} 个变量">
             <span class="pl-[2px]">{{ data.length }}</span>
           </i18n-t>
@@ -38,7 +38,7 @@
       </div>
 
       <div
-        class="flex items-center text-[#979BA5] transition-transform duration-200"
+        class="flex items-center text-[#8F9FBD] transition-transform duration-200"
         :class="{ 'rotate-180': !collapsed }"
       >
         <AngleDown class="text-[22px]" />
@@ -134,16 +134,17 @@
 <style scoped lang="postcss">
   /* 表格边框色 */
   :deep(.missing-var-panel__table) {
-    --vxe-ui-table-border-color: #dcdee5;
+    --vxe-ui-table-border-color: #E4E9F2;
   }
 
   /* 表头背景色 */
   :deep(.missing-var-panel__table .vxe-header--column) {
-    background-color: #fafbfd;
+    background-color: #fbfcfe;
+    color: #111214;
   }
 
   /* 表格正文文字色 */
   :deep(.missing-var-panel__table .vxe-body--column .vxe-cell) {
-    color: #4d4f56;
+    color: #4A5973;
   }
 </style>

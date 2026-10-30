@@ -17,17 +17,17 @@
 -->
 
 <template>
-  <div class="flex items-center h-[32px] bg-[#F0F1F5] rounded-[2px] px-[4px] flex-nowrap">
+  <div class="flex items-center h-[32px] bg-[#E9EDF5] rounded-[6px] px-[4px] flex-nowrap">
     <div
       v-for="(item, index) in tabs"
       :key="index"
       :class="[
         'h-[24px] text-[12px] leading-[24px] text-center px-[12px] text-nowrap',
         item.disabled
-          ? 'text-[#C4C6CC] cursor-not-allowed'
+          ? 'text-[#C1CDE5] cursor-not-allowed'
           : active === item.name
-            ? 'text-[#3A84FF] bg-[#FFF] cursor-pointer'
-            : 'text-[#4D4F56] cursor-pointer',
+            ? 'text-[#3B6EF5] bg-[#FFF] cursor-pointer'
+            : 'text-[#4A5973] cursor-pointer',
       ]"
       @click="updateTabActive(item)"
     >

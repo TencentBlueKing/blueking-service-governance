@@ -59,7 +59,7 @@
       <!-- 部署总览是跨环境视角，事件与部署历史只需要环境选择器，两者都不出现顶部栏；用 v-show 保留环境列表请求 -->
       <FlexRow
         v-show="isTopBarVisible"
-        class="mx-[24px] mt-[20px] mb-[16px] shrink-0 bg-[#EAEBF0] shadow-[0_2px_4px_0_#0000001a] px-[12px] py-[8px]"
+        class="mx-[24px] mt-[20px] mb-[16px] shrink-0 bg-[#E9EDF5] shadow-[0_2px_4px_0_#0000001a] px-[12px] py-[8px]"
       >
         <template #left>
           <div class="flex">
@@ -77,7 +77,7 @@
                 ref="envSelectPanelRef"
                 v-model="curEnv"
                 v-model:model-values="curEnvs"
-                class="mr-[16px]"
+                :class="isEnvSelectInline ? 'mr-0' : 'mr-[16px]'"
                 enable-visible-env-settings
                 :filter-visible-envs="activeTab === 'instance' || activeTab === 'overview'"
                 init-first-env-when-empty
@@ -104,14 +104,14 @@
                 :icon="curDeployStatus?.icon || ''"
                 :size="12"
               />
-              <span class="leading-[20px] text-[#4D4F56]">{{ curDeployStatus?.text }}</span>
+              <span class="leading-[20px] text-[#4A5973]">{{ curDeployStatus?.text }}</span>
               <i
                 v-if="curDeployStatus?.isFailed && curDeployStatus?.message"
                 v-bk-tooltips="{
                   content: curDeployStatus?.message,
                   theme: 'dark',
                 }"
-                class="bkms-icon bkms-icon-circle-info ml-[4px] cursor-pointer text-[16px] text-[#C4C6CC]"
+                class="bkms-icon bkms-icon-circle-info ml-[4px] cursor-pointer text-[16px] text-[#C1CDE5]"
               ></i>
             </KeyValueBadge>
           </div>
@@ -145,7 +145,7 @@
             <i
               :class="[
                 'inline-block bg-[#fff] ml-[6px] size-[32px] leading-[32px]',
-                'border border-[#C4C6CC] rounded-[2px] cursor-pointer',
+                'border border-[#C1CDE5] rounded-[6px] cursor-pointer',
                 'bkms-icon bkms-icon-more-fill',
               ]"
             ></i>
@@ -168,12 +168,12 @@
         type="empty"
       >
         <template #title>
-          <div class="text-[#313238] text-[20px] leading-[28px]">
+          <div class="text-[#111214] text-[20px] leading-[28px]">
             {{ $t('暂无可用的环境') }}
           </div>
         </template>
         <template #description>
-          <div class="text-[#4D4F56] text-[14px] leading-[22px]">
+          <div class="text-[#4A5973] text-[14px] leading-[22px]">
             {{ $t('环境必须先配置集群资源后才能部署应用') }}
           </div>
         </template>
@@ -194,10 +194,15 @@
       <div
         v-else
         :class="[
-          'flex-1 min-h-0 px-[24px] pb-[20px]',
-          isTopBarVisible ? '' : 'pt-[20px]',
-          // 部署总览：操作栏固定，仅表格区域滚动
-          activeTab === 'overview' ? 'flex flex-col overflow-hidden' : 'overflow-auto',
+          'min-h-0 flex-1',
+          activeTab === 'event' || activeTab === 'history'
+            ? 'overflow-auto p-[16px]'
+            : [
+                'px-[24px] pb-[20px]',
+                isTopBarVisible ? '' : 'pt-[20px]',
+                // 部署总览、实例列表：上方信息栏固定，仅下方内容滚动
+                activeTab === 'overview' || activeTab === 'instance' ? 'flex flex-col overflow-hidden' : 'overflow-auto',
+              ],
         ]"
       >
         <DeployOverview
@@ -242,7 +247,7 @@
                 height="14px"
                 width="14px"
               />
-              <span class="text-[#4D4F56] text-[12px] font-bold ml-[8px]">{{ buildAlertInfo!.statusText }}</span>
+              <span class="text-[#4A5973] text-[12px] font-bold ml-[8px]">{{ buildAlertInfo!.statusText }}</span>
             </template>
             <template #default>
               <div class="flex px-[24px] gap-[36px] text-[12px] h-[18px] leading-[18px]">
@@ -260,7 +265,10 @@
               </div>
             </template>
           </Alert>
-          <template v-if="isMultiEnvMode || isDeployStatusVisible">
+          <div
+            v-if="isMultiEnvMode || isDeployStatusVisible"
+            class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[6px] bg-[#fff] p-[16px] shadow-[0_2px_4px_0_#1919290d]"
+          >
             <!-- 单环境 -->
             <InstanceList
               v-if="!isMultiEnvMode"
@@ -274,7 +282,7 @@
               :requestable-env-names="requestableMultiEnvNames"
               @remove-deploy="handleRemoveDeploy"
             />
-          </template>
+          </div>
           <!-- 未部署状态 -->
           <Skeleton
             v-else
@@ -301,7 +309,7 @@
                 <img src="/empty.svg" />
               </template>
               <template #description>
-                <div class="text-[#4D4F56] text-[14px] leading-[22px]">{{ $t('该环境尚未部署应用') }}</div>
+                <div class="text-[#4A5973] text-[14px] leading-[22px]">{{ $t('该环境尚未部署应用') }}</div>
               </template>
               <Button
                 v-bk-tooltips="{ content: currentEnvDeployDisabledReason, disabled: !currentEnvDeployDisabledReason }"

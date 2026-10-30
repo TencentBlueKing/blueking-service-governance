@@ -37,7 +37,7 @@
     <!-- 空状态 -->
     <div
       v-if="!fileList?.length"
-      class="flex-1 h-full flex items-center min-w-0 bg-[#F5F7FA]"
+      class="flex-1 h-full flex items-center min-w-0 bg-[#F0F4FA]"
     >
       <Exception
         class="large-exception"
@@ -48,13 +48,13 @@
           <img src="/empty.svg" />
         </template>
         <template #description>
-          <div class="text-[#4D4F56] text-[14px] leading-[22px]">{{ $t('请先在左侧添加文件') }}</div>
+          <div class="text-[#4A5973] text-[14px] leading-[22px]">{{ $t('请先在左侧添加文件') }}</div>
         </template>
       </Exception>
     </div>
     <div
       v-else
-      class="flex-1 h-full pt-[12px] flex flex-col min-w-0 bg-[#F5F7FA]"
+      class="flex-1 h-full pt-[12px] flex flex-col min-w-0 bg-[#F0F4FA]"
     >
       <FlexRow class="mb-[8px] mx-[24px]">
         <template #left>
@@ -89,7 +89,7 @@
             />
             <Divider
               class="h-[12px]"
-              color="#C4C6CC"
+              color="#C1CDE5"
               direction="vertical"
               type="solid"
             />
@@ -102,7 +102,7 @@
           />
           <Divider
             class="h-[12px]"
-            color="#C4C6CC"
+            color="#C1CDE5"
             direction="vertical"
             type="solid"
           />
@@ -114,7 +114,7 @@
           />
           <Divider
             class="h-[12px]"
-            color="#C4C6CC"
+            color="#C1CDE5"
             direction="vertical"
             type="solid"
           />
@@ -155,7 +155,7 @@
                     extCls: '!w-[400px]',
                     theme: 'light',
                   }"
-                  class="ml-[6px] text-[14px] text-[#979BA5] transform translate-y-[2px]"
+                  class="ml-[6px] text-[14px] text-[#8F9FBD] transform translate-y-[2px]"
                 />
               </template>
             </MsHighlightjs>
@@ -211,7 +211,7 @@
                       width="240"
                     >
                       <Tag
-                        class="!text-[#CDDFFE] !bg-[#2759AE] ml-[4px] h-[16px] text-[10px] px-[4px]"
+                        class="!text-[#C7D8FF] !bg-[#2759AE] ml-[4px] h-[16px] text-[10px] px-[4px]"
                         theme="info"
                       >
                         {{ $t('覆盖层') }}
@@ -261,7 +261,7 @@
                     >
                       <template #icon>
                         <Upload
-                          color="#979BA5"
+                          color="#8F9FBD"
                           height="16"
                           width="16"
                         />

@@ -22,7 +22,7 @@
     <span
       v-for="dot in count"
       :key="dot"
-      class="inline-block w-[6px] h-[6px] rounded-full bg-[#63656e]"
+      class="inline-block w-[6px] h-[6px] rounded-full bg-[#4A5973]"
     ></span>
   </span>
 </template>

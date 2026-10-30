@@ -17,9 +17,9 @@
 -->
 
 <template>
-  <div class="border border-[#e5e7eb] text-[#4d4f56]">
+  <div class="border border-[#e5e7eb] text-[#4A5973]">
     <div
-      class="grid grid-cols-2 h-[40px] items-center border-b border-b-[#e5e7eb] bg-[#f8f8f9] text-[#313238] text-[13px]"
+      class="grid grid-cols-2 h-[40px] items-center border-b border-b-[#e5e7eb] bg-[#f8f8f9] text-[#111214] text-[13px]"
     >
       <div class="min-w-0 px-[16px]">
         {{ $t('应用名称') }}
@@ -46,7 +46,7 @@
               :icon="getDeployStatusInfo(app.appType, app.deployStatus).icon"
               :size="12"
             />
-            <span class="text-[#4D4F56]">{{ getDeployStatusInfo(app.appType, app.deployStatus).text || '--' }}</span>
+            <span class="text-[#4A5973]">{{ getDeployStatusInfo(app.appType, app.deployStatus).text || '--' }}</span>
           </div>
         </div>
       </div>

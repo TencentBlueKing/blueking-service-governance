@@ -29,27 +29,27 @@
   >
     <div
       :class="[
-        'flex items-center px-[8px] rounded-[2px] cursor-pointer bg-white transition-all duration-200',
-        { 'text-[#3a84ff]': isPopoverShow },
+        'flex items-center px-[8px] rounded-[6px] cursor-pointer bg-white transition-all duration-200',
+        { 'text-[#3B6EF5]': isPopoverShow },
       ]"
       :style="styleVars"
     >
       <span
         :class="[
           'flex-1 text-[12px] overflow-hidden text-ellipsis whitespace-nowrap',
-          displayText ? 'text-[#63656e]' : 'text-[#c4c6cc]',
+          displayText ? 'text-[#4A5973]' : 'text-[#C1CDE5]',
         ]"
         :style="{ lineHeight: styleVars.lineHeight }"
       >
         {{ displayText || props.placeholder }}
       </span>
       <AngleDownLine
-        class="text-[11px] text-[#979ba5] ml-[4px] transition-transform duration-200"
+        class="text-[11px] text-[#8F9FBD] ml-[4px] transition-transform duration-200"
         :class="{ 'rotate-180': isPopoverShow }"
       />
       <!-- <i
         :class="[
-          'bkms-icon bkms-icon-angle-down shrink-0 text-[12px] text-[#979ba5] ml-[4px] transition-transform duration-200',
+          'bkms-icon bkms-icon-angle-down shrink-0 text-[12px] text-[#8F9FBD] ml-[4px] transition-transform duration-200',
           { 'rotate-180': isPopoverShow },
         ]"
       /> -->
@@ -120,7 +120,7 @@
             </div>
           </Form>
         </div>
-        <FlexRow class="h-[42px] px-[16px] bg-[#fafbfd] border-t border-solid border-[#eaebf0]">
+        <FlexRow class="h-[42px] px-[16px] bg-[#F7F9FD] border-t border-solid border-[#e9edf5]">
           <template #right>
             <div class="flex gap-[8px]">
               <Button
@@ -386,7 +386,7 @@
 
   :deep(.params-type) {
     .bk-form-label {
-      color: #313238;
+      color: #111214;
       font-weight: bold;
     }
   }

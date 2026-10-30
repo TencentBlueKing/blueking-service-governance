@@ -18,12 +18,12 @@
 
 <template>
   <div class="flex h-full w-full flex-col bg-[#fff]">
-    <div class="flex shrink-0 items-center border-b border-[#EAEBF0] px-[12px] py-[16px]">
-      <span class="text-[14px] font-bold leading-[22px] text-[#313238]">{{ $t('文件列表') }}</span>
+    <div class="flex shrink-0 items-center border-b border-[#E9EDF5] px-[12px] py-[16px]">
+      <span class="text-[14px] font-bold leading-[22px] text-[#111214]">{{ $t('文件列表') }}</span>
       <a
         v-bk-tooltips="$t('点击查看配置文件说明')"
         :aria-label="$t('点击查看配置文件说明')"
-        class="ml-[6px] flex items-center text-[16px] text-[#3A84FF]"
+        class="ml-[6px] flex items-center text-[16px] text-[#3B6EF5]"
         :href="configFileDocUrl"
         rel="noopener noreferrer"
         target="_blank"
@@ -94,7 +94,7 @@
             </div>
           </div>
         </template>
-        <div class="px-[12px] py-[6px] text-[12px] text-[#979BA5]">{{ $t('框架配置文件') }}</div>
+        <div class="px-[12px] py-[6px] text-[12px] text-[#8F9FBD]">{{ $t('框架配置文件') }}</div>
         <FileItem
           v-for="file in frameworkFiles"
           :key="file.id"
@@ -104,7 +104,7 @@
         />
 
         <div class="mt-[8px] flex items-center justify-between px-[12px] py-[6px]">
-          <span class="text-[12px] text-[#979BA5]">{{ $t('其他配置文件') }}（{{ plainFiles.length }}）</span>
+          <span class="text-[12px] text-[#8F9FBD]">{{ $t('其他配置文件') }}（{{ plainFiles.length }}）</span>
           <Button
             :disabled="createDisabled"
             text
@@ -138,7 +138,7 @@
           >
             <template #title><span /></template>
             <template #description>
-              <span class="text-[12px] leading-[20px] text-[#979BA5]">{{ $t('暂无其他配置文件，可点击新建') }}</span>
+              <span class="text-[12px] leading-[20px] text-[#8F9FBD]">{{ $t('暂无其他配置文件，可点击新建') }}</span>
             </template>
           </Exception>
         </div>

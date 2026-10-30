@@ -36,17 +36,16 @@
       class="absolute top-1/2 transform -translate-y-1/2 z-10 transition-all duration-300"
       :style="{ [position]: collapsed ? '0px' : `${width}px` }"
     >
-      <div class="flex">
-        <div
-          class="flex items-center justify-center w-[16px] h-[64px] bg-[#DCDEE5] border-0 cursor-pointer"
-          :style="collapsed ? buttonStyle.expand : buttonStyle.collapse"
-          @click="toggle"
-        >
-          <component
-            :is="collapsed ? expandIcon : collapseIcon"
-            class="text-[16px] text-[#63656E]"
-          />
-        </div>
+      <div
+        class="collapse-handle"
+        :class="position === 'left' ? 'is-left' : 'is-right'"
+        @click="toggle"
+      >
+        <component
+          :is="collapsed ? expandIcon : collapseIcon"
+          width="26"
+          height="26"
+        />
       </div>
     </div>
   </div>
@@ -91,24 +90,44 @@
     return props.position === 'left' ? AngleLeft : AngleRight;
   });
 
-  // 根据位置确定按钮样式
-  const buttonStyle = computed(() => {
-    if (props.position === 'left') {
-      return {
-        expand: 'border-radius: 0 4px 4px 0;',
-        collapse: 'border-radius: 0 4px 4px 0;',
-      };
-    } else {
-      return {
-        expand: 'border-radius: 4px 0 0 4px;',
-        collapse: 'border-radius: 4px 0 0 4px;',
-      };
-    }
-  });
-
   function toggle() {
     const newCollapsed = !props.collapsed;
     emits('update:collapsed', newCollapsed);
     emits('toggle', newCollapsed);
   }
 </script>
+
+<style lang="postcss" scoped>
+  /* 对齐 bkui ResizeLayout 的 .bk-resize-collapse：16×64，白箭头 26，悬停主色。 */
+  .collapse-handle {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 64px;
+    color: #fff;
+    cursor: pointer;
+    background: #E4E9F2;
+    border: 0;
+  }
+
+  .collapse-handle.is-left {
+    border-radius: 0 4px 4px 0;
+  }
+
+  .collapse-handle.is-right {
+    border-radius: 4px 0 0 4px;
+  }
+
+  .collapse-handle:hover {
+    background: #3B6EF5;
+  }
+
+  .collapse-handle :deep(svg) {
+    position: absolute;
+    width: 26px;
+    height: 26px;
+    fill: currentcolor;
+  }
+</style>

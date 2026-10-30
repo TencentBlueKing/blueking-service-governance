@@ -28,8 +28,10 @@
       />
 
       <!-- 内容区域 -->
-      <div class="px-[24px] py-[20px] flex-1 overflow-auto">
-        <component :is="currentTabComponent" />
+      <div class="flex-1 overflow-auto p-[16px]">
+        <div class="overflow-hidden rounded-[6px] bg-[#fff] p-[16px] shadow-[0_2px_4px_0_#1919290d]">
+          <component :is="currentTabComponent" />
+        </div>
       </div>
     </template>
 
@@ -38,8 +40,10 @@
       <!-- 默认 Header 区域 -->
       <TabHeader :title="$t('制品管理')" />
 
-      <div class="px-[24px] py-[20px] flex-1 overflow-auto">
-        <ContainerImage />
+      <div class="flex-1 overflow-auto p-[16px]">
+        <div class="overflow-hidden rounded-[6px] bg-[#fff] p-[16px] shadow-[0_2px_4px_0_#1919290d]">
+          <ContainerImage />
+        </div>
       </div>
     </template>
   </div>

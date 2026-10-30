@@ -28,7 +28,7 @@
       </Tag>
     </template>
     <template #header-right>
-      <div class="flex items-center gap-[4px] text-[12px] text-[#4D4F56]">
+      <div class="flex items-center gap-[4px] text-[12px] text-[#4A5973]">
         <span
           class="inline-block bg-[#65C389] w-[12px] h-[12px] border-[#2CAF5E] border-[1px] border-solid rounded-[4px] mr-[6px]"
         ></span>

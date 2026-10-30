@@ -32,8 +32,8 @@
     <div
       v-bind="$attrs"
       :class="[
-        'flex items-center min-w-[280px] max-w-[626px] border border-[#c4c6cc] rounded-[2px] bg-[#FFF] cursor-pointer overflow-hidden transition-border-color duration-200 hover:border-[#979BA5]',
-        { '!border-[#3a84ff] shadow-[0_0_3px_0_#a3c5fd]': isPopoverVisible },
+        'flex items-center min-w-[280px] max-w-[626px] border border-[#C1CDE5] rounded-[6px] bg-[#FFF] cursor-pointer overflow-hidden transition-border-color duration-200 hover:border-[#8F9FBD]',
+        { '!border-[#3B6EF5] shadow-[0_0_3px_0_#99B9FF]': isPopoverVisible },
         mode === 'multi' ? 'h-auto min-h-[32px] !w-[626px]' : 'h-[32px]',
         { '!max-w-none': !showEnvPrefix },
       ]"
@@ -59,7 +59,7 @@
       </Select>
       <div
         v-else-if="showEnvPrefix"
-        class="flex items-center h-[32px] px-[10px] border-r-[1px] border-[#c4c6cc] shrink-0"
+        class="flex items-center h-[32px] px-[10px] border-r-[1px] border-[#C1CDE5] shrink-0"
       >
         {{ $t('环境') }}
       </div>
@@ -94,7 +94,7 @@
                   </Tag>
                   <Tag
                     v-if="isFeatureEnv(selectedMultiEnvItems[index])"
-                    class="bg-[#E2F5F7] text-[#3A9EAA]"
+                    class="bg-[var(--aidev-cyan-6)] text-[var(--aidev-cyan-2)]"
                     size="small"
                   >
                     {{ $t('特性') }}
@@ -105,7 +105,7 @@
           </OverflowTags>
           <span
             v-else
-            class="text-[12px] leading-[22px] text-[#C4C6CC]"
+            class="text-[12px] leading-[22px] text-[#C1CDE5]"
           >
             {{ $t('请选择') }}
           </span>
@@ -114,7 +114,7 @@
         <template v-else>
           <span
             v-if="selectedEnvItem"
-            class="inline-flex items-center gap-[4px] min-w-0 text-[12px] leading-[22px] text-[#4D4F56]"
+            class="inline-flex items-center gap-[4px] min-w-0 text-[12px] leading-[22px] text-[#4A5973]"
           >
             <span class="truncate">{{ selectedEnvItem.displayName }}</span>
             <Tag
@@ -126,7 +126,7 @@
             </Tag>
             <Tag
               v-if="isFeatureEnv(selectedEnvItem)"
-              class="bg-[#E2F5F7] text-[#3A9EAA] shrink-0"
+              class="bg-[var(--aidev-cyan-6)] text-[var(--aidev-cyan-2)] shrink-0"
               size="small"
             >
               {{ $t('特性') }}
@@ -134,7 +134,7 @@
           </span>
           <span
             v-else
-            class="text-[12px] leading-[22px] text-[#C4C6CC]"
+            class="text-[12px] leading-[22px] text-[#C1CDE5]"
           >
             {{ $t('请选择') }}
           </span>
@@ -142,7 +142,7 @@
       </div>
       <AngleDownLine
         :class="[
-          'text-[#979BA5] mr-[10px] shrink-0 self-start mt-[10px] transition-transform duration-200',
+          'text-[#8F9FBD] mr-[10px] shrink-0 self-start mt-[10px] transition-transform duration-200',
           { 'rotate-180': isPopoverVisible },
         ]"
       />
@@ -154,8 +154,8 @@
         v-if="enableVisibleEnvSettings && isEditingVisibleEnvs"
         class="px-[8px] pt-[8px]"
       >
-        <div class="text-[14px] leading-[22px] font-medium text-[#313238]">{{ $t('设置可见环境') }}</div>
-        <p class="mt-[4px] mb-[8px] text-[12px] leading-[20px] text-[#979BA5]">
+        <div class="text-[14px] leading-[22px] font-medium text-[#111214]">{{ $t('设置可见环境') }}</div>
+        <p class="mt-[4px] mb-[8px] text-[12px] leading-[20px] text-[#8F9FBD]">
           {{
             $t(
               '特性环境始终可见，无需设置。可仅勾选需要在「部署管理」页面环境下拉列表中显示的环境；其他页面不受此设置影响，仍会显示全部环境。',
@@ -187,27 +187,27 @@
             :placeholder="$t('请输入关键词')"
           >
             <template #prefix>
-              <div class="flex items-center justify-center text-[#979BA5]">
+              <div class="flex items-center justify-center text-[#8F9FBD]">
                 <Search class="ml-[2px] text-[16px]" />
               </div>
             </template>
           </Input>
           <div
             v-if="showOnlyDeployedFilter"
-            class="h-[40px] flex items-center border-l-[1px] border-b-[1px] border-[#DCDEE5] ml-[-1px] pl-[8px] pb-[2px]"
+            class="h-[40px] flex items-center border-l-[1px] border-b-[1px] border-[#E4E9F2] ml-[-1px] pl-[8px] pb-[2px]"
           >
             <Checkbox
               v-model="onlyDeployed"
               class="shrink-0"
             >
-              <span class="text-[12px] text-[#4D4F56]">{{ $t('仅显示已部署环境') }}</span>
+              <span class="text-[12px] text-[#4A5973]">{{ $t('仅显示已部署环境') }}</span>
             </Checkbox>
           </div>
         </div>
         <!-- 无已部署环境 -->
         <div
           v-if="onlyDeployed && filteredGroups.length === 0"
-          class="py-[16px] px-[12px] text-[12px] text-[#c4c6cc] text-center"
+          class="py-[16px] px-[12px] text-[12px] text-[#C1CDE5] text-center"
         >
           {{ $t('无匹配数据') }}
         </div>
@@ -223,7 +223,7 @@
             class="flex-1 min-w-0"
           >
             <!-- 分组标题 -->
-            <div class="h-[32px] flex items-center justify-between px-[8px] bg-[#f5f7fa]">
+            <div class="h-[32px] flex items-center justify-between px-[8px] bg-[#F0F4FA]">
               <Tag :class="envTypeTagClassMap[group.type]">
                 {{ group.label }}
               </Tag>
@@ -248,11 +248,11 @@
                   placement: 'bottom',
                 }"
                 :class="[
-                  'flex items-center h-[32px] px-[8px] cursor-pointer text-[12px] text-[#4D4F56] transition-bg-color duration-150',
+                  'flex items-center h-[32px] px-[8px] cursor-pointer text-[12px] text-[#4A5973] transition-bg-color duration-150',
                   { 'feature-env-child': env.isFeatureChild },
-                  { '!bg-[#e1ecff] !text-[#3a84ff]': isSelected(env) },
+                  { '!bg-[#E5EDFF] !text-[#3B6EF5]': isSelected(env) },
                   { 'cursor-not-allowed opacity-60': isEnvDisabled(env) },
-                  { 'hover:bg-[#F5F7FA]': !isSelected(env) && !isEnvDisabled(env) },
+                  { 'hover:bg-[#F0F4FA]': !isSelected(env) && !isEnvDisabled(env) },
                 ]"
                 @click="handleSelectEnv(env)"
               >
@@ -270,7 +270,7 @@
                   <span class="truncate">{{ env.displayName }}</span>
                   <Tag
                     v-if="isFeatureEnv(env)"
-                    class="bg-[#E2F5F7] text-[#3A9EAA] ml-[4px] shrink-0"
+                    class="bg-[var(--aidev-cyan-6)] text-[var(--aidev-cyan-2)] ml-[4px] shrink-0"
                     size="small"
                   >
                     {{ $t('特性') }}
@@ -284,7 +284,7 @@
               </div>
               <div
                 v-if="group.envs.length === 0"
-                class="py-[16px] px-[12px] text-[12px] text-[#c4c6cc] text-center"
+                class="py-[16px] px-[12px] text-[12px] text-[#C1CDE5] text-center"
               >
                 {{ searchKeyword.trim() ? $t('无匹配数据') : $t('暂无数据') }}
               </div>
@@ -295,7 +295,7 @@
       <!-- 编辑态会替换操作按钮，避免同一次点击被误判为弹层外部点击。 -->
       <div
         v-if="enableVisibleEnvSettings"
-        class="flex items-center justify-between border-t border-[#DCDEE5] mt-[8px] px-[8px] pt-[8px]"
+        class="flex items-center justify-between border-t border-[#E4E9F2] mt-[8px] px-[8px] pt-[8px]"
         @click.stop
       >
         <template v-if="isEditingVisibleEnvs">
@@ -324,7 +324,7 @@
           </div>
         </template>
         <template v-else>
-          <span class="text-[12px] text-[#979BA5]">{{
+          <span class="text-[12px] text-[#8F9FBD]">{{
             isRestricted && filterVisibleEnvs
               ? $t('已按可见环境筛选，共 {0} 个', [selectableEnvList.length])
               : $t('显示全部环境')
@@ -1092,7 +1092,7 @@
     height: 32px;
     border: none !important;
     border-radius: 0 !important;
-    border-right: 1px solid #c4c6cc !important;
+    border-right: 1px solid #C1CDE5 !important;
     background: transparent !important;
     .bk-input {
       border: none !important;
@@ -1100,11 +1100,11 @@
     }
     .bk-select-tag {
       font-size: 12px;
-      color: #63656e;
+      color: #4A5973;
     }
   }
   :deep(.bk-input.is-simplicity) {
-    border-bottom-color: #dcdee5 !important;
+    border-bottom-color: #E4E9F2 !important;
     border-radius: 0 !important;
     &:hover {
       background-color: transparent !important;
@@ -1135,8 +1135,8 @@
       left: -8px;
       width: 16px;
       height: 16px;
-      border-left: 1px solid #dcdee5;
-      border-bottom: 1px solid #dcdee5;
+      border-left: 1px solid #E4E9F2;
+      border-bottom: 1px solid #E4E9F2;
       border-bottom-left-radius: 8px;
       content: '';
     }
@@ -1145,7 +1145,7 @@
 <style lang="postcss">
   .c-env-select-popover {
     padding: 0 8px 8px 8px !important;
-    border-radius: 2px !important;
+    border-radius: 6px !important;
     border: none;
     box-shadow: 0 2px 4px 0 #1919290d !important;
 
@@ -1156,11 +1156,11 @@
       }
 
       &::-webkit-scrollbar-thumb {
-        background: #dcdee5;
+        background: #E4E9F2;
         box-shadow: inset 0 0 6px #cccccc4d;
 
         &:hover {
-          background: #dcdee5;
+          background: #E4E9F2;
         }
       }
     }

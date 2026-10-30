@@ -28,7 +28,7 @@
       @click="scrollLeft"
     >
       <AngleLeft
-        fill="#979BA5"
+        fill="#8F9FBD"
         :height="12"
         :width="12"
       />
@@ -47,7 +47,7 @@
       @click="scrollRight"
     >
       <AngleRight
-        fill="#979BA5"
+        fill="#8F9FBD"
         :height="12"
         :width="12"
       />
@@ -163,12 +163,12 @@
     width: 16px;
     height: 32px;
     cursor: pointer;
-    color: #979ba5;
+    color: #8F9FBD;
     transition: color 0.2s;
-    background-color: #f0f1f5;
+    background-color: #E9EDF5;
 
     &:hover {
-      color: #3a84ff;
+      color: #3B6EF5;
     }
 
     &.left {

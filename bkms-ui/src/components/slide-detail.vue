@@ -35,7 +35,7 @@
         <AngleRight class="text-[22px]" />
       </span>
     </span>
-    <div class="absolute left-[-24px] h-full w-[24px] bg-[#f5f7fa]"></div>
+    <div class="absolute left-[-24px] h-full w-[24px] bg-[#F0F4FA]"></div>
     <div
       ref="resizeRef"
       :class="SlideDetailClass['resize-line']"
@@ -86,7 +86,7 @@
       // 开始拖拽事件
       function handleMouseDown(e: MouseEvent) {
         // 改变分割线颜色
-        resizeRef.value.style.borderLeft = '1px solid #3a84ff';
+        resizeRef.value.style.borderLeft = '1px solid #3B6EF5';
         // 启始位置
         startX.value = e.clientX;
         // 启始宽度

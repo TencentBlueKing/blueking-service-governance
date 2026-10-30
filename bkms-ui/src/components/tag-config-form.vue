@@ -30,10 +30,10 @@
     <!-- 版本规则 -->
     <div
       v-if="enabled"
-      class="mt-[8px] p-[16px] bg-[#F5F7FA] rounded-[2px]"
+      class="mt-[8px] p-[16px] bg-[#F0F4FA] rounded-[6px]"
     >
       <div class="flex">
-        <div class="w-[90px] text-align-right pr-[22px] text-[14px] text-[#63656e]">
+        <div class="w-[90px] text-align-right pr-[22px] text-[14px] text-[#4A5973]">
           {{ $t('版本规则') }}
           <span class="text-[#ea3636]">*</span>
         </div>
@@ -78,7 +78,7 @@
         >
           {{ $t('构建时间') }}
         </Checkbox>
-        <span class="text-[14px] text-[#63656e]">{{ $t('(示例：{0})', [example]) }}</span>
+        <span class="text-[14px] text-[#4A5973]">{{ $t('(示例：{0})', [example]) }}</span>
       </div>
     </div>
   </Form.FormItem>

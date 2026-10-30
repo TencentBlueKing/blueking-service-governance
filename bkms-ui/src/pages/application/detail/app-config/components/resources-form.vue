@@ -173,7 +173,7 @@
           <!-- 实例数（副本数） -->
           <Form.FormItem
             :class="[
-              '!text-[#4D4F56] !w-[400px] relative',
+              '!text-[#4A5973] !w-[400px] relative',
               { 'field-diff-highlight': shouldShowResetIcon('replicas') },
             ]"
             :label="$t('实例数')"
@@ -338,8 +338,8 @@
   import type { ExtendedEnv } from './types';
 
   // 查看态字段值样式常量
-  const FIELD_VALUE_BASE_CLASS = 'text-[12px] text-[#313238]';
-  const FIELD_VALUE_MODIFIED_CLASS = 'border-b border-dashed border-b-[#313238]';
+  const FIELD_VALUE_BASE_CLASS = 'text-[12px] text-[#111214]';
+  const FIELD_VALUE_MODIFIED_CLASS = 'border-b border-dashed border-b-[#111214]';
 
   type FieldKey = 'cpuLimits' | 'cpuRequests' | 'memoryLimits' | 'memoryRequests' | 'replicas';
 
@@ -598,11 +598,11 @@
 
 <style lang="postcss" scoped>
   :deep(.bkms-content-title) {
-    background-color: #eaebf0;
+    background-color: #e4e9f2;
   }
 
   :deep(.bk-form-label) {
-    color: #4d4f56;
+    color: #4A5973;
   }
 
   :deep(.field-diff-highlight) {

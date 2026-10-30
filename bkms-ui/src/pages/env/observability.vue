@@ -25,7 +25,7 @@
       v-if="currentEnv"
       class="flex flex-col gap-[16px] h-full min-h-0"
     >
-      <div class="bg-[#fff] shadow-[0_2px_4px_0_#1919290d] rounded-[2px] overflow-hidden">
+      <div class="overflow-hidden rounded-[6px] bg-[#fff] shadow-[0_2px_4px_0_#1919290d]">
         <ApmInstance
           :current-apm="currentApm"
           :data="currentEnv"
@@ -34,7 +34,7 @@
       </div>
       <MonitorIframe
         v-if="currentApm && iframeUrl"
-        class="flex-1 min-h-0 bg-[#fff] shadow-[0_2px_4px_0_#1919290d] rounded-[2px] overflow-hidden"
+        class="min-h-0 flex-1 overflow-hidden rounded-[6px] bg-[#fff] shadow-[0_2px_4px_0_#1919290d]"
         :url="iframeUrl"
         @route-change="handleRouteChange"
       />

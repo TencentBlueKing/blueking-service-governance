@@ -67,7 +67,7 @@
     containerHeight?: number | string;
     /** 右侧值(value)为空时展示(默认'--') */
     emptyPlaceholder?: string;
-    /** 左侧字段(key)文本颜色(默认#979BA5) */
+    /** 左侧字段(key)文本颜色(默认#8F9FBD) */
     fieldColor?: string;
     /** 左侧字段(key)文本方向(默认right) */
     fieldDirection?: 'center' | 'left' | 'right';
@@ -96,7 +96,7 @@
     fieldSplitCode: '：',
     fieldDirection: 'right',
     fieldWidth: 100,
-    fieldColor: '#979BA5',
+    fieldColor: '#8F9FBD',
     fieldSize: 12,
     isLabelOverflow: true,
     emptyPlaceholder: '--',

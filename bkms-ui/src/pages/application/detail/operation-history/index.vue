@@ -17,7 +17,8 @@
 -->
 
 <template>
-  <div class="h-full px-[24px] py-[20px]">
+  <div class="h-full p-[16px]">
+    <div class="overflow-hidden rounded-[6px] bg-[#fff] p-[16px] shadow-[0_2px_4px_0_#1919290d]">
     <Skeleton
       :loading="isLoading"
       theme="gray"
@@ -25,7 +26,7 @@
       <template #loading>
         <div class="flex mb-[16px]">
           <Layout.shape
-            class="mr-[16px]"
+            class="mr-[8px]"
             :width="300"
           />
           <Layout.shape :width="400" />
@@ -40,7 +41,7 @@
         <template #left>
           <DatePicker
             v-model="dateRange"
-            class="w-[300px] mr-[16px]"
+            class="w-[300px] mr-[8px]"
             :placeholder="$t('请选择操作时间范围')"
             type="daterange"
             @change="handleListRecord"
@@ -182,6 +183,7 @@
         </Table>
       </Loading>
     </Skeleton>
+    </div>
     <OperationDetailSideslider
       v-model:is-show="isShow"
       :env-name-mapping="envNameMapping"
@@ -223,7 +225,8 @@
   const { envNameMapping, generateEnvNameMapping, handleGetEnvList } = useEnvManager();
   const spaceStore = useSpaceStore();
   const appDetailStore = useAppDetail();
-  const { maxHeight } = useDynamicsHeight(96, ['.header-right', '.container-header']);
+  // 96 是顶栏和页面留白。卡片内边距上下各 16，页面留白从 20 收到 16，净增 24
+  const { maxHeight } = useDynamicsHeight(120, ['.header-right', '.container-header']);
 
   const operationFilters = ref<OperationRecordFilterOptionsOutputObj>();
   // 部署列表

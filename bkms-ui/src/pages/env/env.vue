@@ -76,25 +76,11 @@
             >
             </SearchSelect>
           </div>
-          <Select
+          <SortDropdown
             v-model="curEnvOption"
-            :clearable="false"
-          >
-            <template #prefix>
-              <div
-                class="flex items-center px-[8px] cursor-pointer"
-                @click.stop="toggleSortOrder"
-              >
-                <i :class="['bkms-icon', sortOrder === 'asc' ? 'bkms-icon-jiangxu' : 'bkms-icon-shengxu']" />
-              </div>
-            </template>
-            <Select.Option
-              v-for="(item, index) in envOptions"
-              :id="item.value"
-              :key="index"
-              :name="item.label"
-            />
-          </Select>
+            v-model:order="sortOrder"
+            :options="envOptions"
+          />
         </div>
       </template>
     </FlexRow>
@@ -148,7 +134,7 @@
                 @click.stop="handleShowEnvDetail(row)"
                 >{{ row.displayName }}</Button
               >
-              <div class="text-[#979BA5]">{{ row.name }}</div>
+              <div class="text-[#8F9FBD]">{{ row.name }}</div>
             </div>
           </template>
         </TableColumn>
@@ -198,7 +184,7 @@
               v-else
               class="flex items-center gap-[8px]"
             >
-              <i class="bkms-icon bkms-icon-time-circle-fill text-[#C4C6CC] text-[14px]"></i>
+              <i class="bkms-icon bkms-icon-time-circle-fill text-[#C1CDE5] text-[14px]"></i>
               {{ $t('未配置') }}
             </div>
           </template>
@@ -237,7 +223,8 @@
 
   import { Table, TableColumn } from '@blueking/table';
   import { useDebounce } from '@vueuse/core';
-  import { Button, Message, SearchSelect, Select } from 'bkui-vue';
+  import { Button, Message, SearchSelect } from 'bkui-vue';
+  import SortDropdown from '~/components/sort-dropdown.vue';
   import { Done, Plus } from 'bkui-vue/lib/icon';
   import { useI18n } from 'vue-i18n';
   import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router';
@@ -403,11 +390,11 @@
   // 排序配置
   const curEnvOption = ref(savedState?.sortField || 'type');
   const sortOrder = ref<'asc' | 'desc'>(savedState?.sortOrder || 'asc');
-  const envOptions = ref([
-    { label: t('环境分类'), value: 'type' },
-    { label: t('环境 ID'), value: 'name' },
-    { label: t('环境名称'), value: 'displayName' },
-  ]);
+  const envOptions = [
+    { label: t('环境分类'), value: 'type', ascName: t('升序'), descName: t('降序') },
+    { label: t('环境 ID'), value: 'name', ascName: 'A → Z', descName: 'Z → A' },
+    { label: t('环境名称'), value: 'displayName', ascName: 'A → Z', descName: 'Z → A' },
+  ];
   const ENV_TYPE_ORDER: Record<string, number> = { development: 1, test: 2, staging: 3, production: 4 };
 
   // 仅点击 环境名称/ID、环境分类、集群资源 三列时进入环境详情页；点击 应用 列跳转应用管理页面。
@@ -480,10 +467,6 @@
       }
       return result * multiplier;
     });
-  }
-
-  function toggleSortOrder() {
-    sortOrder.value = sortOrder.value === 'asc' ? 'desc' : 'asc';
   }
 
   // 是否展示新建环境
@@ -576,11 +559,11 @@
     }
 
     .row--current .env-normal.env-tag-development {
-      background-color: #cddffe !important;
+      background-color: #C7D8FF !important;
     }
   }
   .env-normal {
-    color: #63656e;
-    background-color: #f0f1f5;
+    color: #4A5973;
+    background-color: #E9EDF5;
   }
 </style>

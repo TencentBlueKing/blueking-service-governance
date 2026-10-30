@@ -280,7 +280,7 @@
       position: relative;
     }
     .bk-option-group-label {
-      border-bottom: 1px solid #dcdee5;
+      border-bottom: 1px solid #E4E9F2;
       margin: 0 16px;
       padding: 0 !important;
     }

@@ -24,7 +24,7 @@
   />
   <p
     v-if="tip"
-    class="mt-[4px] text-[12px] text-[#979BA5]"
+    class="mt-[4px] text-[12px] text-[#8F9FBD]"
   >
     {{ tip }}
   </p>

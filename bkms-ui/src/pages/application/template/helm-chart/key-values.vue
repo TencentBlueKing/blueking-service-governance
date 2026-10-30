@@ -22,7 +22,7 @@
     text
     @click="handleAdd"
   >
-    <div :class="['flex items-center', disabledAdd ? 'text-[#C4C6CC]' : 'text-[#3A84FF]']">
+    <div :class="['flex items-center', disabledAdd ? 'text-[#C1CDE5]' : 'text-[#3B6EF5]']">
       <span class="bkms-icon bkms-icon-plus-circle-shape text-[14px]"></span>
       <span class="text-[12px] ml-[6px]">{{ $t('添加') }}</span>
     </div>
@@ -39,8 +39,8 @@
     />
     <div
       :class="[
-        'size-[32px] flex justify-center items-center text-[#979BA5] text-[12px]',
-        'border-1 border-[#c4c6cc] mx-[8px] radius-[2px]',
+        'size-[32px] flex justify-center items-center text-[#8F9FBD] text-[12px]',
+        'border-1 border-[#C1CDE5] mx-[8px] rounded-[6px]',
       ]"
     >
       =
@@ -56,7 +56,7 @@
     >
       <Del
         class="ml-[8px]"
-        fill="#979BA5"
+        fill="#8F9FBD"
         height="14px"
         width="14px"
       ></Del>

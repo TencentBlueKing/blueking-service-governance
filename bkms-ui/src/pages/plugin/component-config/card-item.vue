@@ -18,7 +18,7 @@
 
 <template>
   <div
-    class="card-item flex p-[16px] flex-col justify-center items-start gap-[16px] flex-[1_0_0] rounded-[4px] bg-[var(--Neutral-11,#FFF)] shadow-[0_2px_4px_0_#0000000d]"
+    class="card-item flex flex-[1_0_0] flex-col items-start justify-center gap-[16px] overflow-hidden rounded-[6px] bg-[var(--Neutral-11,#FFF)] p-[16px] shadow-[0_2px_4px_0_#1919290d]"
   >
     <!-- 卡片头部：名称 + Tag -->
     <div class="flex flex-col gap-[6px]">
@@ -47,11 +47,11 @@
       </div>
     </div>
     <!-- 描述 -->
-    <div class="text-[#4D4F56] text-warp break-all max-h-[200px] overflow-y-auto">
+    <div class="text-[#4A5973] text-warp break-all max-h-[200px] overflow-y-auto">
       {{ item.description || '--' }}
     </div>
     <Divider
-      class="m-[0px]"
+      class="card-divider m-[0px]"
       type="solid"
     />
     <!-- 卡片底部：根据类型差异化渲染 -->
@@ -83,13 +83,13 @@
     </div>
     <div
       v-else-if="footerType === 'builtin'"
-      class="text-[#C4C6CC]"
+      class="text-[#C1CDE5]"
     >
       {{ t('内置组件，不可编辑') }}
     </div>
     <div
       v-else-if="footerType === 'shared'"
-      class="text-[#C4C6CC]"
+      class="text-[#C1CDE5]"
     >
       {{ t('来自「{space}」', { space: item.managedByWorkspaceIDs?.join('、') ?? '' }) }}
     </div>
@@ -117,6 +117,10 @@
 </script>
 <style scoped>
   .card-item:hover {
-    box-shadow: 0 6px 16px 0 rgba(0, 0, 0, 0.12);
+    box-shadow: 0 2px 4px 0 #0000001a;
+  }
+
+  .card-item :deep(.card-divider) {
+    background: #E4E9F2;
   }
 </style>

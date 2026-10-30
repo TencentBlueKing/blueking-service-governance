@@ -46,7 +46,7 @@
             </bk-tag>
             <span
               v-else
-              class="text-[#979BA5]"
+              class="text-[#8F9FBD]"
               >{{ $t('未部署') }}</span
             >
           </template>

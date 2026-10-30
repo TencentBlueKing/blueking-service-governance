@@ -34,7 +34,7 @@
             class="mx-[12px]"
             direction="vertical"
           ></Divider>
-          <span class="text-[#979BA5] text-[14px]">{{ editData?.name || '--' }}</span>
+          <span class="text-[#8F9FBD] text-[14px]">{{ editData?.name || '--' }}</span>
         </template>
       </div>
     </template>
@@ -122,7 +122,7 @@
               type="number"
             />
             <template #description>
-              <span class="text-[#979BA5] text-[12px]">{{
+              <span class="text-[#8F9FBD] text-[12px]">{{
                 $t('端口数量需要与 Agones 组件中端口数量的配置保持一致')
               }}</span>
             </template>
@@ -153,7 +153,7 @@
                   {{ $t('负载均衡 ID') }} <span style="color: #ea3636">*</span>
                   <i
                     v-bk-tooltips="{ content: lbIdFormatTip, placement: 'top' }"
-                    class="bkms-icon bkms-icon-circle-info ml-[6px] text-[14px] text-[#63656e]"
+                    class="bkms-icon bkms-icon-circle-info ml-[6px] text-[14px] text-[#4A5973]"
                   ></i>
                 </template>
                 <template #default="{ row, rowIndex }: { row: any; rowIndex?: number }">

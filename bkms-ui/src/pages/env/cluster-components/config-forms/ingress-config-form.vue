@@ -63,7 +63,7 @@
           :list="regionOptions"
           :placeholder="$t('请选择CLB区域')"
         />
-        <p class="text-[#979BA5] text-[12px] mt-[4px]">tencentcloudRegion，{{ $t('默认 CLB 区域') }}</p>
+        <p class="text-[#8F9FBD] text-[12px] mt-[4px]">tencentcloudRegion，{{ $t('默认 CLB 区域') }}</p>
       </Form.FormItem>
 
       <Form.FormItem
@@ -76,7 +76,7 @@
           v-model.trim="innerFormData.secretId"
           :placeholder="$t('请输入腾讯云 SecretID')"
         />
-        <p class="text-[#979BA5] text-[12px] mt-[4px]">tencentcloudSecretID</p>
+        <p class="text-[#8F9FBD] text-[12px] mt-[4px]">tencentcloudSecretID</p>
       </Form.FormItem>
     </div>
 
@@ -90,7 +90,7 @@
         :placeholder="$t('请输入腾讯云 SecretKey')"
         type="password"
       />
-      <p class="text-[#979BA5] text-[12px] mt-[4px]">tencentcloudSecretKey</p>
+      <p class="text-[#8F9FBD] text-[12px] mt-[4px]">tencentcloudSecretKey</p>
     </Form.FormItem>
   </Form>
 </template>

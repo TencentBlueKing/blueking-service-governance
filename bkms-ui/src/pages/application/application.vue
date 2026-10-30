@@ -17,7 +17,7 @@
 -->
 
 <template>
-  <main class="flex flex-col h-full w-full relative overflow-hidden bg-[#F5F7FA] px-[24px] py-[16px]">
+  <main class="flex flex-col h-full w-full relative overflow-hidden bg-[#F0F4FA] px-[24px] py-[16px]">
     <Skeleton
       :loading="isLoading"
       theme="gray"
@@ -53,7 +53,7 @@
           </div>
         </template>
         <template #right>
-          <div class="flex items-center gap-[12px] justify-end">
+          <div class="flex items-center gap-[8px] justify-end">
             <SearchSelect
               v-model="searchValue"
               class="w-[520px] bg-[#fff] relative z-[100]"
@@ -68,39 +68,21 @@
               value-behavior="need-key"
             >
             </SearchSelect>
-            <!-- 排序 -->
-            <div class="flex items-center">
-              <Select
-                v-model="curSortOption"
-                class="w-[136px] bg-[#fff]"
-                :clearable="false"
-              >
-                <Select.Option
-                  v-for="(item, index) in sortOptions"
-                  :id="item.value"
-                  :key="index"
-                  :name="item.label"
-                />
-              </Select>
-              <Button
-                :key="`${curSortOption}-${sortOrder}`"
-                v-bk-tooltips="sortTip"
-                class="!min-w-[32px] !px-[8px] !ml-[-1px] text-[#3A84FF]"
-                @click="toggleSortOrder"
-              >
-                <i :class="['bkms-icon', sortOrder === 'asc' ? 'bkms-icon-shengxu' : 'bkms-icon-jiangxu']" />
-              </Button>
-            </div>
+            <SortDropdown
+              v-model="curSortOption"
+              v-model:order="sortOrder"
+              :options="sortOptions"
+            />
             <Radio.Group
               v-model="appTableMode"
               type="capsule"
             >
               <Radio.Button label="list">
-                <i class="bkms-icon bkms-icon-shitu-liebiao text-[14px]"></i>
+                <i class="bkms-icon bkms-icon-shitu-liebiao mr-[4px] text-[14px]"></i>
                 {{ $t('列表模式') }}
               </Radio.Button>
               <Radio.Button label="global">
-                <i class="bkms-icon bkms-icon-shitu-lianglan text-[14px]"></i>
+                <i class="bkms-icon bkms-icon-shitu-lianglan mr-[4px] text-[14px]"></i>
                 {{ $t('全局视图') }}
               </Radio.Button>
             </Radio.Group>
@@ -224,12 +206,12 @@
                     theme="popover-dark-translucent"
                     trigger="hover"
                   >
-                    <Tag>
+                    <Tag :class="envTypeTagClassMap[item.type || '']">
                       <div class="flex items-center">
                         <ColorIcon
-                          v-if="item.deployStatus"
+                          v-if="deployStatusIcon(row.type, item.deployStatus)"
                           class="mr-[4px]"
-                          :icon="getDeployStatusInfo(row.type as AppType, item.deployStatus).icon"
+                          :icon="deployStatusIcon(row.type, item.deployStatus)"
                           :size="12"
                         />
                         {{ item.displayName || item.name }}
@@ -242,7 +224,7 @@
                           :size="14"
                         />
                         <span>{{ item.displayName || item.name }}</span>
-                        <span class="text-[#979BA5]">
+                        <span class="text-[#8F9FBD]">
                           （{{ getDeployStatusInfo(row.type as AppType, item.deployStatus || '').text }}）
                         </span>
                       </div>
@@ -331,7 +313,8 @@
   import { computed, onBeforeMount, ref, watch } from 'vue';
 
   import { Table, TableColumn } from '@blueking/table';
-  import { Button, Popover, Radio, SearchSelect, Select, Tag } from 'bkui-vue';
+  import { Button, Popover, Radio, SearchSelect, Tag } from 'bkui-vue';
+  import SortDropdown from '~/components/sort-dropdown.vue';
   import { Plus } from 'bkui-vue/lib/icon';
   import { useI18n } from 'vue-i18n';
   import { useRouter } from 'vue-router';
@@ -342,6 +325,7 @@
   import MoreTag from '~/components/more-tag.vue';
   import Layout from '~/components/skeleton/skeleton-layout';
   import { useDeployStatusMap } from '~/composables/use-deploy-status';
+  import { envTypeTagClassMap } from '~/composables/use-env-manager';
   import { useElementHeight } from '~/composables/use-element-height';
   import usePersistentStorage from '~/composables/use-persistent-storage';
   import useSearchFilter from '~/composables/use-search-filter';
@@ -374,6 +358,11 @@
   const spaceStore = useSpaceStore();
   const appDetailStore = useAppDetail();
   const { getDeployStatusInfo } = useDeployStatusMap();
+
+  function deployStatusIcon(appType: string | undefined, status: string | undefined) {
+    if (!status) return '';
+    return getDeployStatusInfo(appType as AppType, status).icon;
+  }
   const { formatDateString } = useTime();
 
   // 列设置：应用名称列不可隐藏，操作列无 field 天然不进面板
@@ -386,19 +375,16 @@
   const appList = ref<AppInfoOutputObj[]>([]);
 
   const curSortOption = ref<AppSortField>('lastOperatedAt');
-  const sortOrder = ref<'asc' | 'desc'>('asc');
-  const sortOptions: { label: string; value: AppSortField }[] = [
-    { label: t('应用名称'), value: 'name' },
-    { label: t('操作时间'), value: 'lastOperatedAt' },
-    { label: t('创建时间'), value: 'createdAt' },
+  // 默认降序：时间上最近的在前，和 aidev 列表默认 desc 一致
+  const sortOrder = ref<'asc' | 'desc'>('desc');
+  const sortOptions: { label: string; value: AppSortField; ascName: string; descName: string }[] = [
+    { label: t('应用名称'), value: 'name', ascName: 'A → Z', descName: 'Z → A' },
+    { label: t('操作时间'), value: 'lastOperatedAt', ascName: t('升序'), descName: t('降序') },
+    { label: t('创建时间'), value: 'createdAt', ascName: t('升序'), descName: t('降序') },
   ];
   const appNameCollator = new Intl.Collator('zh-CN', { sensitivity: 'base' });
   const compareAppID = (left: AppInfoOutputObj, right: AppInfoOutputObj) =>
     appNameCollator.compare(left.id || '', right.id || '');
-  const sortTip = computed(() => {
-    if (curSortOption.value === 'name') return sortOrder.value === 'asc' ? 'A-Z' : 'Z-A';
-    return sortOrder.value === 'asc' ? t('最新') : t('最早');
-  });
 
   // 使用持久化分页hooks - 自动使用当前路由路径作为存储key
   const { usePagination } = usePersistentStorage();
@@ -511,9 +497,7 @@
     const data = [...tableDataMatchSearch.value];
 
     if (field !== 'name') {
-      // 时间字段的升序交互表示最近时间优先，与时间戳的自然排序方向相反
-      const dateSortOrder = sortOrder.value === 'asc' ? 'desc' : 'asc';
-      return sortByDate(data, item => item[field], dateSortOrder, compareAppID);
+      return sortByDate(data, item => item[field], sortOrder.value, compareAppID);
     }
 
     const direction = sortOrder.value === 'asc' ? 1 : -1;
@@ -666,10 +650,6 @@
         type: row?.type || '',
       },
     });
-  }
-
-  function toggleSortOrder() {
-    sortOrder.value = sortOrder.value === 'asc' ? 'desc' : 'asc';
   }
 
   watch(searchValue, () => {

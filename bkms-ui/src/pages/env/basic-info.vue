@@ -25,7 +25,7 @@
     <template #loading>
       <div class="flex flex-col gap-[16px]">
         <!-- 环境概览 -->
-        <div class="flex items-start p-[24px] bg-[#fff] rounded-[2px] shadow-[0_2px_4px_0_#1919290d]">
+        <div class="flex items-start rounded-[6px] bg-[#fff] p-[24px] shadow-[0_2px_4px_0_#1919290d]">
           <Layout.shape
             :height="72"
             :width="72"
@@ -71,11 +71,11 @@
         </div>
 
         <!-- 集群资源 -->
-        <div class="overflow-hidden rounded-[2px] shadow-[0_2px_4px_0_#1919290d]">
-          <div class="h-[32px] bg-[#EAEBF0]"></div>
+        <div class="overflow-hidden rounded-[6px] shadow-[0_2px_4px_0_#1919290d]">
+          <div class="h-[32px] bg-[#E9EDF5]"></div>
           <div class="flex flex-wrap gap-[32px] p-[24px] bg-[#fff]">
-            <div class="w-[240px] shrink-0 overflow-hidden rounded-[2px]">
-              <div class="flex items-center h-[136px] px-[24px] bg-[#FAFBFD]">
+            <div class="w-[240px] shrink-0 overflow-hidden rounded-[6px]">
+              <div class="flex items-center h-[136px] px-[24px] bg-[#F7F9FD]">
                 <Layout.shape
                   :height="80"
                   type="circle"
@@ -123,8 +123,8 @@
         </div>
 
         <!-- 集群组件 -->
-        <div class="overflow-hidden rounded-[2px] shadow-[0_2px_4px_0_#1919290d]">
-          <div class="h-[32px] bg-[#EAEBF0]"></div>
+        <div class="overflow-hidden rounded-[6px] shadow-[0_2px_4px_0_#1919290d]">
+          <div class="h-[32px] bg-[#E9EDF5]"></div>
           <div class="min-h-[200px] p-[16px] bg-[#fff]">
             <Layout.shape
               v-for="index in 3"
@@ -151,7 +151,7 @@
     </template>
     <div class="flex flex-col gap-[16px]">
       <!-- 环境概览 -->
-      <div class="bg-[#fff] shadow-[0_2px_4px_0_#1919290d] rounded-[2px]">
+      <div class="overflow-hidden rounded-[6px] bg-[#fff] shadow-[0_2px_4px_0_#1919290d]">
         <template v-if="!isBasicInfoEditing">
           <div class="flex items-start p-[24px]">
             <div
@@ -162,7 +162,7 @@
             </div>
             <div class="min-w-0 flex-1 ml-[20px]">
               <div class="flex items-center min-h-[24px]">
-                <span class="text-[16px] leading-[24px] font-bold text-[#313238] truncate">
+                <span class="text-[16px] leading-[24px] font-bold text-[#111214] truncate">
                   {{ envData?.displayName || envData?.name || '--' }}
                 </span>
                 <Tag
@@ -187,7 +187,7 @@
                   :field-value="$t('环境名称')"
                   field-width="auto"
                   :value="envData?.name"
-                  value-color="#313238"
+                  value-color="#111214"
                 />
                 <FieldItem
                   class="!w-auto"
@@ -196,7 +196,7 @@
                   :field-value="$t('创建人')"
                   field-width="auto"
                   :value="envData.creator"
-                  value-color="#313238"
+                  value-color="#111214"
                 />
                 <FieldItem
                   class="!w-auto"
@@ -205,7 +205,7 @@
                   :field-value="$t('创建时间')"
                   field-width="auto"
                   :value="formatTimeByTimezone(envData?.createdAt?.toString() || '')"
-                  value-color="#313238"
+                  value-color="#111214"
                 />
               </div>
             </div>
@@ -316,9 +316,9 @@
               opacity: 1,
               size: 'small',
             }"
-            class="w-[240px] shrink-0 flex flex-col rounded-[2px] overflow-hidden"
+            class="w-[240px] shrink-0 flex flex-col rounded-[6px] overflow-hidden"
           >
-            <div class="flex-1 flex flex-col items-center justify-center p-[12px] bg-[#FAFBFD]">
+            <div class="flex-1 flex flex-col items-center justify-center p-[12px] bg-[#F7F9FD]">
               <ClusterHealthScore
                 :count="{
                   RISK: clusterScore?.RISK,
@@ -329,7 +329,7 @@
               />
             </div>
             <div
-              class="w-full bg-[#F0F5FF] hover:bg-[#E1ECFF] flex justify-center items-center h-[32px] cursor-pointer transition-colors"
+              class="w-full bg-[#F0F4FF] hover:bg-[#E5EDFF] flex justify-center items-center h-[32px] cursor-pointer transition-colors"
             >
               <Button
                 v-bk-tooltips="{
@@ -353,7 +353,7 @@
               :field-value="$t('容器项目')"
               :field-width="88"
               :value="envData?.cluster?.projectCode"
-              value-color="#313238"
+              value-color="#111214"
               :value-max-width="'100%'"
             />
             <FieldItem
@@ -361,7 +361,7 @@
               :field-value="$t('集群')"
               :field-width="88"
               :value="envData?.cluster?.clusterID"
-              value-color="#313238"
+              value-color="#111214"
               :value-max-width="'100%'"
             />
             <FieldItem
@@ -369,7 +369,7 @@
               :field-value="$t('命名空间')"
               :field-width="88"
               :value="envData?.cluster?.namespace"
-              value-color="#313238"
+              value-color="#111214"
               :value-max-width="'100%'"
             />
           </div>
@@ -464,7 +464,7 @@
         </Button>
         <div class="flex items-center gap-[4px] text-[12px] min-w-0">
           <ExclamationCircleShape class="text-[14px] text-[#F59500] shrink-0" />
-          <span class="text-[#4D4F56]">
+          <span class="text-[#4A5973]">
             {{ $t('删除环境后，所有配置、环境变量和操作记录将永久删除') }}
           </span>
         </div>
@@ -559,7 +559,7 @@
 
   // 环境中文名称
   const selectedEnvName = computed(() => envTypeList.find(item => item.id === envData.value?.type)?.name || '');
-  const envAvatarColor = computed(() => envTypeAvatarColorMap[envData.value?.type || ''] || '#3A84FF');
+  const envAvatarColor = computed(() => envTypeAvatarColorMap[envData.value?.type || ''] || '#3B6EF5');
   const envInitial = computed(() => {
     const label = envData.value?.displayName || envData.value?.name || '';
     return label.slice(0, 1) || '-';
@@ -827,6 +827,6 @@
 
 <style lang="postcss" scoped>
   .info-title :deep(.bkms-content-title) {
-    background-color: #eaebf0;
+    background-color: #e4e9f2;
   }
 </style>

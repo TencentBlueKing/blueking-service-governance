@@ -19,9 +19,9 @@
 <template>
   <div
     :class="[
-      'p-[12px] border border-[#DCDEE5] rounded-[2px] text-[#4D4F56] hover:bg-[#F0F5FF] hover:border-[#3A84FF] group',
-      { 'bg-[#FAFBFD] border-[#DCDEE5]': disabled },
-      active ? '!border-[#3A84FF]' : 'border-[#C4C6CC]',
+      'p-[12px] border border-[#E4E9F2] rounded-[6px] text-[#4A5973] hover:bg-[#F0F4FF] hover:border-[#3B6EF5] group',
+      { 'bg-[#F7F9FD] border-[#E4E9F2]': disabled },
+      active ? '!border-[#3B6EF5]' : 'border-[#C1CDE5]',
     ]"
   >
     <FlexRow class="mb-[4px]">
@@ -47,16 +47,16 @@
       </template>
     </FlexRow>
     <div class="flex">
-      <span class="text-[#979BA5] mr-[4px] shrink-0">{{ $t('描述') }} : </span>
-      <div class="text-[#313238]">{{ curCom?.description || '--' }}</div>
+      <span class="text-[#8F9FBD] mr-[4px] shrink-0">{{ $t('描述') }} : </span>
+      <div class="text-[#111214]">{{ curCom?.description || '--' }}</div>
     </div>
     <div class="h-[24px] flex items-center">
-      <span class="text-[#979BA5] mr-[4px] shrink-0">{{ $t('更新人') }} : </span>
-      <span class="text-[#313238]">{{ curCom?.updater || '--' }}</span>
+      <span class="text-[#8F9FBD] mr-[4px] shrink-0">{{ $t('更新人') }} : </span>
+      <span class="text-[#111214]">{{ curCom?.updater || '--' }}</span>
     </div>
     <div class="h-[24px] flex items-center">
-      <span class="text-[#979BA5] mr-[4px] shrink-0">{{ $t('已添加实例') }} : </span>
-      <span class="text-[#313238]">--</span>
+      <span class="text-[#8F9FBD] mr-[4px] shrink-0">{{ $t('已添加实例') }} : </span>
+      <span class="text-[#111214]">--</span>
     </div>
   </div>
 </template>

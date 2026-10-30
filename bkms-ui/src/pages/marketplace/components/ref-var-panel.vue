@@ -20,11 +20,11 @@
   <div class="flex flex-col h-full min-w-0 w-full">
     <!-- 头部 -->
     <div
-      class="flex-shrink-0 h-[40px] pl-[16px] pr-[8px] rounded-t-sm border-b-[1px] border-[#DCDEE5] bg-[#F5F7FA] flex items-center justify-between"
+      class="flex-shrink-0 h-[40px] pl-[16px] pr-[8px] rounded-t-sm border-b-[1px] border-[#E4E9F2] bg-[#F0F4FA] flex items-center justify-between"
     >
-      <span class="text-[12px] text-[#313238]">
+      <span class="text-[12px] text-[#111214]">
         {{ $t('可引用变量') }}
-        <span class="text-[#979BA5]">({{ variableList.length }})</span>
+        <span class="text-[#8F9FBD]">({{ variableList.length }})</span>
       </span>
       <Button
         class="p-[4px]"
@@ -32,7 +32,7 @@
         @click="emit('close')"
       >
         <CloseLine
-          fill="#979BA5"
+          fill="#8F9FBD"
           height="12"
           width="12"
         />
@@ -50,15 +50,8 @@
           class="flex-1"
           :label="tab.value"
         >
-          <span class="text-[12px]">{{ tab.label }}</span>
-          <span
-            :class="[
-              'h-[16px] leading-[16px] ml-[4px] px-[6px] rounded-[8px]',
-              activeTab === tab.value ? 'bg-[#E1ECFF] text-[#3A84FF]' : 'bg-[#fff]',
-            ]"
-          >
-            {{ tab.count }}
-          </span>
+          <span>{{ tab.label }}</span>
+          <span class="aidev-capsule-count">{{ tab.count }}</span>
         </Radio.Button>
       </Radio.Group>
     </div>

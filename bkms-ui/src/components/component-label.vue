@@ -20,10 +20,10 @@
   <div class="flex flex-col gap-[16px]">
     <template v-if="label">
       <div class="flex items-center gap-[5px]">
-        <span class="text-[#313238] font-700 label">{{ label }}</span>
+        <span class="text-[#111214] font-700 label">{{ label }}</span>
         <InfoLine
           v-if="showIcon"
-          fill="#979BA5"
+          fill="#8F9FBD"
           :height="font"
           :width="font"
         />

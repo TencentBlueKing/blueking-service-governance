@@ -61,7 +61,7 @@
             class="bg-[#fff]"
             @click="showImportSlider = true"
           >
-            <i class="bkms-icon bkms-icon-daoru mr-[6px] text-[#979BA5]"></i>
+            <i class="bkms-icon bkms-icon-daoru mr-[6px] text-[#8F9FBD]"></i>
             {{ $t('导入') }}
           </Button>
           <Button
@@ -69,7 +69,7 @@
             :loading="isExporting"
             @click="handleExport"
           >
-            <i class="bkms-icon bkms-icon-daochu mr-[6px] text-[#979BA5]"></i>
+            <i class="bkms-icon bkms-icon-daochu mr-[6px] text-[#8F9FBD]"></i>
             {{ $t('导出') }}
           </Button>
           <Button
@@ -89,7 +89,7 @@
           :placeholder="$t('搜索变量名、变量值、描述')"
         >
           <template #suffix>
-            <Search class="text-[16px] text-[#979BA5] mr-[6px] mt-[2px] hover:text-[#3A84FF]" />
+            <Search class="text-[16px] text-[#8F9FBD] mr-[6px] mt-[2px] hover:text-[#3B6EF5]" />
           </template>
         </Input>
       </div>

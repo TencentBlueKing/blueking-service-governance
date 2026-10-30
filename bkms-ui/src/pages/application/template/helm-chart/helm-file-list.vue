@@ -28,12 +28,12 @@
             ),
             extCls: '!w-[400px]',
           }"
-          class="ml-[6px] text-[16px] text-[#979BA5] transform translate-y-[2px]"
+          class="ml-[6px] text-[16px] text-[#8F9FBD] transform translate-y-[2px]"
         />
       </template>
       <template #right>
         <div
-          class="flex items-center cursor-pointer text-[#3A84FF] text-[12px]"
+          class="flex items-center cursor-pointer text-[#3B6EF5] text-[12px]"
           @click="handleAddFile"
         >
           <Plus
@@ -58,7 +58,7 @@
         <template #type>
           <img src="/empty.svg" />
         </template>
-        <span class="text-[#4D4F56]">{{ $t('暂无文件') }}，</span>
+        <span class="text-[#4A5973]">{{ $t('暂无文件') }}，</span>
         <Button
           text
           theme="primary"
@@ -69,7 +69,7 @@
       </Exception>
       <div
         v-else
-        class="h-full text-[12px] text-[#313238]"
+        class="h-full text-[12px] text-[#111214]"
       >
         <Tree
           :key="treeUpdateKey"
@@ -94,7 +94,7 @@
                   class="bkms-icon mr-[12px] text-[14px]"
                   :class="[
                     !node.baseAppConfigFileId ? 'bkms-icon-file' : 'bkms-icon-shezhi',
-                    activeDefID === node.id ? 'text-[#3A84FF]' : 'text-[#979BA5]',
+                    activeDefID === node.id ? 'text-[#3B6EF5]' : 'text-[#8F9FBD]',
                   ]"
                 ></i>
                 <span class="ellipsis">
@@ -118,7 +118,7 @@
               >
                 <!-- 编辑 -->
                 <EditLine
-                  class="cursor-pointer text-[#979BA5] hover:text-[#3A84FF] p-[3px]"
+                  class="cursor-pointer text-[#8F9FBD] hover:text-[#3B6EF5] p-[3px]"
                   @click.stop="handleEditFile(node)"
                 >
                 </EditLine>
@@ -134,13 +134,13 @@
                     <div class="pb-[16px] text-[12px]">
                       <div class="mb-[4px]">
                         {{ $t('文件名称') }}：
-                        <span class="text-[#313238]">{{ node?.name }}</span>
+                        <span class="text-[#111214]">{{ node?.name }}</span>
                       </div>
                       {{ $t('删除操作无法撤回，请谨慎操作！') }}
                     </div>
                   </template>
                   <Del
-                    class="cursor-pointer text-[#979BA5] hover:text-[#EA3636] p-[3px]"
+                    class="cursor-pointer text-[#8F9FBD] hover:text-[#EA3636] p-[3px]"
                     :class="{ 'opacity-100': activePopConfirmId === node.id }"
                     @click="popConfirmShow(node.id)"
                   >
@@ -553,7 +553,7 @@
     .bk-node-row {
       padding-left: 12px;
       &:hover {
-        background-color: #f0f1f5;
+        background-color: #E9EDF5;
       }
     }
     .bk-node-prefix {

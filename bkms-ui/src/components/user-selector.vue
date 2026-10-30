@@ -126,7 +126,7 @@
     right: 6px;
     z-index: 9999;
     transform: translateY(-50%);
-    color: #c4c6cc;
+    color: #C1CDE5;
     opacity: 0;
     cursor: pointer;
     transition: opacity 0.2s ease;
@@ -137,6 +137,6 @@
   }
 
   .user-selector-clear-btn:hover {
-    color: #979ba5;
+    color: #8F9FBD;
   }
 </style>

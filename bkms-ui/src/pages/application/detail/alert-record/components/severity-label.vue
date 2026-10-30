@@ -25,7 +25,7 @@
   const SEVERITY_COLOR_MAP: Record<number, string> = {
     1: '#E71818',
     2: '#FF9C01',
-    3: '#3A84FF',
+    3: '#3B6EF5',
   };
 
   const SEVERITY_LABEL_MAP: Record<number, string> = {
@@ -34,6 +34,6 @@
     3: t('提醒'),
   };
 
-  const color = computed(() => SEVERITY_COLOR_MAP[props.severity || 0] || '#979BA5');
+  const color = computed(() => SEVERITY_COLOR_MAP[props.severity || 0] || '#8F9FBD');
   const label = computed(() => SEVERITY_LABEL_MAP[props.severity || 0] || '--');
 </script>

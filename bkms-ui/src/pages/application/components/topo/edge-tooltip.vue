@@ -24,7 +24,7 @@
       :style="{ left: `${x}px`, top: `${y}px` }"
     >
       <div
-        class="max-w-[max-content] bg-white rounded-[6px] shadow-[0_2px_12px_0_rgba(0,0,0,0.12)] py-[12px] px-[16px] text-[12px] leading-[20px] text-[#63656e] break-all"
+        class="max-w-[max-content] bg-white rounded-[6px] shadow-[0_2px_12px_0_rgba(0,0,0,0.12)] py-[12px] px-[16px] text-[12px] leading-[20px] text-[#4A5973] break-all"
       >
         <div>{{ `${$t('关系')}：${relation}` }}</div>
         <template v-if="reason">

@@ -25,7 +25,13 @@
       :model="formData"
       :rules="rules"
     >
-      <ToggleCard :name="$t('基础信息')">
+      <ToggleCard
+        class="overflow-hidden rounded-[6px] bg-[#fff]"
+        header-class="!rounded-none"
+        :name="$t('基础信息')"
+        normal-bg-color="#E4E9F2"
+        type="normal"
+      >
         <div class="px-[245px]">
           <Form.FormItem
             class="row-start-2"
@@ -53,8 +59,11 @@
       </ToggleCard>
       <!-- 构建配置 -->
       <ToggleCard
-        class="mt-[16px]"
+        class="mt-[16px] overflow-hidden rounded-[6px] bg-[#fff]"
+        header-class="!rounded-none"
         :name="$t('构建配置')"
+        normal-bg-color="#E4E9F2"
+        type="normal"
       >
         <div class="px-[245px]">
           <Form.FormItem
@@ -136,7 +145,7 @@
                 v-model="formData.buildConfig.pipelineBuildConfig.pipelineID"
                 :workspace="formData.workspaceID"
               />
-              <div class="text-[12px] text-[#979ba5]">
+              <div class="text-[12px] text-[#8F9FBD]">
                 {{ $t('需要保证流水线会将构建的镜像推送到当前空间的镜像仓库下') }}
                 <Button
                   text

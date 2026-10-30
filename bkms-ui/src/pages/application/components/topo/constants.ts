@@ -239,8 +239,8 @@ export const STATUS_CONFIG: Record<
   },
   healthy: {
     bgColor: '#fff',
-    iconBgColor: 'linear-gradient(90deg, #5FB8AC 0%, #61C7B9 100%)',
-    color: '#61C7B9',
+    iconBgColor: 'linear-gradient(90deg, var(--aidev-cyan-2) 0%, var(--aidev-cyan-3) 100%)',
+    color: 'var(--aidev-cyan-3)',
     miniColor: '#DAF6E5',
   },
   warning: {

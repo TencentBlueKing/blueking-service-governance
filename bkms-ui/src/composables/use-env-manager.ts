@@ -94,10 +94,10 @@ export const envTypeTagClassMap: Record<string, string> = {
 
 /** 环境首字头像底色，与分类 Tag 对应。 */
 export const envTypeAvatarColorMap: Record<string, string> = {
-  development: '#3A84FF',
-  test: '#0399D4',
-  staging: '#E38B02',
-  production: '#299E56',
+  development: '#3B6EF5',
+  test: 'var(--aidev-cyan-2)',
+  staging: '#F59500',
+  production: '#2CAF5E',
 };
 
 /** 建立标准环境索引，避免 id/name/displayName 的 key 空间互相冲突。 */

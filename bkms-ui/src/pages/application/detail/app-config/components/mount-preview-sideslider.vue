@@ -60,8 +60,8 @@
         >
           <template #default="{ row }">
             <div class="leading-[18px]">
-              <span class="text-[#313238]">{{ row.name || '--' }}</span>
-              <div class="text-[#979BA5]">{{ row.mountDir || '--' }}</div>
+              <span class="text-[#111214]">{{ row.name || '--' }}</span>
+              <div class="text-[#8F9FBD]">{{ row.mountDir || '--' }}</div>
             </div>
           </template>
         </TableColumn>
@@ -94,7 +94,7 @@
           </template>
         </TableColumn>
       </Table>
-      <div class="mt-[12px] text-[12px] text-[#979BA5]">
+      <div class="mt-[12px] text-[12px] text-[#8F9FBD]">
         {{ $t('共 {0} 个文件；未挂载到该环境的配置文件不会出现在容器内。', [rows.length]) }}
       </div>
     </div>

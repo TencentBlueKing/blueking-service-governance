@@ -172,8 +172,8 @@
   import type { ExtendedEnv } from './types';
 
   // 查看态字段值样式常量
-  const FIELD_VALUE_BASE_CLASS = 'text-[12px] text-[#313238]';
-  const FIELD_VALUE_MODIFIED_CLASS = 'border-b border-dashed border-b-[#313238]';
+  const FIELD_VALUE_BASE_CLASS = 'text-[12px] text-[#111214]';
+  const FIELD_VALUE_MODIFIED_CLASS = 'border-b border-dashed border-b-[#111214]';
 
   type FieldKey = 'maxSurge' | 'maxUnavailable';
 
@@ -299,11 +299,11 @@
 
 <style lang="postcss" scoped>
   :deep(.bkms-content-title) {
-    background-color: #eaebf0;
+    background-color: #e4e9f2;
   }
 
   :deep(.bk-form-label) {
-    color: #4d4f56;
+    color: #4A5973;
   }
 
   :deep(.field-diff-highlight) {

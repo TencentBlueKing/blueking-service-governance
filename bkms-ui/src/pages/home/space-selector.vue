@@ -24,22 +24,23 @@
       filterable
       :model-value="spaceStore.currentSpace"
       :popover-min-width="300"
+      :popover-options="{ extCls: 'space-selector-popover' }"
       :search-placeholder="$t('搜索空间ID、名称')"
       :search-with-pinyin="false"
       @change="handleChangeSpace"
       @toggle="isSpacePopoverShow = !isSpacePopoverShow"
     >
       <template #trigger>
-        <span class="flex items-center text-[#eaebf0] text-[14px] cursor-pointer">
+        <span class="space-selector-trigger flex items-center text-[14px] cursor-pointer">
           <Loading
             class="mr-[5px]"
-            color="#182132"
+            color="var(--aidev-horiz-nav-item-color)"
             :loading="spaceStore.isLoading"
             :opacity="1"
             size="small"
             theme="default"
           >
-            <span class="text-[#DCDEE5]">{{ spaceName }}</span>
+            <span class="space-selector-name">{{ spaceName }}</span>
           </Loading>
           <AngleDownFill :class="['ml-[5px] text-[12px]', isSpacePopoverShow ? '' : 'rotate-180']" />
         </span>
@@ -51,7 +52,7 @@
         :name="`${item.displayName}(${item.id})`"
       />
       <template #extension>
-        <div class="flex w-full items-center">
+        <div class="flex w-full items-center text-[12px] leading-[20px]">
           <div
             class="flex-1 text-center flex cursor-pointer justify-center items-center"
             @click="handleCreateTeamSpace"
@@ -61,7 +62,7 @@
               width="20px"
             />
             <Button
-              class="!text-[14px]"
+              class="!text-[12px]"
               text
             >
               {{ $t('新建') }}
@@ -74,7 +75,7 @@
           >
             <i class="bkms-icon bkms-icon-guanlikongjian-3 mr-[5px] mt-[1px]"></i>
             <Button
-              class="!text-[14px]"
+              class="!text-[12px]"
               text
               >{{ $t('空间管理') }}</Button
             >
@@ -146,4 +147,20 @@
   }
 </script>
 
-<style lang="postcss" scoped></style>
+<style lang="postcss">
+  .space-selector-popover .bk-select-option,
+  .space-selector-popover .bk-select-option-item {
+    font-size: 12px;
+    line-height: 20px;
+  }
+</style>
+
+<style lang="postcss" scoped>
+  .space-selector-trigger {
+    color: var(--aidev-horiz-nav-item-color);
+  }
+
+  .space-selector-name {
+    color: var(--aidev-horiz-nav-space-color);
+  }
+</style>

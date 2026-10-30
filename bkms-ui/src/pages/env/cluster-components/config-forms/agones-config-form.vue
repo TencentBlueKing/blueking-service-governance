@@ -86,7 +86,7 @@
         v-model.trim="innerFormData.imageRepository"
         :placeholder="$t('示例：gcr.io/agones-images')"
       />
-      <p class="text-[#979BA5] text-[12px] mt-[4px]">{{ $t('如需使用私有镜像仓库，请填写完整地址') }}</p>
+      <p class="text-[#8F9FBD] text-[12px] mt-[4px]">{{ $t('如需使用私有镜像仓库，请填写完整地址') }}</p>
     </Form.FormItem>
   </Form>
 </template>

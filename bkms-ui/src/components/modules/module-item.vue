@@ -17,10 +17,10 @@
 -->
 
 <template>
-  <div class="group border rounded-[2px] text-[#4D4F56] hover:border-[#1562FC]">
+  <div class="group border rounded-[6px] text-[#4A5973] hover:border-[#1562FC]">
     <div
       :class="[
-        'bg-[#FAFBFD] px-[16px] py-[8px] border-b leading-[22px] flex justify-between items-center relative',
+        'bg-[#F7F9FD] px-[16px] py-[8px] border-b leading-[22px] flex justify-between items-center relative',
         headerClass,
       ]"
     >
@@ -37,7 +37,7 @@
         <Button
           v-if="visibleButtonList.includes('edit')"
           v-bk-tooltips="{ content: $t('编辑') }"
-          class="hover:text-[#3a84ff]"
+          class="hover:text-[#3B6EF5]"
           text
           @click="handleEdit"
         >
@@ -51,7 +51,7 @@
           text
           @click="handleClone"
         >
-          <i :class="['bkms-icon bkms-icon-clone', { 'text-[#979BA5] hover:text-[#3a84ff]': !disabledClone }]"></i>
+          <i :class="['bkms-icon bkms-icon-clone', { 'text-[#8F9FBD] hover:text-[#3B6EF5]': !disabledClone }]"></i>
         </Button>
         <Button
           v-if="visibleButtonList.includes('delete')"

@@ -17,10 +17,10 @@
 -->
 
 <template>
-  <div :class="['flex flex-col h-full min-w-0 w-full rounded-[2px]', border ? 'border-[1px] border-[#DCDEE5]' : '']">
+  <div :class="['flex flex-col h-full min-w-0 w-full rounded-[6px]', border ? 'border-[1px] border-[#E4E9F2]' : '']">
     <div
       v-if="showHeader"
-      class="flex-shrink-0 h-[40px] pl-[16px] rounded-t-sm border-b-[1px] text-[14px] font-bold border-[#DCDEE5] bg-[#F5F7FA] flex items-center"
+      class="flex-shrink-0 h-[40px] pl-[16px] rounded-t-sm border-b-[1px] text-[14px] font-bold border-[#E4E9F2] bg-[#F0F4FA] flex items-center"
     >
       {{ $t('环境变量') }}
     </div>
@@ -53,7 +53,7 @@
         :placeholder="$t('搜索变量名、变量值、描述')"
       >
         <template #suffix>
-          <Search class="text-[16px] text-[#979BA5] mr-[6px] mt-[2px] hover:text-[#3A84FF]" />
+          <Search class="text-[16px] text-[#8F9FBD] mr-[6px] mt-[2px] hover:text-[#3B6EF5]" />
         </template>
       </Input>
       <div
@@ -94,7 +94,7 @@
                   }"
                   :class="[
                     'whitespace-nowrap overflow-hidden text-ellipsis',
-                    row?.description ? 'border-b-1 border-b-dashed border-b-[#313238]' : '',
+                    row?.description ? 'border-b-1 border-b-dashed border-b-[#111214]' : '',
                   ]"
                 >
                   {{ row?.key || '--' }}
@@ -128,7 +128,7 @@
                   @click="copyText(defaultCopyFormat(row.key))"
                 >
                   <Copy
-                    class="group-hover:opacity-100 opacity-0 transition text-[#3A84FF]"
+                    class="group-hover:opacity-100 opacity-0 transition text-[#3B6EF5]"
                     :title="$t('复制')"
                   />
                 </Button>

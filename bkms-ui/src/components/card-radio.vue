@@ -28,33 +28,33 @@
       class="flex items-center gap-[12px] px-[16px] py-[12px] rounded-[4px] border transition-all duration-200"
       :class="[
         item.disabled
-          ? 'border-[#DCDEE5] bg-[#FAFBFD] cursor-not-allowed opacity-60'
+          ? 'border-[#E4E9F2] bg-[#F7F9FD] cursor-not-allowed opacity-60'
           : modelValue === item.value
-            ? 'border-[#3A84FF] bg-[#F0F5FF] cursor-pointer'
-            : 'border-[#DCDEE5] bg-white hover:border-[#3A84FF] cursor-pointer',
+            ? 'border-[#3B6EF5] bg-[#F0F4FF] cursor-pointer'
+            : 'border-[#E4E9F2] bg-white hover:border-[#3B6EF5] cursor-pointer',
       ]"
       @click="handleSelect(item)"
     >
       <div
         class="mt-[2px] w-[16px] h-[16px] rounded-full border-[1px] shrink-0 flex items-center justify-center transition-all duration-200"
-        :class="[modelValue === item.value ? 'border-[#3A84FF]' : 'border-[#DCDEE5]']"
+        :class="[modelValue === item.value ? 'border-[#3B6EF5]' : 'border-[#E4E9F2]']"
       >
         <div
           v-if="modelValue === item.value"
-          class="w-[8px] h-[8px] rounded-full bg-[#3A84FF]"
+          class="w-[8px] h-[8px] rounded-full bg-[#3B6EF5]"
         />
       </div>
       <div class="flex-1 min-w-0">
         <div
           class="text-[12px] leading-[20px] font-bold"
-          :class="[modelValue === item.value ? 'text-[#3A84FF]' : 'text-[#313238]']"
+          :class="[modelValue === item.value ? 'text-[#3B6EF5]' : 'text-[#111214]']"
         >
           {{ item.label }}
         </div>
         <div
           v-if="item.description"
           class="mt-[4px] text-[12px] leading-[20px]"
-          :class="[modelValue === item.value ? 'text-[#699DF4]' : 'text-[#979BA5]']"
+          :class="[modelValue === item.value ? 'text-[#6691FF]' : 'text-[#8F9FBD]']"
         >
           {{ item.description }}
         </div>

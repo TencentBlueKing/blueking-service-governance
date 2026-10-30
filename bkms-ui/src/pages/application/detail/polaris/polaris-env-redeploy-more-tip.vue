@@ -33,7 +33,7 @@
         </span>
         <Button
           v-if="env.changes.length"
-          class="!px-0 text-[#3A84FF] ml-[8px] !text-[12px]"
+          class="!px-0 text-[#3B6EF5] ml-[8px] !text-[12px]"
           text
           theme="primary"
           @click.stop="emit('go-deploy', env.name)"

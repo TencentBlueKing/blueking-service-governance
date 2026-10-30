@@ -31,7 +31,7 @@
       <CollapseCard class="pb-[12px] mb-[24px]">
         <template #header-left>
           <div class="flex items-center min-w-0">
-            <span class="font-bold text-[#313238] shrink-0">
+            <span class="font-bold text-[#111214] shrink-0">
               {{ $t('Patch 已有的工作负载') }}
             </span>
             <Tag
@@ -48,7 +48,7 @@
             :clearable="false"
           >
             <template #prefix>
-              <span class="px-[8px] text-[#63656E] border-r-[#c4c6cc] border-r text-[12px] bg-[#FAFBFD] leading-[32px]">
+              <span class="px-[8px] text-[#4A5973] border-r-[#C1CDE5] border-r text-[12px] bg-[#F7F9FD] leading-[32px]">
                 {{ $t('工作负载类型') }}
               </span>
             </template>
@@ -84,7 +84,7 @@
       >
         <template #header-left>
           <div class="flex items-center min-w-0">
-            <span class="font-bold text-[#313238] shrink-0">
+            <span class="font-bold text-[#111214] shrink-0">
               {{ $t('新建 Kubernetes 资源') }}
             </span>
             <Tag
@@ -93,13 +93,13 @@
             >
               {{ $t('附加资源') }}
             </Tag>
-            <span class="text-[12px] text-[#979BA5] truncate min-w-0">
+            <span class="text-[12px] text-[#8F9FBD] truncate min-w-0">
               {{ $t('（将随工作负载一起创建独立的 Kubernetes 资源）') }}
             </span>
           </div>
         </template>
         <template #item-header-left>
-          <span class="text-[12px] text-[#313238]">
+          <span class="text-[12px] text-[#111214]">
             {{ $t('资源定义') }}
             （{{ $t('YAML 格式，支持引用上方变量') }}）
             <span class="text-[#EA3636]">*</span>

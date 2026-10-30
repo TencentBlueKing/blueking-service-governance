@@ -42,12 +42,12 @@ body,
 }
 
 ::-webkit-scrollbar-thumb {
-  background-color: #dcdee5;
+  background-color: #E4E9F2;
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background-color: #979BA5;
+  background-color: #8F9FBD;
 }
 
 ::-webkit-scrollbar-track {
@@ -55,7 +55,7 @@ body,
 }
 
 ::-webkit-scrollbar-track:hover {
-  background-color: #F0F1F5;
+  background-color: #E9EDF5;
 }
 
 /* vxe表格滚动条样式 */
@@ -102,25 +102,25 @@ body,
   height: 32px;
   line-height: 32px;
   padding: 0 16px;
-  color: #63656e;
+  color: #4A5973;
   font-size: 12px;
   text-decoration: none;
   white-space: nowrap;
   cursor: pointer;
 
   &:hover:not(.disabled) {
-    background-color: #f5f7fa;
-    color: #3a84ff;
+    background-color: #F0F4FA;
+    color: #3B6EF5;
   }
 
   &.disabled {
-    color: #dcdee5;
+    color: #E4E9F2;
     cursor: not-allowed;
   }
 
   &.active {
     background-color: #eaf3ff;
-    color: #3a84ff;
+    color: #3B6EF5;
   }
 }
 
@@ -132,7 +132,7 @@ body,
 }
 
 .row--current {
-  background-color: #E1ECFF !important;
+  background-color: #E5EDFF !important;
 }
 
 .bkms-skeleton {

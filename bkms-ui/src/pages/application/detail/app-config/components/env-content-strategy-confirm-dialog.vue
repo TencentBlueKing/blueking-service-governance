@@ -30,29 +30,29 @@
     @closed="finish(false)"
     @confirm="finish(true)"
   >
-    <div class="text-[14px] leading-[22px] text-[#4D4F56]">
+    <div class="text-[14px] leading-[22px] text-[#4A5973]">
       <i18n-t
-        class="mb-[16px] bg-[#F5F7FA] px-[16px] py-[12px]"
+        class="mb-[16px] bg-[#F0F4FA] px-[16px] py-[12px]"
         keypath="切换后，这些环境的文件内容{0}。请在切换后{1}。"
         tag="div"
       >
-        <strong class="font-bold text-[#313238]">
+        <strong class="font-bold text-[#111214]">
           {{ strategy === 'overlay' ? $t('保持原样，不会自动按环境拆分差异') : $t('保持原样，不会自动合并') }}
         </strong>
-        <strong class="font-bold text-[#313238]">{{ $t('手动修改下列环境的文件内容') }}</strong>
+        <strong class="font-bold text-[#111214]">{{ $t('手动修改下列环境的文件内容') }}</strong>
       </i18n-t>
-      <div class="overflow-hidden rounded-[2px] border border-solid border-[#EAEBF0]">
-        <div class="bg-[#EAEBF0] px-[16px] py-[6px] text-[#313238]">
+      <div class="overflow-hidden rounded-[6px] border border-solid border-[#E9EDF5]">
+        <div class="bg-[#E9EDF5] px-[16px] py-[6px] text-[#111214]">
           {{ $t('涉及 {0} 个环境', [affectedEnvs.length]) }}
         </div>
         <div class="max-h-[180px] overflow-y-auto">
           <div
             v-for="env in affectedEnvs"
             :key="env.name"
-            class="flex h-[36px] items-center px-[16px] text-[12px] even:bg-[#FAFBFD]"
+            class="flex h-[36px] items-center px-[16px] text-[12px] even:bg-[#F7F9FD]"
           >
             <span
-              class="truncate text-[#313238]"
+              class="truncate text-[#111214]"
               :title="env.name"
               >{{ env.displayName }}</span
             >

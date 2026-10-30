@@ -20,17 +20,17 @@
 <template>
   <div
     ref="highlightRef"
-    class="flex flex-col border-[1px] border-[#DCDEE5] w-full h-full"
+    class="flex flex-col border-[1px] border-[#E4E9F2] w-full h-full"
   >
     <!-- 工具栏 -->
     <FlexRow
       :class="[
-        'h-[40px] px-[16px] rounded-t-sm border-b-[1px] border-[#DCDEE5]',
-        lightTheme ? 'bg-[#F5F7FA]' : 'bg-[#2E2E2E]',
+        'h-[40px] px-[16px] rounded-t-sm border-b-[1px] border-[#E4E9F2]',
+        lightTheme ? 'bg-[#F0F4FA]' : 'bg-[#2E2E2E]',
       ]"
     >
       <template #left>
-        <span :class="['text-[14px] leading-none', lightTheme ? 'text-[#313238]' : 'text-[#C4C6CC]']">
+        <span :class="['text-[14px] leading-none', lightTheme ? 'text-[#111214]' : 'text-[#C1CDE5]']">
           <slot name="title">{{ title }}</slot>
         </span>
       </template>
@@ -46,7 +46,7 @@
           >
             <template #icon>
               <Copy
-                color="#979BA5"
+                color="#8F9FBD"
                 height="16"
                 :title="$t('复制')"
                 width="16"

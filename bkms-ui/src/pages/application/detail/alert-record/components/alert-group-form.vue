@@ -39,7 +39,7 @@
           v-model="formModel.users"
           multiple
         />
-        <div class="text-[#979BA5] text-[12px] mt-[4px]">
+        <div class="text-[#8F9FBD] text-[12px] mt-[4px]">
           {{ $t('处理套餐中使用了电话语音通知，拨打的顺序是按通知对象顺序依次拨打，用户组内无法保证顺序') }}
         </div>
       </Form.FormItem>
@@ -72,7 +72,7 @@
             <template #header>
               <div class="flex items-center justify-center gap-[8px]">
                 <i
-                  class="text-[#979BA5] text-[16px]"
+                  class="text-[#8F9FBD] text-[16px]"
                   :class="col.iconClass"
                 />
                 <span>{{ $t(col.labelKey) }}</span>
@@ -86,7 +86,7 @@
             </template>
           </TableColumn>
         </Table>
-        <div class="text-[#979BA5] text-[12px] mt-[8px]">
+        <div class="text-[#8F9FBD] text-[12px] mt-[8px]">
           {{ $t('每个告警级别至少配置一种通知渠道；勾选的通知类型至少在某级别有配置。') }}
         </div>
       </Form.FormItem>

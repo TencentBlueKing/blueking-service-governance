@@ -189,7 +189,7 @@
       }
       h3 {
         margin: 6px 0 24px;
-        color: #63656e;
+        color: #4A5973;
         font-size: 20px;
         font-weight: normal;
         line-height: 1;

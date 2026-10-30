@@ -26,8 +26,8 @@
     <template #header>
       <span class="align-bottom">
         <span>{{ t('组件详情') }}</span>
-        <span class="ml-[12px] mr-[9px] text-[#DCDEE5]">|</span>
-        <span class="text-[14px] text-[#979BA5]">
+        <span class="ml-[12px] mr-[9px] text-[#E4E9F2]">|</span>
+        <span class="text-[14px] text-[#8F9FBD]">
           {{ row.displayName || row.name || '--' }}
         </span>
       </span>
@@ -39,7 +39,7 @@
       >
         <div
           v-bkloading="{ loading: isUpdateLoading }"
-          class="w-full px-[24px] py-[18px] bg-[#F5F7FA] border-[1px] border-solid border-[#F0F1F5]"
+          class="w-full px-[24px] py-[18px] bg-[#F0F4FA] border-[1px] border-solid border-[#E9EDF5]"
         >
           <ComponentLabel :label="langMap.label.baseInfo">
             <div class="grid grid-cols-3 px-[20px]">
@@ -114,7 +114,7 @@
           class="grow flex overflow-y-hidden"
         >
           <ComponentLabel
-            class="scrollbar-stable w-[210px] overflow-y-auto pl-[24px] pr-[18px] py-[16px] bg-[#FAFBFD] border-[1px] border-solid border-[#F0F1F5]"
+            class="scrollbar-stable w-[210px] overflow-y-auto pl-[24px] pr-[18px] py-[16px] bg-[#F7F9FD] border-[1px] border-solid border-[#E9EDF5]"
             :label="langMap.label.componentVersion"
           >
             <div class="flex flex-col gap-[8px]">
@@ -144,8 +144,8 @@
                 <FlexRow
                   average
                   :class="[
-                    'version-content w-full px-[8px] border-[#DCDEE5]',
-                    'border-[1px] rounded-[2px] h-[32px] cursor-pointer',
+                    'version-content w-full px-[8px] border-[#E4E9F2]',
+                    'border-[1px] rounded-[6px] h-[32px] cursor-pointer',
                     currentVersion.version === item.version ? 'version-active' : '',
                   ]"
                   @click="handleChangeVersion(item)"
@@ -153,7 +153,7 @@
                   <template #left>
                     <div class="flex items-center">
                       <div class="max-w-[50px] ellipsis">
-                        <span class="version text-[#4D4F56]">{{ item.version }}</span>
+                        <span class="version text-[#4A5973]">{{ item.version }}</span>
                       </div>
                       <Tag
                         v-if="item.version === versionList[0].version"
@@ -213,7 +213,7 @@
                       </PopConfirm>
                       <div
                         v-bk-tooltips="$t(`引用数: ${item.referenceCount}`)"
-                        class="reference-count ml-[5px] leading-[16px] min-w-[23px] text-center rounded-[8px] bg-[#F0F1F5] text-[12px] text-[#979BA5]"
+                        class="reference-count ml-[5px] leading-[16px] min-w-[23px] text-center rounded-[8px] bg-[#E9EDF5] text-[12px] text-[#8F9FBD]"
                       >
                         {{ item.referenceCount }}
                       </div>
@@ -230,19 +230,19 @@
                   class="items-center gap-[8px]"
                   :label="langMap.label.version3"
                 >
-                  <div class="text-[#313238]">{{ currentVersion.version }}</div>
+                  <div class="text-[#111214]">{{ currentVersion.version }}</div>
                 </DetailItem>
                 <DetailItem
                   class="items-center gap-[8px]"
                   :label="langMap.label.importNumber"
                 >
-                  <div class="text-[#313238]">{{ currentVersion.referenceCount }}</div>
+                  <div class="text-[#111214]">{{ currentVersion.referenceCount }}</div>
                 </DetailItem>
                 <DetailItem
                   class="items-center gap-[8px]"
                   :label="langMap.label.createTime"
                 >
-                  <div class="text-[#313238]">
+                  <div class="text-[#111214]">
                     {{ currentVersion.createTime ? formatDateString(currentVersion.createTime) : '--' }}
                   </div>
                 </DetailItem>
@@ -250,7 +250,7 @@
                   class="items-center gap-[8px]"
                   :label="langMap.label.creator"
                 >
-                  <div class="text-[#313238]">{{ currentVersion.creator }}</div>
+                  <div class="text-[#111214]">{{ currentVersion.creator }}</div>
                 </DetailItem>
               </div>
             </ComponentLabel>
@@ -512,13 +512,13 @@
   }
   .version-active,
   .version-content:hover {
-    border-color: #3a84ff;
+    border-color: #3B6EF5;
     .version {
-      color: #3a84ff;
+      color: #3B6EF5;
     }
     .reference-count {
-      color: #3a84ff;
-      background-color: #e1ecff;
+      color: #3B6EF5;
+      background-color: #E5EDFF;
     }
   }
   .version-content:hover {

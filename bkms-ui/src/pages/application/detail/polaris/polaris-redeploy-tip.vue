@@ -26,20 +26,20 @@
           width="72px"
         />
       </div>
-      <h3 class="mb-[16px] text-center text-[24px] font-normal leading-[32px] text-[#313238]">
+      <h3 class="mb-[16px] text-center text-[24px] font-normal leading-[32px] text-[#111214]">
         {{ $t('配置已保存，需重新部署后生效') }}
       </h3>
-      <p class="mb-[26px] text-center text-[14px] leading-[22px] text-[#63656E]">
+      <p class="mb-[26px] text-center text-[14px] leading-[22px] text-[#4A5973]">
         {{ $t('你修改了以下配置，这些变更需要') }}
         <span class="font-bold text-[#F59500]">{{ $t('重新部署应用') }}</span>
         {{ $t('后才会真正生效：') }}
       </p>
       <Loading :loading="loading">
-        <div class="min-h-[240px] bg-[#F5F7FA] p-[16px]">
-          <div class="mb-[12px] text-[14px] font-bold leading-[24px] text-[#313238]">
+        <div class="min-h-[240px] bg-[#F0F4FA] p-[16px]">
+          <div class="mb-[12px] text-[14px] font-bold leading-[24px] text-[#111214]">
             {{ $t('待部署的环境（{0}）', [redeployRequiredEnvs.length]) }}
           </div>
-          <p class="mb-[8px] text-[14px] leading-[22px] text-[#63656E]">
+          <p class="mb-[8px] text-[14px] leading-[22px] text-[#4A5973]">
             {{ $t('请点击以下部署链接进行部署，或前往') }}
             <Button
               class="align-baseline !px-0"
@@ -51,7 +51,7 @@
             </Button>
             {{ $t('选择对应环境执行部署；') }}
           </p>
-          <p class="mb-[16px] text-[14px] leading-[22px] text-[#63656E]">
+          <p class="mb-[16px] text-[14px] leading-[22px] text-[#4A5973]">
             {{ $t('本次操作会记录在部署历史中，可追溯、可回滚；') }}
           </p>
           <div class="flex flex-col gap-[10px]">
@@ -60,9 +60,9 @@
               :key="env.name"
               class="bg-[#fff]"
             >
-              <div class="flex justify-between h-[32px] items-center border-b border-[#F0F1F5] px-[10px]">
+              <div class="flex justify-between h-[32px] items-center border-b border-[#E9EDF5] px-[10px]">
                 <div class="h-full flex items-center">
-                  <span class="mr-[10px] text-[16px] text-[#4D4F56]">•</span>
+                  <span class="mr-[10px] text-[16px] text-[#4A5973]">•</span>
                   <span
                     v-bk-tooltips="env.displayName"
                     class="truncate text-[12px] font-bold"
@@ -87,19 +87,19 @@
                   <Share class="ml-[4px]" />
                 </Button>
               </div>
-              <div class="px-[30px] py-[8px] text-[12px] text-[#63656E] leading-[24px]">
+              <div class="px-[30px] py-[8px] text-[12px] text-[#4A5973] leading-[24px]">
                 <div
                   v-for="change in env.changes"
                   :key="change.key"
                 >
                   <span>{{ change.label }}：</span>
                   <template v-if="change.oldValue === undefined">
-                    <span class="font-bold text-[#313238]">{{ formatRedeployValue(change.newValue) }}</span>
+                    <span class="font-bold text-[#111214]">{{ formatRedeployValue(change.newValue) }}</span>
                   </template>
                   <template v-else>
                     <span>{{ formatRedeployValue(change.oldValue) }}</span>
                     <span class="mx-[8px]">→</span>
-                    <span class="font-bold text-[#313238]">{{ formatRedeployValue(change.newValue) }}</span>
+                    <span class="font-bold text-[#111214]">{{ formatRedeployValue(change.newValue) }}</span>
                   </template>
                 </div>
               </div>

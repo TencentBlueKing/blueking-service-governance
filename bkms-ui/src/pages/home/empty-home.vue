@@ -18,7 +18,7 @@
 
 <template>
   <div
-    class="flex items-center justify-center mx-[100px] my-[24px] rounded-[8px] bg-[#FFF] shadow-[0_2px_4px_0_#1919290d] min-h-[calc(100vh-150px)]"
+    class="mx-[100px] my-[24px] flex min-h-[calc(100vh-150px)] items-center justify-center overflow-hidden rounded-[6px] bg-[#FFF] shadow-[0_2px_4px_0_#1919290d]"
   >
     <div class="flex flex-col items-center">
       <img
@@ -27,8 +27,8 @@
         src="@/assets/home-platform-logo.png"
       />
 
-      <h1 class="text-[24px] font-bold text-[#313238] mb-[16px]">{{ $t('欢迎使用蓝鲸服务治理平台') }}</h1>
-      <p class="text-[14px] text-[#4D4F56]">
+      <h1 class="text-[24px] font-bold text-[#111214] mb-[16px]">{{ $t('欢迎使用蓝鲸服务治理平台') }}</h1>
+      <p class="text-[14px] text-[#4A5973]">
         {{ $t('一站式应用全生命周期管理服务，从开发、构建、部署到运维的完整解决方案') }}
       </p>
 
@@ -48,8 +48,8 @@
               :class="feature.icon"
             />
           </div>
-          <div class="text-[14px] font-bold text-[#313238] mb-[8px]">{{ feature.title }}</div>
-          <div class="text-[12px] text-[#4D4F56] leading-[20px]">{{ feature.desc }}</div>
+          <div class="text-[14px] font-bold text-[#111214] mb-[8px]">{{ feature.title }}</div>
+          <div class="text-[12px] text-[#4A5973] leading-[20px]">{{ feature.desc }}</div>
         </div>
       </div>
 
@@ -87,7 +87,7 @@
   const features = [
     {
       icon: 'bkms-icon bkms-icon-auto-refresh-line',
-      bgGradient: 'linear-gradient(180deg, #76AAFF 0%, #3A84FF 100%)',
+      bgGradient: 'linear-gradient(180deg, #76AAFF 0%, #3B6EF5 100%)',
       title: t('全流程自动化'),
       desc: t('打通代码构建、部署到运维观测的完整闭环'),
     },
@@ -99,7 +99,7 @@
     },
     {
       icon: 'bkms-icon bkms-icon-shipei',
-      bgGradient: 'linear-gradient(135deg, #8B5CF6 0%, #A78BFA 100%)',
+      bgGradient: 'linear-gradient(135deg, var(--aidev-purple-3) 0%, var(--aidev-purple-4) 100%)',
       title: t('多场景适配'),
       desc: t('支持 tRPC、Helm、TAF 等多种应用类型'),
     },

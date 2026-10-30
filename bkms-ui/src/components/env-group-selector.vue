@@ -30,7 +30,7 @@
           {{ group.label }}
         </span>
         <div class="flex items-center">
-          <span class="text-[12px] text-[#4D4F56] mr-[8px]">{{ $t('全选') }}</span>
+          <span class="text-[12px] text-[#4A5973] mr-[8px]">{{ $t('全选') }}</span>
           <Checkbox
             class="bg-[#fff]"
             :disabled="props.disabled || getGroupEnvValues(group.envs).length === 0"
@@ -50,7 +50,7 @@
             disabled: !getCustomDisabledReason(env),
             placement: 'bottom',
           }"
-          class="h-[32px] flex items-center px-[12px] bg-[#F5F7FA] cursor-pointer"
+          class="h-[32px] flex items-center px-[12px] bg-[#F0F4FA] cursor-pointer"
           :class="isEnvDisplayDisabled(env) ? 'opacity-60 cursor-not-allowed' : ''"
           @click="handleEnvItemClick(env)"
         >
@@ -62,14 +62,14 @@
               :size="14"
             />
             <span
-              class="min-w-0 truncate text-[12px] text-[#4D4F56]"
+              class="min-w-0 truncate text-[12px] text-[#4A5973]"
               :title="env.displayName || env.name"
             >
               {{ env.displayName || env.name || '--' }}
             </span>
             <Tag
               v-if="isFeatureEnv(env)"
-              class="bg-[#E2F5F7] text-[#3A9EAA] ml-[6px] shrink-0"
+              class="bg-[var(--aidev-cyan-6)] text-[var(--aidev-cyan-2)] ml-[6px] shrink-0"
               size="small"
             >
               {{ $t('特性') }}
@@ -94,7 +94,7 @@
         </div>
         <div
           v-if="group.envs.length === 0"
-          class="h-[40px] flex items-center justify-center bg-[#F5F7FA] text-[12px] text-[#979BA5]"
+          class="h-[40px] flex items-center justify-center bg-[#F0F4FA] text-[12px] text-[#8F9FBD]"
         >
           {{ $t('暂无数据') }}
         </div>

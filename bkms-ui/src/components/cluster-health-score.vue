@@ -36,7 +36,7 @@
           :cy="center"
           fill="none"
           :r="circleRadius"
-          stroke="#F0F1F5"
+          stroke="#E9EDF5"
           :stroke-width="STROKE_WIDTH"
         />
         <!-- 致命问题圆环（红色） -->
@@ -68,13 +68,13 @@
         <div
           class="progress-value font-bold leading-none"
           :style="{
-            color: count?.RISK != null ? '#EA3636' : '#979BA5',
+            color: count?.RISK != null ? '#EA3636' : '#8F9FBD',
             fontSize: `${valueSize}px`,
           }"
         >
           {{ count?.RISK ?? '--' }}
         </div>
-        <div class="text-[10px] text-[#979BA5] mt-[4px]">
+        <div class="text-[10px] text-[#8F9FBD] mt-[4px]">
           {{ $t('致命问题') }}
         </div>
       </div>
@@ -87,11 +87,11 @@
     >
       <div class="flex items-center gap-[8px]">
         <span class="inline-block w-[8px] h-[8px] rounded-full bg-[#EA3636]"></span>
-        <span class="text-[12px] text-[#63656E]">{{ $t('致命问题') }}：{{ count?.RISK ?? '--' }}</span>
+        <span class="text-[12px] text-[#4A5973]">{{ $t('致命问题') }}：{{ count?.RISK ?? '--' }}</span>
       </div>
       <div class="flex items-center gap-[8px]">
         <span class="inline-block w-[8px] h-[8px] rounded-full bg-[#F59500]"></span>
-        <span class="text-[12px] text-[#63656E]">{{ $t('预警问题') }}：{{ count?.WARN ?? '--' }}</span>
+        <span class="text-[12px] text-[#4A5973]">{{ $t('预警问题') }}：{{ count?.WARN ?? '--' }}</span>
       </div>
     </div>
   </div>

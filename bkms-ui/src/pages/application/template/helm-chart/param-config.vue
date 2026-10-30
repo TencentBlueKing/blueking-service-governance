@@ -25,7 +25,13 @@
       :model="formData"
       :rules="rules"
     >
-      <ToggleCard :name="$t('基础信息')">
+      <ToggleCard
+        class="overflow-hidden rounded-[6px] bg-[#fff]"
+        header-class="!rounded-none"
+        :name="$t('基础信息')"
+        normal-bg-color="#E4E9F2"
+        type="normal"
+      >
         <div class="px-[245px]">
           <Form.FormItem
             :label="$t('应用名称')"
@@ -52,8 +58,11 @@
         </div>
       </ToggleCard>
       <ToggleCard
-        class="mt-[16px]"
+        class="mt-[16px] overflow-hidden rounded-[6px] bg-[#fff]"
+        header-class="!rounded-none"
         :name="`Helm Chart ${$t('配置')}`"
+        normal-bg-color="#E4E9F2"
+        type="normal"
       >
         <div class="px-[245px]">
           <HelmChartSourceForm
@@ -64,8 +73,11 @@
         </div>
       </ToggleCard>
       <ToggleCard
-        class="mt-[16px]"
+        class="mt-[16px] overflow-hidden rounded-[6px] bg-[#fff]"
+        header-class="!rounded-none"
         :name="$t('构建配置')"
+        normal-bg-color="#E4E9F2"
+        type="normal"
       >
         <div class="px-[245px]">
           <!-- 创建应用：不展示推荐版本号 -->

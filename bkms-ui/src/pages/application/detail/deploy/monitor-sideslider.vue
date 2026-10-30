@@ -24,7 +24,7 @@
   >
     <template #header>
       <div class="w-full flex items-center justify-between px-[16px]">
-        <span class="text-[#313238] text-[16px]">{{ $t('实例监控') }}</span>
+        <span class="text-[#111214] text-[16px]">{{ $t('实例监控') }}</span>
         <div class="flex items-center">
           <DatePicker
             v-model="value"
@@ -36,7 +36,7 @@
           />
           <Divider
             class="h-[12px] min-h-[16px] mr-[12px]"
-            color="#DCDEE5"
+            color="#E4E9F2"
             direction="vertical"
             type="solid"
           />
@@ -59,11 +59,11 @@
     </template>
 
     <div
-      class="flex items-center border-b border-[#DCDEE5] h-[48px] bg-[#fff] px-[24px] shadow-[0_3px_5.5px_0_#00000012]"
+      class="flex items-center border-b border-[#E4E9F2] h-[48px] bg-[#fff] px-[24px] shadow-[0_3px_5.5px_0_#00000012]"
     >
       <!-- 实例名称 -->
       <div class="flex items-center">
-        <span class="bg-[#FAFBFD] h-[32px] leading-[30px] text-[#4D4F56] text-[12px] px-[6px] b b-r-0 b-[#c4c6cc]">{{
+        <span class="bg-[#F7F9FD] h-[32px] leading-[30px] text-[#4A5973] text-[12px] px-[6px] b b-r-0 b-[#C1CDE5]">{{
           $t('实例名称')
         }}</span>
         <Select
@@ -82,7 +82,7 @@
           @toggle="handleSelectBlur"
         >
           <div
-            class="flex items-center px-[12px] py-[6px] text-[#63656E] cursor-pointer hover:bg-[#f5f7fa]"
+            class="flex items-center px-[12px] py-[6px] text-[#4A5973] cursor-pointer hover:bg-[#F0F4FA]"
             @click.stop="handleToggleAll"
           >
             <Checkbox
@@ -107,7 +107,7 @@
             @node-checked="handleNodeChecked"
           >
             <template #node="{ name }">
-              <span class="text-[12px] text-[#63656E] pr-[12px] cursor-pointer">{{ name }}</span>
+              <span class="text-[12px] text-[#4A5973] pr-[12px] cursor-pointer">{{ name }}</span>
             </template>
           </Tree>
         </Select>
@@ -119,7 +119,7 @@
         :clearable="false"
       >
         <template #prefix>
-          <span class="bg-[#FAFBFD] leading-[32px] text-[#4D4F56] text-[12px] px-[6px] b-r b-[#c4c6cc]">{{
+          <span class="bg-[#F7F9FD] leading-[32px] text-[#4A5973] text-[12px] px-[6px] b-r b-[#C1CDE5]">{{
             $t('汇聚周期')
           }}</span>
         </template>
@@ -132,7 +132,7 @@
       </Select>
       <!-- 时间对比 -->
       <div class="flex items-center ml-[16px] flex-shrink-0">
-        <span class="text-[#4D4F56] text-[12px] mr-[8px]">{{ $t('时间对比') }}</span>
+        <span class="text-[#4A5973] text-[12px] mr-[8px]">{{ $t('时间对比') }}</span>
         <Switcher
           v-model="timeCompareEnabled"
           :disabled="isMultiEnv"
@@ -159,7 +159,7 @@
               <div style="padding: 0 12px 6px">
                 <span
                   v-if="!showCustomInput"
-                  class="text-[#3A84FF] cursor-pointer text-[12px]"
+                  class="text-[#3B6EF5] cursor-pointer text-[12px]"
                   @click="handleShowCustomInput"
                 >{{ $t('自定义') }}</span>
                 <template v-if="showCustomInput">
@@ -172,11 +172,11 @@
                     <template #suffix>
                       <i
                         v-bk-tooltips="{ content: $t('自定义输入格式提示'), placement: 'top', boundary: 'parent' }"
-                        class="bkms-icon bkms-icon-help-document text-[#C4C6CC] flex items-center mr-[4px]"
+                        class="bkms-icon bkms-icon-help-document text-[#C1CDE5] flex items-center mr-[4px]"
                       />
                     </template>
                     <template #append>
-                      <span class="text-[#3A84FF] cursor-pointer" @click="handleCustomOffsetConfirm">{{ $t('确定') }}</span>
+                      <span class="text-[#3B6EF5] cursor-pointer" @click="handleCustomOffsetConfirm">{{ $t('确定') }}</span>
                     </template>
                   </Input>
                 </template>
@@ -186,7 +186,7 @@
         </template>
       </div>
     </div>
-    <div class="overflow-auto px-[24px] pt-[24px] pb-[24px] bg-[#F5F7FA] h-[calc(100vh-105px)]">
+    <div class="overflow-auto px-[24px] pt-[24px] pb-[24px] bg-[#F0F4FA] h-[calc(100vh-105px)]">
       <div class="mb-[24px] bg-[#fff] h-[48px] px-[16px] py-[8px] shadow-[0_3px_5.5px_0_#00000012]">
         <Radio.Group
           v-model="metricFilter"
@@ -224,13 +224,13 @@
           <template #default="{ row }">
             <div class="flex items-center">
               <Progress
-                color="#3A84FF"
+                color="#3B6EF5"
                 :percent="Math.min(row.cpuLimitUsageRate, 100)"
                 :show-text="false"
                 :stroke-width="6"
                 type="line"
               />
-              <span class="text-[#63656E] text-[12px] ml-[4px]">{{ formatDecimal(row.cpuLimitUsageRate) }}%</span>
+              <span class="text-[#4A5973] text-[12px] ml-[4px]">{{ formatDecimal(row.cpuLimitUsageRate) }}%</span>
             </div>
           </template>
         </TableColumn>
@@ -240,7 +240,7 @@
           :min-width="120"
         >
           <template #default="{ row }">
-            <span class="text-[#63656E] text-[12px]">{{ formatDecimal(row.memLimitUsageRate) }}%</span>
+            <span class="text-[#4A5973] text-[12px]">{{ formatDecimal(row.memLimitUsageRate) }}%</span>
           </template>
         </TableColumn>
         <TableColumn
@@ -249,7 +249,7 @@
           :min-width="120"
         >
           <template #default="{ row }">
-            <span class="text-[#63656E] text-[12px]">
+            <span class="text-[#4A5973] text-[12px]">
               {{ formatDecimal(row.cpuUsage) }}
             </span>
           </template>
@@ -260,7 +260,7 @@
           :min-width="120"
         >
           <template #default="{ row }">
-            <span class="text-[#63656E] text-[12px]">
+            <span class="text-[#4A5973] text-[12px]">
               {{ formatBytes(row.memUsage) }}
             </span>
           </template>
@@ -275,7 +275,7 @@
         :class="['mb-[24px]', { '!mb-0': index === metricGroups.length - 1 }]"
         content-class="grid grid-cols-1 gap-[16px] pt-[6px]"
         :name="group.name"
-        normal-bg-color="#EAEBF0"
+        normal-bg-color="#E9EDF5"
         type="normal"
       >
         <chart-card-item
@@ -294,7 +294,7 @@
         >
           <template #title>
             <div class="flex items-center">
-              <span class="text-[#313238] text-[14px] font-[500] mr-[8px]">{{ item.title }}</span>
+              <span class="text-[#111214] text-[14px] font-[500] mr-[8px]">{{ item.title }}</span>
               <Tag v-bk-tooltips="$t('数据步长')">{{ formatIntervalText(chartParams.interval || 0) }}</Tag>
             </div>
           </template>
@@ -971,7 +971,7 @@
 <style lang="postcss" scoped>
   :deep(.bk-modal-content) {
     scrollbar-gutter: auto !important;
-    background-color: #f5f7fa;
+    background-color: #F0F4FA;
   }
   :deep(.bk-select .bk-select-trigger .bk-select-tag:not(.collapse-tag)) {
     z-index: 999;

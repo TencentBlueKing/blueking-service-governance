@@ -24,7 +24,7 @@
   >
     <template #header>
       <i18n-t
-        class="text-[20px] text-[#313238]"
+        class="text-[20px] text-[#111214]"
         keypath="部署预检发现{0}类问题"
       >
         <span class="px-[4px] font-bold">{{ problemCount }}</span>
@@ -34,7 +34,7 @@
     <!-- 资源规格不一致 -->
     <div
       v-if="hasResourceBlocker"
-      class="overflow-hidden rounded-[2px] border border-[#F8B4B4]"
+      class="overflow-hidden rounded-[6px] border border-[#F8B4B4]"
       :class="{ 'mb-[16px]': hasMissingRequiredClusterAddons || hasUndefinedVars }"
     >
       <div
@@ -46,7 +46,7 @@
           <span class="mx-[8px] text-base font-bold text-[#EA3636]">{{ $t('联邦集群资源规格不一致') }}</span>
         </div>
         <AngleDown
-          class="text-[22px] text-[#979BA5] transition-transform duration-200"
+          class="text-[22px] text-[#8F9FBD] transition-transform duration-200"
           :class="{ 'rotate-180': !resourceCollapsed }"
         />
       </div>
@@ -56,16 +56,16 @@
           v-show="!resourceCollapsed"
           class="border-t border-[#F8B4B4] bg-[#FFF5F4] px-[12px] py-[8px]"
         >
-          <p class="text-[12px] leading-[20px] text-[#4D4F56]">
+          <p class="text-[12px] leading-[20px] text-[#4A5973]">
             {{ $t('当前环境已绑定联邦集群。联邦集群要求 CPU、内存的 Requests 与 Limits 必须一致，否则无法部署。') }}
           </p>
           <i18n-t
-            class="mb-[8px] text-[12px] leading-[20px] text-[#4D4F56]"
+            class="mb-[8px] text-[12px] leading-[20px] text-[#4A5973]"
             keypath="建议前往 {0} 将 Requests 调整为与 Limits 一致后再部署。"
             tag="p"
           >
             <span
-              class="cursor-pointer text-[#3A84FF]"
+              class="cursor-pointer text-[#3B6EF5]"
               @click="handleGoResourceModify"
             >
               「{{ $t('应用配置') }} / {{ $t('部署配置') }}」
@@ -99,7 +99,7 @@
     <!-- 环境组件缺失 -->
     <div
       v-if="hasMissingRequiredClusterAddons"
-      class="overflow-hidden rounded-[2px] border border-[#F8B4B4]"
+      class="overflow-hidden rounded-[6px] border border-[#F8B4B4]"
       :class="{ 'mb-[16px]': hasUndefinedVars }"
     >
       <div
@@ -109,14 +109,14 @@
         <div class="flex items-center">
           <i class="bkms-icon bkms-icon-close-circle-shape text-[14px] text-[#EA3636]" />
           <span class="mx-[8px] text-base font-bold text-[#EA3636]">{{ $t('缺少必选集群组件') }}</span>
-          <span class="rounded-[2px] bg-[#FCD5D3] px-[8px] py-[2px] text-[12px] text-[#EA3636]">
+          <span class="rounded-[6px] bg-[#FCD5D3] px-[8px] py-[2px] text-[12px] text-[#EA3636]">
             <i18n-t keypath="{0} 个组件">
               <span class="pl-[2px]">{{ missingRequiredClusterAddons.length }}</span>
             </i18n-t>
           </span>
         </div>
         <AngleDown
-          class="text-[22px] text-[#979BA5] transition-transform duration-200"
+          class="text-[22px] text-[#8F9FBD] transition-transform duration-200"
           :class="{ 'rotate-180': !clusterAddonCollapsed }"
         />
       </div>
@@ -126,16 +126,16 @@
           v-show="!clusterAddonCollapsed"
           class="border-t border-[#F8B4B4] bg-[#FFF5F4] px-[12px] py-[8px]"
         >
-          <p class="text-[12px] leading-[20px] text-[#4D4F56]">
+          <p class="text-[12px] leading-[20px] text-[#4A5973]">
             {{ $t('以下必选集群组件在目标环境所在集群中尚未安装，缺失时应用无法正常部署。') }}
           </p>
           <i18n-t
-            class="mb-[8px] text-[12px] leading-[20px] text-[#4D4F56]"
+            class="mb-[8px] text-[12px] leading-[20px] text-[#4A5973]"
             keypath="建议前往 {0} 安装组件后再部署。"
             tag="p"
           >
             <span
-              class="cursor-pointer text-[#3A84FF]"
+              class="cursor-pointer text-[#3B6EF5]"
               @click="handleGoClusterAddonModify"
             >
               「{{ $t('环境管理') }} / {{ $t('集群组件') }}」
@@ -145,7 +145,7 @@
             <span
               v-for="(name, index) in clusterAddonNames"
               :key="`${name}:${index}`"
-              class="rounded-[2px] bg-[#F0F1F5] px-[16px] py-[4px] text-[14px] leading-[24px] text-[#63656E]"
+              class="rounded-[6px] bg-[#E9EDF5] px-[16px] py-[4px] text-[14px] leading-[24px] text-[#4A5973]"
             >
               {{ name }}
             </span>
@@ -157,7 +157,7 @@
     <!-- 环境变量未定义 -->
     <div
       v-if="hasUndefinedVars"
-      class="rounded-[2px] border border-[#F9D090] bg-[#FDF4E8] px-[12px]"
+      class="rounded-[6px] border border-[#F9D090] bg-[#FDF4E8] px-[12px]"
     >
       <div
         class="flex cursor-pointer items-center justify-between py-[8px]"
@@ -166,14 +166,14 @@
         <div class="flex items-center">
           <i class="bkms-icon bkms-icon-triangle-warning text-[12px] text-[#F59500]" />
           <span class="mx-[8px] text-base font-bold text-[#F59500]">{{ $t('环境变量未定义') }}</span>
-          <span class="rounded-[2px] bg-[#FCE5C0] px-[8px] py-[2px] text-[12px] text-[#E38B02]">
+          <span class="rounded-[6px] bg-[#FCE5C0] px-[8px] py-[2px] text-[12px] text-[#E38B02]">
             <i18n-t keypath="{0} 个变量">
               <span class="pl-[2px]">{{ envVarRows.length }}</span>
             </i18n-t>
           </span>
         </div>
         <AngleDown
-          class="text-[22px] text-[#979BA5] transition-transform duration-200"
+          class="text-[22px] text-[#8F9FBD] transition-transform duration-200"
           :class="{ 'rotate-180': !envVarCollapsed }"
         />
       </div>
@@ -184,19 +184,19 @@
           class="border-t border-[#F9D090] py-[8px]"
         >
           <i18n-t
-            class="text-[12px] leading-[20px] text-[#4D4F56]"
+            class="text-[12px] leading-[20px] text-[#4A5973]"
             keypath="以下环境变量在当前配置中被引用，但在目标部署环境中未定义，部署后将被渲染为空值，{0}"
             tag="p"
           >
             <span class="font-bold">{{ $t('可能导致服务异常！') }}</span>
           </i18n-t>
           <i18n-t
-            class="mb-[8px] text-[12px] leading-[20px] text-[#4D4F56]"
+            class="mb-[8px] text-[12px] leading-[20px] text-[#4A5973]"
             keypath="建议前往 {0} 补充配置后再部署，避免服务注册异常或配置错误。"
             tag="p"
           >
             <span
-              class="cursor-pointer text-[#3A84FF]"
+              class="cursor-pointer text-[#3B6EF5]"
               @click="handleGoEnvVarModify"
             >
               「{{ $t('环境管理') }} / {{ $t('环境变量') }}」
@@ -228,7 +228,7 @@
                 >
                   <template #default="{ item }: { item: DisplaySource }">
                     <span
-                      class="max-w-full break-all rounded-[2px] px-[6px] py-[2px] text-[12px] leading-[18px]"
+                      class="max-w-full break-all rounded-[6px] px-[6px] py-[2px] text-[12px] leading-[18px]"
                       :class="item.className"
                     >
                       {{ item.text }}
@@ -239,7 +239,7 @@
                       <span
                         v-for="source in items"
                         :key="source.id"
-                        class="break-all rounded-[2px] px-[6px] py-[2px] text-[12px] leading-[18px]"
+                        class="break-all rounded-[6px] px-[6px] py-[2px] text-[12px] leading-[18px]"
                         :class="source.className"
                       >
                         {{ source.text }}
@@ -263,7 +263,7 @@
           {{ $t('存在阻断问题，请先解决后再部署') }}
         </span>
         <Button
-          class="bg-[#fff] text-[#4D4F56] !min-w-[60px]"
+          class="bg-[#fff] text-[#4A5973] !min-w-[60px]"
           @click="handleCancel"
         >
           {{ $t('关闭') }}
@@ -281,13 +281,13 @@
           {{ $t('前往修改') }}
         </Button>
         <Button
-          class="mr-[8px] bg-[#fff] text-[#4D4F56]"
+          class="mr-[8px] bg-[#fff] text-[#4A5973]"
           @click="handleStillDeploy"
         >
           {{ $t('仍然部署') }}
         </Button>
         <Button
-          class="bg-[#fff] text-[#4D4F56] !min-w-[60px]"
+          class="bg-[#fff] text-[#4A5973] !min-w-[60px]"
           @click="handleCancel"
         >
           {{ $t('取消') }}
@@ -361,7 +361,7 @@
 
   const sourceTypeMap: Record<string, { className: string; label: string }> = {
     appConfigFile: {
-      className: 'bg-[#F0F1F5] text-[#63656E]',
+      className: 'bg-[#E9EDF5] text-[#4A5973]',
       label: '框架配置文件',
     },
     component: {
@@ -369,7 +369,7 @@
       label: '组件配置',
     },
     polaris: {
-      className: 'bg-[#E1ECFF] text-[#3A84FF]',
+      className: 'bg-[#E5EDFF] text-[#3B6EF5]',
       label: '北极星',
     },
   };
@@ -378,7 +378,7 @@
   function formatSources(item: UndefinedEnvVarOutput): DisplaySource[] {
     const sources = item.sources ?? [];
     if (sources.length === 0) {
-      return [{ className: 'bg-[#F0F1F5] text-[#63656E]', id: 'unknown', text: '--' }];
+      return [{ className: 'bg-[#E9EDF5] text-[#4A5973]', id: 'unknown', text: '--' }];
     }
 
     const sourceMap = new Map<string, DisplaySource>();
@@ -387,7 +387,7 @@
       const typeLabel = config ? t(config.label) : source.type || t('未知来源');
       const text = source.name ? `${typeLabel}：${source.name}` : typeLabel;
       sourceMap.set(text, {
-        className: config?.className ?? 'bg-[#F0F1F5] text-[#63656E]',
+        className: config?.className ?? 'bg-[#E9EDF5] text-[#4A5973]',
         id: `${source.type ?? 'unknown'}:${source.name ?? index}`,
         text,
       });
@@ -524,14 +524,14 @@
   }
 
   :deep(.bk-dialog-footer) {
-    border-top-color: #eaebf0;
+    border-top-color: #e9edf5;
   }
 
   :deep(.deploy-precheck-dialog-table) {
-    --vxe-ui-table-border-color: #dcdee5;
+    --vxe-ui-table-border-color: #E4E9F2;
     --vxe-ui-table-header-font-weight: 400;
-    --vxe-ui-table-header-font-color: #4d4f56;
-    --vxe-ui-table-header-background-color: #fafbfd;
-    --vxe-ui-font-color: #4d4f56;
+    --vxe-ui-table-header-font-color: #111214;
+    --vxe-ui-table-header-background-color: #FBFCFE;
+    --vxe-ui-font-color: #4A5973;
   }
 </style>

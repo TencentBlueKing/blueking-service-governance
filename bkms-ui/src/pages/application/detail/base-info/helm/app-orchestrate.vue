@@ -26,7 +26,7 @@
     @validate-change="handleValidateChange"
   >
     <template #footer>
-      <div class="flex items-center mt-[14px] pl-[24px] bg-[#FFFFFF] h-[48px] border border-[1px_solid_#EAEBF0]">
+      <div class="flex items-center mt-[14px] pl-[24px] bg-[#FFFFFF] h-[48px] border border-[1px_solid_#E9EDF5]">
         <Button
           v-bk-tooltips="{
             content: isBscp ? $t('来源于 BSCP 的文件仅能查看，不能编辑') : $t('校验未通过'),

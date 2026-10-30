@@ -22,8 +22,8 @@
   >
     <div
       :class="[
-        'flex items-center justify-between cursor-pointer text-[#313238] leading-[22px]',
-        type === 'normal' ? 'px-[16px] py-[4px] text-[12px]' : 'text-[14px]',
+        'flex items-center justify-between cursor-pointer text-[#111214] leading-[22px]',
+        type === 'normal' ? 'px-[16px] py-[4px] text-[12px] rounded-[6px]' : 'text-[14px]',
         headerClass,
       ]"
       :style="normalStyle"
@@ -41,7 +41,7 @@
           ></i>
           <RightShape
             v-else
-            fill="#313238"
+            fill="#111214"
             :height="12"
             :width="12"
           />
@@ -106,11 +106,11 @@
     },
     normalBgColor: {
       type: String,
-      default: '#F0F1F5',
+      default: '#E9EDF5',
     },
     normalColor: {
       type: String,
-      default: '#4D4F56',
+      default: '#4A5973',
     },
     stopPropagation: {
       type: Boolean,

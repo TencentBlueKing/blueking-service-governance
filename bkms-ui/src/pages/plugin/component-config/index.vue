@@ -84,7 +84,7 @@
     min-height: 0px;
     min-width: 0px;
     overflow: auto;
-    background-color: #f5f7fa;
+    background-color: #F0F4FA;
     padding: 0 !important;
 
     .bk-tab-panel {

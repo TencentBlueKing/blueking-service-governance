@@ -26,8 +26,10 @@
       :rules="rules"
     >
       <ToggleCard
-        class="bg-[#fff] rounded-[2px]"
+        class="overflow-hidden rounded-[6px] bg-[#fff]"
+        header-class="!rounded-none"
         :name="$t('基础信息')"
+        normal-bg-color="#E4E9F2"
         type="normal"
       >
         <div class="px-[245px]">
@@ -71,8 +73,10 @@
       </ToggleCard>
       <!-- 构建配置 -->
       <ToggleCard
-        class="mt-[16px] bg-[#fff] rounded-[2px]"
+        class="mt-[16px] overflow-hidden rounded-[6px] bg-[#fff]"
+        header-class="!rounded-none"
         :name="$t('构建配置')"
+        normal-bg-color="#E4E9F2"
         type="normal"
       >
         <div class="px-[245px]">
@@ -184,8 +188,9 @@
                 :label="$t('高级命令')"
               >
                 <ToggleCard
-                  class="bg-[#fff] rounded-[2px] border-[1px] border-[#e5e5e5]"
+                  class="overflow-hidden rounded-[6px] border-[1px] border-[#e5e5e5] bg-[#fff]"
                   content-class="p-[16px]"
+                  header-class="!rounded-none"
                   :model-value="false"
                   type="normal"
                 >
@@ -232,7 +237,7 @@
                       :rows="4"
                       type="textarea"
                     />
-                    <span class="text-[#c4c6cc]">{{
+                    <span class="text-[#C1CDE5]">{{
                       $t(
                         '文件会按相对路径打包到运行镜像的 /app 目录，例如 data/privatekey.pem 打包后为 /app/data/privatekey.pem。',
                       )
@@ -261,7 +266,7 @@
                       :rows="4"
                       type="textarea"
                     />
-                    <span class="text-[#c4c6cc]">{{
+                    <span class="text-[#C1CDE5]">{{
                       $t('写入镜像的默认启动方式（ENTRYPOINT），构建时固化到镜像中。部署时可被「运行命令」覆盖')
                     }}</span>
                   </div>
@@ -282,7 +287,7 @@
               <div class="mb-[24px]">
                 <span class="inline-block mb-[2px] mt-[10px] font-bold">{{ $t('等价构建命令（示意）') }}</span>
                 <div
-                  class="equivalent-build-command bg-[#f5f7fa] p-[16px] leading-[20px] text-[#4D4F56] overflow-x-auto"
+                  class="equivalent-build-command bg-[#F0F4FA] p-[16px] leading-[20px] text-[#4A5973] overflow-x-auto"
                 >
                   <pre
                     v-bk-xss-html="highlightedBuildCommand"
@@ -302,7 +307,7 @@
                 v-model="formData.buildConfig.pipelineBuildConfig.pipelineID"
                 :workspace="formData.workspaceID"
               />
-              <div class="text-[12px] text-[#979ba5]">
+              <div class="text-[12px] text-[#8F9FBD]">
                 {{ $t('需要保证流水线会将构建的镜像推送到当前空间的镜像仓库下') }}
                 <Button
                   text
@@ -763,11 +768,11 @@
   }
 
   .equivalent-build-command :deep(.build-command-comment) {
-    color: #c4c6cc;
+    color: #C1CDE5;
   }
 
   .equivalent-build-command :deep(.build-command-option) {
-    color: #699df4;
+    color: #6691FF;
   }
 
   .equivalent-build-command :deep(.build-command-arg-key) {
@@ -775,6 +780,6 @@
   }
 
   .equivalent-build-command :deep(.build-command-image) {
-    color: #8648d7;
+    color: var(--aidev-purple-2);
   }
 </style>

@@ -27,7 +27,7 @@
         :title="$t('配置仪表盘')"
         :title-size="16"
       >
-        <span class="truncate text-[#979BA5]">{{ appDetailStore.app || '--' }}</span>
+        <span class="truncate text-[#8F9FBD]">{{ appDetailStore.app || '--' }}</span>
       </DividerHeader>
     </template>
 
@@ -138,7 +138,7 @@
                 </OverflowTitle>
                 <span
                   v-if="isUidTaken(item.uid)"
-                  class="shrink-0 text-[12px] text-[#979BA5]"
+                  class="shrink-0 text-[12px] text-[#8F9FBD]"
                 >
                   {{ $t('已添加到本应用') }}
                 </span>
@@ -177,7 +177,7 @@
             ></i>
           </Button>
         </div>
-        <div class="mt-[4px] text-[12px] text-[#979BA5]">
+        <div class="mt-[4px] text-[12px] text-[#8F9FBD]">
           {{ $t('从监控平台已有仪表盘中选择，新建后可刷新列表') }}
         </div>
       </Form.FormItem>
@@ -290,7 +290,7 @@
       confirmText: t('删除'),
       content: h('div', { class: 'text-left' }, [
         h('div', [t('仪表盘名称: {name}', { name: row.title || row.uid })]),
-        h('div', { class: 'mt-[14px] bg-[#F5F7FA] py-[12px] px-[16px]' }, [t('删除后，将不可恢复，请谨慎操作！')]),
+        h('div', { class: 'mt-[14px] bg-[#F0F4FA] py-[12px] px-[16px]' }, [t('删除后，将不可恢复，请谨慎操作！')]),
       ]),
       footerAlign: 'center',
       headerAlign: 'center',

@@ -30,7 +30,7 @@
         :name="TAB_NAMES.space"
       >
         <template #label>
-          <span class="text-[14px] text-[#4D4F56]">
+          <span class="text-[14px] text-[#4A5973]">
             {{ t('空间组件') }}
           </span>
         </template>
@@ -41,11 +41,11 @@
         :name="TAB_NAMES.marketplace"
       >
         <template #label>
-          <span class="text-[14px] text-[#4D4F56]"> {{ t('市场组件') }}</span>
+          <span class="text-[14px] text-[#4A5973]"> {{ t('市场组件') }}</span>
         </template>
       </Tab.TabPanel>
       <!-- tab背景 -->
-      <div class="absolute w-[calc(100%+48px)] h-[54px] top-[-14px] left-[-24px] bg-[#EAEBF0] z-[-1]"></div>
+      <div class="absolute w-[calc(100%+48px)] h-[54px] top-[-14px] left-[-24px] bg-[#E9EDF5] z-[-1]"></div>
     </Tab>
     <Skeleton :loading="isLoading">
       <template #loading>
@@ -453,11 +453,11 @@
 
   :deep(.bk-tab-header--active) {
     span {
-      color: #3a84ff;
+      color: #3B6EF5;
     }
   }
 
   :deep(.bk-tab-header-item:not(.bk-tab-header--active)) {
-    background-color: #dcdee5;
+    background-color: #E4E9F2;
   }
 </style>

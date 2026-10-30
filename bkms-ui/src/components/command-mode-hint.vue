@@ -17,7 +17,7 @@
 -->
 
 <template>
-  <p class="mb-[8px] text-[12px] text-[#979BA5]">
+  <p class="mb-[8px] text-[12px] text-[#8F9FBD]">
     {{
       mode === 'shell'
         ? $t('按脚本执行，可以用 && 和管道，例如 cd /usr/local/trpc/bin && ./server --port=8080')

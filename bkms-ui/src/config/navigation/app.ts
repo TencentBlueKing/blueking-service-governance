@@ -137,6 +137,9 @@ export const TRPC_NAVIGATION: NavigationItem[] = [
         name: i18n.global.t('北极星'),
         icon: 'polaris',
         component: polaris,
+        meta: {
+          class: 'h-full min-h-full',
+        },
       },
       {
         // tRPC / TAF：网络访问页仅含 HostPort 端口映射
@@ -153,6 +156,9 @@ export const TRPC_NAVIGATION: NavigationItem[] = [
         name: i18n.global.t('组件配置'),
         icon: 'component-configuration',
         component: modulesConfig,
+        meta: {
+          class: 'h-full min-h-full',
+        },
       },
       {
         key: 'appConfig',
@@ -181,6 +187,9 @@ export const TRPC_NAVIGATION: NavigationItem[] = [
         name: i18n.global.t('操作记录'),
         icon: 'historical-tasks',
         component: operationHistory,
+        meta: {
+          class: 'h-full min-h-full',
+        },
       },
     ],
   },
@@ -278,6 +287,9 @@ export const HELM_NAVIGATION: NavigationItem[] = [
         name: i18n.global.t('操作记录'),
         icon: 'historical-tasks',
         component: operationHistory,
+        meta: {
+          class: 'h-full min-h-full',
+        },
       },
     ],
   },

@@ -61,7 +61,7 @@
               v-if="getResourceText(row.spec)"
               placement="top"
             >
-              <span class="cursor-default border-b border-dashed border-[#979BA5]">{{
+              <span class="cursor-default border-b border-dashed border-[#8F9FBD]">{{
                 getResourceText(row.spec)
               }}</span>
               <template #content>
@@ -279,18 +279,18 @@
   }
 
   :deep(.bkms-content-title) {
-    background-color: #eaebf0;
+    background-color: #e4e9f2;
     height: 42px;
   }
 
-  /* 表头：背景白色 + 默认文字颜色 */
+  /* 表头对齐表格规范：底 #FBFCFE，字 #111214 */
   :deep(.resources-table .vxe-header--column) {
-    background-color: #fff;
-    color: #4d4f56;
+    background-color: #fbfcfe;
+    color: #111214;
   }
 
   /* 表格正文：默认文字颜色 */
   :deep(.resources-table .vxe-body--column .vxe-cell) {
-    color: #4d4f56;
+    color: #4A5973;
   }
 </style>

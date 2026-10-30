@@ -17,7 +17,7 @@
 -->
 
 <template>
-  <div class="flex flex-col gap-[16px] p-[16px] bg-[#FFF] shadow-[0_2px_4px_0_#1919290d]">
+  <div class="flex flex-col gap-[16px] overflow-hidden rounded-[6px] p-[16px] bg-[#FFF] shadow-[0_2px_4px_0_#1919290d]">
     <Alert theme="info">
       {{ $t('应用变量优先级最高，同名时将覆盖该应用继承的环境级别变量。') }}
       <Button
@@ -41,11 +41,11 @@
           {{ $t('新增应用变量') }}
         </Button>
         <Button @click="showImportSlider = true">
-          <i class="bkms-icon bkms-icon-daoru mr-[6px] text-[#979BA5]"></i>
+          <i class="bkms-icon bkms-icon-daoru mr-[6px] text-[#8F9FBD]"></i>
           {{ $t('导入') }}
         </Button>
         <Button @click="handleShowExportDialog">
-          <i class="bkms-icon bkms-icon-daochu mr-[6px] text-[#979BA5]"></i>
+          <i class="bkms-icon bkms-icon-daochu mr-[6px] text-[#8F9FBD]"></i>
           {{ $t('导出') }}
         </Button>
       </div>
@@ -56,7 +56,7 @@
         :placeholder="$t('搜索变量名、变量值、描述')"
       >
         <template #suffix>
-          <Search class="text-[16px] text-[#979BA5] mr-[6px] mt-[2px] hover:text-[#3A84FF]" />
+          <Search class="text-[16px] text-[#8F9FBD] mr-[6px] mt-[2px] hover:text-[#3B6EF5]" />
         </template>
       </Input>
     </div>
@@ -103,11 +103,11 @@
           <span>{{ $t('导出环境变量') }}</span>
           <Divider
             class="h-[16px] mx-[0] text-[12px]"
-            color="#DCDEE5"
+            color="#E4E9F2"
             direction="vertical"
             type="solid"
           />
-          <span class="text-[14px] font-normal text-[#979BA5]">{{ $t('应用') }}：{{ appName }}</span>
+          <span class="text-[14px] font-normal text-[#8F9FBD]">{{ $t('应用') }}：{{ appName }}</span>
         </div>
       </template>
       <Form

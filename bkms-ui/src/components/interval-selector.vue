@@ -26,14 +26,14 @@
     <span class="flex items-center h-[32px] cursor-pointer select-none">
       <span
         v-bk-tooltips="t('自动刷新设置')"
-        class="flex items-center px-[4px] py-[2px] rounded-[2px] hover:bg-[#eaf3ff] hover:text-[#3a84ff]"
+        class="flex items-center px-[4px] py-[2px] rounded-[6px] hover:bg-[#eaf3ff] hover:text-[#3B6EF5]"
       >
         <i class="bkms-icon bkms-icon-auto-refresh-line"></i>
-        <span :class="['text-[12px] pl-[4px]', textActive ? 'text-[#3a84ff]' : '']">{{ triggerText }}</span>
+        <span :class="['text-[12px] pl-[4px]', textActive ? 'text-[#3B6EF5]' : '']">{{ triggerText }}</span>
       </span>
       <Divider
         class="h-[12px] min-h-[16px] mx-[12px]"
-        color="#DCDEE5"
+        color="#E4E9F2"
         direction="vertical"
         type="solid"
       />
@@ -41,7 +41,7 @@
       <i
         v-bk-tooltips="t('刷新')"
         :class="[
-          'bkms-icon bkms-icon-refresh cursor-pointer text-[#63656E] px-[4px] py-[2px] hover:bg-[#eaf3ff] hover:text-[#3a84ff] rounded-[2px]',
+          'bkms-icon bkms-icon-refresh cursor-pointer text-[#4A5973] px-[4px] py-[2px] hover:bg-[#eaf3ff] hover:text-[#3B6EF5] rounded-[6px]',
         ]"
         @click.stop="handleRefresh"
         @mousedown.stop
@@ -52,7 +52,7 @@
         <Dropdown.DropdownItem
           v-for="option in options"
           :key="option.id"
-          :class="['!h-[32px] !leading-[32px]', option.id === value ? 'text-[#3a84ff] !bg-[#eaf3ff]' : '']"
+          :class="['!h-[32px] !leading-[32px]', option.id === value ? 'text-[#3B6EF5] !bg-[#eaf3ff]' : '']"
           @click="handleSelect(option)"
         >
           {{ option.name }}

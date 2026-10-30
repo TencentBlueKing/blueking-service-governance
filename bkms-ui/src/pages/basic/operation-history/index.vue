@@ -17,6 +17,8 @@
 -->
 
 <template>
+  <div class="-mx-[8px] w-[calc(100%+16px)]">
+  <div class="overflow-hidden rounded-[6px] bg-[#fff] p-[16px] shadow-[0_2px_4px_0_#1919290d]">
   <Skeleton
     :loading="isLoading"
     theme="gray"
@@ -24,7 +26,7 @@
     <template #loading>
       <div class="flex mb-[16px]">
         <Layout.shape
-          class="mr-[16px]"
+          class="mr-[8px]"
           :width="300"
         />
         <Layout.shape :width="400" />
@@ -39,7 +41,7 @@
       <template #left>
         <DatePicker
           v-model="dateRange"
-          class="w-[300px] mr-[16px]"
+          class="w-[300px] mr-[8px]"
           :placeholder="$t('请选择操作时间范围')"
           type="daterange"
           @change="handleListRecord"
@@ -178,6 +180,8 @@
       </Table>
     </Loading>
   </Skeleton>
+  </div>
+  </div>
   <!-- 操作详情 -->
   <Sideslider
     v-model:is-show="isShow"
@@ -200,10 +204,10 @@
       >
         <template #title>
           <div class="grid grid-cols-2 gap-[18px] text-[12px] text-center leading-[22px]">
-            <div class="w-[52px] h-[22px] bg-[#1E3567] rounded-[2px]">
+            <div class="w-[52px] h-[22px] bg-[#1E3567] rounded-[6px]">
               {{ $t('操作前') }}
             </div>
-            <div class="w-[52px] h-[22px] bg-[#144628] rounded-[2px] text-[#3FC362]">
+            <div class="w-[52px] h-[22px] bg-[#144628] rounded-[6px] text-[#3FC362]">
               {{ $t('操作后') }}
             </div>
           </div>
@@ -244,7 +248,8 @@
   const { createPlaceholder } = useSearchPlaceholder();
   const { envNameMapping, generateEnvNameMapping, handleGetEnvList } = useEnvManager();
   const spaceStore = useSpaceStore();
-  const { maxHeight } = useDynamicsHeight(96, ['.header-right', '.container-header']);
+  // 96 是顶栏和内容区留白。卡片内边距上下各 16，表格高度再减 32
+  const { maxHeight } = useDynamicsHeight(128, ['.header-right', '.container-header']);
 
   const operationFilters = ref<OperationRecordFilterOptionsOutputObj>();
   // 部署列表

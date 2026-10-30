@@ -25,18 +25,18 @@
     <Loading :loading="buttonLoading">
       <div
         v-if="!params?.length"
-        class="bg-[#F5F7FA] h-[32px] flex items-center justify-center"
+        class="bg-[#F0F4FA] h-[32px] flex items-center justify-center"
       >
         <InfoLine
           class="mr-[10px]"
-          fill="#979BA5"
+          fill="#8F9FBD"
           :width="14"
         />
         {{ !pipelineId ? $t('请先选择流水线') : $t('流水线无参数配置') }}
       </div>
       <div
         v-else
-        class="bg-[#F5F7FA]"
+        class="bg-[#F0F4FA]"
       >
         <PipelineParamsForm
           ref="pipelineParamsRef"

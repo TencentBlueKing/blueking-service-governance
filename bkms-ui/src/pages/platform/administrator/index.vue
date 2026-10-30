@@ -25,7 +25,7 @@
       :title="$t('管理员能查看并执行“平台管理”导航下所有操作。')"
     />
 
-    <div class="p-[16px] bg-[#fff] shadow-[0_2px_4px_0_#1919290d]">
+    <div class="overflow-hidden rounded-[6px] p-[16px] bg-[#fff] shadow-[0_2px_4px_0_#1919290d]">
       <div class="flex justify-between mb-[16px]">
         <Button
           theme="primary"
@@ -39,7 +39,7 @@
           :placeholder="t('搜索管理员')"
         >
           <template #suffix>
-            <Search class="text-[16px] text-[#979ba5] mr-[6px] mt-[2px]" />
+            <Search class="text-[16px] text-[#8F9FBD] mr-[6px] mt-[2px]" />
           </template>
         </Input>
       </div>

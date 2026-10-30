@@ -106,7 +106,7 @@
               placement: 'right',
             }"
             :aria-disabled="isGrayDisabled"
-            :class="{ '!text-[#c4c6cc] !cursor-not-allowed hover:!bg-transparent': isGrayDisabled }"
+            :class="{ '!text-[#C1CDE5] !cursor-not-allowed hover:!bg-transparent': isGrayDisabled }"
             @click="handleGrayClick"
           >
             {{ $t('灰度') }}

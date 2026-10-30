@@ -5,7 +5,7 @@
   />
   <div
     v-if="language === 'go' && golangProxyUrl"
-    class="flex items-center justify-between gap-[24px] bg-[#f5f7fa] mt-[16px] p-[16px]"
+    class="flex items-center justify-between gap-[24px] bg-[#F0F4FA] mt-[16px] p-[16px]"
   >
     <div class="flex flex-wrap gap-x-[4px] text-[13px] leading-[22px]">
       <i18n-t keypath="若 go.mod 有使用工蜂私有仓库依赖包，构建参数中需要添加 {0}，取值见：">
@@ -13,7 +13,7 @@
       </i18n-t>
       <a
         v-if="golangProxyUrl"
-        class="text-[#3a84ff]"
+        class="text-[#3B6EF5]"
         :href="golangProxyUrl"
         rel="noopener noreferrer"
         target="_blank"

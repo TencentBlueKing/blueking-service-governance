@@ -29,22 +29,22 @@
           icon="bkms-icon-tishi"
           :width="42"
         />
-        <span class="text-[#313238] text-[20px] leading-[32px] text-center mt-[18px]">
+        <span class="text-[#111214] text-[20px] leading-[32px] text-center mt-[18px]">
           {{ $t('确定要删除公共变量') }}?
         </span>
       </div>
     </template>
 
     <!-- 变量信息 -->
-    <div class="bg-[#F5F7FA] mb-[16px] py-[12px] px-[16px] text-[12px]">
+    <div class="bg-[#F0F4FA] mb-[16px] py-[12px] px-[16px] text-[12px]">
       <ul class="list-disc line-height-[20px] font-normal">
         <li>
-          <span class="text-[#979BA5]">{{ $t('变量名') }}：</span>
-          <span class="text-[#313238]">{{ envVarData?.key }}</span>
+          <span class="text-[#8F9FBD]">{{ $t('变量名') }}：</span>
+          <span class="text-[#111214]">{{ envVarData?.key }}</span>
         </li>
         <li>
-          <span class="text-[#979BA5]">{{ $t('生效环境类型') }}：</span>
-          <span class="text-[#313238]">{{ scopeLabel }}</span>
+          <span class="text-[#8F9FBD]">{{ $t('生效环境类型') }}：</span>
+          <span class="text-[#111214]">{{ scopeLabel }}</span>
         </li>
       </ul>
     </div>

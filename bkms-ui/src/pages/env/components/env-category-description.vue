@@ -11,12 +11,12 @@
   >
     <Help
       :height="16"
-      text="#979BA5"
+      text="#8F9FBD"
       :width="16"
     />
     <template #content>
       <div class="w-[460px] pt-[8px]">
-        <div class="mb-[12px] text-[14px] font-bold text-[#313238]">{{ $t('环境分类说明') }}</div>
+        <div class="mb-[12px] text-[14px] font-bold text-[#111214]">{{ $t('环境分类说明') }}</div>
         <Table
           class="w-full"
           :data="categoryRows"
@@ -76,12 +76,12 @@
                 @after-show="keepCategoryPopoverVisible"
                 @content-mouseenter="keepCategoryPopoverVisible"
               >
-                <span class="border-b border-dashed border-[#979BA5]">{{ $t('开发模式') }}</span>
+                <span class="border-b border-dashed border-[#8F9FBD]">{{ $t('开发模式') }}</span>
                 <template #content>
-                  <div class="w-[320px] text-[#4D4F56]">
+                  <div class="w-[320px] text-[#4A5973]">
                     {{ $t('支持通过 bkms-cli 上传二进制的方式热更新服务，更新过程不会重启容器实例。') }}
                     <span
-                      class="ml-[4px] cursor-pointer text-[#3A84FF]"
+                      class="ml-[4px] cursor-pointer text-[#3B6EF5]"
                       @click.stop="goToTrpcDevModeDoc"
                     >
                       {{ $t('查看详细文档') }}

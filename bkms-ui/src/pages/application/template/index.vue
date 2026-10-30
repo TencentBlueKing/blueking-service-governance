@@ -38,10 +38,10 @@
           :key="item.id"
           :class="[
             'flex flex-col items-center justify-center',
-            'h-[180px] w-[360px] bg-[#fff] shadow cursor-pointer',
-            'rounded-sm border-[1px]',
-            activeCard?.id === item.id ? 'border-[#3A84FF]' : '',
-            item.disabled ? 'opacity-50 cursor-not-allowed' : 'hover:border-[#3A84FF]',
+            'h-[180px] w-[360px] bg-[#fff] shadow-[0_2px_4px_0_#1919290d] cursor-pointer',
+            'rounded-[6px] border-[1px]',
+            activeCard?.id === item.id ? 'border-[#3B6EF5]' : '',
+            item.disabled ? 'opacity-50 cursor-not-allowed' : 'hover:border-[#3B6EF5] hover:shadow-[0_2px_4px_0_#0000001a]',
           ]"
           @click="handleClick(item)"
         >
@@ -50,8 +50,8 @@
             :class="[item.icon, 'size-[50px] leading-[50px]', item.disabled ? 'grayscale' : '']"
             :style="{ color: item.iconColor, fontSize: item.iconFontSize }"
           ></span>
-          <span class="text-[#313238] leading-[24px] text-[16px] mt-[10px] font-bold">{{ item.title }}</span>
-          <span class="mt-[12px] text-[#4D4F56] text-[12px]">{{ item.desc }}</span>
+          <span class="text-[#111214] leading-[24px] text-[16px] mt-[10px] font-bold">{{ item.title }}</span>
+          <span class="mt-[12px] text-[#4A5973] text-[12px]">{{ item.desc }}</span>
         </div>
       </div>
       <div class="mt-[32px]">

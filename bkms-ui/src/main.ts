@@ -73,5 +73,5 @@ console.log(
   'color: #2DCB56',
   'padding: 2px 5px; background: #ea3636; color: #fff; border-radius: 3px 0 0 3px;',
   'padding: 2px 5px; background: #42c02e; color: #fff; border-radius: 0 3px 3px 0; font-weight: bold;',
-  'background-color: #3A84FF; color: #fff; padding: 2px 5px; border-radius: 3px; font-weight: bold;margin-left: 16px;',
+  'background-color: #3B6EF5; color: #fff; padding: 2px 5px; border-radius: 3px; font-weight: bold;margin-left: 16px;',
 );

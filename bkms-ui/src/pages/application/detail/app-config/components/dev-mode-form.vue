@@ -23,10 +23,10 @@
   >
     <div class="bg-[#FFF] p-[16px] !text-[12px]">
       <div class="flex items-center">
-        <span class="text-[#4D4F56] mr-[16px]">
+        <span class="text-[#4A5973] mr-[16px]">
           {{ isProductionEnv ? $t('开发模式（生产环境不支持）') : $t('开发模式') }}
         </span>
-        <div class="flex items-center text-[#4D4F56]">
+        <div class="flex items-center text-[#4A5973]">
           <Switcher
             class="mr-[6px]"
             :disabled="isProductionEnv"
@@ -173,6 +173,6 @@
 
 <style lang="postcss" scoped>
   :deep(.bkms-content-title) {
-    background-color: #eaebf0;
+    background-color: #e4e9f2;
   }
 </style>

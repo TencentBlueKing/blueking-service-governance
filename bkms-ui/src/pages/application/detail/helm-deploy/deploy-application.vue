@@ -94,7 +94,7 @@
             <template #extension>
               <div class="w-full flex items-center justify-center">
                 <template v-if="isProductionEnv">
-                  <span class="text-[#63656e]">{{ $t('生产类型环境仅支持部署已晋级的 Tag') }}</span>
+                  <span class="text-[#4A5973]">{{ $t('生产类型环境仅支持部署已晋级的 Tag') }}</span>
                   <Button
                     class="ml-[8px]"
                     text

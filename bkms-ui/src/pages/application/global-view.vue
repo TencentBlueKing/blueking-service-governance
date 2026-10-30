@@ -40,7 +40,7 @@
 
       <!-- 筛选工具栏：包含镜像 Tag 筛选和部署环境过滤选项 -->
       <div
-        class="flex h-[40px] items-center justify-between bg-[#fff] px-[16px] border-t border-l border-r border-[#e8eaec]"
+        class="flex h-[40px] items-center justify-between bg-[#fff] px-[16px] border-t border-l border-r border-[#E4E9F2]"
       >
         <!-- 左侧筛选控件 -->
         <div class="flex items-center gap-[16px]">
@@ -55,7 +55,7 @@
           >
             <template #prefix>
               <span
-                class="inline-flex h-full items-center border-r border-[#dcdee5] px-[8px] text-[12px] text-[#4D4F56] bg-[#FAFBFD]"
+                class="inline-flex h-full items-center border-r border-[#E4E9F2] px-[8px] text-[12px] text-[#4A5973] bg-[#F7F9FD]"
               >
                 {{ $t('镜像 Tag') }}
               </span>
@@ -77,16 +77,16 @@
           </Checkbox>
         </div>
         <!-- 右侧图例说明：展示不同部署状态的颜色标识 -->
-        <div class="flex items-center gap-[12px] text-[12px] text-[#4d4f56]">
+        <div class="flex items-center gap-[12px] text-[12px] text-[#4A5973]">
           <span>{{ $t('Tag 图例') }}：</span>
           <span class="inline-flex items-center gap-[6px]">
-            <i class="inline-block h-[14px] w-[14px] rounded-[2px] bg-[#c8f2d8]"></i>{{ $t('部署成功') }}
+            <i class="inline-block h-[14px] w-[14px] rounded-[6px] bg-[#c8f2d8]"></i>{{ $t('部署成功') }}
           </span>
           <span class="inline-flex items-center gap-[6px]">
-            <i class="inline-block h-[14px] w-[14px] rounded-[2px] bg-[#ffe1e1]"></i>{{ $t('部署失败') }}
+            <i class="inline-block h-[14px] w-[14px] rounded-[6px] bg-[#ffe1e1]"></i>{{ $t('部署失败') }}
           </span>
           <span class="inline-flex items-center gap-[6px]">
-            <i class="inline-block h-[14px] w-[14px] rounded-[2px] bg-[#d9e8ff]"></i>{{ $t('部署中') }}
+            <i class="inline-block h-[14px] w-[14px] rounded-[6px] bg-[#d9e8ff]"></i>{{ $t('部署中') }}
           </span>
         </div>
       </div>
@@ -300,7 +300,7 @@
 
   /** 环境分组 → 表头样式映射：不同环境类型使用不同的背景色和文字颜色 */
   const ENV_GROUP_HEADER_CLASS: Record<string, string> = {
-    development: '!text-[#3a84ff] bg-[#f0f5ff]',
+    development: '!text-[#3B6EF5] bg-[#F0F4FF]',
     production: '!text-[#2caf5e] bg-[#ebfaf0]',
     test: '!text-[#f59500] bg-[#fdf4e8]',
   };
@@ -552,7 +552,7 @@
    * @param { TableCellParams } params - 单元格参数
    */
   function handleHeaderCellClassName({ column }: TableCellParams) {
-    const defaultStyle = 'bg-[#FAFBFD] !font-bold';
+    const defaultStyle = 'bg-[#FBFCFE] font-normal';
     if (column?.field) {
       return defaultStyle;
     }
@@ -659,7 +659,7 @@
             h('i', {
               class: [
                 'relative left-[4px] top-[1px] vxe-filter--btn vxe-table-icon-funnel',
-                selectedDeployStatus.value === 'all' ? 'text-[#c0c4cc]' : 'text-[#3a84ff]',
+                selectedDeployStatus.value === 'all' ? 'text-[#c0c4cc]' : 'text-[#3B6EF5]',
               ],
             }),
           ]),
@@ -672,8 +672,8 @@
                 'div',
                 {
                   class: [
-                    'flex h-[36px] cursor-pointer items-center gap-[8px] px-[12px] text-[12px] hover:bg-[#f5f7fa]',
-                    selectedDeployStatus.value === option.value ? 'bg-[#e1ecff] text-[#3a84ff]' : 'text-[#63656e]',
+                    'flex h-[36px] cursor-pointer items-center gap-[8px] px-[12px] text-[12px] hover:bg-[#F0F4FA]',
+                    selectedDeployStatus.value === option.value ? 'bg-[#E5EDFF] text-[#3B6EF5]' : 'text-[#4A5973]',
                   ],
                   onClick: () => handleSelectDeployStatus(option.value),
                 },
@@ -697,7 +697,7 @@
    */
   function renderDeployCell(row: AppInfoOutputObj, env: EnvOutput) {
     const deployments = getCellDeployments(row, env.name || '');
-    if (!deployments.length) return h('span', { class: 'text-[#979ba5]' }, '--');
+    if (!deployments.length) return h('span', { class: 'text-[#8F9FBD]' }, '--');
 
     // 渲染该环境下所有部署记录（一个应用可能在同一环境多次部署）
     return h(
@@ -742,7 +742,7 @@
             content: () =>
               h('div', { class: 'leading-[20px]' }, [
                 h('div', `镜像 Tag：${tagText}`),
-                h('div', { class: 'text-[#c4c6cc]' }, [
+                h('div', { class: 'text-[#C1CDE5]' }, [
                   h('div', `环境：${env.displayName || env.name}`),
                   h(
                     'div',
@@ -779,7 +779,7 @@
       },
       {
         default: () => h('span', env.displayName || env.name),
-        content: () => [h('div', env.displayName || env.name), h('div', { class: 'text-[#c4c6cc]' }, env.name)],
+        content: () => [h('div', env.displayName || env.name), h('div', { class: 'text-[#C1CDE5]' }, env.name)],
       },
     );
   }

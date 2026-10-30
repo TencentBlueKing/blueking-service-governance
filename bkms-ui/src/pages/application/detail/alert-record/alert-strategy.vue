@@ -1,7 +1,7 @@
 <template>
   <div
     ref="containerRef"
-    class="rounded-[2px] flex flex-col gap-[16px]"
+    class="rounded-[6px] flex flex-col gap-[16px]"
   >
     <!-- 顶部工具栏 -->
     <div
@@ -57,7 +57,7 @@
         >
           <template #default="{ row }">
             <span
-              class="text-[#3a84ff] cursor-pointer"
+              class="text-[#3B6EF5] cursor-pointer"
               @click="handleEdit(row)"
               >{{ row.displayName || '--' }}</span
             >
@@ -75,7 +75,7 @@
           <template #default="{ row }">
             <span class="flex flex-col">
               <span>{{ monitorMetricNameMap.get(row.monitorMetric || '') || row.monitorMetric || '--' }}</span>
-              <span class="text-[#979BA5] text-[12px] font-mono">{{ row.monitorMetric }}</span>
+              <span class="text-[#8F9FBD] text-[12px] font-mono">{{ row.monitorMetric }}</span>
             </span>
           </template>
         </TableColumn>
@@ -139,9 +139,9 @@
                     delay: 300,
                     disabled: !getUserGroupUsers(item).length,
                   }"
-                  class="flex items-center gap-[4px] rounded-[2px] px-[8px] bg-[#F0F1F5] cursor-default"
+                  class="flex items-center gap-[4px] rounded-[6px] px-[8px] bg-[#E9EDF5] cursor-default"
                 >
-                  <i class="bkms-icon bkms-icon-usergroup text-[#979BA5] text-[14px]"></i>
+                  <i class="bkms-icon bkms-icon-usergroup text-[#8F9FBD] text-[14px]"></i>
                   {{ userGroupMap.get(String(item))?.name || item }}
                 </span>
               </template>
@@ -365,20 +365,28 @@
     parentContentHeight.value = rect.height - padTop - padBottom;
   }
 
+  let parentObserver: ResizeObserver | undefined;
+
   onMounted(() => {
     updateParentHeight();
+    const parent = containerRef.value?.parentElement;
+    if (parent) {
+      parentObserver = new ResizeObserver(updateParentHeight);
+      parentObserver.observe(parent);
+    }
     window.addEventListener('resize', updateParentHeight);
   });
 
   onBeforeUnmount(() => {
+    parentObserver?.disconnect();
     window.removeEventListener('resize', updateParentHeight);
   });
 
   /** 是否有任意筛选条件 */
   const hasFilter = computed(() => searchValue.value.length > 0);
 
-  /** 表格最大高度：父容器内容区高度 - 根容器内边距(24×2) - 筛选栏高度 - 间距(16)，确保不超出父元素 */
-  const tableMaxHeight = computed(() => Math.max(parentContentHeight.value - searchBarHeight.value - 24 * 2 - 16, 0));
+  /** 表格最大高度：卡片内容区高度 - 筛选栏 - 间距 16。父级内边距已在测量时扣除 */
+  const tableMaxHeight = computed(() => Math.max(parentContentHeight.value - searchBarHeight.value - 16, 0));
 
   /** 前端筛选后的数据（后端 listAlertStrategies 暂不支持搜索参数，采用前端过滤） */
   const filteredData = computed(() => {
@@ -517,7 +525,7 @@
       footerAlign: 'center',
       content: h('div', { class: 'text-left' }, [
         h('div', [t('策略名称: {name}', { name: row.displayName || row.id })]),
-        h('div', { class: 'mt-[14px] bg-[#F5F7FA] py-[12px] px-[16px]' }, [t('删除后，将不可恢复，请谨慎操作！')]),
+        h('div', { class: 'mt-[14px] bg-[#F0F4FA] py-[12px] px-[16px]' }, [t('删除后，将不可恢复，请谨慎操作！')]),
       ]),
       confirmButtonTheme: 'danger',
       confirmText: t('删除'),

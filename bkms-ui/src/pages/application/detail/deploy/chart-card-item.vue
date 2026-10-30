@@ -21,10 +21,10 @@
     <!-- 头部 -->
     <div class="flex items-center justify-between px-[16px] py-[12px]">
       <slot name="title">
-        <span class="text-[#313238] text-[14px] font-medium leading-[22px]">{{ title }}</span>
+        <span class="text-[#111214] text-[14px] font-medium leading-[22px]">{{ title }}</span>
       </slot>
       <!-- <i
-        class="bkms-icon bkms-icon-filliscreen-line text-[#979BA5] text-[14px] cursor-pointer hover:text-[#3A84FF]"
+        class="bkms-icon bkms-icon-filliscreen-line text-[#8F9FBD] text-[14px] cursor-pointer hover:text-[#3B6EF5]"
         @click="handleFullscreen"
       ></i> -->
     </div>
@@ -64,7 +64,7 @@
         :sort-config="sortConfig"
       >
         <template #empty>
-          <span class="text-[#979BA5] text-[12px]">{{ $t('暂无数据') }}</span>
+          <span class="text-[#8F9FBD] text-[12px]">{{ $t('暂无数据') }}</span>
         </template>
         <TableColumn
           field="name"
@@ -77,9 +77,9 @@
             >
               <span
                 class="legend-color-dot mr-[8px]"
-                :style="{ backgroundColor: row.show ? row.color : '#C4C6CC' }"
+                :style="{ backgroundColor: row.show ? row.color : '#C1CDE5' }"
               ></span>
-              <span :style="{ color: row.show ? '#63656E' : '#C4C6CC' }">{{ row.alias || row.name }}</span>
+              <span :style="{ color: row.show ? '#4A5973' : '#C1CDE5' }">{{ row.alias || row.name }}</span>
             </div>
           </template>
         </TableColumn>
@@ -488,7 +488,7 @@
     display: inline-block;
     width: 12px;
     height: 4px;
-    border-radius: 2px;
+    border-radius: 6px;
     flex-shrink: 0;
   }
 </style>

@@ -25,7 +25,7 @@
       placement,
     }"
     :class="[
-      'flex items-center justify-center rounded-sm',
+      'flex items-center justify-center rounded-[6px]',
       sizeMap[size],
       fontSizeMap[fontSize as keyof typeof fontSizeMap],
       clickable ? 'cursor-pointer' : '',
@@ -34,7 +34,7 @@
     <slot name="icon">
       <i
         :class="icon"
-        :style="{ color: props.color || '#979BA5' }"
+        :style="{ color: props.color || '#8F9FBD' }"
       >
       </i>
     </slot>

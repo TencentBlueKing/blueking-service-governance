@@ -28,9 +28,9 @@
       </Tag>
     </template>
     <template #header-right>
-      <div class="flex items-center gap-[4px] text-[12px] text-[#4D4F56]">
+      <div class="flex items-center gap-[4px] text-[12px] text-[#4A5973]">
         <span
-          class="inline-block bg-[#699DF4] w-[12px] h-[12px] border-[#3A84FF] border-[1px] border-solid rounded-[4px] mr-[6px]"
+          class="inline-block bg-[#6691FF] w-[12px] h-[12px] border-[#3B6EF5] border-[1px] border-solid rounded-[4px] mr-[6px]"
         ></span>
         <span>{{ $t('附加资源') }}</span>
       </div>

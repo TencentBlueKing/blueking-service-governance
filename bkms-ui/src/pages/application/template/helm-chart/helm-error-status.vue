@@ -17,11 +17,11 @@
 -->
 
 <template>
-  <div class="border-[1px] border-[#DCDEE5] max-h-[300px] bg-[#fff]">
-    <div class="flex items-center h-[48px] text-[12px] text-[#4D4F56] px-[24px] border-b-[1px] border-[#DCDEE5]">
+  <div class="border-[1px] border-[#E4E9F2] max-h-[300px] bg-[#fff]">
+    <div class="flex items-center h-[48px] text-[12px] text-[#4A5973] px-[24px] border-b-[1px] border-[#E4E9F2]">
       <span class="font-bold">{{ $t('校验结果') }}</span>
       <span
-        :class="['inline-block w-[24px] h-[16px] rounded-[8px]', 'bg-[#E1ECFF] text-center ml-[4px] text-[#3A84FF]']"
+        :class="['inline-block w-[24px] h-[16px] rounded-[8px]', 'bg-[#E5EDFF] text-center ml-[4px] text-[#3B6EF5]']"
         >{{ (data?.length || 0) + (errorLines?.length || 0) }}</span
       >
     </div>

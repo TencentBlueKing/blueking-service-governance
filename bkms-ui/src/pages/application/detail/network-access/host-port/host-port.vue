@@ -21,13 +21,13 @@
     <!-- 骨架屏 -->
     <template v-if="loading">
       <Layout.shape
-        class="mb-[16px] !block w-full rounded-[2px]"
+        class="mb-[16px] !block w-full rounded-[6px]"
         height="40px"
         type="rect"
         width="100%"
       />
-      <div class="overflow-hidden rounded-[2px] shadow-[0_2px_4px_0_#1919290d]">
-        <div class="flex h-[32px] items-center bg-[#eaebf0] px-[16px]">
+      <div class="overflow-hidden rounded-[6px] shadow-[0_2px_4px_0_#1919290d]">
+        <div class="flex h-[32px] items-center bg-[#e9edf5] px-[16px]">
           <Layout.shape
             height="16px"
             type="rect"
@@ -94,7 +94,7 @@
     <!-- 没有联邦集群环境时整个功能用不上，不给表单 -->
     <div
       v-else-if="showEmptyGuide"
-      class="host-port-empty-guide bg-[#FFF] rounded-[2px] py-[60px]"
+      class="host-port-empty-guide overflow-hidden rounded-[6px] bg-[#FFF] py-[60px]"
     >
       <Exception
         scene="part"
@@ -107,8 +107,8 @@
           />
         </template>
         <template #description>
-          <p class="text-[16px] text-[#313238]">{{ $t('当前空间没有绑定联邦集群的环境') }}</p>
-          <p class="mt-[8px] text-[12px] text-[#979BA5]">
+          <p class="text-[16px] text-[#111214]">{{ $t('当前空间没有绑定联邦集群的环境') }}</p>
+          <p class="mt-[8px] text-[12px] text-[#8F9FBD]">
             {{ $t('HostPort 目前仅对绑定联邦集群的环境生效') }}
           </p>
         </template>
@@ -176,7 +176,7 @@
             >
               <table class="min-w-0 flex-1 border-collapse">
                 <thead>
-                  <tr class="host-port-row--head border-b border-[var(--host-port-border)] text-[#313238]">
+                  <tr class="host-port-row--head border-b border-[var(--host-port-border)] text-[#111214]">
                     <th class="host-port-cell w-[120px] text-left font-normal">{{ $t('容器端口') }}</th>
                     <th class="host-port-cell text-left font-normal">{{ $t('节点端口的环境变量') }}</th>
                   </tr>
@@ -187,7 +187,7 @@
                     v-if="declaredPorts.length === 0"
                     class="border-b border-[var(--host-port-border)] last:border-b-0"
                   >
-                    <td class="host-port-cell text-[#979BA5]">{{ $t('未配置') }}</td>
+                    <td class="host-port-cell text-[#8F9FBD]">{{ $t('未配置') }}</td>
                     <td class="host-port-cell"></td>
                   </tr>
                   <tr
@@ -195,12 +195,12 @@
                     :key="row.port"
                     class="border-b border-[var(--host-port-border)] last:border-b-0"
                   >
-                    <td class="host-port-cell text-[#313238]">{{ row.port }}</td>
+                    <td class="host-port-cell text-[#111214]">{{ row.port }}</td>
                     <td class="host-port-cell">
                       <div class="flex items-center flex-nowrap">
                         <span class="host-port-env-tag">{{ row.envName }}</span>
                         <Copy
-                          class="ml-[4px] shrink-0 cursor-pointer text-[#979BA5] hover:text-[#3A84FF]"
+                          class="ml-[4px] shrink-0 cursor-pointer text-[#8F9FBD] hover:text-[#3B6EF5]"
                           @click="handleCopy(row.envName)"
                         />
                       </div>
@@ -209,11 +209,11 @@
                 </tbody>
               </table>
               <div class="host-port-scope">
-                <div class="host-port-row host-port-row--head text-[#313238]">
+                <div class="host-port-row host-port-row--head text-[#111214]">
                   {{ $t('生效范围')
                   }}<span
                     v-if="pendingEnvCount > 0"
-                    class="text-[#979BA5]"
+                    class="text-[#8F9FBD]"
                     >（{{ $t('{count} 个环境待部署生效', { count: pendingEnvCount }) }}）</span
                   >
                 </div>
@@ -236,7 +236,7 @@
             :model="formModel"
           >
             <!-- 列标题：所有端口行共用 -->
-            <div class="mb-[8px] flex items-center min-w-0 text-[12px] leading-[20px] text-[#63656E]">
+            <div class="mb-[8px] flex items-center min-w-0 text-[12px] leading-[20px] text-[#4A5973]">
               <span class="w-[160px] shrink-0">{{ $t('容器端口') }}</span>
               <span class="ml-[12px]">{{ $t('节点端口的环境变量') }}</span>
             </div>
@@ -272,7 +272,7 @@
                     @click="handleCopy(hostPortEnvName(portRow.port))"
                   >
                     <Copy
-                      class="text-[#979BA5] hover:text-[#3A84FF]"
+                      class="text-[#8F9FBD] hover:text-[#3B6EF5]"
                       height="12px"
                       width="12px"
                     />
@@ -281,7 +281,7 @@
 
                 <span
                   v-else
-                  class="text-[#C4C6CC]"
+                  class="text-[#C1CDE5]"
                 >
                   {{ $t('填写容器端口后自动生成') }}
                 </span>
@@ -292,7 +292,7 @@
                 @click="handleRemovePort(portIndex)"
               >
                 <Del
-                  class="text-[#979BA5] hover:text-[#4D4F56]"
+                  class="text-[#8F9FBD] hover:text-[#4A5973]"
                   height="14px"
                   width="14px"
                 />
@@ -310,10 +310,10 @@
 
             <div class="mt-[16px] pt-[16px] border-t border-[var(--host-port-border)]">
               <div class="flex items-center gap-[8px] mb-[8px]">
-                <span class="text-[14px] leading-[22px] text-[#313238]">{{ $t('生效范围') }}</span>
-                <span class="text-[12px] leading-[20px] text-[#979BA5]">{{ $t('对所有绑定联邦集群的环境生效') }}</span>
+                <span class="text-[14px] leading-[22px] text-[#111214]">{{ $t('生效范围') }}</span>
+                <span class="text-[12px] leading-[20px] text-[#8F9FBD]">{{ $t('对所有绑定联邦集群的环境生效') }}</span>
               </div>
-              <div class="bg-[#F5F7FA] rounded-[2px] px-[16px] py-[12px]">
+              <div class="bg-[#F0F4FA] rounded-[6px] px-[16px] py-[12px]">
                 <ScopeEnvList
                   :env-states="envStates"
                   :envs="scopeEnvs"
@@ -604,11 +604,11 @@
     /* 查看态 / 骨架屏共用：行高、生效范围列宽、边框色 */
     --host-port-row-height: 42px;
     --host-port-scope-width: 280px;
-    --host-port-border: #dcdee5;
+    --host-port-border: #E4E9F2;
   }
 
   .info-title :deep(.bkms-content-title) {
-    background-color: #eaebf0;
+    background-color: #e4e9f2;
   }
 
   /* 左侧端口表 + 右侧生效范围 */
@@ -616,7 +616,7 @@
     display: flex;
     overflow: hidden;
     border: 1px solid var(--host-port-border);
-    border-radius: 2px;
+    border-radius: 6px;
   }
 
   .host-port-scope {
@@ -633,7 +633,7 @@
   }
 
   .host-port-row--head {
-    background: #f5f7fa;
+    background: #F0F4FA;
     border-bottom: 1px solid var(--host-port-border);
   }
 
@@ -651,11 +651,11 @@
     max-width: none;
     padding: 0 8px;
     overflow: visible;
-    color: #63656e;
+    color: #4A5973;
     font-size: 12px;
     line-height: 22px;
     white-space: nowrap;
-    background: #f0f1f5;
+    background: #E9EDF5;
     border-radius: 2px;
   }
 

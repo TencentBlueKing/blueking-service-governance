@@ -34,7 +34,7 @@
     </Button.ButtonGroup>
     <!-- 平台推荐镜像 -->
     <template v-if="imageMode === 'platform'">
-      <div class="bg-[#F5F7FA] mt-[16px] p-[16px]">
+      <div class="bg-[#F0F4FA] mt-[16px] p-[16px]">
         <div class="flex gap-[6px] items-start">
           <Form.FormItem
             class="flex-grow-2 !mb-0"
@@ -88,7 +88,7 @@
         >
           {{ $t('所选镜像 Tag 已不在当前镜像的 Tag 列表中，请重新选择') }}
         </div>
-        <div class="text-[12px] text-[#979ba5] mt-[4px] leading-[20px]">
+        <div class="text-[12px] text-[#8F9FBD] mt-[4px] leading-[20px]">
           {{ descText }}
         </div>
       </div>

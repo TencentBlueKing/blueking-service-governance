@@ -80,20 +80,20 @@
 
             <!-- 顶部问候栏 -->
             <div
-              class="flex items-center justify-between p-[16px] mb-[24px] rounded-[8px] bg-[#FFF] shadow-[0_2px_4px_0_#1919290d]"
+              class="mb-[24px] flex items-center justify-between overflow-hidden rounded-[6px] bg-[#FFF] p-[16px] shadow-[0_2px_4px_0_#1919290d]"
             >
               <div class="flex items-center">
-                <div class="w-[60px] h-[60px] rounded-[12px] bg-[#F0F5FF] flex items-center justify-center mr-[16px]">
+                <div class="w-[60px] h-[60px] rounded-[12px] bg-[#F0F4FF] flex items-center justify-center mr-[16px]">
                   <Coffee class="w-[28px] h-[28px] animate-bounce-coffee" />
                 </div>
                 <div>
-                  <div class="text-[20px] font-bold text-[#313238]">
+                  <div class="text-[20px] font-bold text-[#111214]">
                     {{ greetingText }}，
-                    <span class="bg-clip-text text-transparent bg-gradient-to-r from-[#614BFA] to-[#3A84FF]"
+                    <span class="bg-clip-text text-transparent bg-gradient-to-r from-[var(--aidev-purple-2)] to-[#3B6EF5]"
                       >{{ userStore.userInfo.user_id || '--' }} ~
                     </span>
                   </div>
-                  <div class="text-[14px] text-[#979BA5] mt-[4px]">{{ $t('欢迎回到蓝鲸服务治理平台') }} ~</div>
+                  <div class="text-[14px] text-[#8F9FBD] mt-[4px]">{{ $t('欢迎回到蓝鲸服务治理平台') }} ~</div>
                 </div>
               </div>
               <Button
@@ -110,14 +110,14 @@
 
             <!-- 最近操作区域 -->
             <div class="flex items-center justify-between mb-[16px]">
-              <span class="text-[16px] font-bold text-[#313238]">{{ $t('最近操作') }}</span>
+              <span class="text-[16px] font-bold text-[#111214]">{{ $t('最近操作') }}</span>
               <Button
                 text
                 theme="primary"
                 @click="handleGoAllSpaces"
               >
                 {{ $t('启用空间') }}（{{ enableSpaceCount }}）
-                <i class="bkms-icon bkms-icon-expand-small rotate-270 text-[16px] text-[#3a84ff]"></i>
+                <i class="bkms-icon bkms-icon-expand-small rotate-270 text-[16px] text-[#3B6EF5]"></i>
               </Button>
             </div>
 
@@ -126,7 +126,7 @@
               <div
                 v-for="(space, spaceIndex) in overviewList"
                 :key="space.id"
-                class="bg-[#fff] rounded-[8px] shadow-[0_2px_4px_0_#1919290d] overflow-hidden"
+                class="overflow-hidden rounded-[6px] bg-[#fff] shadow-[0_2px_4px_0_#1919290d]"
               >
                 <!-- 卡片头部 -->
                 <div class="flex items-center justify-between p-[16px]">
@@ -141,8 +141,8 @@
                       {{ getFirstChar(space?.displayName ?? '') }}
                     </div>
                     <div class="flex flex-col">
-                      <span class="text-[14px] font-bold text-[#313238]">{{ space.displayName }}</span>
-                      <span class="text-[12px] text-[#979BA5]">
+                      <span class="text-[14px] font-bold text-[#111214]">{{ space.displayName }}</span>
+                      <span class="text-[12px] text-[#8F9FBD]">
                         {{ $t('共 {0} 个应用', [space.apps?.length ?? 0]) }}
                       </span>
                     </div>
@@ -153,15 +153,17 @@
                     @click="handleChangeSpace(space)"
                   >
                     {{ $t('进入空间') }}
-                    <i class="bkms-icon bkms-icon-expand-small rotate-270 text-[16px] text-[#3a84ff]"></i>
+                    <i class="bkms-icon bkms-icon-expand-small rotate-270 text-[16px] text-[#3B6EF5]"></i>
                   </Button>
                 </div>
 
-                <div class="p-[16px] pt-[0]">
+                <div>
                   <Table
-                    class="w-full"
+                    class="home-space-table w-full"
+                    :border="false"
                     :data="(space.apps ?? []).slice(0, 5)"
                     :row-height="42"
+                    :stripe="false"
                     show-overflow="tooltip"
                   >
                     <template #empty>
@@ -227,7 +229,7 @@
                                         :size="12"
                                       />
                                       <span>{{ item.displayName }}</span>
-                                      <span class="text-[#979BA5]">
+                                      <span class="text-[#8F9FBD]">
                                         （{{
                                           row.type && item?.deployStatus
                                             ? getDeployStatusInfo(row.type as AppType, item.deployStatus)?.text
@@ -242,7 +244,7 @@
                           </MoreTag>
                           <span
                             v-else
-                            class="text-[#979BA5]"
+                            class="text-[#8F9FBD]"
                             >--</span
                           >
                         </div>
@@ -259,7 +261,7 @@
                             content: formatRelativeTimeWithTooltip(row.lastOperatedAt).tooltip,
                             disabled: !formatRelativeTimeWithTooltip(row.lastOperatedAt).tooltip,
                           }"
-                          class="text-[#979BA5]"
+                          class="text-[#4A5973]"
                           >{{ formatRelativeTimeWithTooltip(row.lastOperatedAt).text }}</span
                         >
                       </template>
@@ -333,7 +335,7 @@
   );
 
   // 空间 icon 颜色循环
-  const spaceColors = ['#3A84FF', '#2CAF5E', '#F59500', '#6228FF', '#EF6317', '#EA3636'];
+  const spaceColors = ['#3B6EF5', '#2CAF5E', '#F59500', 'var(--aidev-purple-2)', '#EF6317', '#EA3636'];
 
   function getGroupedEnvCount(item: unknown): number {
     return isGroupedEnv(item) ? item.count : 0;
@@ -472,6 +474,11 @@
   }
 
   :deep(.app-name-button .bk-button-text) {
-    line-height: 22px;
+    line-height: 20px;
+  }
+
+  /* 规范是边框关闭。vxe 的 border=false 仍会画外框，卡片里只留行分割 */
+  :deep(.home-space-table .vxe-table--border-line) {
+    display: none;
   }
 </style>

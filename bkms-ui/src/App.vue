@@ -37,14 +37,14 @@
           @click="handleGotoHome"
         />
         <span
-          class="text-[16px] text-[#eaebf0] font-bold cursor-pointer"
+          class="side-header-title text-[16px] font-bold cursor-pointer"
           @click="handleGotoHome"
           >{{ t('蓝鲸服务治理') }}</span
         >
         <template v-if="!isGlobalRoute">
           <Divider
             class="h-[14px] !mx-[12px]"
-            color="#4D4F56"
+            color="var(--aidev-nav-divider-color)"
             direction="vertical"
             type="solid"
           />
@@ -56,18 +56,12 @@
           <template #left>
             <span
               v-if="!isGlobalRoute"
-              class="flex items-center text-[14px]"
+              class="horiz-nav-links"
             >
               <RouterLink
                 v-for="item in navList"
                 :key="item.name"
-                :class="[
-                  'px-[16px] text-[#96A2B9]',
-                  {
-                    'bkms-active-nav': item.id === route.meta.menuId,
-                    'hover:text-[#C2CEE5]': item.id !== route.meta.menuId,
-                  },
-                ]"
+                :class="['horiz-nav-item', { 'is-active': item.id === route.meta.menuId }]"
                 :to="{ name: item.name, params: item.params }"
               >
                 {{ $t(item.title) }}
@@ -269,10 +263,62 @@
   });
 </script>
 <style lang="postcss" scoped>
+  :deep(.bk-navigation-header) {
+    background: var(--aidev-horiz-nav-background);
+  }
+
+  :deep(.bk-navigation-header .header-right) {
+    min-width: 0;
+  }
+
   :deep(.bk-navigation-title) {
     flex: 0 0 360px;
   }
-  .bkms-active-nav {
-    color: #fff;
+
+  .side-header-title {
+    color: var(--aidev-logo-color);
+  }
+
+  .horiz-nav-links {
+    display: flex;
+    align-items: center;
+    height: 100%;
+    min-width: 0;
+  }
+
+  .horiz-nav-item {
+    position: relative;
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+    height: 30px;
+    padding: 0 8px;
+    margin-right: 16px;
+    font-size: 14px;
+    line-height: 1;
+    color: var(--aidev-horiz-nav-item-color);
+    border-radius: var(--border-radius-base);
+    text-decoration: none;
+
+    &:hover {
+      color: var(--aidev-horiz-nav-item-hover-color);
+      background: var(--aidev-horiz-nav-item-hover-background);
+    }
+
+    &.is-active {
+      color: var(--aidev-horiz-nav-item-active-color);
+
+      &::after {
+        content: '';
+        position: absolute;
+        left: 50%;
+        bottom: 0;
+        width: 24px;
+        height: 4px;
+        border-radius: var(--border-radius-base);
+        background: var(--aidev-horiz-nav-item-active-after-background);
+        transform: translateX(-50%);
+      }
+    }
   }
 </style>

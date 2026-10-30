@@ -139,7 +139,7 @@
           />
         </Form.FormItem>
       </div>
-      <div class="text-[#979BA5] text-[12px] leading-[20px]">{{ $t('私有仓库需要填写凭证才能拉取 chart') }}</div>
+      <div class="text-[#8F9FBD] text-[12px] leading-[20px]">{{ $t('私有仓库需要填写凭证才能拉取 chart') }}</div>
     </Form.FormItem>
   </template>
 </template>

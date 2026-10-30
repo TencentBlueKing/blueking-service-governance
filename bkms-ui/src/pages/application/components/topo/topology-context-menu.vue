@@ -33,9 +33,9 @@
           disabled: !item.disabled,
           placement: 'left',
         }"
-        class="flex items-center gap-[6px] px-[16px] py-[6px] text-[12px] text-[#63656E] cursor-pointer whitespace-nowrap hover:bg-[#F0F1F5] hover:text-[#3A84FF]"
+        class="flex items-center gap-[6px] px-[16px] py-[6px] text-[12px] text-[#4A5973] cursor-pointer whitespace-nowrap hover:bg-[#E9EDF5] hover:text-[#3B6EF5]"
         :class="{
-          'text-[#C4C6CC]! cursor-not-allowed! hover:bg-transparent! hover:text-[#C4C6CC]!': item.disabled,
+          'text-[#C1CDE5]! cursor-not-allowed! hover:bg-transparent! hover:text-[#C1CDE5]!': item.disabled,
         }"
         @click="handleItemClick(item)"
       >
@@ -43,7 +43,7 @@
       </div>
       <div
         v-if="!menuItems.length"
-        class="px-[16px] py-[8px] text-[12px] text-[#C4C6CC] text-center"
+        class="px-[16px] py-[8px] text-[12px] text-[#C1CDE5] text-center"
       >
         {{ $t('暂无操作') }}
       </div>

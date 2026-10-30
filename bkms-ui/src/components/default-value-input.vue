@@ -36,8 +36,8 @@
         class="flex justify-between w-[240px] cursor-pointer"
         @click="handleClickDefaultValue"
       >
-        <span class="text-[#4D4F56]">{{ defaultValue }}</span>
-        <span class="text-[#C4C6CC]">&lt;{{ $t('默认值') }}&gt;</span>
+        <span class="text-[#4A5973]">{{ defaultValue }}</span>
+        <span class="text-[#C1CDE5]">&lt;{{ $t('默认值') }}&gt;</span>
       </div>
     </template>
   </Popover>

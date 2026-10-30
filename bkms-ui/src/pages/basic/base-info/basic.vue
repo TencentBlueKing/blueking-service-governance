@@ -83,7 +83,7 @@
       />
       <FlexRow
         average
-        class="mt-[16px] px-[40px]"
+        class="mt-[16px] px-[16px]"
         lclass="flex items-center"
         rclass="flex justify-end ml-[8px]"
       >
@@ -109,13 +109,13 @@
           />
         </template>
       </FlexRow>
-      <Layout.table class="mt-[16px] px-[40px]" />
+      <Layout.table class="mt-[16px] px-[16px]" />
     </template>
     <!-- 基本信息 -->
-    <div class="w-[clac(100% - 80px)] min-h-[172px] bg-[#fff] p-[24px] flex shadow-[0_2px_4px_0_#1919290d]">
+    <div class="w-[clac(100% - 80px)] min-h-[172px] flex overflow-hidden rounded-[6px] bg-[#fff] p-[24px] shadow-[0_2px_4px_0_#1919290d]">
       <div class="w-[80px]">
-        <div class="w-[100%] h-[80px] bg-[#f0f5ff] rounded-lg flex items-center justify-center">
-          <span class="bkms-icon bkms-icon-space-basic text-[38px] text-[#3a84ff]"></span>
+        <div class="w-[100%] h-[80px] bg-[#F0F4FF] rounded-lg flex items-center justify-center">
+          <span class="bkms-icon bkms-icon-space-basic text-[38px] text-[#3B6EF5]"></span>
         </div>
       </div>
       <div class="w-full">
@@ -129,7 +129,7 @@
           >
             <template #text>
               <span class="font-bold mr-[5px]">{{ curSpace?.displayName || '--' }}</span>
-              <span class="ml-[5px] mr-[5px] text-[12px] text-[#979BA5]">
+              <span class="ml-[5px] mr-[5px] text-[12px] text-[#8F9FBD]">
                 {{ curSpace?.id ? `( ${curSpace?.id} )` : '' }}
               </span>
             </template>
@@ -185,7 +185,7 @@
       </div>
     </div>
 
-    <div class="w-[clac(100% - 80px)] bg-[#fff] p-[24px] mt-[16px] shadow-[0_2px_4px_0_#1919290d]">
+    <div class="w-[clac(100% - 80px)] mt-[16px] overflow-hidden rounded-[6px] bg-[#fff] p-[24px] shadow-[0_2px_4px_0_#1919290d]">
       <!-- 空间仓库 -->
       <BkmsContent :title="$t('镜像仓库')">
         <div class="grid grid-cols-4 gap-4 mt-[16px] text-[12px] w-full pl-[80px] place-items-center">
@@ -213,7 +213,7 @@
                 v-bk-tooltips="{
                   content: $t('复制凭据信息'),
                 }"
-                class="ml-[6px] cursor-pointer hover:text-[#3A84FF]"
+                class="ml-[6px] cursor-pointer hover:text-[#3B6EF5]"
                 :title="$t('复制')"
                 @click="copyText(imageRegistryInfo.copy)"
               >
@@ -240,7 +240,7 @@
               <div class="flex">
                 <div>{{ $t('蓝盾') }}</div>
                 <Share
-                  class="text-[#3A84FF] mx-[5px] cursor-pointer"
+                  class="text-[#3B6EF5] mx-[5px] cursor-pointer"
                   @click="() => handleToLink('devops', curSpace?.bkSystems?.bkCIProjectID)"
                 >
                 </Share>
@@ -249,7 +249,7 @@
               <div class="flex">
                 <div>{{ $t('容器项目') }}</div>
                 <Share
-                  class="text-[#3A84FF] mx-[5px] cursor-pointer"
+                  class="text-[#3B6EF5] mx-[5px] cursor-pointer"
                   @click="() => handleToLink('bcs', curSpace?.bkSystems?.bkBCSProjectCode)"
                 >
                 </Share>
@@ -258,7 +258,7 @@
               <div class="flex">
                 <div>{{ $t('监控') }}</div>
                 <Share
-                  class="text-[#3A84FF] mx-[5px] cursor-pointer"
+                  class="text-[#3B6EF5] mx-[5px] cursor-pointer"
                   @click="() => handleToLink('monitor', curSpace?.bkSystems?.bkMonitorProjectID)"
                 >
                 </Share>
@@ -269,11 +269,12 @@
       </BkmsContent>
     </div>
 
-    <div class="w-[clac(100% - 80px)] bg-[#fff] p-[24px] mt-[16px] shadow-[0_2px_4px_0_#1919290d]">
+    <div class="w-[clac(100% - 80px)] mt-[16px] overflow-hidden rounded-[6px] bg-[#fff] p-[24px] shadow-[0_2px_4px_0_#1919290d]">
       <BkmsContent :title="$t('成员管理')">
-        <div class="pt-[16px] px-[40px]">
+        <div class="pt-[16px]">
           <FlexRow
             average
+            class="pr-[16px]"
             lclass="flex items-center"
             rclass="flex justify-end ml-[8px]"
           >
@@ -294,19 +295,24 @@
                 type="capsule"
               >
                 <Radio.Button label="all">
-                  {{ `${$t('全部成员')} ( ${memberData.length} )` }}
+                  <span>{{ $t('全部成员') }}</span>
+                  <span class="aidev-capsule-count">{{ memberData.length }}</span>
                 </Radio.Button>
                 <Radio.Button label="admin">
-                  {{ `${$t('管理员')} ( ${memberRoleMap['admin']?.length} )` }}
+                  <span>{{ $t('管理员') }}</span>
+                  <span class="aidev-capsule-count">{{ memberRoleMap['admin']?.length ?? 0 }}</span>
                 </Radio.Button>
                 <Radio.Button label="developer">
-                  {{ `${$t('开发者')} ( ${memberRoleMap['developer']?.length} )` }}
+                  <span>{{ $t('开发者') }}</span>
+                  <span class="aidev-capsule-count">{{ memberRoleMap['developer']?.length ?? 0 }}</span>
                 </Radio.Button>
                 <Radio.Button label="sre">
-                  {{ `SRE (${memberRoleMap['sre']?.length})` }}
+                  <span>SRE</span>
+                  <span class="aidev-capsule-count">{{ memberRoleMap['sre']?.length ?? 0 }}</span>
                 </Radio.Button>
                 <Radio.Button label="operator">
-                  {{ `${$t('运营者')} ( ${memberRoleMap['operator']?.length} )` }}
+                  <span>{{ $t('运营者') }}</span>
+                  <span class="aidev-capsule-count">{{ memberRoleMap['operator']?.length ?? 0 }}</span>
                 </Radio.Button>
               </Radio.Group>
               <Button
@@ -632,11 +638,11 @@
     },
     sre: {
       label: 'SRE',
-      style: 'bg-[#E1ECFF] text-[#1768EF] text-[10px]',
+      style: 'bg-[#E5EDFF] text-[#1768EF] text-[10px]',
     },
     operator: {
       label: t('运营者'),
-      style: 'bg-[#D6F0F9] text-[#428499] text-[10px]',
+      style: 'bg-[var(--aidev-cyan-5)] text-[var(--aidev-cyan-1)] text-[10px]',
     },
   };
   const memberRoleMap = ref<Partial<Record<RoleCode, string[]>>>({});
@@ -697,7 +703,7 @@
         h('div', t('成员：{0}', [row.username])),
         h(
           'p',
-          { class: 'mt-[16px] px-[16px] py-[12px] bg-[#F5F7FA]' },
+          { class: 'mt-[16px] px-[16px] py-[12px] bg-[#F0F4FA]' },
           t('删除后该用户将失去此空间的所有权限，请谨慎操作'),
         ),
       ]),

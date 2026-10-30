@@ -21,8 +21,8 @@
     class="text-[12px] flex items-center"
     :style="{ lineHeight: resolvedLineHeight }"
   >
-    <span class="text-[#979BA5]">{{ label }}：</span>
-    <span class="text-[#313238]">
+    <span class="text-[#8F9FBD]">{{ label }}：</span>
+    <span class="text-[#111214]">
       <slot>{{ value ?? '--' }}</slot>
     </span>
   </div>
@@ -49,10 +49,10 @@
 
 <style lang="postcss" scoped>
   .probe-detail-label {
-    color: var(--probe-detail-label-color, #979ba5);
+    color: var(--probe-detail-label-color, #8F9FBD);
   }
 
   .probe-detail-value {
-    color: var(--probe-detail-value-color, #313238);
+    color: var(--probe-detail-value-color, #111214);
   }
 </style>

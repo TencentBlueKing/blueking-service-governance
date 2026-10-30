@@ -43,7 +43,7 @@
           show-overflow-tooltip
         >
           <template #default="{ row }">
-            <span class="text-[#313238]">{{ row.name || '--' }}</span>
+            <span class="text-[#111214]">{{ row.name || '--' }}</span>
           </template>
         </TableColumn>
         <!-- 成员 -->
@@ -58,8 +58,8 @@
               overflow-mode="popover"
             >
               <template #default="{ item }">
-                <span class="flex items-center gap-[4px] rounded-[2px] px-[8px] bg-[#F0F1F5] cursor-default">
-                  <i class="bkms-icon bkms-icon-usergroup text-[#979BA5] text-[14px]"></i>
+                <span class="flex items-center gap-[4px] rounded-[6px] px-[8px] bg-[#E9EDF5] cursor-default">
+                  <i class="bkms-icon bkms-icon-usergroup text-[#8F9FBD] text-[14px]"></i>
                   {{ item.display_name || item.id || '--' }}
                 </span>
               </template>
@@ -93,7 +93,7 @@
 
     <template #footer>
       <div class="flex items-center justify-end gap-[12px]">
-        <span class="text-[12px] text-[#979BA5]">
+        <span class="text-[12px] text-[#8F9FBD]">
           {{ $t('已选 {n} 个告警组', { n: checkedIds.length }) }}
         </span>
         <Button

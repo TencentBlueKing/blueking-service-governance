@@ -21,7 +21,7 @@
     <div
       v-bk-tooltips="{ content: tooltip, disabled: disableOverflowTooltip || !tooltip }"
       class="max-w-[calc(100%-20px)]"
-      :class="{ 'border-b border-dashed border-[#979ba5] cursor-pointer': tooltip && !disableOverflowTooltip }"
+      :class="{ 'border-b border-dashed border-[#8F9FBD] cursor-pointer': tooltip && !disableOverflowTooltip }"
     >
       <div
         v-if="disableOverflowTooltip"
@@ -39,8 +39,8 @@
     <slot />
     <Copy
       v-if="copyValue"
-      class="cursor-pointer content-item hover:text-[#3A84FF]"
-      fill="#3a84ff"
+      class="cursor-pointer content-item hover:text-[#3B6EF5]"
+      fill="#3B6EF5"
       height="16"
       :title="$t('复制')"
       width="16"

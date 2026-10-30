@@ -29,8 +29,8 @@
       <span class="align-bottom">
         <span>{{ isEditMode ? t('编辑组件') : t('新建组件') }}</span>
         <template v-if="isEditMode">
-          <span class="ml-[12px] mr-[9px] text-[#DCDEE5]">|</span>
-          <span class="text-[14px] text-[#979BA5]">
+          <span class="ml-[12px] mr-[9px] text-[#E4E9F2]">|</span>
+          <span class="text-[14px] text-[#8F9FBD]">
             {{ currentEditComponent?.displayName || currentEditComponent?.name }}
           </span>
         </template>

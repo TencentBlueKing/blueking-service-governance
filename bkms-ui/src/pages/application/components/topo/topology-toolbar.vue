@@ -23,10 +23,10 @@
     <!-- 1:1 -->
     <span
       v-bk-tooltips="$t('恢复100%')"
-      class="flex items-center justify-center w-[24px] h-[24px] cursor-pointer rounded-[2px] hover:bg-[#41475C]"
+      class="flex items-center justify-center w-[24px] h-[24px] cursor-pointer rounded-[6px] hover:bg-[#41475C]"
       @click="zoomToOriginal"
     >
-      <i class="bkms-icon bkms-icon-reset-1_1 text-[#F5F7FA] text-[16px]" />
+      <i class="bkms-icon bkms-icon-reset-1_1 text-[#F0F4FA] text-[16px]" />
     </span>
 
     <Divider
@@ -39,10 +39,10 @@
     <!-- 缩小 -->
     <span
       v-bk-tooltips="$t('缩小')"
-      class="flex items-center justify-center w-[24px] h-[24px] cursor-pointer rounded-[2px] hover:bg-[#41475C]"
+      class="flex items-center justify-center w-[24px] h-[24px] cursor-pointer rounded-[6px] hover:bg-[#41475C]"
       @click="zoomOut"
     >
-      <i class="bkms-icon bkms-icon-jianhao text-[#F5F7FA] text-[16px]" />
+      <i class="bkms-icon bkms-icon-jianhao text-[#F0F4FA] text-[16px]" />
     </span>
 
     <!-- 缩放比例 -->
@@ -51,10 +51,10 @@
     <!-- 放大 -->
     <span
       v-bk-tooltips="$t('放大')"
-      class="flex items-center justify-center w-[24px] h-[24px] cursor-pointer rounded-[2px] hover:bg-[#41475C]"
+      class="flex items-center justify-center w-[24px] h-[24px] cursor-pointer rounded-[6px] hover:bg-[#41475C]"
       @click="zoomIn"
     >
-      <i class="bkms-icon bkms-icon-jiahao text-[#F5F7FA] text-[16px]" />
+      <i class="bkms-icon bkms-icon-jiahao text-[#F0F4FA] text-[16px]" />
     </span>
 
     <Divider
@@ -68,13 +68,13 @@
     <span
       v-bk-tooltips="minimapDisabled ? $t('节点数量过多，已禁用缩略图') : $t('缩略图')"
       :class="[
-        'flex items-center justify-center w-[24px] h-[24px] cursor-pointer rounded-[2px] hover:bg-[#41475C]',
-        showMinimap ? '!bg-[#3A84FF]' : '',
+        'flex items-center justify-center w-[24px] h-[24px] cursor-pointer rounded-[6px] hover:bg-[#41475C]',
+        showMinimap ? '!bg-[#3B6EF5]' : '',
         minimapDisabled ? 'opacity-50 cursor-not-allowed hover:bg-transparent' : '',
       ]"
       @click="!minimapDisabled && changeShowMinimap()"
     >
-      <i class="bkms-icon bkms-icon-map text-[#F5F7FA] text-[16px]" />
+      <i class="bkms-icon bkms-icon-map text-[#F0F4FA] text-[16px]" />
     </span>
 
     <div

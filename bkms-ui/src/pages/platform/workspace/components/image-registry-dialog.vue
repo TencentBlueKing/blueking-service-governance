@@ -62,7 +62,7 @@
             v-model.trim="formData.registry"
             :placeholder="$t('请输入镜像仓库地址，如：{0}', ['mirrors.tencent.com/my-namespace'])"
           />
-          <div class="text-[#979BA5] text-[12px] leading-[20px] mt-[4px]">
+          <div class="text-[#8F9FBD] text-[12px] leading-[20px] mt-[4px]">
             {{ $t('填写到命名空间即可，不带协议前缀，不含镜像名与 tag') }}
           </div>
         </Form.FormItem>

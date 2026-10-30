@@ -81,14 +81,7 @@
                 :label="key"
               >
                 <span>{{ value.label }}</span>
-                <span
-                  :class="[
-                    'h-[16px] leading-[16px] ml-[4px] px-[6px] rounded-[8px]',
-                    componentType === key ? 'bg-[#E1ECFF] text-[#3A84FF]' : 'bg-[#fff]',
-                  ]"
-                >
-                  {{ value.value.length }}
-                </span>
+                <span class="aidev-capsule-count">{{ value.value.length }}</span>
               </Radio.Button>
             </Radio.Group>
           </div>
@@ -529,12 +522,7 @@
       height: 200px;
     }
     .bk-exception-title {
-      color: #4d4f56;
-    }
-  }
-  .square-radio-button {
-    :deep(.bk-radio-button-label) {
-      padding: 0 5px;
+      color: #4A5973;
     }
   }
 </style>

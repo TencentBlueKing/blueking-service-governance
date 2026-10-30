@@ -19,12 +19,12 @@
 <template>
   <div
     class="group cursor-pointer border-l-[2px] px-[12px] py-[8px]"
-    :class="active ? 'border-[#3A84FF] bg-[#E1ECFF]' : 'border-transparent hover:bg-[#F5F7FA]'"
+    :class="active ? 'border-[#3B6EF5] bg-[#E5EDFF]' : 'border-transparent hover:bg-[#F0F4FA]'"
     @click="emit('click')"
   >
     <div class="relative flex min-w-0 items-center pr-[20px]">
       <OverflowTitle
-        class="min-w-0 text-[12px] text-[#313238]"
+        class="min-w-0 text-[12px] text-[#111214]"
         type="tips"
       >
         {{ file.displayName || '--' }}
@@ -45,19 +45,19 @@
           <template #content>
             <div class="mb-[4px]">
               <span>{{ $t('文件名') }}：</span>
-              <span class="text-[#313238]">{{ file.displayName || '--' }}</span>
+              <span class="text-[#111214]">{{ file.displayName || '--' }}</span>
             </div>
             <div>{{ $t('删除后不再挂载到容器内，文件内容与历史版本一并删除，需要重新部署后生效。') }}</div>
           </template>
           <Del
-            class="cursor-pointer p-[3px] text-[14px] text-[#979BA5] hover:text-[#EA3636]"
+            class="cursor-pointer p-[3px] text-[14px] text-[#8F9FBD] hover:text-[#EA3636]"
             @click="deleting = true"
           />
         </PopConfirm>
       </div>
     </div>
     <OverflowTitle
-      class="mt-[2px] min-w-0 text-[12px] text-[#979BA5]"
+      class="mt-[2px] min-w-0 text-[12px] text-[#8F9FBD]"
       type="tips"
     >
       {{ file.displayPath || '--' }}
@@ -75,7 +75,7 @@
           >{{ scopeLabel }}</Tag
         >
         <template #content>
-          <div class="max-w-[420px] whitespace-pre-line text-[12px] text-[#313238]">{{ envTooltip }}</div>
+          <div class="max-w-[420px] whitespace-pre-line text-[12px] text-[#111214]">{{ envTooltip }}</div>
         </template>
       </Popover>
       <Tag

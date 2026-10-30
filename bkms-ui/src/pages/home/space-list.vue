@@ -47,7 +47,7 @@
             <template #right>
               <div class="flex">
                 <Layout.shape
-                  class="mr-[10px]"
+                  class="mr-[8px]"
                   :width="176"
                 />
                 <Layout.shape :width="400" />
@@ -70,7 +70,7 @@
               <div class="flex">
                 <Tab
                   v-model:active="spaceStore.statusTab"
-                  class="mr-[10px]"
+                  class="mr-[8px]"
                   :tabs="tabList"
                 >
                 </Tab>

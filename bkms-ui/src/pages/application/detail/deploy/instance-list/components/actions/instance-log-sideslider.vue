@@ -30,7 +30,7 @@
           class="mx-[12px]"
           direction="vertical"
         />
-        <span class="text-[#979BA5] text-[14px] leading-[24px]">{{ instance?.id || '' }}</span>
+        <span class="text-[#8F9FBD] text-[14px] leading-[24px]">{{ instance?.id || '' }}</span>
       </div>
     </template>
     <template #default>

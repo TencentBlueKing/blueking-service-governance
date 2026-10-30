@@ -46,7 +46,7 @@
       theme="warning"
     >
       <template #title>
-        <span class="font-bold text-[#313238]">{{ $t('调整说明') }}</span>
+        <span class="font-bold text-[#111214]">{{ $t('调整说明') }}</span>
       </template>
       <div class="flex flex-col gap-[4px] leading-[20px]">
         <template v-if="deployed">
@@ -104,7 +104,7 @@
             </template>
           </Input>
           <template v-if="deployed">
-            <span class="mx-[10px] text-[#63656E]">×</span>
+            <span class="mx-[10px] text-[#4A5973]">×</span>
             <Input
               class="w-[160px]"
               disabled
@@ -128,15 +128,15 @@
         <!-- 已部署场景，展示总权重和占比 -->
         <div
           v-if="deployed"
-          class="mt-[8px] rounded-[2px] bg-[#F5F7FA] px-[12px] py-[8px] text-[12px] leading-[20px]"
+          class="mt-[8px] rounded-[6px] bg-[#F0F4FA] px-[12px] py-[8px] text-[12px] leading-[20px]"
         >
           <i18n-t keypath="总权重 = {0}，预计占比 {1}%">
-            <span class="font-bold text-[#313238]">{{ draftTotalWeight }}</span>
-            <span class="font-bold text-[#313238]">{{ draftPercent }}</span>
+            <span class="font-bold text-[#111214]">{{ draftTotalWeight }}</span>
+            <span class="font-bold text-[#111214]">{{ draftPercent }}</span>
           </i18n-t>
           <p
             v-if="weightOverriddenInstanceCount > 0"
-            class="mt-[4px] text-[#979BA5]"
+            class="mt-[4px] text-[#8F9FBD]"
           >
             {{ $t('部分实例权重已单独调整，上方为保存后全部统一为该权重后的预计值') }}
           </p>
@@ -153,7 +153,7 @@
             :disabled="!enableWeightFactor"
             theme="primary"
           />
-          <span class="text-[12px] leading-[20px] text-[#979BA5]">
+          <span class="text-[12px] leading-[20px] text-[#8F9FBD]">
             {{
               enableWeightFactor
                 ? $t('开启后北极星按机型动态调整该环境实例权重，上方填写的是基准权重。')

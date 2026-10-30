@@ -28,11 +28,11 @@
         label="all"
       >
         <span class="text-[14px]">{{ $t('所有环境') }}</span>
-        <span class="text-[#979BA5] text-[14px]">{{ $t('( 所有环境都生效，包括新增的环境也会生效 )') }}</span>
+        <span class="text-[#8F9FBD] text-[14px]">{{ $t('( 所有环境都生效，包括新增的环境也会生效 )') }}</span>
       </div> -->
       <div>
-        <span class="text-[14px] text-[#4D4F56] mr-[4px]">{{ $t('按环境类型') }}</span>
-        <span class="text-[#979BA5] text-[14px]">{{ $t('( 针对环境类型生效，包括新增的环境也会生效 )') }}</span>
+        <span class="text-[14px] text-[#4A5973] mr-[4px]">{{ $t('按环境类型') }}</span>
+        <span class="text-[#8F9FBD] text-[14px]">{{ $t('( 针对环境类型生效，包括新增的环境也会生效 )') }}</span>
       </div>
       <!-- 按环境类型：多选；已被占用或不支持的环境分类禁用 -->
       <div
@@ -69,7 +69,7 @@
         label="specific_envs"
       >
         <span class="text-[14px]">{{ $t('特定环境') }}</span>
-        <span class="text-[#979BA5] text-[14px]">{{
+        <span class="text-[#8F9FBD] text-[14px]">{{
           $t('( 针对指定的环境生效，新增同类环境不会自动生效 )')
         }}</span>
       </Radio>
@@ -148,7 +148,7 @@
     }
 
     :deep(.bk-checkbox.is-disabled .bk-checkbox-input) {
-      border-color: #c4c6cc;
+      border-color: #C1CDE5;
     }
 
     :deep(.bk-checkbox.is-disabled .bk-checkbox-label) {

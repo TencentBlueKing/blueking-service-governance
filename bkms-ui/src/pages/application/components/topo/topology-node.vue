@@ -105,14 +105,14 @@
             />
           </svg>
           <span
-            class="collapse-btn absolute top-[50%] translate-y-[-50%] select-none bg-[#F5F7FA] rounded-[50%] flex items-center justify-center w-[18px] h-[18px]"
+            class="collapse-btn absolute top-[50%] translate-y-[-50%] select-none bg-[#F0F4FA] rounded-[50%] flex items-center justify-center w-[18px] h-[18px]"
             :style="{ left: `calc(100% + ${EDGE_LENGTH / 2 - 9}px)` }"
             @click.stop.prevent="handleCollapse"
             @pointerdown.stop
             @pointerenter.stop
           >
             <i
-              class="text-[#ABB5CC] text-[18px] hover:text-[#3A84FF] custom-collapse"
+              class="text-[#ABB5CC] text-[18px] hover:text-[#3B6EF5] custom-collapse"
               :class="data.data?.collapsed ? 'bkms-icon bkms-icon-plus' : 'bkms-icon bkms-icon-minus'"
             ></i>
           </span>

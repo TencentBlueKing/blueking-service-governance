@@ -18,18 +18,18 @@
 
 <template>
   <MsHeader
-    back-color="#3A84FF"
+    back-color="#3B6EF5"
     class="env-header !fixed w-full z-[999]"
     :title="$t('端口池配置')"
     :trigger-back="handlePageBack"
   >
     <Divider
-      class="h-[16px] mx-[16px] text-[#DCDEE5]"
+      class="h-[16px] mx-[16px] text-[#E4E9F2]"
       direction="vertical"
       type="solid"
     />
-    <span class="text-[#979BA5] text-[14px] mr-[16px]">{{ $t('环境') }}：{{ envDetail.displayName || envId }}</span>
-    <span class="text-[#979BA5] text-[14px]">{{ $t('集群') }}：{{ envDetail.cluster?.clusterID || '--' }}</span>
+    <span class="text-[#8F9FBD] text-[14px] mr-[16px]">{{ $t('环境') }}：{{ envDetail.displayName || envId }}</span>
+    <span class="text-[#8F9FBD] text-[14px]">{{ $t('集群') }}：{{ envDetail.cluster?.clusterID || '--' }}</span>
   </MsHeader>
   <Skeleton
     class="bg-[#fff] mt-[52px] p-[16px]"
@@ -182,7 +182,7 @@
   >
     <div class="text-[12px]">
       <p>{{ $t('端口池名称') }}：{{ deleteTarget?.name }}</p>
-      <div class="bg-[#F5F7FA] mt-[10px] py-[12px] px-[14px]">{{ $t('端口池删除后数据不可恢复，请确认') }}</div>
+      <div class="bg-[#F0F4FA] mt-[10px] py-[12px] px-[14px]">{{ $t('端口池删除后数据不可恢复，请确认') }}</div>
     </div>
     <template #footer>
       <Button

@@ -59,7 +59,7 @@
         </ul>
       </Alert>
 
-      <div class="bg-[#F5F7FA] p-[12px]">
+      <div class="bg-[#F0F4FA] p-[12px]">
         <p>
           {{ $t('关闭后，仍需') }}&nbsp;
           <Button

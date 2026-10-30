@@ -42,12 +42,12 @@
         <div
           v-for="section in sectionItems"
           :key="section.key"
-          class="metadata-card border border-[#EAEBF0] rounded-[8px] min-w-0 overflow-hidden"
+          class="metadata-card border border-[#E9EDF5] rounded-[8px] min-w-0 overflow-hidden"
         >
-          <div class="flex items-center gap-[10px] h-[32px] px-[12px] bg-[#F5F7FA] border-b border-[#EAEBF0]">
+          <div class="flex items-center gap-[10px] h-[32px] px-[12px] bg-[#F0F4FA] border-b border-[#E9EDF5]">
             <span
               :class="[
-                'text-[12px] font-bold text-[#4D4F56]',
+                'text-[12px] font-bold text-[#4A5973]',
                 { 'section-modified-label': controllers[section.key].hasOverride.value },
               ]"
             >
@@ -55,7 +55,7 @@
             </span>
             <Button
               v-if="!editingSection"
-              class="!hover:text-[#3A84FF]"
+              class="!hover:text-[#3B6EF5]"
               text
               @click="handleEdit(section.key)"
             >
@@ -81,7 +81,7 @@
 
                 <Copy
                   v-if="inputModes[section.key] === 'text'"
-                  class="text-[#979BA5] text-[16px] hover:text-[#3A84FF] cursor-pointer"
+                  class="text-[#8F9FBD] text-[16px] hover:text-[#3B6EF5] cursor-pointer"
                   :title="$t('复制')"
                   @click="handleCopy"
                 />
@@ -834,15 +834,15 @@
 
 <style lang="postcss" scoped>
   :deep(.bkms-content-title) {
-    background-color: #eaebf0;
+    background-color: #e4e9f2;
   }
 
   :deep(.bk-form-label) {
-    color: #4d4f56;
+    color: #4A5973;
   }
 
   :deep(.metadata-card .bk-radio-group) {
-    background-color: #eaebf0;
+    background-color: #e9edf5;
   }
 
   .section-modified-label {

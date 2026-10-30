@@ -1,15 +1,17 @@
 <template>
   <div
     ref="containerRef"
-    class="rounded-[2px] flex flex-col gap-[16px]"
+    class="rounded-[6px] flex flex-col gap-[16px]"
   >
     <!-- 告警组空间级资源提示 -->
-    <Alert
-      class="w-full"
-      theme="info"
-    >
-      {{ $t('告警组空间级资源提示') }}
-    </Alert>
+    <div ref="alertRef">
+      <Alert
+        class="w-full"
+        theme="info"
+      >
+        {{ $t('告警组空间级资源提示') }}
+      </Alert>
+    </div>
 
     <!-- 顶部工具栏 -->
     <div
@@ -63,7 +65,7 @@
         >
           <template #default="{ row }">
             <span
-              class="text-[#3a84ff] cursor-pointer"
+              class="text-[#3B6EF5] cursor-pointer"
               @click="handleEdit(row)"
             >
               {{ row.name || '--' }}
@@ -82,8 +84,8 @@
               overflow-mode="popover"
             >
               <template #default="{ item }: { item: UserGroupUser }">
-                <span class="flex items-center gap-[4px] rounded-[2px] px-[8px] bg-[#F0F1F5] cursor-default">
-                  <i class="bkms-icon bkms-icon-usergroup text-[#979BA5] text-[14px]"></i>
+                <span class="flex items-center gap-[4px] rounded-[6px] px-[8px] bg-[#E9EDF5] cursor-default">
+                  <i class="bkms-icon bkms-icon-usergroup text-[#8F9FBD] text-[14px]"></i>
                   {{ item.display_name || item.id || '--' }}
                 </span>
               </template>
@@ -203,9 +205,14 @@
   const formGroupID = ref<number>();
 
   const containerRef = ref<HTMLElement>();
+  const alertRef = ref<HTMLElement>();
   const searchBarRef = ref<HTMLElement>();
-  /** 父容器（index.vue 的 flex-1 容器）内容区高度 */
+  /** 卡片内容区高度。父级内边距在测量时扣除 */
   const parentContentHeight = ref(400);
+  const { height: alertHeight } = useElementHeight(alertRef, {
+    watchSource: isLoading,
+    defaultHeight: 32,
+  });
   const { height: searchBarHeight } = useElementHeight(searchBarRef, {
     watchSource: isLoading,
     defaultHeight: 40,
@@ -222,20 +229,30 @@
     parentContentHeight.value = rect.height - padTop - padBottom;
   }
 
+  let parentObserver: ResizeObserver | undefined;
+
   onMounted(() => {
     updateParentHeight();
+    const parent = containerRef.value?.parentElement;
+    if (parent) {
+      parentObserver = new ResizeObserver(updateParentHeight);
+      parentObserver.observe(parent);
+    }
     window.addEventListener('resize', updateParentHeight);
   });
 
   onBeforeUnmount(() => {
+    parentObserver?.disconnect();
     window.removeEventListener('resize', updateParentHeight);
   });
 
   /** 是否有任意筛选条件 */
   const hasFilter = computed(() => searchValue.value.length > 0);
 
-  /** 表格最大高度 */
-  const tableMaxHeight = computed(() => Math.max(parentContentHeight.value - searchBarHeight.value - 24 * 2 - 16, 0));
+  /** 表格最大高度：卡片内容区 - 提示条 - 筛选栏 - 两段间距 16 */
+  const tableMaxHeight = computed(() =>
+    Math.max(parentContentHeight.value - alertHeight.value - searchBarHeight.value - 16 * 2, 0),
+  );
 
   /** 前端筛选 */
   const filteredData = computed(() => {

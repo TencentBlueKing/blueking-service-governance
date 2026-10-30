@@ -88,7 +88,7 @@
                 <div class="shrink-0">
                   <TypeIcon :type="appType">
                     <template #label>
-                      <span class="text-[#313238] leading-[20px] text-[14px] font-bold ml-[6px]">
+                      <span class="text-[#111214] leading-[20px] text-[14px] font-bold ml-[6px]">
                         {{ appType === 'trpc' ? $t('tRPC 应用') : $t('TAF 应用') }}
                       </span>
                     </template>
@@ -100,19 +100,19 @@
               :container-height="20"
               :field-value="$t('空间名称')"
               :value="appData?.workspaceID"
-              value-color="#313238"
+              value-color="#111214"
             />
             <FieldItem
               :container-height="20"
               :field-value="$t('应用名称')"
               :value="appData?.name"
-              value-color="#313238"
+              value-color="#111214"
             />
             <FieldItem
               :container-height="20"
               :field-value="`${$t('应用')} ID`"
               :value="appData?.id"
-              value-color="#313238"
+              value-color="#111214"
             />
           </div>
         </BkmsContent>
@@ -128,33 +128,33 @@
               :container-height="20"
               :field-value="$t('来源')"
               :value="curBuilderType"
-              value-color="#313238"
+              value-color="#111214"
             />
             <template v-if="builderType === 'codeRepository'">
               <FieldItem
                 :container-height="20"
                 :field-value="$t('代码库')"
                 :value="getBuildConfigFieldValue('repoBuildConfig.repoURL')"
-                value-color="#313238"
+                value-color="#111214"
                 value-max-width="100%"
               />
               <FieldItem
                 :container-height="20"
                 :field-value="$t('默认分支')"
                 :value="getBuildConfigFieldValue('repoBuildConfig.defaultBranch')"
-                value-color="#313238"
+                value-color="#111214"
               />
               <FieldItem
                 :container-height="20"
                 :field-value="$t('构建目录')"
                 :value="getBuildConfigFieldValue('repoBuildConfig.sourceDir')"
-                value-color="#313238"
+                value-color="#111214"
               />
               <!-- 构建方式 -->
               <FieldItem
                 :container-height="20"
                 :field-value="$t('构建方式')"
-                value-color="#313238"
+                value-color="#111214"
               >
                 <template #value>
                   <span>{{
@@ -168,7 +168,7 @@
                 :container-height="20"
                 :field-value="$t('推荐版本号')"
                 :value="tagConfigDisplayText"
-                value-color="#313238"
+                value-color="#111214"
               />
               <!-- 使用仓库 Dockerfile 模式 -->
               <template v-if="appData?.buildConfig?.repoBuildConfig?.imageBuildMode !== 'platform'">
@@ -176,7 +176,7 @@
                   :container-height="20"
                   :field-value="$t('Dockerfile 路径')"
                   :value="getBuildConfigFieldValue('repoBuildConfig.dockerfile')"
-                  value-color="#313238"
+                  value-color="#111214"
                   value-max-width="100%"
                 />
               </template>
@@ -186,14 +186,14 @@
                   :container-height="20"
                   :field-value="$t('构建镜像')"
                   :value="getBuildConfigFieldValue('repoBuildConfig.platformBuildConfig.builderImage')"
-                  value-color="#313238"
+                  value-color="#111214"
                   value-max-width="100%"
                 />
                 <FieldItem
                   :container-height="20"
                   :field-value="$t('运行镜像')"
                   :value="getBuildConfigFieldValue('repoBuildConfig.platformBuildConfig.runnerImage')"
-                  value-color="#313238"
+                  value-color="#111214"
                   value-max-width="100%"
                 />
                 <!-- 高级命令 -->
@@ -210,10 +210,10 @@
                     >
                       <ToggleCard
                         v-if="platformCommandsPreBuild"
-                        class="rounded-[2px] overflow-hidden"
+                        class="rounded-[6px] overflow-hidden"
                         content-class="px-[38px] py-[8px] mt-0 border-t"
-                        header-class="!hover:bg-[#f0f1f5]"
-                        normal-bg-color="#F5F7FA"
+                        header-class="!hover:bg-[#E9EDF5]"
+                        normal-bg-color="#F0F4FA"
                         type="normal"
                       >
                         <template #icon>
@@ -226,16 +226,16 @@
                           </div>
                         </template>
                         <pre
-                          class="m-0 text-[12px] font-mono leading-[22px] text-[#63656e] whitespace-pre-wrap"
+                          class="m-0 text-[12px] font-mono leading-[22px] text-[#4A5973] whitespace-pre-wrap"
                           v-text="platformCommandsPreBuild"
                         ></pre>
                       </ToggleCard>
                       <ToggleCard
                         v-if="platformCommandsBuild"
-                        class="rounded-[2px] overflow-hidden"
+                        class="rounded-[6px] overflow-hidden"
                         content-class="px-[38px] py-[8px] mt-0 border-t"
-                        header-class="!hover:bg-[#f0f1f5]"
-                        normal-bg-color="#F5F7FA"
+                        header-class="!hover:bg-[#E9EDF5]"
+                        normal-bg-color="#F0F4FA"
                         type="normal"
                       >
                         <template #icon>
@@ -248,16 +248,16 @@
                           </div>
                         </template>
                         <pre
-                          class="m-0 text-[12px] font-mono leading-[22px] text-[#63656e] whitespace-pre-wrap"
+                          class="m-0 text-[12px] font-mono leading-[22px] text-[#4A5973] whitespace-pre-wrap"
                           v-text="platformCommandsBuild"
                         ></pre>
                       </ToggleCard>
                       <ToggleCard
                         v-if="platformExtraFiles"
-                        class="rounded-[2px] overflow-hidden"
+                        class="rounded-[6px] overflow-hidden"
                         content-class="px-[38px] py-[8px] mt-0 border-t"
-                        header-class="!hover:bg-[#f0f1f5]"
-                        normal-bg-color="#F5F7FA"
+                        header-class="!hover:bg-[#E9EDF5]"
+                        normal-bg-color="#F0F4FA"
                         type="normal"
                       >
                         <template #icon>
@@ -270,16 +270,16 @@
                           </div>
                         </template>
                         <pre
-                          class="m-0 text-[12px] font-mono leading-[22px] text-[#63656e] whitespace-pre-wrap"
+                          class="m-0 text-[12px] font-mono leading-[22px] text-[#4A5973] whitespace-pre-wrap"
                           v-text="platformExtraFiles"
                         ></pre>
                       </ToggleCard>
                       <ToggleCard
                         v-if="platformCommandsRuntimeEnv"
-                        class="rounded-[2px] overflow-hidden"
+                        class="rounded-[6px] overflow-hidden"
                         content-class="px-[38px] py-[8px] mt-0 border-t"
-                        header-class="!hover:bg-[#f0f1f5]"
-                        normal-bg-color="#F5F7FA"
+                        header-class="!hover:bg-[#E9EDF5]"
+                        normal-bg-color="#F0F4FA"
                         type="normal"
                       >
                         <template #icon>
@@ -292,16 +292,16 @@
                           </div>
                         </template>
                         <pre
-                          class="m-0 text-[12px] font-mono leading-[22px] text-[#63656e] whitespace-pre-wrap"
+                          class="m-0 text-[12px] font-mono leading-[22px] text-[#4A5973] whitespace-pre-wrap"
                           v-text="platformCommandsRuntimeEnv"
                         ></pre>
                       </ToggleCard>
                       <ToggleCard
                         v-if="platformCommandsStart"
-                        class="rounded-[2px] overflow-hidden"
+                        class="rounded-[6px] overflow-hidden"
                         content-class="px-[38px] py-[8px] mt-0 border-t"
-                        header-class="!hover:bg-[#f0f1f5]"
-                        normal-bg-color="#F5F7FA"
+                        header-class="!hover:bg-[#E9EDF5]"
+                        normal-bg-color="#F0F4FA"
                         type="normal"
                       >
                         <template #icon>
@@ -314,7 +314,7 @@
                           </div>
                         </template>
                         <pre
-                          class="m-0 text-[12px] font-mono leading-[22px] text-[#63656e] whitespace-pre-wrap"
+                          class="m-0 text-[12px] font-mono leading-[22px] text-[#4A5973] whitespace-pre-wrap"
                           v-text="platformCommandsStart"
                         ></pre>
                       </ToggleCard>
@@ -327,7 +327,7 @@
                 class="!items-start"
                 :container-height="isEmpty(appData?.buildConfig?.repoBuildConfig?.dockerBuildArgs) ? 20 : 'auto'"
                 :field-value="$t('构建参数')"
-                value-color="#313238"
+                value-color="#111214"
               >
                 <template #value>
                   <div v-if="isEmpty(appData?.buildConfig?.repoBuildConfig?.dockerBuildArgs)">--</div>
@@ -351,7 +351,7 @@
                 :container-height="20"
                 :field-value="$t('流水线库')"
                 :value="getBuildConfigFieldValue('pipelineBuildConfig.pipelineID')"
-                value-color="#313238"
+                value-color="#111214"
               />
               <FieldItem
                 :container-height="20"
@@ -379,7 +379,7 @@
           </Button>
           <div class="flex items-center gap-[4px] text-[12px]">
             <ExclamationCircleShape class="text-[14px] text-[#F59500]" />
-            <span class="text-[#4D4F56]">
+            <span class="text-[#4A5973]">
               {{ $t('删除应用后，所有相关的配置、部署信息和操作记录将永久丢失，此操作不可恢复。') }}
             </span>
           </div>
@@ -606,6 +606,6 @@
 
 <style lang="postcss" scoped>
   .info-title :deep(.bkms-content-title) {
-    background-color: #eaebf0;
+    background-color: #e4e9f2;
   }
 </style>

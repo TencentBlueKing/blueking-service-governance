@@ -26,7 +26,7 @@
     @change="handleProjectChange"
   >
     <template #prefix>
-      <span class="px-[10px] text-[#63656E] border-r-[#c4c6cc] border-r">
+      <span class="px-[10px] text-[#4A5973] border-r-[#C1CDE5] border-r">
         {{ prefix || $t('工蜂Git') }}
       </span>
     </template>
@@ -61,7 +61,7 @@
           @click="handleRefresh"
         >
           <RightTurnLine class="text-[14px] mr-[6px]" />
-          <span class="#4D4F56 text-[12ox]">{{ $t('刷新列表') }}</span>
+          <span class="#4A5973 text-[12ox]">{{ $t('刷新列表') }}</span>
         </div>
       </Loading>
     </template>

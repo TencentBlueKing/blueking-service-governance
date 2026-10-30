@@ -288,20 +288,20 @@
       >
         {{ t('该镜像尚未部署到任何测试环境，请确认是否仍要晋级') }}
       </Alert>
-      <div class="rounded bg-[#F5F7FA] px-[16px] py-[12px]">
+      <div class="rounded bg-[#F0F4FA] px-[16px] py-[12px]">
         <FieldItem
           :container-height="32"
           :field-value="t('镜像 Tag')"
           :field-width="90"
           :value="promoteRow?.tag || '--'"
-          value-color="#313238"
+          value-color="#111214"
         />
         <FieldItem
           class="!h-auto !items-start"
           :container-height="32"
           :field-value="t('已部署环境')"
           :field-width="90"
-          value-color="#313238"
+          value-color="#111214"
         >
           <template #value>
             <div class="flex flex-wrap gap-[4px]">
@@ -317,7 +317,7 @@
           </template>
         </FieldItem>
       </div>
-      <div class="mt-[12px] text-[12px] text-[#979BA5]">
+      <div class="mt-[12px] text-[12px] text-[#8F9FBD]">
         {{ t('制品仅在手动晋级后，才允许被部署到生产类型环境中：') }}
       </div>
       <div class="mt-[8px] flex flex-wrap gap-[4px]">
@@ -330,7 +330,7 @@
         </Tag>
         <span
           v-if="!productionEnvNames.length"
-          class="text-[12px] text-[#979BA5]"
+          class="text-[12px] text-[#8F9FBD]"
           >--</span
         >
       </div>
@@ -469,8 +469,8 @@
   const expandConfig = {
     showIcon: true,
     trigger: 'row',
-    iconOpen: 'bkms-icon bkms-icon-down-shape !text-[#C4C6CC] hover:!text-[#63656E] p-[2px]',
-    iconClose: 'bkms-icon bkms-icon-right-shape !text-[#C4C6CC] hover:!text-[#63656E] p-[2px]',
+    iconOpen: 'bkms-icon bkms-icon-down-shape !text-[#C1CDE5] hover:!text-[#4A5973] p-[2px]',
+    iconClose: 'bkms-icon bkms-icon-right-shape !text-[#C1CDE5] hover:!text-[#4A5973] p-[2px]',
   };
 
   const artifactSearchData = shallowRef([
@@ -607,7 +607,7 @@
         'div',
         {
           style: {
-            color: '#979BA5',
+            color: '#8F9FBD',
           },
         },
         t('由 {0} 于 {1} 晋级', [promotedByText, promotedAtText]),

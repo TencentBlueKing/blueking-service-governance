@@ -17,12 +17,14 @@
 -->
 
 <template>
+  <div class="h-full overflow-auto p-[16px]">
+    <div class="overflow-hidden rounded-[6px] bg-[#fff] p-[16px] shadow-[0_2px_4px_0_#1919290d]">
   <Skeleton
     :loading="loading"
     theme="gray"
   >
     <template #loading>
-      <div class="h-full px-[24px] py-[20px]">
+      <div>
         <Layout.shape width="100%" />
         <FlexRow
           average
@@ -35,13 +37,13 @@
         <Layout.table />
       </div>
     </template>
-    <div class="h-full px-[24px] py-[20px]">
+    <div>
       <Alert
-        class="mb-[12px]"
+        class="mb-[12px] shrink-0"
         theme="info"
         >{{ $t('通过组件可以灵活修改应用的 Kubernetes 资源配置，如调整参数、添加网络策略等。') }}</Alert
       >
-      <FlexRow>
+      <FlexRow class="shrink-0">
         <template #left>
           <Button
             theme="primary"
@@ -72,14 +74,10 @@
           </SearchSelect>
         </template>
       </FlexRow>
-      <div
-        ref="componentTableContentRef"
-        class="!h-[calc(100%-48px-33px-16px)] flex flex-col gap-[16px] mt-[16px]"
-      >
+      <div class="mt-[16px]">
         <Table
           ref="componentTableRef"
           :data="tableDataMatchSearch"
-          :max-height="componentTableContentHeight"
           :pagination="pagination"
           :row-config="{
             isHover: true,
@@ -157,13 +155,13 @@
                 <span
                   v-for="key in Object.keys(row.properties || {}).slice(0, 3)"
                   :key="key"
-                  class="text-[12px] text-[#4D4F56] truncate"
+                  class="text-[12px] text-[#4A5973] truncate"
                 >
                   {{ `${key}: ${formatPropertyValue(row.properties[key])}` }}
                 </span>
                 <span
                   v-if="Object.keys(row.properties || {})?.length > 3"
-                  class="text-[12px] text-[#979BA5]"
+                  class="text-[12px] text-[#8F9FBD]"
                 >
                   ...
                 </span>
@@ -279,6 +277,7 @@
       </div>
     </div>
   </Skeleton>
+    </div>
   <ComponentsSideSlider
     v-model="isShow"
     :btn-loading="updating"
@@ -288,6 +287,7 @@
     @close="handleCloseSlider"
     @submit="handleSubmitComponent"
   />
+  </div>
 </template>
 <script setup lang="ts">
   import { computed, h, onBeforeMount, ref, shallowRef } from 'vue';
@@ -300,7 +300,6 @@
   import { AppComponentsService } from '~/api/modules/v1';
   import { ComponentData } from '~/components/modules/components-sideSlider.vue';
   import Layout from '~/components/skeleton/skeleton-layout';
-  import { useElementHeight } from '~/composables/use-element-height';
   import usePageConf from '~/composables/use-page';
   import { ISelectKey, ITableFilterItem, useTableSearchSelect } from '~/composables/use-search';
   import { useSearchPlaceholder } from '~/composables/use-search-placeholder';
@@ -334,7 +333,6 @@
   const editIndex = ref<number>(-1); // 当前更新索引
   const componentType = ref<ComponentType | undefined>('Deploy');
 
-  const componentTableContentRef = ref<HTMLElement>();
   const componentTableRef = ref();
   const componentTypeOptions = computed<ITableFilterItem[]>(() => {
     const typeSet = new Set<string>();
@@ -422,12 +420,6 @@
     },
     count,
   );
-
-  // 使用 useElementHeight hook 获取表格容器高度
-  const { height: componentTableContentHeight } = useElementHeight(componentTableContentRef, {
-    watchSource: loading,
-    defaultHeight: 600,
-  });
 
   /**
    * 关闭 Slider
@@ -594,16 +586,16 @@
     }
     const instances = selections.value.map(item => h('div', { class: ['px-[16px] leading-[32px]'] }, [`${item.name}`]));
     return h('div', [
-      h('div', { class: 'bg-[#F5F7FA] py-[12px] px-[16px]' }, [t('删除后，将不可恢复，请谨慎操作！')]),
+      h('div', { class: 'bg-[#F0F4FA] py-[12px] px-[16px]' }, [t('删除后，将不可恢复，请谨慎操作！')]),
       h(
         'div',
         {
           class:
-            'bg-[#F5F7FA] leading-[32px] px-[16px] mt-[16px] border-1 border-[#EAEBF0] rounded-[2px] border-b-transparent',
+            'bg-[#F0F4FA] leading-[32px] px-[16px] mt-[16px] border-1 border-[#E9EDF5] rounded-[6px] border-b-transparent',
         },
         [h('span', [t('已选择以下 {0} 个实例', [selections.value.length])])],
       ),
-      h('div', { class: 'max-h-[160px] overflow-auto border-1 border-t-transparent border-[#EAEBF0] rounded-[2px]' }, [
+      h('div', { class: 'max-h-[160px] overflow-auto border-1 border-t-transparent border-[#E9EDF5] rounded-[6px]' }, [
         ...instances,
       ]),
     ]);
@@ -616,8 +608,8 @@
 
 <style lang="less" scoped>
   .info-title :deep(.bkms-content-title) {
-    background-color: #eaebf0;
-    border-radius: 2px;
+    background-color: #e4e9f2;
+    border-radius: 6px;
   }
 
   @media (max-width: 1440px) {

@@ -65,6 +65,7 @@
         >
           <Form
             ref="formRef"
+            class="flex flex-col gap-[24px]"
             form-type="vertical"
             :model="formModel"
             :rules="rules"
@@ -75,7 +76,7 @@
             >
               <!-- 实例名称 -->
               <Form.FormItem
-                class="!text-[#4D4F56]"
+                class="!text-[#4A5973]"
                 :label="$t('实例名称')"
                 property="instanceKey"
                 required
@@ -98,7 +99,7 @@
                   :precision="0"
                   type="number"
                 />
-                <div class="mt-[4px] text-[12px] leading-[20px] text-[#979BA5]">
+                <div class="mt-[4px] text-[12px] leading-[20px] text-[#8F9FBD]">
                   {{ servicePortHint }}
                 </div>
                 <Alert
@@ -112,7 +113,6 @@
             </ToggleCard>
 
             <ToggleCard
-              class="mb-[24px]"
               content-class="!p-0 !mt-[12px]"
               :name="$t('可用环境')"
               type="normal"
@@ -125,7 +125,6 @@
             </ToggleCard>
 
             <ToggleCard
-              class="mt-[10px]"
               :name="$t('北极星信息')"
               type="normal"
             >
@@ -159,7 +158,7 @@
               <!-- 连接信息与连通测试 -->
               <div
                 ref="connectionBlockRef"
-                class="mb-[24px] rounded-[2px] bg-[#F5F7FA] p-[16px]"
+                class="mb-[24px] rounded-[6px] bg-[#F0F4FA] p-[16px]"
               >
                 <Form.FormItem
                   v-test="'polaris-config-namespace-options'"
@@ -265,7 +264,7 @@
                   multiple
                 />
                 <template v-if="!isEditMode">
-                  <span class="text-[#979BA5]">{{ $t('可快捷填入') }}: </span>
+                  <span class="text-[#8F9FBD]">{{ $t('可快捷填入') }}: </span>
                   <Button
                     text
                     theme="primary"
@@ -311,12 +310,12 @@
                   :disabled="isEditMode"
                 >
                   <div
-                    class="w-full border border-solid rounded-[2px] px-[16px] py-[8px] transition-colors duration-200"
+                    class="w-full border border-solid rounded-[6px] px-[16px] py-[8px] transition-colors duration-200"
                     :class="[
                       formModel.registerMode === 'immediate'
-                        ? 'border-[#3A84FF] bg-[#F0F5FF]'
-                        : 'border-[#DCDEE5] bg-white',
-                      isEditMode ? 'cursor-not-allowed' : 'cursor-pointer hover:border-[#3A84FF]',
+                        ? 'border-[#3B6EF5] bg-[#F0F4FF]'
+                        : 'border-[#E4E9F2] bg-white',
+                      isEditMode ? 'cursor-not-allowed' : 'cursor-pointer hover:border-[#3B6EF5]',
                     ]"
                     @click="handleSelectRegisterMode('immediate')"
                   >
@@ -329,12 +328,12 @@
                     </Radio>
                   </div>
                   <div
-                    class="w-full border border-solid rounded-[2px] px-[16px] py-[8px] transition-colors duration-200"
+                    class="w-full border border-solid rounded-[6px] px-[16px] py-[8px] transition-colors duration-200"
                     :class="[
                       formModel.registerMode === 'on_deploy'
-                        ? 'border-[#3A84FF] bg-[#F0F5FF]'
-                        : 'border-[#DCDEE5] bg-white',
-                      isEditMode ? 'cursor-not-allowed' : 'cursor-pointer hover:border-[#3A84FF]',
+                        ? 'border-[#3B6EF5] bg-[#F0F4FF]'
+                        : 'border-[#E4E9F2] bg-white',
+                      isEditMode ? 'cursor-not-allowed' : 'cursor-pointer hover:border-[#3B6EF5]',
                     ]"
                     @click="handleSelectRegisterMode('on_deploy')"
                   >
@@ -344,18 +343,18 @@
                       label="on_deploy"
                     >
                       <span class="inline-flex flex-wrap items-center gap-x-[8px] leading-[20px]">
-                        <span class="shrink-0 text-[#4D4F56]">{{ $t('下次部署生效') }}</span>
-                        <span class="text-[12px] leading-[20px] text-[#979BA5]">
+                        <span class="shrink-0 text-[#4A5973]">{{ $t('下次部署生效') }}</span>
+                        <span class="text-[12px] leading-[20px] text-[#8F9FBD]">
                           {{ $t('部署后才将实例注册到北极星，同时注入北极星 Token、服务端口等内容到应用环境变量中') }}
                         </span>
                       </span>
                     </Radio>
                   </div>
                 </Radio.Group>
-                <div class="mt-[4px] text-[12px] leading-[20px] text-[#979BA5]">
+                <div class="mt-[4px] text-[12px] leading-[20px] text-[#8F9FBD]">
                   <span>{{ $t('实例何时注册、摘除北极星，还受生命周期和健康探针影响') }}</span>
                   <a
-                    class="ml-[8px] text-[#3A84FF]"
+                    class="ml-[8px] text-[#3B6EF5]"
                     :href="instanceLifecycleDocUrl"
                     rel="noopener noreferrer"
                     target="_blank"
@@ -379,7 +378,7 @@
                   />
                   <div
                     v-if="showHealthCheckTip"
-                    class="text-[12px] leading-[20px] text-[#979BA5]"
+                    class="text-[12px] leading-[20px] text-[#8F9FBD]"
                   >
                     <i18n-t
                       v-if="isImmediateRegister(formModel)"
@@ -387,7 +386,7 @@
                       tag="span"
                     >
                       <a
-                        class="text-[#3A84FF]"
+                        class="text-[#3B6EF5]"
                         :href="heartbeatDocUrl"
                         rel="noopener noreferrer"
                         target="_blank"
@@ -425,10 +424,10 @@
                       theme="primary"
                     />
                   </span>
-                  <div class="text-[12px] leading-[20px] text-[#979BA5]">
+                  <div class="text-[12px] leading-[20px] text-[#8F9FBD]">
                     <span>{{ $t('按实例机型动态分配流量。开启后，可在关联环境中打开「动态权重」') }}</span>
                     <a
-                      class="ml-[8px] text-[#3A84FF]"
+                      class="ml-[8px] text-[#3B6EF5]"
                       :href="weightFactorDocUrl"
                       rel="noopener noreferrer"
                       target="_blank"
@@ -491,8 +490,8 @@
               >
                 <template #label>
                   <span>{{ $t('服务标签') }}</span>
-                  <i class="bkms-icon bkms-icon-warning-circle text-[14px] text-[#979BA5] ml-[4px]"></i>
-                  <span class="text-[#979BA5] text-[12px] ml-[4px]">
+                  <i class="bkms-icon bkms-icon-warning-circle text-[14px] text-[#8F9FBD] ml-[4px]"></i>
+                  <span class="text-[#8F9FBD] text-[12px] ml-[4px]">
                     {{ $t('服务标签支持通过表达式 {0} 引用环境变量', [expressTemplate]) }}
                   </span>
                 </template>
@@ -507,7 +506,7 @@
                     >
                       <Radio.Button label="keyvalue">
                         <span class="flex items-center">
-                          <i class="bkms-icon bkms-icon-single-column mr-[2px]"></i>
+                          <i class="bkms-icon bkms-icon-single-column mr-[4px] text-[14px]"></i>
                           <span>{{ $t('表格模式') }}</span>
                         </span>
                       </Radio.Button>
@@ -522,7 +521,7 @@
                   <template #right>
                     <Copy
                       v-show="inputMode === 'text'"
-                      class="cursor-pointer !hover:text-[#3A84FF]"
+                      class="cursor-pointer !hover:text-[#3B6EF5]"
                       height="16"
                       :title="$t('复制')"
                       width="16"
@@ -1200,9 +1199,9 @@
   }
 
   .polaris-type-radio :deep(.bk-radio-button.is-checked .bk-radio-button-label) {
-    color: #3a84ff;
-    background: #e1ecff;
-    border-color: #3a84ff;
+    color: #3B6EF5;
+    background: #E5EDFF;
+    border-color: #3B6EF5;
   }
 
   .polaris-connection-item :deep(.bk-form-error) {
@@ -1210,7 +1209,7 @@
   }
 
   :deep(.bk-form-label) {
-    color: #4d4f56;
+    color: #4A5973;
   }
 
   :deep(.bk-checkbox-group) {
@@ -1219,7 +1218,4 @@
     }
   }
 
-  :deep(.bk-alert-content) {
-    padding-right: 22px;
-  }
 </style>

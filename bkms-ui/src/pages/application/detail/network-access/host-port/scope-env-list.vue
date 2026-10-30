@@ -20,7 +20,7 @@
     <div
       v-for="env in scopeEnvItems"
       :key="env.name"
-      class="inline-flex items-center h-[22px] text-[12px] text-[#4D4F56]"
+      class="inline-flex items-center h-[22px] text-[12px] text-[#4A5973]"
     >
       <span class="max-w-[160px] truncate">{{ env.displayName }}</span>
       <Tag
@@ -49,7 +49,7 @@
             </div>
             <Button
               v-if="showGoDeploy"
-              class="mt-[6px] !px-0 text-[#3A84FF]"
+              class="mt-[6px] !px-0 text-[#3B6EF5]"
               text
               theme="primary"
               @click.stop="$emit('goDeploy', env.name)"

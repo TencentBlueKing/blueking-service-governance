@@ -19,14 +19,14 @@
 <template>
   <div class="text-[12px] flex w-full h-[30px]">
     <div
-      class="text-[#979BA5] text-right shrink-0"
+      class="text-[#8F9FBD] text-right shrink-0"
       :style="{
         minWidth: labelStyle,
       }"
     >
       {{ label }}：
     </div>
-    <div class="text-[#313238] text-wrap break-all">
+    <div class="text-[#111214] text-wrap break-all">
       <slot>{{ value ?? '--' }}</slot>
     </div>
   </div>

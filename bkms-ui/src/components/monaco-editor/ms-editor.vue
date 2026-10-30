@@ -23,12 +23,12 @@
     :class="{ 'ms-editor-readonly': readonly }"
   >
     <!-- 工具栏 -->
-    <div :class="['h-[40px] px-[16px] rounded-t-sm ms-editor', lightTheme ? 'bg-[#DCDEE5]' : 'bg-[#2E2E2E]']">
+    <div :class="['h-[40px] px-[16px] rounded-t-sm ms-editor', lightTheme ? 'bg-[#E4E9F2]' : 'bg-[#2E2E2E]']">
       <div class="flex items-center justify-between h-full">
         <div
           :class="[
             'flex-1 min-w-0 ms-editor-title text-[14px] leading-none',
-            lightTheme ? 'text-[#313238]' : 'text-[#C4C6CC]',
+            lightTheme ? 'text-[#111214]' : 'text-[#C1CDE5]',
           ]"
         >
           <slot name="title">
@@ -57,7 +57,7 @@
           >
             <template #icon>
               <Copy
-                color="#979BA5"
+                color="#8F9FBD"
                 height="16"
                 :title="$t('复制')"
                 width="16"

@@ -39,7 +39,7 @@
           @update:model-value="handleItemChange(index, $event)"
         />
         <Del
-          class="ml-[8px] cursor-pointer text-[14px] text-[#979BA5] hover:text-[#4D4F56]"
+          class="ml-[8px] cursor-pointer text-[14px] text-[#8F9FBD] hover:text-[#4A5973]"
           @click="handleDel(index)"
         ></Del>
       </div>

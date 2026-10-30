@@ -63,8 +63,8 @@
         <slot name="middle">
           <div
             :class="[
-              'size-[30px] flex justify-center items-center text-[#979BA5] text-[12px]',
-              'border-1 border-[#c4c6cc] mx-[8px] radius-[2px] shrink-0',
+              'size-[30px] flex justify-center items-center text-[#8F9FBD] text-[12px]',
+              'border-1 border-[#C1CDE5] mx-[8px] rounded-[6px] shrink-0',
             ]"
           >
             =
@@ -110,8 +110,8 @@
             :class="[
               'ml-[8px]',
               disabled || (minRows > 0 && validValue.length <= minRows)
-                ? 'text-[#DCDEE5]'
-                : 'text-[#979BA5] hover:text-[#4D4F56]',
+                ? 'text-[#E4E9F2]'
+                : 'text-[#8F9FBD] hover:text-[#4A5973]',
             ]"
             height="14px"
             width="14px"

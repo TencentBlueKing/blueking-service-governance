@@ -29,13 +29,13 @@
     <span class="cursor-pointer">
       <span
         v-bk-tooltips="{ content: tooltip, disabled: !tooltip }"
-        :class="{ 'border-b border-dashed border-[#979ba5]': tooltip }"
+        :class="{ 'border-b border-dashed border-[#8F9FBD]': tooltip }"
       >
         {{ label }}
       </span>
       <i
         class="hover:text-[#606266] relative text-[#c0c4cc] top-[1px] left-[4px] vxe-filter--btn vxe-table-icon-funnel"
-        :class="hasApplied ? '!text-[#3a84ff]' : ''"
+        :class="hasApplied ? '!text-[#3B6EF5]' : ''"
       ></i>
     </span>
     <template #content>
@@ -49,7 +49,7 @@
             :key="group.field"
             class="group-section w-[160px]"
           >
-            <div class="px-[12px] h-[28px] leading-[28px] text-[12px] text-[#979ba5]">{{ group.label }}</div>
+            <div class="px-[12px] h-[28px] leading-[28px] text-[12px] text-[#8F9FBD]">{{ group.label }}</div>
             <Checkbox.Group
               v-model="selected[group.field]"
               class="flex flex-col w-full max-h-[288px] overflow-y-auto"
@@ -57,7 +57,7 @@
               <Checkbox
                 v-for="option in group.options"
                 :key="option.value"
-                class="!ml-0 w-full text-[12px] text-[#63656e]"
+                class="!ml-0 w-full text-[12px] text-[#4A5973]"
                 :label="option.value"
               >
                 {{ option.label }}
@@ -65,7 +65,7 @@
             </Checkbox.Group>
           </div>
         </div>
-        <div class="flex items-center justify-end h-[42px] border-t px-[8px] border-[#dcdee5]">
+        <div class="flex items-center justify-end h-[42px] border-t px-[8px] border-[#E4E9F2]">
           <Button
             class="mr-[8px]"
             size="small"
@@ -148,7 +148,7 @@
 
 <style lang="postcss" scoped>
   .group-section + .group-section {
-    border-left: 1px solid #f0f1f5;
+    border-left: 1px solid #E9EDF5;
   }
 
   :deep(.bk-checkbox) {
@@ -156,11 +156,11 @@
     padding: 0 12px;
 
     &:hover {
-      background-color: #f5f7fa;
+      background-color: #F0F4FA;
     }
   }
 
   :deep(.bk-checkbox.is-checked .bk-checkbox-label) {
-    color: #3a84ff;
+    color: #3B6EF5;
   }
 </style>

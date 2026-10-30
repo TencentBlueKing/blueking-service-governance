@@ -85,7 +85,7 @@
                       <h2 class="text-[14px] font-bold flex items-center">
                         <span class="mr-[6px]">{{ $t('请选择一个组件') }}</span>
                         <i
-                          class="bkms-icon bkms-icon-refresh cursor-pointer text-[#3A84FF]"
+                          class="bkms-icon bkms-icon-refresh cursor-pointer text-[#3B6EF5]"
                           @click="handleRefresh"
                         ></i>
                       </h2>
@@ -141,7 +141,7 @@
                       v-for="(item, index) in curComponentList"
                       :key="`${index}-${item?.name}`"
                       :active="item.name === curComponent?.name"
-                      :class="['mt-[16px]', { 'bg-[#F0F5FF] !border-[#3A84FF]': activeIndex === index }]"
+                      :class="['mt-[16px]', { 'bg-[#F0F4FF] !border-[#3B6EF5]': activeIndex === index }]"
                       :data="item"
                       :disabled="disabledFn?.(item)"
                       :disabled-text="$t('应用必须且只有一个部署类组件，无法新增部署组件。')"
@@ -167,7 +167,7 @@
                       direction="vertical"
                       type="solid"
                     />
-                    <span class="text-[#979BA5]">{{ curInstanceObj?.name || '--' }}</span>
+                    <span class="text-[#8F9FBD]">{{ curInstanceObj?.name || '--' }}</span>
                   </div>
                   <div class="mt-[24px] flex-1 overflow-auto">
                     <ToggleCard
@@ -246,7 +246,7 @@
               >
                 <template #suffix>
                   <Button
-                    class="!min-w-[60px] rounded-[0_2px_2px_0] text-[12px]"
+                    class="component-picker-reselect !min-w-[60px] text-[12px]"
                     :disabled="!!data"
                     theme="primary"
                     @click="handleReSelect"
@@ -274,8 +274,8 @@
                     {{ $t('引用空间配置的实例') }}
                     <span
                       :class="[
-                        'text-[#979BA5] rounded-[8px] px-[8px] transition',
-                        isUseInstance ? 'bg-[#3A84FF] text-[#fff]' : 'bg-[#F0F1F5]',
+                        'text-[#8F9FBD] rounded-[8px] px-[8px] transition',
+                        isUseInstance ? 'bg-[#3B6EF5] text-[#fff]' : 'bg-[#E9EDF5]',
                       ]"
                     >
                       {{ curInstanceList.length }}
@@ -514,7 +514,6 @@
             >{{ $t('试运行') }}</Button
           >
           <Button
-            class="ml-[8px]"
             :disabled="isTrialRunning"
             @click="handleCancel"
             >{{ $t('取消') }}</Button
@@ -533,7 +532,6 @@
             >{{ $t('提交') }}</Button
           >
           <Button
-            class="ml-[8px]"
             :disabled="btnLoading"
             @click="handleCancel"
             >{{ $t('取消') }}</Button
@@ -706,7 +704,7 @@
   ]);
 
   function getInstanceRowClass({ row }: { row: WorkspaceComponentOutputObj }) {
-    return row.name === curInstanceObj.value?.name ? 'bg-[#F0F5FF]' : '';
+    return row.name === curInstanceObj.value?.name ? 'bg-[#F0F4FF]' : '';
   }
 
   /**
@@ -1195,6 +1193,12 @@
   );
 </script>
 <style scoped lang="postcss">
+  /* 组件名和「重选」拼在一起：外框 6px，中间衔接直角。主按钮全局圆角会盖住左侧。 */
+  :deep(.component-picker-reselect.bk-button) {
+    height: 100%;
+    border-radius: 0 6px 6px 0 !important;
+  }
+
   :deep(.bk-tab-content) {
     padding: 0 8px 0 0 !important;
     overflow: auto;

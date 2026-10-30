@@ -17,9 +17,10 @@
 -->
 
 <template>
-  <div class="flex items-center justify-between gap-[12px] mb-[16px]">
+  <div class="overflow-hidden rounded-[6px] bg-[#fff] p-[16px] shadow-[0_2px_4px_0_#1919290d]">
+  <div class="flex items-center justify-between gap-[8px] mb-[16px]">
     <div :id="DEPLOY_ENV_SELECT_SLOT_ID"></div>
-    <div class="flex items-center gap-[12px]">
+    <div class="flex items-center gap-[8px]">
       <DatePicker
         v-model="dateRange"
         class="w-[300px]"
@@ -126,6 +127,7 @@
       </TableColumn>
     </Table>
   </Skeleton>
+  </div>
 </template>
 
 <script lang="ts" setup>

@@ -38,7 +38,7 @@
             :class="{ '!items-start': preStopExecMode === 'exec' && formModel?.preStopCommand?.length }"
             container-height="auto"
             :field-width="205"
-            value-color="#313238"
+            value-color="#111214"
           >
             <template #field>
               <ModifiedFieldLabel
@@ -75,7 +75,7 @@
                     </div>
                     <span
                       v-if="!formModel.preStopCommand?.length"
-                      class="text-[12px] text-[#313238]"
+                      class="text-[12px] text-[#111214]"
                       >--</span
                     >
                   </div>
@@ -90,7 +90,7 @@
             class="min-h-[20px]"
             container-height="auto"
             :field-width="205"
-            value-color="#313238"
+            value-color="#111214"
           >
             <template #field>
               <ModifiedFieldLabel
@@ -118,7 +118,7 @@
       <!-- 编辑态 -->
       <div v-else>
         <div class="mb-[16px]">
-          <div class="flex flex-col mb-[24px] text-[12px] text-[#4D4F56]">
+          <div class="flex flex-col mb-[24px] text-[12px] text-[#4A5973]">
             <div class="flex items-center gap-[4px]">
               <p :class="['text-[14px]', { 'field-diff-highlight': isFieldModified('preStop') }]">
                 {{ $t('退出前命令 (preStop)') }}
@@ -216,7 +216,7 @@
               <div class="flex items-center gap-[4px]">
                 <div
                   :class="[
-                    'text-[14px] text-[#4D4F56]',
+                    'text-[14px] text-[#4A5973]',
                     { 'field-diff-highlight': isFieldModified('terminationGracePeriodSeconds') },
                   ]"
                 >
@@ -231,7 +231,7 @@
                 suffix="秒"
                 type="number"
               />
-              <p class="mt-[4px] text-[12px] text-[#979BA5]">
+              <p class="mt-[4px] text-[12px] text-[#8F9FBD]">
                 {{ $t('等待 preStop 执行的最大时间，时间超过而 preStop 未执行完时，将强制杀死容器') }}
               </p>
             </div>
@@ -291,8 +291,8 @@
   import type { ExtendedEnv } from './types';
 
   // 查看态值样式常量
-  const VIEW_VALUE_CLASS = 'text-[12px] text-[#313238]';
-  const VIEW_VALUE_MODIFIED_CLASS = 'border-b border-dashed border-b-[#313238]';
+  const VIEW_VALUE_CLASS = 'text-[12px] text-[#111214]';
+  const VIEW_VALUE_MODIFIED_CLASS = 'border-b border-dashed border-b-[#111214]';
 
   type FieldKey = 'preStop' | 'terminationGracePeriodSeconds';
   type PreStopExecMode = 'exec' | 'shell';
@@ -767,7 +767,7 @@
 
 <style lang="postcss" scoped>
   :deep(.bkms-content-title) {
-    background-color: #eaebf0;
+    background-color: #e4e9f2;
   }
 
   :deep(.bk-radio-label) {

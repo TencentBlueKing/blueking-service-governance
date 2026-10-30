@@ -18,7 +18,7 @@
 
 <template>
   <MsHeader
-    back-color="#3A84FF"
+    back-color="#3B6EF5"
     class="env-header !fixed w-full z-[999]"
     :title="$t('集群健康诊断')"
     :trigger-back="handlePageBack"
@@ -28,8 +28,8 @@
       direction="vertical"
       type="solid"
     />
-    <span class="text-[#4D4F56]">{{ $t('集群') }}：</span>
-    <span class="text-[#4D4F56]">
+    <span class="text-[#4A5973]">{{ $t('集群') }}：</span>
+    <span class="text-[#4A5973]">
       {{ clusterData?.clusterID || '--' }}
     </span>
   </MsHeader>
@@ -114,18 +114,18 @@
         <!-- 集群健康分数 -->
         <ScoreCard
           :active="curScoreCardActive as string"
-          class="score-card rounded-[2px] shadow-[0_2px_4px_0_rgba(25,25,41,0.05)]"
+          class="score-card rounded-[6px] shadow-[0_2px_4px_0_rgba(25,25,41,0.05)]"
           :count="levelCount"
           :value="clusterData?.score || 0"
           @change="handleScoreCardChange"
         />
         <!-- 基础信息 -->
         <BasicInfoCard
-          class="rounded-[2px] shadow-[0_2px_4px_0_rgba(25,25,41,0.05)]"
+          class="rounded-[6px] shadow-[0_2px_4px_0_rgba(25,25,41,0.05)]"
           :cluster-info="clusterData?.clusterInfo"
         />
       </div>
-      <div class="col-span-2 bg-[#fff] px-[16px] mt-[16px] rounded-[2px] shadow-[0_2px_4px_0_rgba(25,25,41,0.05)]">
+      <div class="col-span-2 bg-[#fff] px-[16px] mt-[16px] rounded-[6px] shadow-[0_2px_4px_0_rgba(25,25,41,0.05)]">
         <Tab
           :key="tabKey"
           :active="filterData.isRecovered"
@@ -154,7 +154,7 @@
             <template #label>
               <div class="flex items-center">
                 <span>{{ item.label }}</span>
-                <div class="bg-[#E1ECFF] h-[16px] leading-[16px] px-[8px] ml-[4px] rounded-[8px]">
+                <div class="bg-[#E5EDFF] h-[16px] leading-[16px] px-[8px] ml-[4px] rounded-[8px]">
                   {{ item.count }}
                 </div>
               </div>
@@ -381,8 +381,8 @@
   /** table折叠配置项 */
   const expandConfig = {
     showIcon: true,
-    iconOpen: 'bkms-icon bkms-icon-down-shape !text-[#C4C6CC] hover:!text-[#63656E]',
-    iconClose: 'bkms-icon bkms-icon-right-shape !text-[#C4C6CC] hover:!text-[#63656E]',
+    iconOpen: 'bkms-icon bkms-icon-down-shape !text-[#C1CDE5] hover:!text-[#4A5973]',
+    iconClose: 'bkms-icon bkms-icon-right-shape !text-[#C1CDE5] hover:!text-[#4A5973]',
   };
   /** Table排序配置 */
   const sortConfig = {

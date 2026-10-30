@@ -20,7 +20,7 @@
   <div class="w-full">
     <!-- 自定义 Header -->
     <div class="h-[52px] flex items-center justify-between px-[24px] bg-[#FFF] shadow-[0_3px_4px_0_#0000000a]">
-      <div class="text-[16px] text-[#313238]">{{ $t('构建管理') }}</div>
+      <div class="text-[16px] text-[#111214]">{{ $t('构建管理') }}</div>
       <Button
         text
         theme="primary"
@@ -30,7 +30,8 @@
         <span class="text-[14px]">{{ $t('构建配置') }}</span>
       </Button>
     </div>
-    <div class="px-[24px] py-[20px]">
+    <div class="p-[16px]">
+      <div class="overflow-hidden rounded-[6px] bg-[#fff] p-[16px] shadow-[0_2px_4px_0_#1919290d]">
       <Skeleton
         :loading="loading"
         theme="gray"
@@ -73,7 +74,10 @@
                   {{ $t('执行构建') }}
                 </Button>
                 <template #content>
-                  <div @mousedown="dismissBranchSelectOnOutsideMouseDown">
+                  <div
+                    class="w-[400px]"
+                    @mousedown="dismissBranchSelectOnOutsideMouseDown"
+                  >
                     <div class="pb-[16px] text-[14px]">{{ $t('执行配置') }}</div>
                     <Form
                       ref="executeFormRef"
@@ -108,7 +112,7 @@
                         />
                         <p
                           v-if="recommendTag"
-                          class="text-[#979BA5]"
+                          class="w-[400px] break-all text-[12px] leading-[20px] text-[#8F9FBD]"
                         >
                           {{ $t('推荐版本号') }}：{{ recommendTag }}
                         </p>
@@ -283,6 +287,7 @@
           </TableColumn>
         </Table>
       </Skeleton>
+      </div>
     </div>
 
     <!-- 编辑构建配置侧栏 -->

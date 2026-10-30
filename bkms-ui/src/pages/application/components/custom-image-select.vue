@@ -17,13 +17,13 @@
 -->
 
 <template>
-  <div class="bg-[#F5F7FA] mt-[16px] p-[16px]">
+  <div class="bg-[#F0F4FA] mt-[16px] p-[16px]">
     <Alert
       class="mb-[12px]"
       theme="warning"
     >
       <template #title>
-        <div class="flex items-center text-[#4D4F56]">
+        <div class="flex items-center text-[#4A5973]">
           <i18n-t keypath="请先将自定义的镜像推送至空间，{0}">
             <CustomImagePushGuide
               :image-name="name"
@@ -110,7 +110,7 @@
       v-if="displayNames.length"
       class="mt-[8px] flex items-start text-[12px] leading-[20px]"
     >
-      <span class="text-[#979BA5] shrink-0 mr-[4px]">{{ $t('快捷填入镜像名称') }}：</span>
+      <span class="text-[#8F9FBD] shrink-0 mr-[4px]">{{ $t('快捷填入镜像名称') }}：</span>
       <div class="flex flex-wrap items-center gap-x-[12px] gap-y-[4px] min-w-[24px] min-h-[16px]">
         <Button
           v-for="item in displayNames"

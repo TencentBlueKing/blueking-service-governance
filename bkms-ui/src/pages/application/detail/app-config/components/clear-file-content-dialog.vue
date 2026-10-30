@@ -29,13 +29,13 @@
           icon="bkms-icon-tishi"
           :width="42"
         />
-        <span class="text-[#313238] text-[20px] leading-[32px] text-center mt-[18px]">
+        <span class="text-[#111214] text-[20px] leading-[32px] text-center mt-[18px]">
           {{ $t('清空文件内容') }}
         </span>
       </div>
     </template>
 
-    <div class="text-[14px] text-[#313238] mb-[16px] mt-[32px]">
+    <div class="text-[14px] text-[#111214] mb-[16px] mt-[32px]">
       {{ $t('文件清空后，该环境将恢复为默认配置。请选择处理方式：') }}
     </div>
 
@@ -46,14 +46,14 @@
       <div
         v-for="item in actionOptions"
         :key="item.value"
-        class="clear-file-action-card cursor-pointer rounded-[4px] border border-solid border-[#dcdee5] px-[16px] py-[14px] transition-all duration-300"
+        class="clear-file-action-card cursor-pointer rounded-[4px] border border-solid border-[#E4E9F2] px-[16px] py-[14px] transition-all duration-300"
         :class="{ 'is-active': selectedAction === item.value }"
         @click="selectedAction = item.value"
       >
         <Radio :label="item.value">
           <div class="ml-[8px]">
-            <div class="font-700 text-[12px] text-[#313238]">{{ item.title }}</div>
-            <div class="mt-[8px] text-[12px] leading-[20px] text-[#63656E]">
+            <div class="font-700 text-[12px] text-[#111214]">{{ item.title }}</div>
+            <div class="mt-[8px] text-[12px] leading-[20px] text-[#4A5973]">
               {{ item.desc }}
               <template v-if="item.value === 'saveEmpty'">
                 <br />
@@ -142,17 +142,17 @@
 
   .clear-file-action-card {
     &:hover {
-      border-color: #3a84ff;
+      border-color: #3B6EF5;
     }
 
     &.is-active {
-      border-color: #3a84ff;
-      background: #f5f7fa;
-      color: #3a84ff !important;
+      border-color: #3B6EF5;
+      background: #F0F4FA;
+      color: #3B6EF5 !important;
 
       :deep(.bk-radio-label),
       :deep(.bk-radio-label *) {
-        color: #3a84ff !important;
+        color: #3B6EF5 !important;
       }
 
       .modified-status {

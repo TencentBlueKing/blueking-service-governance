@@ -19,7 +19,7 @@
 <template>
   <div class="network-header-container bg-[#FFF] px-[24px]">
     <div class="pt-[14px] pb-[10px]">
-      <span class="text-[16px] font-medium text-[#313238]">{{ title }}</span>
+      <span class="text-[16px] font-medium text-[#111214]">{{ title }}</span>
     </div>
     <Tab
       v-model:active="activeTabModel"

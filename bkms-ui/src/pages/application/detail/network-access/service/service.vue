@@ -24,7 +24,7 @@
         <Layout.shape :width="520" />
       </div>
       <!-- 服务列表骨架屏 -->
-      <div class="rounded-[2px] overflow-hidden bg-[#FFF] mb-[16px]">
+      <div class="rounded-[6px] overflow-hidden bg-[#FFF] mb-[16px]">
         <div class="service-header px-[36px] pt-[12px] pb-[16px] flex items-center gap-[12px]">
           <Layout.shape :width="180" />
           <Layout.shape :width="60" />

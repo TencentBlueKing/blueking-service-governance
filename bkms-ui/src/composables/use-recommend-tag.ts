@@ -48,6 +48,16 @@ export function useRecommendTag(
     return `${source.revisionType}\0${source.revision}`;
   }
 
+  /** 接口应返回版本字符串。包了一层 data，或整段对象被当成版本时，不要把 JSON 写进输入框 */
+  function readRecommendTag(raw: unknown): string {
+    if (typeof raw === 'string') return raw.trim();
+    if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+      const data = (raw as { data?: unknown }).data;
+      if (typeof data === 'string') return data.trim();
+    }
+    return '';
+  }
+
   /** 半截 CommitID 不是一次有效修订 */
   function shouldSkip(source: RecommendSource) {
     return source.revisionType === 'commit' && source.revision !== '' && !isCommitID(source.revision);
@@ -78,7 +88,7 @@ export function useRecommendTag(
     const current = sourceGetter();
     if (serial !== requestSerial || sourceKey(current) !== requestedKey) return '';
 
-    const tag = rawTag || filterTimeFormat(new Date(), 'YYYYmmddHHMM');
+    const tag = readRecommendTag(rawTag) || filterTimeFormat(new Date(), 'YYYYmmddHHMM');
     options?.onRecommend?.(tag);
     return tag;
   }

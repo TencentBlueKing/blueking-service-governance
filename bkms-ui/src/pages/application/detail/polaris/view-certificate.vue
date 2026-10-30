@@ -38,7 +38,7 @@
             }}
             <a
               v-if="polarisConsoleUrl"
-              class="mt-[4px] flex w-fit items-center text-[#3A84FF]"
+              class="mt-[4px] flex w-fit items-center text-[#3B6EF5]"
               :href="polarisConsoleUrl"
               target="_blank"
             >

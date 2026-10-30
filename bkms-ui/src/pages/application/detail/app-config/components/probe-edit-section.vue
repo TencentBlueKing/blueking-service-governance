@@ -19,13 +19,13 @@
 <template>
   <div class="probe-card border rounded-[8px] flex-1 min-w-0 overflow-hidden">
     <!-- 卡片标题行 -->
-    <div class="flex items-center justify-between h-[32px] px-[12px] bg-[#F5F7FA] border-b border-[#EAEBF0]">
+    <div class="flex items-center justify-between h-[32px] px-[12px] bg-[#F0F4FA] border-b border-[#E9EDF5]">
       <div class="flex items-center gap-[6px]">
         <i
           v-if="isFieldModified"
           class="w-[3px] h-[18px] bg-[#ff9c01] flex-shrink-0"
         ></i>
-        <span class="text-[12px] font-bold text-[#4D4F56]">{{ label }}</span>
+        <span class="text-[12px] font-bold text-[#4A5973]">{{ label }}</span>
       </div>
     </div>
 
@@ -249,7 +249,7 @@
         </Button>
         <Divider
           class="h-[14px] !mx-[0]"
-          color="#EAEBF0"
+          color="#E9EDF5"
           direction="vertical"
           type="solid"
         />
@@ -445,6 +445,6 @@
 
 <style lang="postcss" scoped>
   :deep(.bk-form-label) {
-    color: #4d4f56;
+    color: #4A5973;
   }
 </style>

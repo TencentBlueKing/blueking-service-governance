@@ -23,7 +23,7 @@
   >
     <template #loading>
       <div class="p-[24px]">
-        <div class="flex items-center justify-end gap-[12px] mb-[16px]">
+        <div class="mb-[16px] flex items-center justify-end gap-[8px]">
           <Layout.shape :width="300" />
           <Layout.shape :width="360" />
         </div>
@@ -31,7 +31,7 @@
       </div>
     </template>
     <div class="h-full p-[24px] flex flex-col gap-[16px]">
-      <div class="flex justify-end items-center gap-[12px]">
+      <div class="flex items-center justify-end gap-[8px]">
         <DatePicker
           v-model="dateRange"
           class="w-[300px]"

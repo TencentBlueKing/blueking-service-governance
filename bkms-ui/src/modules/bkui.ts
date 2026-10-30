@@ -21,8 +21,26 @@ import bkui from 'bkui-vue';
 import type { UserModule } from '~/types';
 
 import 'bkui-vue/dist/style.variable.css';
+import themeCss from '~/styles/aidev-theme.css?inline';
 
-// Setup BKUI
+const themeStyleId = 'aidev-theme';
+
+// Setup BKUI。主题样式放在组件库样式之后，保证主按钮和色值覆盖生效。
 export const install: UserModule = ({ app }) => {
   app.use(bkui);
+  let style = document.getElementById(themeStyleId);
+  if (!(style instanceof HTMLStyleElement)) {
+    style = document.createElement('style');
+    style.id = themeStyleId;
+  }
+  style.textContent = themeCss;
+  document.head.appendChild(style);
+  // 部分依赖会在组件渲染后再插入写死色值的样式，把主题节点挪到 head 末尾才能盖住主按钮底色。
+  const observer = new MutationObserver(() => {
+    const current = document.getElementById(themeStyleId);
+    if (current && current !== document.head.lastElementChild) {
+      document.head.appendChild(current);
+    }
+  });
+  observer.observe(document.head, { childList: true });
 };

@@ -37,7 +37,7 @@
         v-if="step !== 3"
         :class="[
           'flex justify-center py-[10px] transition z-10',
-          hasScroll ? 'bg-[#fff] border-t-1px border-t-solid border-t-[#DCDEE5]' : '',
+          hasScroll ? 'bg-[#fff] border-t-1px border-t-solid border-t-[#E4E9F2]' : '',
         ]"
       >
         <!-- 第二步创建成功后, 就已经成功了, 第三步就是修改values操作 -->

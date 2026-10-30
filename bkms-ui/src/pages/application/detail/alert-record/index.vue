@@ -7,8 +7,10 @@
       :title="$t('监控告警')"
     />
 
-    <div class="flex-1 overflow-hidden px-[24px] py-[20px]">
-      <component :is="currentComponent" />
+    <div class="min-h-0 flex-1 overflow-auto p-[16px]">
+      <div class="overflow-hidden rounded-[6px] bg-[#fff] p-[16px] shadow-[0_2px_4px_0_#1919290d]">
+        <component :is="currentComponent" />
+      </div>
     </div>
   </div>
 </template>

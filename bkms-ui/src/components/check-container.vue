@@ -17,7 +17,7 @@
 -->
 
 <template>
-  <div :class="['relative', { '!border-[#3A84FF]': checked }]">
+  <div :class="['relative', { '!border-[#3B6EF5]': checked }]">
     <slot></slot>
     <span
       v-show="checked"
@@ -59,7 +59,7 @@
     height: 0;
     border-style: solid;
     border-width: 0 42px 42px 0;
-    border-color: transparent #3a84ff transparent transparent;
+    border-color: transparent #3B6EF5 transparent transparent;
     .nc-check-small {
       position: absolute;
       color: #fff;

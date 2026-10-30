@@ -74,10 +74,10 @@
     >
       <template #title>
         <div class="grid grid-cols-2 gap-[18px] text-[12px] text-center leading-[22px]">
-          <div class="w-[52px] h-[22px] bg-[#1E3567] rounded-[2px]">
+          <div class="w-[52px] h-[22px] bg-[#1E3567] rounded-[6px]">
             {{ $t('操作前') }}
           </div>
-          <div class="w-[52px] h-[22px] bg-[#144628] rounded-[2px] text-[#3FC362]">
+          <div class="w-[52px] h-[22px] bg-[#144628] rounded-[6px] text-[#3FC362]">
             {{ $t('操作后') }}
           </div>
         </div>

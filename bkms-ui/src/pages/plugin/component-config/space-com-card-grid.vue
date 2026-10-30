@@ -27,7 +27,7 @@
       class="mt-[16px]"
       content-class="!pt-0 mt-[16px] overflow-visible"
       :name="`${group.title}（${group.items.length}）`"
-      normal-bg-color="#EAEBF0"
+      normal-bg-color="#E9EDF5"
       type="normal"
     >
       <!-- 卡片网格 -->

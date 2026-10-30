@@ -17,7 +17,8 @@
 -->
 
 <template>
-  <div class="flex items-center justify-between gap-[12px] mb-[16px]">
+  <div class="overflow-hidden rounded-[6px] bg-[#fff] p-[16px] shadow-[0_2px_4px_0_#1919290d]">
+  <div class="mb-[16px] flex items-center justify-between gap-[8px]">
     <div :id="DEPLOY_ENV_SELECT_SLOT_ID"></div>
     <SearchSelect
       v-model="searchValue"
@@ -71,7 +72,7 @@
           <template #default="{ row }">
             <span
               class="rounded-[2px] px-[8px] py-[2px] text-[12px]"
-              :class="isSourceBuild(row) ? 'bg-[#E1ECFF] text-[#1768EF]' : 'bg-[#F0F1F5] text-[#4D4F56]'"
+              :class="isSourceBuild(row) ? 'bg-[#E5EDFF] text-[#1768EF]' : 'bg-[#E9EDF5] text-[#4A5973]'"
             >
               {{ isSourceBuild(row) ? $t('源码构建') : $t('已构建镜像') }}
             </span>
@@ -156,6 +157,7 @@
       </Table>
     </div>
   </Skeleton>
+  </div>
 
   <ResourceSnapshotSideslider
     v-model:is-show="showResourceSnapshots"

@@ -18,7 +18,7 @@
 
 <template>
   <div
-    class="flex items-center justify-end gap-[6px] text-[#979BA5]"
+    class="flex items-center justify-end gap-[6px] text-[#8F9FBD]"
     :style="{ width: `${labelWidth}px`, lineHeight: `${lineHeight}px` }"
   >
     <i

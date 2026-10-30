@@ -74,9 +74,10 @@ const inFlightRequests = new Map<string, Promise<MonitorChartApiResult>>();
 
 const COMPARE_INSTANCE_PREFIX = '__CMP__';
 
+/** 对比序列色。紫、青用 AIdev Purple-3 / Cyan-2。画布不解析 CSS 变量，这里写色值。 */
 const COMPARE_PALETTE: string[] = [
-  '#EA3636', '#FF9C01', '#3A84FF', '#2DCB56',
-  '#A855F7', '#EC4899', '#14B8A6', '#6366F1',
+  '#EA3636', '#FF9C01', '#3B6EF5', '#2DCB56',
+  '#A160E1', '#EC4899', '#1FAAB2', '#6366F1',
 ];
 
 // ─── 导出函数（按字母序） ───────────────────────────────────────

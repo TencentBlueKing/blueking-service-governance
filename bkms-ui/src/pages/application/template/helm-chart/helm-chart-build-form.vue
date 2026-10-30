@@ -116,7 +116,7 @@
         clearable
         :placeholder="$t('请输入镜像仓库，如：{0}', ['mirrors.tencent.com/blueking/helloworld'])"
       />
-      <div class="text-[#979BA5] text-[12px] leading-[20px]">{{ $t('镜像仓库地址，无需包含 tag') }}</div>
+      <div class="text-[#8F9FBD] text-[12px] leading-[20px]">{{ $t('镜像仓库地址，无需包含 tag') }}</div>
     </Form.FormItem>
     <Form.FormItem
       :label="$t('镜像凭证')"
@@ -138,7 +138,7 @@
           :is-edit-mode="isEditMode"
         />
       </div>
-      <div class="text-[#979BA5] text-[12px] leading-[20px]">{{ $t('私有镜像需要填写镜像凭证才能拉去镜像') }}</div>
+      <div class="text-[#8F9FBD] text-[12px] leading-[20px]">{{ $t('私有镜像需要填写镜像凭证才能拉去镜像') }}</div>
     </Form.FormItem>
   </template>
 </template>

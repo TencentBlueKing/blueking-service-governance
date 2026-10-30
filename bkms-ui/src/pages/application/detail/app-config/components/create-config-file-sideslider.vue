@@ -67,7 +67,7 @@
             clearable
             :placeholder="$t('请输入容器内目录，例如 /data/conf')"
           />
-          <div class="mt-[4px] text-[12px] text-[#979BA5]">
+          <div class="mt-[4px] text-[12px] text-[#8F9FBD]">
             {{ $t('文件最终挂载到 {0}', [mountPathPreview]) }}
           </div>
         </Form.FormItem>
@@ -91,7 +91,7 @@
               size="small"
               theme="primary"
             />
-            <span class="ml-[10px] text-[12px] text-[#979BA5]">
+            <span class="ml-[10px] text-[12px] text-[#8F9FBD]">
               {{ $t('开启后，文件内容中的 {0} 会在下发前被渲染为实际值', [envVarPlaceholder]) }}
             </span>
           </div>

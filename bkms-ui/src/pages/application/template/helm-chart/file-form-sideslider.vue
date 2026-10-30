@@ -58,7 +58,7 @@
           >
             <Radio label="normal">
               {{ $t('普通') }}
-              <span class="ml-[12px] text-[12px] text-[#979BA5]">
+              <span class="ml-[12px] text-[12px] text-[#8F9FBD]">
                 <InfoLine class="mr-[4px] text-[14px] transform translate-y-[2px]" />
                 {{ $t('标准的 Helm Chart values YAML 配置文件') }}
               </span>
@@ -68,7 +68,7 @@
               style="margin-left: 0"
             >
               {{ $t('覆盖层') }}
-              <span class="ml-[12px] text-[12px] text-[#979BA5]">
+              <span class="ml-[12px] text-[12px] text-[#8F9FBD]">
                 <InfoLine class="mr-[4px] text-[14px] transform translate-y-[2px]" />
                 {{ $t('覆盖配置片段，与普通 values 文件基于 Patch 算法合并生成完整配置') }}
               </span>
@@ -78,7 +78,7 @@
         <!-- 覆盖层 - 基础 values -->
         <Form.FormItem
           v-if="formData.fileType === 'overlay'"
-          class="bg-[#F5F7FA] px-[24px] py-[16px]"
+          class="bg-[#F0F4FA] px-[24px] py-[16px]"
           :label="$t('基础 values')"
           property="baseAppConfigFileId"
           required
@@ -109,7 +109,7 @@
           >
             <Radio label="local">
               {{ $t('本地编辑') }}
-              <span class="ml-[12px] text-[12px] text-[#979BA5]">
+              <span class="ml-[12px] text-[12px] text-[#8F9FBD]">
                 <InfoLine class="mr-[4px] text-[14px] transform translate-y-[2px]" />
                 {{ $t('文件保存后，请在页面编辑器中填写内容') }}
               </span>

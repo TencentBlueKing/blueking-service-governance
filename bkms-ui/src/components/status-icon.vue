@@ -40,7 +40,7 @@
     <slot>
       <span
         v-bk-tooltips="{ content: message, disabled: !message }"
-        :class="['flex-1 ellipsis', message ? 'border-b border-dashed border-[#979ba5] !flex-none' : '']"
+        :class="['flex-1 ellipsis', message ? 'border-b border-dashed border-[#8F9FBD] !flex-none' : '']"
       >
         {{ statusText }}
       </span>

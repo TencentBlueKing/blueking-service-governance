@@ -60,8 +60,8 @@
           <img src="/empty.svg" />
         </template>
         <template #description>
-          <div class="text-[20px] text-[#313238] mb-[16px]">{{ $t('暂无资源') }}</div>
-          <div class="text-[14px] text-[#4D4F56]">{{ $t('该环境下无任何资源') }}</div>
+          <div class="text-[20px] text-[#111214] mb-[16px]">{{ $t('暂无资源') }}</div>
+          <div class="text-[14px] text-[#4A5973]">{{ $t('该环境下无任何资源') }}</div>
           <slot name="empty-deploy"></slot>
         </template>
       </Exception>

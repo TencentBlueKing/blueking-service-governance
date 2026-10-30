@@ -122,7 +122,7 @@
               >
                 <template #title>
                   <div class="flex items-center">
-                    <span class="text-[14px] text-[#C4C6CC]">{{ formData.tafSpec.fileName }}</span>
+                    <span class="text-[14px] text-[#C1CDE5]">{{ formData.tafSpec.fileName }}</span>
                     <Popover
                       v-model:is-show="isPopoverShow"
                       :padding="16"
@@ -133,7 +133,7 @@
                       @after-hidden="handlePopoverHidden"
                     >
                       <EditLine
-                        class="ml-[8px] text-[#979BA5] cursor-pointer hover:text-[#3A84FF]"
+                        class="ml-[8px] text-[#8F9FBD] cursor-pointer hover:text-[#3B6EF5]"
                         @click="handleEdit"
                       />
                       <template #content>

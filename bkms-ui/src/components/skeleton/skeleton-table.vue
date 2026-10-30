@@ -41,7 +41,7 @@
         <Layout.shape
           v-for="(_, index) in rows"
           :key="index"
-          class="rounded-sm"
+          class="rounded-[6px]"
           :height="index === 0 ? '44px' : '20px'"
           type="rect"
           width="100%"

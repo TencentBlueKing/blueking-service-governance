@@ -37,7 +37,7 @@
             width="100%"
           />
         </div>
-        <div class="rounded-[2px] bg-white p-[16px]">
+        <div class="rounded-[6px] bg-white p-[16px]">
           <div class="mb-[16px] flex justify-end"><Layout.shape :width="560" /></div>
           <Layout.table />
         </div>
@@ -45,7 +45,7 @@
 
       <!-- 顶部操作栏：环境类型是总览表格的一级筛选，部署按钮复用部署管理现有侧栏。 -->
       <div
-        class="mb-[16px] flex shrink-0 items-center justify-between gap-[16px] bg-[#EAEBF0] px-[12px] py-[8px] shadow-[0_2px_4px_0_#0000001a]"
+        class="mb-[16px] flex shrink-0 items-center justify-between gap-[16px] bg-[#E4E9F2] px-[12px] py-[8px] shadow-[0_2px_4px_0_#0000001a]"
       >
         <Radio.Group
           v-model="globalTypeFilter"
@@ -59,14 +59,7 @@
           >
             <div class="flex items-center justify-center">
               {{ option.label }}
-              <span
-                :class="[
-                  'ml-[4px] h-[16px] rounded-[8px] px-[6px] leading-[16px]',
-                  option.value === globalTypeFilter ? 'bg-[#E1ECFF] text-[#3A84FF]' : 'bg-white',
-                ]"
-              >
-                {{ option.count }}
-              </span>
+              <span class="aidev-capsule-count">{{ option.count }}</span>
             </div>
           </Radio.Button>
         </Radio.Group>
@@ -107,14 +100,14 @@
           v-for="stat in stats"
           :key="stat.key"
           :class="[
-            'flex min-w-0 cursor-pointer items-center justify-between gap-[12px] rounded-[2px] bg-white px-[16px] py-[12px] text-left shadow-[0_2px_4px_0_#1919290d] hover:shadow-[0_2px_8px_0_#1919291f]',
-            activeStat === stat.key ? '!bg-[#E1ECFF] outline outline-[1px] outline-[#3A84FF]' : '',
+            'flex min-w-0 cursor-pointer items-center justify-between gap-[12px] rounded-[6px] bg-white px-[16px] py-[12px] text-left shadow-[0_2px_4px_0_#1919290d] hover:shadow-[0_2px_8px_0_#1919291f]',
+            activeStat === stat.key ? '!bg-[#E5EDFF] outline outline-[1px] outline-[#3B6EF5]' : '',
           ]"
           type="button"
           @click="handleStatClick(stat.key)"
         >
           <div class="flex min-w-0 flex-col gap-[4px]">
-            <span class="text-[12px] text-[#979BA5]">{{ stat.label }}</span>
+            <span class="text-[12px] text-[#8F9FBD]">{{ stat.label }}</span>
             <div class="flex items-baseline gap-[8px]">
               <span
                 class="text-[24px] font-bold leading-[28px]"
@@ -124,7 +117,7 @@
               </span>
               <span
                 v-if="stat.desc"
-                class="truncate text-[12px] text-[#979BA5]"
+                class="truncate text-[12px] text-[#8F9FBD]"
               >
                 {{ stat.desc }}
               </span>
@@ -140,7 +133,7 @@
       </div>
 
       <!-- 表格容器占满剩余高度，仅表格内容滚动，顶部筛选与分页保持可见。 -->
-      <div class="flex min-h-0 flex-1 flex-col rounded-[2px] bg-white p-[16px] shadow-[0_2px_4px_0_#1919290d]">
+      <div class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[6px] bg-white p-[16px] shadow-[0_2px_4px_0_#1919290d]">
         <div class="mb-[16px] flex shrink-0 justify-end">
           <SearchSelect
             v-model="searchValue"
@@ -190,18 +183,18 @@
             >
               <template #default="{ row }: { row: DeployOverviewRow }">
                 <div class="flex items-center gap-[4px]">
-                  <span class="truncate text-[#3A84FF] hover:text-[#699DF4]">
+                  <span class="truncate text-[#3B6EF5] hover:text-[#6691FF]">
                     {{ row.displayName }}
                   </span>
                   <Tag
                     v-if="row.isFeature"
-                    class="shrink-0 bg-[#E2F5F7] text-[#3A9EAA]"
+                    class="shrink-0 bg-[var(--aidev-cyan-6)] text-[var(--aidev-cyan-2)]"
                     size="small"
                   >
                     {{ $t('特性') }}
                   </Tag>
                 </div>
-                <div class="text-[#979BA5]">{{ row.name }}</div>
+                <div class="text-[#8F9FBD]">{{ row.name }}</div>
               </template>
             </TableColumn>
             <TableColumn
@@ -234,7 +227,7 @@
                     :icon="getStatusInfo(row.deployStatus).icon"
                     :size="12"
                   />
-                  <span class="text-[#4D4F56]">{{ getStatusInfo(row.deployStatus).text || '--' }}</span>
+                  <span class="text-[#4A5973]">{{ getStatusInfo(row.deployStatus).text || '--' }}</span>
                 </div>
               </template>
             </TableColumn>
@@ -245,11 +238,11 @@
             >
               <template #default="{ row }: { row: DeployOverviewRow }">
                 <div class="flex items-center">
-                  <span class="text-[#313238]">{{ row.runningCount ?? '--' }}</span>
-                  <span class="mx-[4px] text-[#DCDEE5]">/</span>
-                  <span class="text-[#313238]">{{ row.desiredCount ?? '--' }}</span>
-                  <span class="mx-[4px] text-[#DCDEE5]">/</span>
-                  <span :class="row.abnormalCount ? 'text-[#EA3636]' : 'text-[#979BA5]'">
+                  <span class="text-[#111214]">{{ row.runningCount ?? '--' }}</span>
+                  <span class="mx-[4px] text-[#E4E9F2]">/</span>
+                  <span class="text-[#111214]">{{ row.desiredCount ?? '--' }}</span>
+                  <span class="mx-[4px] text-[#E4E9F2]">/</span>
+                  <span :class="row.abnormalCount ? 'text-[#EA3636]' : 'text-[#8F9FBD]'">
                     {{ row.abnormalCount ?? '--' }}
                   </span>
                   <!-- 未配置不显示；已关闭显示中性标签；已启用复用 GPA 状态标签。 -->
@@ -296,7 +289,7 @@
                   v-if="getResourceText(row)"
                   placement="top"
                 >
-                  <span class="cursor-default border-b border-dashed border-[#979BA5]">{{ getResourceText(row) }}</span>
+                  <span class="cursor-default border-b border-dashed border-[#8F9FBD]">{{ getResourceText(row) }}</span>
                   <template #content>
                     <div
                       v-for="line in getResourceTips(row)"
@@ -327,10 +320,10 @@
             >
               <template #default="{ row }: { row: DeployOverviewRow }">
                 <div v-if="row.clusterName || row.clusterID">
-                  <div class="truncate text-[#313238]">{{ row.clusterName || row.clusterID }}</div>
+                  <div class="truncate text-[#111214]">{{ row.clusterName || row.clusterID }}</div>
                   <div
                     v-if="row.clusterName && row.clusterID"
-                    class="truncate text-[#979BA5]"
+                    class="truncate text-[#8F9FBD]"
                   >
                     {{ row.clusterID }}
                   </div>

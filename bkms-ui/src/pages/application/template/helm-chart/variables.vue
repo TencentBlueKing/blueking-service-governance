@@ -17,7 +17,7 @@
 -->
 
 <template>
-  <div class="flex flex-col border-[1px] border-[#DCDEE5] w-full h-full bg-[#fff]">
+  <div class="flex flex-col border-[1px] border-[#E4E9F2] w-full h-full bg-[#fff]">
     <Tab
       v-model:active="activeTab"
       class="helm-variable-tabs flex flex-col flex-1 min-h-0"
@@ -71,7 +71,7 @@
                     @click="copyText(`\${{ bkms.${row.key} }}`)"
                   >
                     <Copy
-                      class="group-hover:opacity-100 opacity-0 transition text-[#3A84FF]"
+                      class="group-hover:opacity-100 opacity-0 transition text-[#3B6EF5]"
                       :title="$t('复制')"
                     />
                   </Button>
@@ -94,9 +94,9 @@
                 {{ $t('部署时自动将镜像凭证写入 Secret，需在 values 中引用方可拉取镜像') }}
               </span>
             </template>
-            <div class="mt-[10px] w-full overflow-hidden bg-[#fff] border border-[#DCDEE5] rounded-[2px]">
+            <div class="mt-[10px] w-full overflow-hidden bg-[#fff] border border-[#E4E9F2] rounded-[6px]">
               <div
-                class="h-[28px] px-[12px] text-[12px] flex items-center justify-between bg-[#F5F7FA] border-b border-[#DCDEE5]"
+                class="h-[28px] px-[12px] text-[12px] flex items-center justify-between bg-[#F0F4FA] border-b border-[#E4E9F2]"
               >
                 <span>{{ $t('使用示例') }}</span>
                 <Button
@@ -105,7 +105,7 @@
                   @click="copyText('imagePullSecret:\n  - name:  ${{ bkms.APP_IMAGE_PULL_SECRET }}')"
                 >
                   <Copy
-                    class="text-[#3A84FF]"
+                    class="text-[#3B6EF5]"
                     :title="$t('复制')"
                   />
                 </Button>
@@ -184,7 +184,7 @@ imagePullSecret:
   :deep(.bk-tab-header) {
     height: 40px;
     padding: 0 24px !important;
-    background-color: #f0f1f5;
+    background-color: #E9EDF5;
   }
 
   :deep(.bk-tab-header-item) {
@@ -219,6 +219,6 @@ imagePullSecret:
   :deep(.image-secret-tip .bk-alert-title) {
     font-size: 14px;
     line-height: 22px;
-    color: #63656e;
+    color: #4A5973;
   }
 </style>

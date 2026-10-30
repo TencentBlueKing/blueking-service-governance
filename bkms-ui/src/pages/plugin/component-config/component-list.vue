@@ -58,7 +58,7 @@
       >
         <template #aside>
           <!-- 左侧树形菜单 -->
-          <div class="flex-1 bg-[#F5F7FA] flex flex-col">
+          <div class="flex-1 bg-[#F0F4FA] flex flex-col">
             <div class="px-[16px] py-[12px]">
               <Radio.Group
                 v-model="viewMode"
@@ -69,15 +69,15 @@
                   class="flex-1"
                   label="component"
                 >
-                  <i class="bkms-icon bkms-icon-single-column text-[14px]"></i>
-                  <span class="text-[14px] pl-[4px]">{{ $t('组件视角') }}</span>
+                  <i class="bkms-icon bkms-icon-single-column mr-[4px] text-[14px]"></i>
+                  <span>{{ $t('组件视角') }}</span>
                 </Radio.Button>
                 <Radio.Button
                   class="flex-1"
                   label="environment"
                 >
-                  <i class="bkms-icon bkms-icon-single-column text-[14px]"></i>
-                  <span class="text-[14px] pl-[4px]">{{ $t('环境视角') }}</span>
+                  <i class="bkms-icon bkms-icon-single-column mr-[4px] text-[14px]"></i>
+                  <span>{{ $t('环境视角') }}</span>
                 </Radio.Button>
               </Radio.Group>
               <Input
@@ -97,10 +97,9 @@
             <div
               v-show="filteredTreeData.length !== 0"
               :class="[
-                'border-b-[1px] border-b-[#EAEBF0]',
-                'flex items-center justify-between px-[16px] h-[36px] cursor-pointer',
-                selectedTreeNode === 'all' ? 'bg-[#E1ECFF] text-[#3A84FF]' : 'text-[#4D4F56]',
-                { 'hover:bg-[#f0f1f5]': selectedTreeNode !== 'all' },
+                'mx-[16px] flex items-center justify-between px-[8px] h-[36px] rounded-[6px] cursor-pointer',
+                selectedTreeNode === 'all' ? 'bg-[#E5EDFF] text-[#3B6EF5]' : 'text-[#4A5973]',
+                { 'hover:bg-[#E9EDF5]': selectedTreeNode !== 'all' },
               ]"
               @click="handleTreeNodeClick('all')"
             >
@@ -110,20 +109,20 @@
               </div>
               <span
                 :class="[
-                  'text-[12px] text-[#979BA5] px-[8px] rounded-[2px]',
-                  selectedTreeNode === 'all' ? 'bg-[#3A84FF] text-[#fff]' : 'text-[#4D4F56] bg-[#F0F1F5]',
+                  'text-[12px] text-[#8F9FBD] px-[8px] rounded-[6px]',
+                  selectedTreeNode === 'all' ? 'bg-[#3B6EF5] text-[#fff]' : 'text-[#4A5973] bg-[#E9EDF5]',
                 ]"
                 >{{ componentList.length }}</span
               >
             </div>
-            <div class="flex-1 overflow-auto mt-[8px] mb-[16px]">
+            <div class="flex-1 overflow-auto mt-[8px] mb-[16px] px-[16px] flex flex-col gap-[4px]">
               <div
                 v-for="item in filteredTreeData"
                 :key="item.id"
                 :class="[
-                  'flex items-center justify-between min-h-[36px] px-[16px] py-[4px] cursor-pointer',
-                  selectedTreeNode === item.id ? 'bg-[#E1ECFF] text-[#3A84FF]' : 'text-[#4D4F56]',
-                  { 'hover:bg-[#f0f1f5]': selectedTreeNode !== item.id },
+                  'flex items-center justify-between min-h-[36px] px-[8px] py-[4px] rounded-[6px] cursor-pointer',
+                  selectedTreeNode === item.id ? 'bg-[#E5EDFF] text-[#3B6EF5]' : 'text-[#4A5973]',
+                  { 'hover:bg-[#E9EDF5]': selectedTreeNode !== item.id },
                 ]"
                 @click="handleTreeNodeClick(item.id)"
               >
@@ -140,15 +139,15 @@
                   </div>
                   <span
                     v-if="item.type && viewMode === 'environment'"
-                    class="block text-[#979BA5]"
+                    class="block text-[#8F9FBD]"
                   >
                     {{ item.name }}
                   </span>
                 </div>
                 <span
                   :class="[
-                    'text-[12px] text-[#979BA5] px-[8px] rounded-[2px] shrink-0',
-                    selectedTreeNode === item.id ? 'bg-[#3A84FF] text-[#fff]' : 'text-[#4D4F56] bg-[#F0F1F5]',
+                    'text-[12px] text-[#8F9FBD] px-[8px] rounded-[6px] shrink-0',
+                    selectedTreeNode === item.id ? 'bg-[#3B6EF5] text-[#fff]' : 'text-[#4A5973] bg-[#E9EDF5]',
                   ]"
                   >{{ item.count }}</span
                 >
@@ -165,7 +164,7 @@
                 {{ currentTreeNode?.displayName || currentTreeNode?.name || $t('全部') }} ( {{ count }} )
               </h3>
               <template v-if="currentTreeNode?.type">
-                <span class="mx-[8px] text-[#979BA5]">( {{ currentTreeNode.name }} )</span>
+                <span class="mx-[8px] text-[#8F9FBD]">( {{ currentTreeNode.name }} )</span>
                 <Tag
                   :class="envTypeTagClassMap[currentTreeNode.type]"
                   size="small"
@@ -312,13 +311,13 @@
                       <span
                         v-for="key in Object.keys(row.properties || {}).slice(0, 3)"
                         :key="key"
-                        class="text-[12px] text-[#4D4F56] truncate"
+                        class="text-[12px] text-[#4A5973] truncate"
                       >
                         {{ `${key}: ${formatPropertyValue(row.properties[key])}` }}
                       </span>
                       <span
                         v-if="Object.keys(row.properties || {}).length > 3"
-                        class="text-[12px] text-[#979BA5]"
+                        class="text-[12px] text-[#8F9FBD]"
                       >
                         ...
                       </span>
@@ -1030,5 +1029,13 @@
   }
   :deep(.bk-resize-layout > .bk-resize-layout-aside) {
     transition: none !important;
+  }
+  /* 收起后组件库把侧栏宽写成 0，border-box 会把 1px 分割线吃掉 */
+  :deep(.bk-resize-layout-collapsed > .bk-resize-layout-aside) {
+    flex: 0 0 1px !important;
+    width: 1px !important;
+    min-width: 1px !important;
+    overflow: visible;
+    border-right: 1px solid #E4E9F2;
   }
 </style>

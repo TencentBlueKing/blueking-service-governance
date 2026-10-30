@@ -18,7 +18,7 @@
 
 <template>
   <div class="flex h-full min-h-0 flex-col">
-    <FlexRow class="mb-[16px] flex-shrink-0 bg-[#EAEBF0] px-[12px] py-[8px] shadow-[0_2px_4px_0_#0000001a]">
+    <FlexRow class="mb-[16px] flex-shrink-0 bg-[#E9EDF5] px-[12px] py-[8px] shadow-[0_2px_4px_0_#0000001a]">
       <template #left>
         <div class="flex">
           <EnvSelectPanel
@@ -31,7 +31,7 @@
       </template>
       <template #right>
         <i
-          class="bkms-icon bkms-icon-full-screen text-[16px] bg-[#fafbfd] cursor-pointer p-[4px] rounded-[4px] hover:text-[#3A84FF]"
+          class="bkms-icon bkms-icon-full-screen text-[16px] bg-[#F7F9FD] cursor-pointer p-[4px] rounded-[4px] hover:text-[#3B6EF5]"
           @click="handleFullScreen"
         ></i>
       </template>
@@ -56,8 +56,8 @@
           <img src="/empty.svg" />
         </template>
         <template #description>
-          <div class="text-[#313238] text-[24px]">{{ $t('尚未开启观测功能') }}</div>
-          <div class="text-[#4D4F56] text-[14px] leading-[22px] mt-[16px]">
+          <div class="text-[#111214] text-[24px]">{{ $t('尚未开启观测功能') }}</div>
+          <div class="text-[#4A5973] text-[14px] leading-[22px] mt-[16px]">
             {{ $t('应用框架配置文件中未配置可观测') }}
           </div>
         </template>
@@ -78,7 +78,7 @@
           <img src="/empty.svg" />
         </template>
         <template #description>
-          <div class="text-[#4D4F56] text-[14px] leading-[22px]">{{ $t('当前环境未创建 APM 实例') }}</div>
+          <div class="text-[#4A5973] text-[14px] leading-[22px]">{{ $t('当前环境未创建 APM 实例') }}</div>
         </template>
         <Button
           theme="primary"

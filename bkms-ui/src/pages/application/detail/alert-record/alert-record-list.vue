@@ -1,12 +1,12 @@
 <template>
   <div
     ref="containerRef"
-    class="rounded-[2px] flex flex-col gap-[16px]"
+    class="rounded-[6px] flex flex-col gap-[16px]"
   >
     <!-- 顶部搜索栏 -->
     <div
       ref="searchBarRef"
-      class="flex items-center gap-[12px]"
+      class="flex items-center gap-[8px]"
     >
       <EnvSelectPanel
         v-model="selectedEnv"
@@ -214,8 +214,8 @@
   const expandConfig = {
     showIcon: true,
     trigger: 'row',
-    iconOpen: 'bkms-icon bkms-icon-down-shape !text-[#C4C6CC] hover:!text-[#63656E] p-[2px]',
-    iconClose: 'bkms-icon bkms-icon-right-shape !text-[#C4C6CC] hover:!text-[#63656E] p-[2px]',
+    iconOpen: 'bkms-icon bkms-icon-down-shape !text-[#C1CDE5] hover:!text-[#4A5973] p-[2px]',
+    iconClose: 'bkms-icon bkms-icon-right-shape !text-[#C1CDE5] hover:!text-[#4A5973] p-[2px]',
   };
 
   /** 服务端排序：remote 模式下点击表头仅触发 @sort-change，排序交给后端 ordering 处理 */
@@ -300,20 +300,28 @@
     parentContentHeight.value = rect.height - padTop - padBottom;
   }
 
+  let parentObserver: ResizeObserver | undefined;
+
   onMounted(() => {
     updateParentHeight();
+    const parent = containerRef.value?.parentElement;
+    if (parent) {
+      parentObserver = new ResizeObserver(updateParentHeight);
+      parentObserver.observe(parent);
+    }
     window.addEventListener('resize', updateParentHeight);
   });
 
   onBeforeUnmount(() => {
+    parentObserver?.disconnect();
     window.removeEventListener('resize', updateParentHeight);
   });
 
   /** 是否有任意筛选条件 */
   const hasFilter = computed(() => searchValue.value.length > 0 || (dateRange.value?.length ?? 0) > 0);
 
-  /** 表格最大高度：父容器内容区高度 - 根容器内边距(24×2) - 筛选栏高度 - 间距(16)，确保不超出父元素 */
-  const tableMaxHeight = computed(() => Math.max(parentContentHeight.value - searchBarHeight.value - 24 * 2 - 16, 0));
+  /** 表格最大高度：卡片内容区高度 - 筛选栏 - 间距 16。父级内边距已在测量时扣除 */
+  const tableMaxHeight = computed(() => Math.max(parentContentHeight.value - searchBarHeight.value - 16, 0));
 
   const { pagination, pageChange, pageSizeChange, handleResetPage } = usePageConf(
     tableData,
@@ -485,6 +493,6 @@
 <style lang="postcss" scoped>
   /* 展开行的数据行背景色 */
   :deep(.vxe-body--row.alert-expanded-row) {
-    background-color: #f5f7fa;
+    background-color: #F0F4FA;
   }
 </style>

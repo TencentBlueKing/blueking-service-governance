@@ -17,13 +17,13 @@
 -->
 
 <template>
-  <div class="py-[12px] px-[16px] bg-[#F5F7FA]">
-    <div class="text-[#313238] font-bold text-[12px] mb-[4px]">{{ $t('权限内容') }}</div>
+  <div class="py-[12px] px-[16px] bg-[#F0F4FA]">
+    <div class="text-[#111214] font-bold text-[12px] mb-[4px]">{{ $t('权限内容') }}</div>
     <ul v-if="value !== 'admin'">
       <li
         v-for="item in permissionContent"
         :key="item.resource"
-        class="text-[#63656E] text-[12px] leading-[20px]"
+        class="text-[#4A5973] text-[12px] leading-[20px]"
       >
         <span class="font-bold">{{ item.resource }}</span>
         <span>：{{ item.operations.join(', ') }}</span>
@@ -31,7 +31,7 @@
     </ul>
     <span
       v-else
-      class="text-[#63656E] text-[12px] leading-[20px]"
+      class="text-[#4A5973] text-[12px] leading-[20px]"
       >{{ $t('拥有全部权限') }}</span
     >
   </div>

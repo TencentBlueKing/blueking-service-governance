@@ -24,7 +24,7 @@
   >
     <template #header>
       <div class="flex items-center">
-        <span class="text-[#313238] text-[16px]">
+        <span class="text-[#111214] text-[16px]">
           {{ $t('填写入参') }}
           <div class="inline-block ml-[16px] text-[12px]">
             <Button

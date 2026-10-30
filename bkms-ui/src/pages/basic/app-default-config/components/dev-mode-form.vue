@@ -24,8 +24,8 @@
     :collapsible="true"
   >
     <template #title>
-      <span class="text-[#313238]">{{ $t('开发模式') }}</span>
-      <span class="ml-[8px] flex items-center font-normal text-[12px] text-[#979BA5]">
+      <span class="text-[#111214]">{{ $t('开发模式') }}</span>
+      <span class="ml-[8px] flex items-center font-normal text-[12px] text-[#8F9FBD]">
         <i class="bkms-icon bkms-icon-circle-info mr-[4px] text-[14px]"></i>
         {{ $t('支持通过 bkms-cli 上传二进制的方式热更新服务，更新过程不会重启容器实例。') }}
       </span>
@@ -261,18 +261,18 @@
   }
 
   :deep(.bkms-content-title) {
-    background-color: #eaebf0;
+    background-color: #e4e9f2;
     height: 42px;
   }
 
-  /* 表头：背景白色 + 默认文字颜色 */
+  /* 表头对齐表格规范：底 #FBFCFE，字 #111214 */
   :deep(.dev-mode-table .vxe-header--column) {
-    background-color: #fff;
-    color: #4d4f56;
+    background-color: #fbfcfe;
+    color: #111214;
   }
 
   /* 表格正文：默认文字颜色 */
   :deep(.dev-mode-table .vxe-body--column .vxe-cell) {
-    color: #4d4f56;
+    color: #4A5973;
   }
 </style>

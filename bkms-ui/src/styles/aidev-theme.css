@@ -1,0 +1,1216 @@
+/*
+ * TencentBlueKing is pleased to support the open source community by making
+ * 蓝鲸智云 - 服务治理 (BlueKing Service Governance) available.
+ * Copyright (C) Tencent. All rights reserved.
+ * Licensed under the MIT License (the "License"); you may not use this file except
+ * in compliance with the License. You may obtain a copy of the License at
+ *
+ *  http://opensource.org/licenses/MIT
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under
+ * the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
+ * either express or implied. See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ * We undertake not to change the open source license (MIT license) applicable
+ * to the current version of the project delivered to anyone in the future.
+ */
+
+/*
+ * AIdev 色值覆盖，以及按钮、链接、弹层、提示等组件样式。
+ * 在 bkui 样式之后注入，避免组件库变量把这里盖掉。
+ */
+:root {
+  --primary-color: #3b6ef5;
+  --default-color: #4a5973;
+  --gray-color: #8f9fbd;
+  --light-gray: #c1cde5;
+  --whitesmoke-color: #f7f9fd;
+  --disable-color: #e4e9f2;
+  --border-color: #e4e9f2;
+  --border-radius-base: 6px;
+  --input-disabled-bg: #f7f9fd;
+  --input-shadow-color: #99b9ff;
+  --input-block-color: #f0f4fa;
+  --input-maxlength-color: #8f9fbd;
+  --button-primary-hover-color: #6691ff;
+  --button-default-hover-border-color: #8f9fbd;
+  --button-primary-active-color: #274ecf;
+  --button-selected-bg-color: #e5edff;
+  --button-disabled-selected-bg-color: #e9edf5;
+  --radio-font-color: #4a5973;
+  --radio-active-color: #3b6ef5;
+  --radio-hover-border-color: #8f9fbd;
+  --radio-disabled-border: #e4e9f2;
+  --radio-disabled-font-color: #c1cde5;
+  --radio-disabled-checked-bg: #99b9ff;
+  --radio-button-checked-bg: #e5edff;
+  --radio-button-disabled-checked-bg: #f7f9fd;
+  --checkbox-disabled-checked-bg: #99b9ff;
+  --switch-grey-color: #c1cde5;
+  --breadcrumb-black-color: #8f9fbd;
+  --breadcrumb-fn-main-color: #4a5973;
+  --link-default-hover-color: #6691ff;
+  --link-primary-hover-color: #6691ff;
+  --link-default-disabled-color: #99b9ff;
+  --link-primary-disabled-color: #99b9ff;
+  --message-primary-border-color: #e5edff;
+  --slider-default-bg: #e4e9f2;
+  --slider-disable-bar-bg: #8f9fbd;
+  --menu-active-bg-color: linear-gradient(155deg, #4abdfb 0%, #425bfb 51%, #4551fb 100%);
+  /* 导航壳层。色值对齐 bk-aidev navy，不进 Brand / Neutral 映射。 */
+  --aidev-logo-color: #ffffff;
+  --aidev-horiz-nav-background: #0c1323;
+  --aidev-horiz-nav-item-color: #96a2b9;
+  --aidev-horiz-nav-item-active-color: #ffffff;
+  --aidev-horiz-nav-item-hover-color: #ffffff;
+  --aidev-horiz-nav-item-hover-background: #31394f;
+  --aidev-horiz-nav-item-active-after-background: linear-gradient(155deg, #4abdfb 0%, #425bfb 51%, #4551fb 100%);
+  --aidev-horiz-nav-space-color: #c4c6cc;
+  --aidev-vertical-nav-background: #ffffff;
+  --aidev-vertical-nav-border-color: #e4e9f2;
+  --aidev-vertical-nav-item-color: #4a5973;
+  --aidev-vertical-nav-icon-color: #8f9fbd;
+  --aidev-vertical-nav-item-active-color: #3b6ef5;
+  --aidev-vertical-nav-item-active-background: linear-gradient(155deg, #f0f4ff 0%, #e5edff 51%, #c7d8ff 100%);
+  --aidev-vertical-nav-item-active-icon: linear-gradient(180deg, #6691ff 0%, #274ecf 100%);
+  --aidev-vertical-nav-item-hover-color: #4a5973;
+  --aidev-vertical-nav-item-hover-background: linear-gradient(155deg, #f0f4fa 0%, #e9edf5 51%, #e4e9f2 100%);
+  --aidev-vertical-nav-group-color: #8f9fbd;
+  --aidev-vertical-nav-collapse-hover-color: #8f9fbd;
+  --aidev-vertical-nav-title-border-color: #e9edf5;
+  --aidev-nav-divider-color: #384a6b;
+  --aidev-exception-illustration-shadow: #f7f9fd;
+  --aidev-exception-illustration-base: #e5edff;
+  --aidev-exception-illustration-fill: #c7d8ff;
+  --aidev-exception-illustration-accent: #99b9ff;
+  --aidev-exception-illustration-paper: #ffffff;
+  --nav-header-bg-color: var(--aidev-horiz-nav-background);
+  --nav-bg-color: var(--aidev-vertical-nav-background);
+  --date-picker-disabled-bg: #f7f9fd;
+  --table-border-color: #e4e9f2;
+  --table-strip-color: #f7f9fd;
+  --table-head-bg-color: #fbfcfe;
+  --table-head-font-color: #111214;
+  --table-body-font-color: #4a5973;
+  --table-row-hover-bg-color: #f0f4fa;
+  --table-row-active-bg-color: #e9edf5;
+  --cascader-panel-border-color: #e4e9f2;
+  --cascader-panel-hover: #f0f4fa;
+  --cascader-panel-active: #e5edff;
+  --select-active-color: #e5edff;
+  --select-hover-color: #f0f4fa;
+  /* AIdev Purple。1 深紫，7 浅浅紫。tokens 与 Light 同值。 */
+  --aidev-purple-1: #7322c3;
+  --aidev-purple-2: #7d25d4;
+  --aidev-purple-3: #a160e1;
+  --aidev-purple-4: #c9a5ee;
+  --aidev-purple-5: #e3cef8;
+  --aidev-purple-6: #eddffb;
+  --aidev-purple-7: #f5eefc;
+  /* AIdev Cyan。1 深青，7 浅浅青。tokens 与 Light 同值。 */
+  --aidev-cyan-1: #1c9aa0;
+  --aidev-cyan-2: #1faab2;
+  --aidev-cyan-3: #3ed2da;
+  --aidev-cyan-4: #a5eaee;
+  --aidev-cyan-5: #cef6f8;
+  --aidev-cyan-6: #dffafb;
+  --aidev-cyan-7: #eefbfc;
+}
+
+/*
+ * 表格对齐 AIdev「尺寸=中（标准），边框=false，斑马纹=false」。
+ * 变量写在 html[data-vxe-ui-theme='light'] 上，比组件库的 [data-vxe-ui-theme='light'] 更具体。
+ * 勾选行的橙色、校验红不在这次替换里。页面自己传入的更高行高保留。
+ */
+html[data-vxe-ui-theme='light'] {
+  --vxe-ui-font-color: #4a5973;
+  --vxe-ui-font-primary-color: #3b6ef5;
+  --vxe-ui-font-lighten-color: #8f9fbd;
+  --vxe-ui-font-darken-color: #111214;
+  --vxe-ui-font-disabled-color: #c1cde5;
+  --vxe-ui-font-size-default: 12px;
+  --vxe-ui-font-size-medium: 12px;
+  --vxe-ui-font-size-small: 12px;
+  --vxe-ui-base-popup-border-color: #e4e9f2;
+  --vxe-ui-input-border-color: #c1cde5;
+  --vxe-ui-input-placeholder-color: #8f9fbd;
+  --vxe-ui-input-disabled-background-color: #f7f9fd;
+  --vxe-ui-table-header-background-color: #fbfcfe;
+  --vxe-ui-table-header-font-color: #111214;
+  --vxe-ui-table-header-font-weight: 400;
+  --vxe-ui-table-border-color: #e4e9f2;
+  --vxe-ui-table-row-height-default: 42px;
+  --vxe-ui-table-row-height-medium: 42px;
+  --vxe-ui-table-row-height-small: 42px;
+  --vxe-ui-table-row-height-mini: 42px;
+  --vxe-ui-table-row-line-height: 20px;
+  --vxe-ui-table-column-padding-default: 11px 0;
+  --vxe-ui-table-column-padding-medium: 11px 0;
+  --vxe-ui-table-column-padding-small: 11px 0;
+  --vxe-ui-table-column-padding-mini: 11px 0;
+  --vxe-ui-table-cell-padding-left: 16px;
+  --vxe-ui-table-cell-padding-right: 16px;
+  --vxe-ui-table-row-hover-background-color: #f0f4fa;
+  --vxe-ui-table-row-striped-background-color: #f7f9fd;
+  --vxe-ui-table-row-hover-striped-background-color: #f0f4fa;
+  --vxe-ui-table-row-current-background-color: #e5edff;
+  --vxe-ui-table-row-hover-current-background-color: #c7d8ff;
+  --vxe-ui-table-column-hover-background-color: #f0f4fa;
+  --vxe-ui-table-column-current-background-color: #e5edff;
+  --vxe-ui-table-column-icon-border-color: #c1cde5;
+  --vxe-ui-table-resizable-line-color: #e4e9f2;
+  --vxe-ui-table-cell-placeholder-color: #8f9fbd;
+}
+
+/* 实心主按钮。描边和文字按钮不带这块投影。 */
+.bk-button.bk-button-primary:not(.is-text):not(.is-outline) {
+  padding: 3px 16px;
+  border-radius: 6px;
+}
+
+.bk-button.bk-button-primary.bk-button-small:not(.is-text):not(.is-outline) {
+  padding: 3px 12px;
+}
+
+.bk-button.bk-button-primary.bk-button-large:not(.is-text):not(.is-outline) {
+  padding: 8px 16px;
+}
+
+.bk-button.bk-button-primary:not(.is-text):not(.is-outline) .bk-button-text {
+  font-weight: 400;
+  line-height: 22px;
+}
+
+.bk-button.bk-button-primary.bk-button-small:not(.is-text):not(.is-outline) .bk-button-text {
+  line-height: 20px;
+}
+
+.bk-button.bk-button-primary.bk-button-large:not(.is-text):not(.is-outline) .bk-button-text {
+  line-height: 24px;
+}
+
+.bk-button.bk-button-primary:not(.is-text):not(.is-outline):not(.is-disabled) {
+  background-color: #3b6ef5;
+  border-color: #3b6ef5;
+  color: #fff;
+  box-shadow: 0 4px 10px 0 #3b6ef540;
+}
+
+.bk-button.bk-button-primary:not(.is-text):not(.is-outline):not(.is-disabled):hover {
+  background-color: #6691ff;
+  border-color: #6691ff;
+  box-shadow: 0 4px 10px 0 #3b6ef540;
+}
+
+.bk-button.bk-button-primary:not(.is-text):not(.is-outline):not(.is-disabled):active {
+  background-color: #274ecf;
+  border-color: #274ecf;
+  box-shadow: 0 4px 10px 0 #3b6ef540;
+}
+
+.bk-button.bk-button-primary.is-disabled:not(.is-text):not(.is-outline) {
+  background-color: #e4e9f2;
+  border-color: #e4e9f2;
+  color: #fff;
+  box-shadow: none;
+}
+
+.bk-button-group .bk-button.bk-button-primary {
+  box-shadow: none;
+}
+
+/*
+ * Checkbox 对齐 Figma 329641:759。方框 16、圆角 2。
+ * 未选边 #8F9FBD，悬停边 #3B6EF5。禁用底 #FBFCFE、边 #E4E9F2。
+ * 已选 / 半选底 #3B6EF5，禁用 #99B9FF。半选横条是直角白条。
+ * 筛选里 14px、圆角 3px 的勾选框选择器更具体，保持原样。
+ */
+.bk-checkbox {
+  color: #4a5973;
+}
+
+.bk-checkbox-input {
+  background: #fff;
+  border-color: #8f9fbd;
+}
+
+.bk-checkbox-input {
+  border-radius: 2px;
+}
+
+.bk-checkbox:not(.is-checked):not(.is-indeterminated):not(.is-disabled):hover .bk-checkbox-input {
+  background: #fff;
+  border-color: #3b6ef5;
+}
+
+.bk-checkbox.is-checked:not(.is-disabled) .bk-checkbox-input,
+.bk-checkbox.is-indeterminated:not(.is-disabled) .bk-checkbox-input {
+  background: #3b6ef5;
+  border-color: #3b6ef5;
+}
+
+.bk-checkbox.is-checked .bk-checkbox-input::after {
+  background: transparent;
+  border-color: #fff;
+}
+
+.bk-checkbox.is-indeterminated .bk-checkbox-input::after {
+  width: 8px;
+  height: 2px;
+  background: #fff;
+  border: none;
+  border-radius: 0;
+}
+
+.bk-checkbox.is-disabled {
+  color: #c1cde5;
+}
+
+.bk-checkbox.is-disabled:not(.is-checked):not(.is-indeterminated) .bk-checkbox-input {
+  background: #fbfcfe;
+  border-color: #e4e9f2;
+}
+
+.bk-checkbox.is-disabled.is-checked .bk-checkbox-input,
+.bk-checkbox.is-disabled.is-indeterminated .bk-checkbox-input {
+  background: #99b9ff;
+  border-color: #99b9ff;
+}
+
+.bk-checkbox.is-disabled.is-checked .bk-checkbox-input::after {
+  background: transparent;
+  border-color: #fff;
+}
+
+.bk-checkbox.is-disabled.is-indeterminated .bk-checkbox-input::after {
+  background: #fff;
+  border-radius: 0;
+}
+
+/* Tag 保持 2px。组件默认写在行内样式里，这里兜住没写行内圆角的 .bk-tag。显式传入的 radius 仍以行内样式为准。 */
+.bk-tag {
+  border-radius: 2px;
+}
+
+/*
+ * @blueking/table 默认把 rowConfig.rowHeight 写成 40，并落到单元格的行内 height。
+ * 只把这个默认值抬到规范的 42。页面传入的 48、56、120 等行高不动。
+ */
+.bk-vxe-table .vxe-body--column[style*='height: 40px'],
+.bk-vxe-table .vxe-body--column[style*='height:40px'] {
+  height: 42px !important;
+}
+
+.bk-vxe-table .vxe-table--render-default,
+.bk-vxe-table .vxe-table--render-default.size--medium,
+.bk-vxe-table .vxe-table--render-default.size--small,
+.bk-vxe-table .vxe-table--render-default.size--mini {
+  font-size: 12px;
+  color: #4a5973;
+}
+
+.bk-vxe-table .vxe-header--column {
+  font-size: 12px;
+  font-weight: 400;
+  color: #111214;
+}
+
+.bk-vxe-table .vxe-header--column .vxe-cell,
+.bk-vxe-table .vxe-body--column .vxe-cell {
+  line-height: 20px;
+}
+
+.bk-vxe-table .vxe-table.size--mini .bk-vxe-table-setting-column-btn,
+.bk-vxe-table .vxe-table.size--small .bk-vxe-table-setting-column-btn,
+.bk-vxe-table .vxe-table.size--medium .bk-vxe-table-setting-column-btn,
+.bk-vxe-table .bk-vxe-table-setting-column-btn {
+  min-height: 42px;
+}
+
+/* 没有数据时不显示分页。空态块一直在 DOM 里，只有 is--empty 时才显示。 */
+.bk-vxe-table:has(.vxe-table.is--empty) .bk-vxe-table-pagination-wrapper {
+  display: none;
+}
+
+/* 分页条：高 60，顶部分割 #F0F4FA，选中页 #E5EDFF / #3B6EF5。 */
+.bk-vxe-table-pagination-wrapper {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  min-height: 60px;
+  padding: 0 16px;
+  background: #fff;
+  border-top: 1px solid #f0f4fa;
+}
+
+.bk-vxe-table-pagination-wrapper .bk-pagination {
+  width: 100%;
+  color: #4a5973;
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.bk-vxe-table-pagination-wrapper .bk-pagination > * {
+  margin: 0 8px 0 0;
+}
+
+/* 共计、每页留在左侧，页码靠右。上面的子项间距会盖掉组件库的 margin-right: auto。 */
+.bk-vxe-table-pagination-wrapper .bk-pagination > .bk-pagination-limit {
+  margin-right: auto;
+}
+
+.bk-vxe-table-pagination-wrapper .bk-pagination > .is-last,
+.bk-vxe-table-pagination-wrapper .bk-pagination-list {
+  margin-right: 0;
+}
+
+.bk-vxe-table-pagination-wrapper .bk-pagination-limit-select {
+  width: 64px;
+  margin: 0 8px;
+}
+
+.bk-vxe-table-pagination-wrapper .bk-pagination-limit-select .bk-input:not(.is-simplicity):not(.is-disabled):not(.is-readonly) {
+  height: 32px;
+  overflow: hidden;
+  background-color: #f7f9fd;
+  border-color: #f7f9fd;
+  border-radius: 6px;
+}
+
+.bk-vxe-table-pagination-wrapper .bk-pagination-limit-select .bk-input--text {
+  height: 32px;
+  color: #4a5973;
+  font-size: 12px;
+  background-color: #f7f9fd;
+  border-radius: 6px;
+}
+
+.bk-vxe-table-pagination-wrapper .bk-pagination-limit-select:hover .bk-input:not(.is-simplicity):not(.is-disabled):not(.is-readonly),
+.bk-vxe-table-pagination-wrapper .bk-pagination-limit-select:hover .bk-input--text {
+  background-color: #f0f4fa;
+  border-color: #f0f4fa;
+}
+
+.bk-vxe-table-pagination-wrapper .bk-pagination-list {
+  gap: 4px;
+}
+
+.bk-vxe-table-pagination-wrapper .bk-pagination-list-pre-batch,
+.bk-vxe-table-pagination-wrapper .bk-pagination-list-next-batch,
+.bk-vxe-table-pagination-wrapper .bk-pagination-list-pre,
+.bk-vxe-table-pagination-wrapper .bk-pagination-list-next,
+.bk-vxe-table-pagination-wrapper .bk-pagination-list-item {
+  min-width: 32px;
+  height: 32px;
+  margin: 0;
+  padding: 0;
+  color: #4a5973;
+  font-size: 12px;
+  line-height: 20px;
+  background: #fff;
+  border-radius: 6px;
+}
+
+.bk-vxe-table-pagination-wrapper .bk-pagination-list-pre,
+.bk-vxe-table-pagination-wrapper .bk-pagination-list-next {
+  font-size: 16px;
+  color: #8f9fbd;
+}
+
+.bk-vxe-table-pagination-wrapper .bk-pagination-list-item:hover,
+.bk-vxe-table-pagination-wrapper .bk-pagination-list-pre:hover,
+.bk-vxe-table-pagination-wrapper .bk-pagination-list-next:hover,
+.bk-vxe-table-pagination-wrapper .bk-pagination-list-pre-batch:hover,
+.bk-vxe-table-pagination-wrapper .bk-pagination-list-next-batch:hover {
+  background: #f0f4fa;
+}
+
+.bk-vxe-table-pagination-wrapper .bk-pagination-list-item.is-active,
+.bk-vxe-table-pagination-wrapper .bk-pagination-list-pre.is-active,
+.bk-vxe-table-pagination-wrapper .bk-pagination-list-next.is-active {
+  color: #3b6ef5;
+  background: #e5edff;
+}
+
+.bk-vxe-table-pagination-wrapper .bk-pagination-list-item.is-active:hover {
+  color: #3b6ef5;
+  background: #e5edff;
+}
+
+.bk-vxe-table-pagination-wrapper .bk-pagination-list-item.is-disabled,
+.bk-vxe-table-pagination-wrapper .bk-pagination-list-pre.is-disabled,
+.bk-vxe-table-pagination-wrapper .bk-pagination-list-next.is-disabled {
+  color: #c1cde5;
+  background: transparent;
+}
+
+/*
+ * Alert。对齐 Figma 329062:50433。
+ * 无描边，内边距 6 8，圆角 6，正文 12 / 20，字色 #4A5973。
+ * 默认图标是组件库的 InfoLine，这里换成设计稿图标。自定义 #icon 不带 .bk-alert-icon-info，不受影响。
+ */
+.bk-alert {
+  color: #4a5973;
+  font-size: 12px;
+  border: none;
+  border-radius: 6px;
+}
+
+.bk-alert-wraper {
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 8px;
+}
+
+.bk-alert .bk-alert-icon-info {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin: 2px 0;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 16px 16px;
+}
+
+.bk-alert .bk-alert-icon-info svg {
+  opacity: 0;
+}
+
+.bk-alert-info {
+  background-color: #e5edff;
+}
+
+.bk-alert-info .bk-alert-icon-info {
+  background-image: url('./alert-icons/info.svg');
+}
+
+.bk-alert-warning {
+  background-color: #fdeed8;
+}
+
+.bk-alert-warning .bk-alert-icon-info {
+  background-image: url('./alert-icons/warning.svg');
+}
+
+.bk-alert-danger,
+.bk-alert-error {
+  background-color: #ffebeb;
+}
+
+.bk-alert-danger .bk-alert-icon-info,
+.bk-alert-error .bk-alert-icon-info {
+  background-image: url('./alert-icons/danger.svg');
+}
+
+.bk-alert-success {
+  background-color: #daf6e5;
+}
+
+.bk-alert-success .bk-alert-icon-info {
+  background-image: url('./alert-icons/success.svg');
+}
+
+.bk-alert-title,
+.bk-alert-description {
+  line-height: 20px;
+  color: #4a5973;
+}
+
+.bk-alert-close {
+  display: flex;
+  flex: none;
+  align-items: center;
+  margin: 0;
+  padding: 4px 0 4px 4px;
+  font-size: 12px;
+  line-height: 1;
+  color: #8f9fbd;
+}
+
+.bk-alert-close:hover {
+  color: #4a5973;
+}
+
+.bk-alert-close.bk-alert-close-icon {
+  box-sizing: border-box;
+  width: 16px;
+  height: 20px;
+  padding: 4px 0 4px 4px;
+  background-color: #8f9fbd;
+  -webkit-mask-image: url('./alert-icons/close.svg');
+  mask-image: url('./alert-icons/close.svg');
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: right center;
+  mask-position: right center;
+  -webkit-mask-size: 12px 12px;
+  mask-size: 12px 12px;
+  mask-mode: alpha;
+}
+
+.bk-alert-close.bk-alert-close-icon:hover {
+  background-color: #4a5973;
+}
+
+.bk-alert-close.bk-alert-close-icon > * {
+  visibility: hidden;
+}
+
+/*
+ * 搜索框、输入框的外框是 6px，右侧图标和前缀是直角白底，会盖住圆角。
+ * 白底放在外框上，内部不再各自画圆角。
+ */
+.bk-input:not(.is-simplicity) {
+  overflow: hidden;
+}
+
+.bk-input:not(.is-simplicity):not(.is-disabled):not(.is-readonly) {
+  background-color: #fff;
+}
+
+.bk-input:not(.is-simplicity) :is(.bk-input--text, .bk-input--suffix-icon, .bk-input--prefix-area, .bk-input--suffix-area) {
+  border-radius: 0;
+}
+
+/*
+ * 胶囊 Tab 对齐 Figma Tab 329175:8588 的「小」。
+ * 高 24，左右 12，字 12 / 20。选中白底加卡片悬停阴影。未选中悬停底 #C1CDE5。
+ * 图标切换是 mini：24 方块，悬停底 #E4E9F2，不画分割线。
+ */
+.bk-radio-capsule .bk-radio-button {
+  border-radius: 6px;
+}
+
+.bk-radio-capsule .bk-radio-button::before {
+  top: 6px;
+  right: 0;
+  bottom: 6px;
+  width: 1px;
+  height: auto;
+  margin-top: 0;
+  background: #e9edf5;
+}
+
+.bk-radio-capsule .bk-radio-button.is-checked::before,
+.bk-radio-capsule .bk-radio-button:has(+ .bk-radio-button.is-checked)::before {
+  display: none;
+}
+
+.bk-radio-capsule .bk-radio-button:not(.is-checked):not(.is-disabled):hover {
+  background: #c1cde5;
+}
+
+.bk-radio-capsule .bk-radio-button:not(.is-checked):not(.is-disabled):hover::before {
+  background: #e4e9f2;
+}
+
+.bk-radio-capsule .bk-radio-button.is-checked {
+  background: #fff;
+  box-shadow: 0 2px 4px 0 #0000001a;
+}
+
+.bk-radio-capsule .bk-radio-button-label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 24px;
+  padding: 0 12px;
+  font-size: 12px;
+  line-height: 20px;
+  color: #4a5973;
+}
+
+.bk-radio-capsule .bk-radio-button.is-checked .bk-radio-button-label {
+  color: #3b6ef5;
+}
+
+.bk-radio-capsule .bk-radio-button.is-disabled .bk-radio-button-label {
+  color: #c1cde5;
+}
+
+.bk-radio-capsule .aidev-capsule-count {
+  display: inline-flex;
+  align-items: center;
+  height: 16px;
+  margin-left: 4px;
+  padding: 0 6px;
+  border-radius: 8px;
+  background: #fff;
+  font-size: 10px;
+  line-height: 16px;
+  color: #4a5973;
+}
+
+.bk-radio-capsule .bk-radio-button.is-checked .aidev-capsule-count {
+  background: #e5edff;
+  color: #274ecf;
+}
+
+.bk-radio-capsule .bk-radio-button.is-disabled .aidev-capsule-count {
+  background: #fff;
+  color: #c1cde5;
+}
+
+.bk-radio-capsule.square-radio-button .bk-radio-button::before {
+  display: none;
+}
+
+.bk-radio-capsule.square-radio-button .bk-radio-button-label {
+  width: 24px;
+  padding: 0;
+}
+
+.bk-radio-capsule.square-radio-button .bk-radio-button:not(.is-checked):not(.is-disabled):hover {
+  background: #e4e9f2;
+}
+
+/*
+ * 基础按钮。中号左右 16，字 14 / 22。悬停字 #111214、边 #8F9FBD。
+ * 规范没有按下态，按下保持悬停色，不再跳成主蓝。
+ */
+.bk-button:not(.is-text):not(.bk-button-primary):not(.bk-button-success):not(.bk-button-warning):not(.bk-button-danger) {
+  padding: 0 16px;
+  color: #4a5973;
+  background-color: #fff;
+  border-color: #c1cde5;
+  border-radius: 6px;
+}
+
+.bk-button.bk-button-small:not(.is-text):not(.bk-button-primary):not(.bk-button-success):not(.bk-button-warning):not(.bk-button-danger) {
+  padding: 0 12px;
+}
+
+.bk-button.bk-button-large:not(.is-text):not(.bk-button-primary):not(.bk-button-success):not(.bk-button-warning):not(.bk-button-danger) {
+  padding: 0 16px;
+  font-size: 16px;
+}
+
+.bk-button:not(.is-text):not(.bk-button-primary):not(.bk-button-success):not(.bk-button-warning):not(.bk-button-danger) .bk-button-text {
+  font-weight: 400;
+  line-height: 22px;
+}
+
+.bk-button.bk-button-small:not(.is-text):not(.bk-button-primary):not(.bk-button-success):not(.bk-button-warning):not(.bk-button-danger) .bk-button-text {
+  line-height: 20px;
+}
+
+.bk-button.bk-button-large:not(.is-text):not(.bk-button-primary):not(.bk-button-success):not(.bk-button-warning):not(.bk-button-danger) .bk-button-text {
+  line-height: 24px;
+}
+
+.bk-button:not(.is-text):not(.is-disabled):not(.bk-button-primary):not(.bk-button-success):not(.bk-button-warning):not(.bk-button-danger):hover,
+.bk-button:not(.is-text):not(.is-disabled):not(.bk-button-primary):not(.bk-button-success):not(.bk-button-warning):not(.bk-button-danger):active {
+  color: #111214;
+  background-color: #fff;
+  border-color: #8f9fbd;
+}
+
+.bk-button.is-disabled:not(.is-text):not(.bk-button-primary):not(.bk-button-success):not(.bk-button-warning):not(.bk-button-danger) {
+  color: #c1cde5;
+  background-color: #fbfcfe;
+  border-color: #e4e9f2;
+}
+
+/* 幽灵按钮是主色描边。悬停底 #E5EDFF，字 #6691FF，边 #274ECF。 */
+.bk-button.bk-button-primary.is-outline {
+  padding: 0 16px;
+  border-radius: 6px;
+  box-shadow: none;
+}
+
+.bk-button.bk-button-primary.is-outline .bk-button-text {
+  font-weight: 400;
+  line-height: 22px;
+}
+
+.bk-button.bk-button-primary.bk-button-small.is-outline {
+  padding: 0 12px;
+}
+
+.bk-button.bk-button-primary.bk-button-small.is-outline .bk-button-text {
+  line-height: 20px;
+}
+
+.bk-button.bk-button-primary.bk-button-large.is-outline {
+  padding: 0 16px;
+  font-size: 16px;
+}
+
+.bk-button.bk-button-primary.bk-button-large.is-outline .bk-button-text {
+  line-height: 24px;
+}
+
+.bk-button.bk-button-primary.is-outline:not(.is-disabled) {
+  color: #3b6ef5;
+  background-color: #fff;
+  border-color: #3b6ef5;
+}
+
+.bk-button.bk-button-primary.is-outline:not(.is-disabled):hover,
+.bk-button.bk-button-primary.is-outline:not(.is-disabled):active {
+  color: #6691ff;
+  background-color: #e5edff;
+  border-color: #274ecf;
+}
+
+.bk-button.bk-button-primary.is-outline.is-disabled {
+  color: #c1cde5;
+  background-color: #fbfcfe;
+  border-color: #e4e9f2;
+  box-shadow: none;
+}
+
+/* 警示按钮是危险色描边，不是实心红。规范只有常规态。 */
+.bk-button.bk-button-danger.is-outline {
+  padding: 0 16px;
+  border-radius: 6px;
+  box-shadow: none;
+}
+
+.bk-button.bk-button-danger.is-outline .bk-button-text {
+  font-weight: 400;
+  line-height: 22px;
+}
+
+.bk-button.bk-button-danger.bk-button-small.is-outline {
+  padding: 0 12px;
+}
+
+.bk-button.bk-button-danger.bk-button-large.is-outline {
+  padding: 0 16px;
+  font-size: 16px;
+}
+
+.bk-button.bk-button-danger.is-outline:not(.is-disabled),
+.bk-button.bk-button-danger.is-outline:not(.is-disabled):hover,
+.bk-button.bk-button-danger.is-outline:not(.is-disabled):active {
+  color: #ea3636;
+  background-color: #fff;
+  border-color: #ea3636;
+}
+
+/* 按钮组中号字 12 / 20。选中底 #E5EDFF、字 #3B6EF5。大号组高度规范未单独取样，保持组件库。 */
+.bk-button-group:not(.bk-button-group-large) .bk-button:not(.bk-button-primary):not(.bk-button-success):not(.bk-button-warning):not(.bk-button-danger) {
+  font-size: 12px;
+}
+
+.bk-button-group:not(.bk-button-group-large) .bk-button:not(.bk-button-primary):not(.bk-button-success):not(.bk-button-warning):not(.bk-button-danger) .bk-button-text {
+  line-height: 20px;
+}
+
+.bk-button-group .bk-button:not(.is-disabled):not(.bk-button-primary):not(.bk-button-success):not(.bk-button-warning):not(.bk-button-danger) {
+  color: #4a5973;
+  background-color: #fff;
+  border-color: #c1cde5;
+}
+
+.bk-button-group .bk-button:hover:not(.is-disabled):not(.is-selected):not(.bk-button-primary):not(.bk-button-success):not(.bk-button-warning):not(.bk-button-danger) {
+  color: #4a5973;
+  background-color: #fff;
+  border-color: #8f9fbd;
+}
+
+.bk-button-group .bk-button.is-selected:not(.is-disabled):not(.bk-button-primary):not(.bk-button-success):not(.bk-button-warning):not(.bk-button-danger) {
+  color: #3b6ef5;
+  background-color: #e5edff;
+  border-color: #3b6ef5;
+}
+
+/*
+ * 按钮组拼接处直角。外框 6px。
+ * 全局按钮 6px 比组件库 first/last 更具体，不写这组会把中间圆角盖回去。
+ */
+.bk-button-group .bk-button:not(.is-text):not(.bk-button-primary):not(.bk-button-success):not(.bk-button-warning):not(.bk-button-danger) {
+  border-radius: 0;
+}
+
+.bk-button-group .bk-button:first-child:not(.is-text):not(.bk-button-primary):not(.bk-button-success):not(.bk-button-warning):not(.bk-button-danger) {
+  border-radius: 6px 0 0 6px;
+}
+
+.bk-button-group .bk-button:last-child:not(.is-text):not(.bk-button-primary):not(.bk-button-success):not(.bk-button-warning):not(.bk-button-danger) {
+  border-radius: 0 6px 6px 0;
+}
+
+.bk-button-group .bk-button:only-child:not(.is-text):not(.bk-button-primary):not(.bk-button-success):not(.bk-button-warning):not(.bk-button-danger) {
+  border-radius: 6px;
+}
+
+/* 默认链接改成主蓝。按下 #274ECF，悬停和访问过 #6691FF，禁用 #99B9FF。 */
+.bk-link.default,
+.bk-link.primary {
+  font-size: 14px;
+  line-height: 22px;
+  color: #3b6ef5;
+}
+
+.bk-link.default:hover,
+.bk-link.primary:hover,
+.bk-link.default:visited,
+.bk-link.primary:visited {
+  color: #6691ff;
+}
+
+.bk-link.default:active,
+.bk-link.primary:active {
+  color: #274ecf;
+}
+
+.bk-link.default.is-disabled,
+.bk-link.primary.is-disabled {
+  color: #99b9ff;
+}
+
+/* Dialog。投影 0 4px 12 #00000033。标题 20 / 28。底栏高 48，底 #FBFCFE，线 #E9EDF5。 */
+.bk-dialog .bk-modal-body,
+.bk-infobox .bk-modal-body {
+  border-radius: 6px;
+  box-shadow: 0 4px 12px #00000033;
+}
+
+.bk-dialog-header {
+  padding: 16px 24px 0;
+  font-size: 20px;
+}
+
+.bk-dialog-title {
+  font-weight: 400;
+  line-height: 28px;
+  color: #111214;
+}
+
+.bk-dialog-content {
+  margin-top: 20px;
+  margin-bottom: 24px;
+  font-size: 14px;
+  line-height: 22px;
+  color: #4a5973;
+}
+
+.bk-dialog-footer {
+  box-sizing: border-box;
+  min-height: 48px;
+  padding: 8px 24px;
+  background-color: #fbfcfe;
+  border-top: 1px solid #e9edf5;
+}
+
+.bk-dialog .bk-modal-close {
+  top: 8px;
+  right: 8px;
+  width: 24px;
+  height: 24px;
+  font-size: 16px;
+  color: #8f9fbd;
+  border-radius: 6px;
+}
+
+.bk-dialog .bk-modal-close:hover {
+  color: #4a5973;
+  background: #e9edf5;
+}
+
+.bk-infobox-title {
+  font-weight: 400;
+  line-height: 28px;
+  color: #111214;
+}
+
+.bk-infobox-content {
+  font-size: 14px;
+  line-height: 22px;
+  color: #4a5973;
+}
+
+.bk-infobox-icon.success {
+  color: #2caf5e;
+}
+
+.bk-infobox-icon.warning {
+  color: #f59500;
+}
+
+.bk-infobox-icon.loading {
+  color: #3b6ef5;
+}
+
+/* Message。高 42，字 14 / 22，圆角 6。底色比 Alert 浅一档，并保留同色系描边。 */
+.bk-message {
+  box-sizing: border-box;
+  align-items: center;
+  min-height: 42px;
+  padding: 9px 16px;
+  font-size: 14px;
+  line-height: 22px;
+  color: #4a5973;
+  border-radius: 6px;
+  box-shadow: none;
+}
+
+.bk-message-icon {
+  height: 16px;
+  margin-right: 8px;
+  font-size: 16px;
+  line-height: 16px;
+}
+
+.bk-message,
+.bk-message-primary {
+  background: #f0f4ff;
+  border: 1px solid #c7d8ff;
+}
+
+.bk-message-primary .bk-message-icon,
+.bk-message .bk-message-icon {
+  color: #3b6ef5;
+}
+
+.bk-message-success {
+  background: #ebfaf0;
+  border: 1px solid #cbf0da;
+  box-shadow: none;
+}
+
+.bk-message-success .bk-message-icon {
+  color: #2caf5e;
+}
+
+.bk-message-warning {
+  background: #fdf4e8;
+  border: 1px solid #fce5c0;
+  box-shadow: none;
+}
+
+.bk-message-warning .bk-message-icon {
+  color: #f59500;
+}
+
+.bk-message-error {
+  background: #fff0f0;
+  border: 1px solid #ffdddd;
+  box-shadow: none;
+}
+
+.bk-message-error .bk-message-icon {
+  color: #ea3636;
+}
+
+.bk-message .bk-message-close {
+  color: #8f9fbd;
+}
+
+.bk-message .bk-message-close:hover {
+  color: #4a5973;
+}
+
+.bk-message-content.multi .overview .tools .tool:not(.fix) span {
+  color: #3b6ef5;
+}
+
+/* Alert 无底色。theme="plain" 得到 .bk-alert-plain。图标用正文色。 */
+.bk-alert-plain {
+  background-color: transparent;
+}
+
+.bk-alert-plain .bk-alert-wraper {
+  padding: 0;
+}
+
+.bk-alert-plain .bk-alert-icon-info {
+  background-image: url('./alert-icons/plain.svg');
+}
+
+/* 下划线 Tab 只改颜色。高度、间距、圆角不改。 */
+.bk-tab-header {
+  color: #4a5973;
+}
+
+.bk-tab-header-item:hover:not(.bk-tab-header--active):not(.bk-tab-header--disabled) {
+  color: #3b6ef5;
+  background: transparent;
+}
+
+.bk-tab-header--active,
+.bk-tab-header--active:hover {
+  color: #3b6ef5;
+}
+
+.bk-tab-header-active-bar {
+  background: #274ecf;
+}
+
+.bk-tab-header--disabled,
+.bk-tab-header--disabled:hover {
+  color: #c1cde5;
+  background: transparent;
+}
+
+.bk-tab--unborder-card .bk-tab-header,
+.bk-tab--left .bk-tab-header,
+.bk-tab--right .bk-tab-header {
+  border-color: #e9edf5;
+}
+
+.bk-tab-header--active .bk-tab-header--has-num-square,
+.bk-tab-header--active .bk-tab-header--has-num-elliptic {
+  background: #e5edff;
+  color: #274ecf;
+}
+
+/* 线框输入。占位和边 #C1CDE5，字 12 / 20。悬停边 #8F9FBD，激活边 #3B6EF5。 */
+.bk-input:not(.is-simplicity) {
+  border-color: #c1cde5;
+  border-radius: 6px;
+}
+
+.bk-input--text {
+  font-size: 12px;
+  line-height: 20px;
+  color: #4a5973;
+}
+
+.bk-input--text::placeholder {
+  color: #c1cde5;
+}
+
+.bk-input:not(.is-simplicity):hover:not(.is-disabled):not(.is-focused) {
+  border-color: #8f9fbd;
+}
+
+.bk-input.is-focused:not(.is-readonly):not(.is-simplicity) {
+  border-color: #3b6ef5;
+}
+
+.bk-form-label {
+  font-size: 14px;
+  line-height: 32px;
+  color: #4a5973;
+}
+
+.bk-form-item.is-required .bk-form-label:after {
+  color: #ea3636;
+}
+
+/* 浅色气泡和确认框。圆角 6，投影 0 0 20 #00000029。 */
+.bk-popper {
+  border-radius: 6px;
+}
+
+.bk-popper.light {
+  color: #4a5973;
+  font-size: 12px;
+  line-height: 20px;
+  background: #fff;
+  border-radius: 6px;
+  box-shadow: 0 0 20px #00000029;
+}
+
+.bk-pop-confirm-title {
+  font-size: 14px;
+  line-height: 22px;
+  color: #111214;
+}
+
+.bk-pop-confirm-content {
+  font-size: 12px;
+  line-height: 20px;
+  color: #4a5973;
+}
+
+.bk-pop-confirm-icon {
+  color: #ea3636;
+}
+
+.bk-dropdown-popover .bk-dropdown-menu {
+  padding: 4px 0;
+  background: #fff;
+  border: none;
+  border-radius: 6px;
+  box-shadow: 0 0 20px #00000029;
+}
+
+.bk-dropdown-popover .bk-dropdown-item {
+  display: flex;
+  align-items: center;
+  height: 32px;
+  padding: 0 16px;
+  font-size: 12px;
+  line-height: 20px;
+  color: #4a5973;
+}
+
+.bk-dropdown-popover .bk-dropdown-item:hover {
+  background-color: #f0f4fa;
+}
+
+.bk-dropdown-popover .bk-dropdown-item.is-disabled {
+  color: #c1cde5;
+  background-color: transparent;
+}
+
+.bk-popover.bk-pop2-content.bk-select-popover .bk-select-content-wrapper .bk-select-option {
+  min-height: 32px;
+  font-size: 12px;
+  line-height: 20px;
+  color: #4a5973;
+}
+
+.bk-popover.bk-pop2-content.bk-select-popover .bk-select-content-wrapper .bk-select-option.is-hover,
+.bk-popover.bk-pop2-content.bk-select-popover .bk-select-content-wrapper .bk-select-option:hover {
+  color: #4a5973;
+  background-color: #f0f4fa;
+}
+
+.bk-popover.bk-pop2-content.bk-select-popover .bk-select-content-wrapper .bk-select-option.is-selected:not(.is-checkbox) {
+  color: #3b6ef5;
+  background-color: #e5edff;
+}
+
+.bk-popover.bk-pop2-content.bk-select-popover .bk-select-content-wrapper .bk-select-option.is-disabled {
+  color: #c1cde5;
+}
+
+/* 单独使用的分页。选中 #E5EDFF / #3B6EF5，悬停 #F0F4FA。表格里的分页条规则更具体，不受影响。 */
+.bk-pagination-list-pre,
+.bk-pagination-list-next,
+.bk-pagination-list-item {
+  color: #4a5973;
+  font-size: 12px;
+  line-height: 20px;
+  background: #fff;
+  border-radius: 6px;
+}
+
+.bk-pagination-list-item:hover,
+.bk-pagination-list-pre:hover,
+.bk-pagination-list-next:hover {
+  background: #f0f4fa;
+}
+
+.bk-pagination-list-item.is-active {
+  color: #3b6ef5;
+  background: #e5edff;
+}
+
+.bk-pagination-list-item.is-disabled,
+.bk-pagination-list-pre.is-disabled,
+.bk-pagination-list-next.is-disabled {
+  color: #c1cde5;
+  background: transparent;
+}
+
+/* bk-card。圆角 6。空间卡片不走这个类，圆角仍是 4。 */
+.bk-card {
+  border: 1px solid #e4e9f2;
+  border-radius: 6px;
+  box-shadow: 0 2px 4px 0 #1919290d;
+}
+
+.bk-card:hover {
+  box-shadow: 0 2px 4px 0 #0000001a;
+}
+
+.bk-card .bk-card-head .title {
+  color: #111214;
+}

@@ -20,7 +20,7 @@
   <div class="flex items-center">
     <slot name="title">
       <span
-        class="text-[#313238] mr-[6px]"
+        class="text-[#111214] mr-[6px]"
         :style="{ fontSize: parseCss(props.titleSize) }"
         >{{ title || '--' }}</span
       >
@@ -28,11 +28,11 @@
     <Divider
       v-if="showDivider"
       class="h-[14px] text-[12px]"
-      color="#DCDEE5"
+      color="#E4E9F2"
       direction="vertical"
       type="solid"
     />
-    <span class="flex items-center gap-[20px] text-[14px] text-[#979BA5] flex-1 overflow-hidden">
+    <span class="flex items-center gap-[20px] text-[14px] text-[#8F9FBD] flex-1 overflow-hidden">
       <slot></slot>
     </span>
   </div>

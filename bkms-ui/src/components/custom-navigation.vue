@@ -20,6 +20,7 @@
   <Navigation
     :class="['h-full', theme, { 'hide-title': !needTitle, 'no-header-page': !showDefaultHeader }]"
     :default-open="navigationDefaultOpen"
+    hover-width="240"
     v-bind="$attrs"
     @toggle-click="navigationState.setOpen"
   >
@@ -27,7 +28,7 @@
       <Menu
         v-model:active-key="activeKey"
         v-bkloading="{ loading }"
-        class="min-h-[50vh] mt-[6px]"
+        class="min-h-[50vh]"
         :opened-keys="openedKeys"
       >
         <template v-for="item in list">
@@ -142,7 +143,7 @@
       theme?: 'dark' | 'light';
     }>(),
     {
-      bg: '#F5F7Fa',
+      bg: '#F0F4FA',
       defaultOpen: () => ({ value: true }),
       needTitle: true,
       theme: 'light',
@@ -203,20 +204,30 @@
 <style lang="postcss" scoped>
   .light :deep(.bk-navigation-wrapper .navigation-nav .nav-slider),
   .light :deep(.bk-menu) {
-    background-color: #fff;
+    background-color: var(--aidev-vertical-nav-background);
   }
 
   .light :deep(.bk-navigation-wrapper .navigation-nav .nav-slider) {
-    border-right: 1px solid #dcdee5 !important;
+    border-right: 1px solid var(--aidev-vertical-nav-border-color) !important;
+  }
+
+  /* 组件库菜单宽写死 260px，侧栏展开是 240px，不改成 100% 时左右 8px 外边距会被裁掉 */
+  .light :deep(.bk-menu) {
+    width: 100%;
   }
 
   .light :deep(.bk-menu-group .group-name) {
-    color: #979ba5 !important;
+    height: 40px;
+    margin: 0 24px;
+    padding: 0;
+    font-size: 12px;
+    line-height: 40px;
+    color: var(--aidev-vertical-nav-group-color) !important;
   }
 
   :deep(.bk-navigation-wrapper .navigation-container .container-header) {
     justify-content: start;
-    color: #313238;
+    color: #111214;
     box-shadow: 0 3px 4px 0 #0000000a;
     border-bottom: none;
     z-index: 1;
@@ -228,28 +239,77 @@
   }
 
   .light :deep(.bk-menu .bk-menu-item) {
-    i {
-      color: #979ba5;
-    }
-    .item-content {
-      color: #4d4f56;
+    box-sizing: border-box;
+    width: calc(100% - 16px);
+    height: 40px;
+    min-height: 40px;
+    margin: 0 8px;
+    padding: 0 16px;
+    border-radius: 8px;
+    color: var(--aidev-vertical-nav-item-color);
+
+    .item-icon {
+      flex: 0 0 16px;
+      margin-right: 16px;
+      font-size: 16px;
     }
 
-    &:not(.is-active):hover {
-      background-color: #f0f1f5 !important;
+    i {
+      color: var(--aidev-vertical-nav-icon-color);
+    }
+
+    .item-content {
+      color: var(--aidev-vertical-nav-item-color);
+    }
+
+    &:not(.is-active):not(.is-disabled):hover {
+      color: var(--aidev-vertical-nav-item-hover-color);
+      background: var(--aidev-vertical-nav-item-hover-background) !important;
+    }
+  }
+
+  /* 收起后侧栏 60px，菜单项仍留左右 8px。图标 16px 居中，不再铺满整列。 */
+  .light :deep(.nav-slider[style*='width: 60px'] .bk-menu .bk-menu-item) {
+    justify-content: center;
+    width: calc(100% - 16px);
+    margin: 2px 8px;
+    padding: 0;
+    border-radius: 8px;
+
+    .item-icon {
+      flex: 0 0 16px;
+      margin-right: 0;
+    }
+
+    .item-content {
+      display: none;
     }
   }
 
   .light :deep(.bk-menu .is-active) {
-    background: #e1ecff;
-    i,
+    background: var(--aidev-vertical-nav-item-active-background) !important;
+    color: var(--aidev-vertical-nav-item-active-color) !important;
+
     .item-content {
-      color: #3a84ff;
+      color: var(--aidev-vertical-nav-item-active-color);
+    }
+
+    /* 图标是字体，渐变要裁在 ::before 的字形上，色差拉大才看得出 */
+    i {
+      color: transparent;
+
+      &::before {
+        background-image: var(--aidev-vertical-nav-item-active-icon);
+        -webkit-background-clip: text;
+        background-clip: text;
+        -webkit-text-fill-color: transparent;
+        color: transparent;
+      }
     }
   }
 
   .light :deep(.bk-navigation-title) {
-    border-bottom: 1px solid #f0f1f5 !important;
+    border-bottom: 1px solid var(--aidev-vertical-nav-title-border-color) !important;
   }
 
   :deep(.bk-navigation-title) {
@@ -261,14 +321,16 @@
   }
 
   :deep(.bk-navigation-wrapper .navigation-nav .nav-slider-list) {
-    padding: 0;
+    padding: 8px 0;
     position: relative;
   }
 
   .light :deep(.bk-navigation-wrapper .navigation-nav .footer-icon) {
+    color: var(--aidev-vertical-nav-icon-color);
+
     &:hover {
-      background: #f0f1f5 !important;
-      color: #979ba5 !important;
+      background: var(--aidev-vertical-nav-item-hover-background) !important;
+      color: var(--aidev-vertical-nav-collapse-hover-color) !important;
     }
   }
 

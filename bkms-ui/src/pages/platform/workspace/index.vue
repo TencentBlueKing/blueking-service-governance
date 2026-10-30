@@ -17,7 +17,7 @@
 -->
 
 <template>
-  <div class="flex flex-col p-[16px] bg-white shadow-[0_2px_4px_0_#1919290d]">
+  <div class="flex flex-col overflow-hidden rounded-[6px] p-[16px] bg-white shadow-[0_2px_4px_0_#1919290d]">
     <div class="flex items-center justify-between mb-[16px]">
       <Radio.Group
         class="shrink-0"
@@ -30,18 +30,13 @@
           :key="item.value"
           :label="item.value"
         >
-          <span class="inline-flex gap-[7px] items-center">
+          <span class="inline-flex items-center">
             <span
-              class="w-[8px] h-[8px] rounded-full shadow-[0_0_0_3px_#f0f1f5]"
+              class="mr-[7px] w-[8px] h-[8px] rounded-full shadow-[0_0_0_3px_#E9EDF5]"
               :style="{ backgroundColor: item.color }"
             />
             <span>{{ item.label }}</span>
-            <span
-              class="min-w-[22px] px-[8px] leading-[20px] text-[#63656e] text-center bg-white rounded-[10px]"
-              :class="activeState === item.value ? '!text-[#3a84ff] !bg-[#E1ECFF]' : ''"
-            >
-              {{ formatCount(statusCounts[item.key]) }}
-            </span>
+            <span class="aidev-capsule-count">{{ formatCount(statusCounts[item.key]) }}</span>
           </span>
         </Radio.Button>
       </Radio.Group>
@@ -97,12 +92,12 @@
             </span>
             <span class="flex flex-col min-w-0 ml-[10px] leading-[20px]">
               <span
-                class="truncate text-[#3A84FF] cursor-pointer hover:text-[#1768ef]"
+                class="truncate text-[#3B6EF5] cursor-pointer hover:text-[#1768ef]"
                 @click="handleGotoWorkspaceDetail(row)"
               >
                 {{ row.displayName || '--' }}
               </span>
-              <span class="truncate text-[#979ba5]">
+              <span class="truncate text-[#8F9FBD]">
                 {{ row.id || '--' }}
               </span>
             </span>
@@ -149,7 +144,7 @@
         <template #default="{ row }: { row: WorkspaceWithStatsOutput }">
           <span class="inline-flex gap-[10px] items-center">
             <span
-              class="w-[8px] h-[8px] rounded-full shadow-[0_0_0_3px_#f0f1f5]"
+              class="w-[8px] h-[8px] rounded-full shadow-[0_0_0_3px_#E9EDF5]"
               :style="{ backgroundColor: getStateColor(row.state) }"
             />
             {{ getStateLabel(row.state) }}
@@ -213,11 +208,11 @@
   type StatusCountKey = 'all' | 'disabled' | 'ready';
   type WorkspaceStateOption = 'all' | 'Disabled' | 'Ready';
 
-  const ICON_COLORS = ['#3A84FF', '#2CAF5E', '#F59500', '#6228FF', '#EF6317', '#EA3636'];
+  const ICON_COLORS = ['#3B6EF5', '#2CAF5E', '#F59500', 'var(--aidev-purple-2)', '#EF6317', '#EA3636'];
   const STATUS_COLORS: Record<string, string> = {
     Ready: '#2CAF5E',
     Processing: '#F59500',
-    Disabled: '#C4C6CC',
+    Disabled: '#C1CDE5',
   };
 
   const { t } = useI18n();
@@ -265,7 +260,7 @@
     },
   ]);
   const statusOptions = computed(() => [
-    { key: 'all' as const, label: t('全部'), value: 'all' as const, color: '#3A84FF' },
+    { key: 'all' as const, label: t('全部'), value: 'all' as const, color: '#3B6EF5' },
     { key: 'ready' as const, label: t('启用中'), value: 'Ready' as const, color: STATUS_COLORS.Ready },
     { key: 'disabled' as const, label: t('已停用'), value: 'Disabled' as const, color: STATUS_COLORS.Disabled },
   ]);
@@ -321,7 +316,7 @@
   }
 
   function getStateColor(state?: string) {
-    return STATUS_COLORS[state || ''] || '#C4C6CC';
+    return STATUS_COLORS[state || ''] || '#C1CDE5';
   }
 
   function getStateLabel(state?: string) {

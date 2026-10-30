@@ -21,10 +21,10 @@
     <!-- 已有密码（编辑态入口）：6个圆点占位，点击进入编辑 -->
     <div
       v-if="!isEditing && isEditMode && props.hasCredential"
-      class="flex items-center h-[32px] px-[10px] border border-solid border-[#c4c6cc] rounded-[2px] cursor-text text-[14px] text-[#63656e] bg-white leading-[30px] hover:border-[#979ba5]"
+      class="flex items-center h-[32px] px-[10px] border border-solid border-[#C1CDE5] rounded-[6px] cursor-text text-[14px] text-[#4A5973] bg-white leading-[30px] hover:border-[#8F9FBD]"
       @click="handlePlaceholderClick"
     >
-      <span class="text-[#63656e]">••••••</span>
+      <span class="text-[#4A5973]">••••••</span>
     </div>
     <!-- 编辑态/创建态：真实输入框 -->
     <Input
@@ -38,7 +38,7 @@
         <div class="flex items-center pr-[8px]">
           <i
             v-if="isEditMode"
-            class="bkms-icon bkms-icon-redo cursor-pointer text-[#c4c6cc] text-[16px] hover:text-[#313238]"
+            class="bkms-icon bkms-icon-redo cursor-pointer text-[#C1CDE5] text-[16px] hover:text-[#111214]"
             @click="handleReset"
           />
         </div>

@@ -23,18 +23,18 @@
     <div
       v-if="showEnvHeader && mode === 'multiEnv'"
       :class="[
-        'env-header flex items-center gap-[8px] h-[42px] px-[16px] bg-[#f5f7fa] cursor-pointer',
+        'env-header flex items-center gap-[8px] h-[42px] px-[16px] bg-[#F0F4FA] cursor-pointer',
         { collapsed: isCollapsed },
       ]"
       @click="toggleCollapse"
     >
       <RightShape
-        :class="['text-[#979ba5] text-[14px] transition-transform duration-200', { 'rotate-90': !isCollapsed }]"
+        :class="['text-[#8F9FBD] text-[14px] transition-transform duration-200', { 'rotate-90': !isCollapsed }]"
       />
-      <span class="font-medium text-[#313238]">{{ envDisplayName }}</span>
+      <span class="font-medium text-[#111214]">{{ envDisplayName }}</span>
       <Tag
         v-if="isFeatureEnv"
-        class="bg-[#E2F5F7] text-[#3A9EAA]"
+        class="bg-[var(--aidev-cyan-6)] text-[var(--aidev-cyan-2)]"
       >
         {{ $t('特性') }}
       </Tag>
@@ -148,7 +148,7 @@
               >
                 <AngleDownLine
                   :class="[
-                    'ml-[8px] mt-[4px] text-[#979ba5] text-[12px] cursor-pointer transition-transform duration-200',
+                    'ml-[8px] mt-[4px] text-[#8F9FBD] text-[12px] cursor-pointer transition-transform duration-200',
                     { 'rotate-180': isDropdownOpen },
                   ]"
                 />
@@ -254,15 +254,15 @@
                   <template #content>
                     <div class="px-[4px] min-w-[500px]">
                       <div class="mb-[12px] flex items-center text-[14px] whitespace-nowrap">
-                        <span class="font-bold text-[#313238] shrink-0">{{ $t('北极星健康状态') }}</span>
+                        <span class="font-bold text-[#111214] shrink-0">{{ $t('北极星健康状态') }}</span>
                         <span
-                          class="text-[#979BA5] ml-[12px] truncate"
+                          class="text-[#8F9FBD] ml-[12px] truncate"
                           :title="row.id"
                         >
                           {{ row.id }}
                         </span>
                       </div>
-                      <div class="text-[12px] text-[#4D4F56] mb-[12px]">
+                      <div class="text-[12px] text-[#4A5973] mb-[12px]">
                         <i class="bkms-icon bkms-icon-circle-info text-[14px] mr-[4px]"></i>
                         {{ $t('数据有 15s 左右延迟') }}
                       </div>
@@ -356,7 +356,7 @@
             <span
               v-else
               v-bk-tooltips="$t('实例是否可以接收流量')"
-              class="border-b border-dashed border-[#979ba5]"
+              class="border-b border-dashed border-[#8F9FBD]"
             >
               {{ $t('就绪') }}
             </span>
@@ -416,14 +416,14 @@
               <template #content>
                 <div class="w-full min-w-0 px-[4px]">
                   <div class="mb-[12px] flex items-center text-[14px] whitespace-nowrap">
-                    <span class="font-bold text-[#313238] shrink-0">{{ $t('热更新') }}</span>
+                    <span class="font-bold text-[#111214] shrink-0">{{ $t('热更新') }}</span>
                     <span
-                      class="text-[#979BA5] text-[12px] ml-[10px] truncate"
+                      class="text-[#8F9FBD] text-[12px] ml-[10px] truncate"
                       :title="row.id"
                       >{{ row.id }}</span
                     >
                   </div>
-                  <div class="text-[12px] text-[#4D4F56] mb-[12px]">
+                  <div class="text-[12px] text-[#4A5973] mb-[12px]">
                     <i class="bkms-icon bkms-icon-circle-info text-[14px] mr-[4px]"></i>
                     {{ $t('展示该实例最近一次通过 bkms-cli 的热更新概要') }}
                   </div>
@@ -438,7 +438,7 @@
                       >
                         <span>{{ row.latestPublish.binaryName }}</span>
                         <Copy
-                          class="shrink-0 cursor-pointer text-[#3A84FF] opacity-0 transition group-hover:opacity-100"
+                          class="shrink-0 cursor-pointer text-[#3B6EF5] opacity-0 transition group-hover:opacity-100"
                           :title="$t('复制')"
                           @click.stop="copyText(row.latestPublish.binaryName)"
                         />
@@ -457,11 +457,11 @@
                         theme="dark"
                       >
                         <div class="group inline-flex items-center gap-[4px]">
-                          <span class="cursor-pointer border-b border-dashed border-[#979ba5]">
+                          <span class="cursor-pointer border-b border-dashed border-[#8F9FBD]">
                             {{ row.latestPublish.md5.slice(0, 8) }}
                           </span>
                           <Copy
-                            class="shrink-0 cursor-pointer text-[#3A84FF] opacity-0 transition group-hover:opacity-100"
+                            class="shrink-0 cursor-pointer text-[#3B6EF5] opacity-0 transition group-hover:opacity-100"
                             :title="$t('复制')"
                             @click.stop="copyText(row.latestPublish.md5)"
                           />
@@ -513,7 +513,7 @@
                         <div class="group flex min-w-0 items-center gap-[4px]">
                           <span class="block min-w-0 truncate">{{ row.latestPublish.message }}</span>
                           <Copy
-                            class="shrink-0 cursor-pointer text-[#3A84FF] opacity-0 transition group-hover:opacity-100"
+                            class="shrink-0 cursor-pointer text-[#3B6EF5] opacity-0 transition group-hover:opacity-100"
                             :title="$t('复制')"
                             @click.stop="copyText(row.latestPublish.message)"
                           />
@@ -542,7 +542,7 @@
               v-if="getResourceText(row.resources)"
               placement="top"
             >
-              <span class="cursor-default border-b border-dashed border-[#979BA5]">{{
+              <span class="cursor-default border-b border-dashed border-[#8F9FBD]">{{
                 getResourceText(row.resources)
               }}</span>
               <template #content>
@@ -1194,18 +1194,18 @@
     width: 24px;
     height: 24px;
     font-size: 16px;
-    color: #979ba5;
+    color: #8F9FBD;
     cursor: pointer;
-    border-radius: 2px;
+    border-radius: 6px;
 
     &:hover {
-      color: #3a84ff;
-      background-color: #f0f1f5;
+      color: #3B6EF5;
+      background-color: #E9EDF5;
     }
   }
 
   .is-disabled {
-    color: #c4c6cc;
+    color: #C1CDE5;
     cursor: not-allowed;
   }
 
@@ -1220,7 +1220,7 @@
     display: none !important;
     margin-left: 4px;
     vertical-align: -3px;
-    color: #3a84ff;
+    color: #3B6EF5;
     cursor: pointer;
   }
 
@@ -1241,7 +1241,7 @@
     line-height: 20px;
 
     .cell-label {
-      color: #979ba5;
+      color: #8F9FBD;
       text-align: right;
     }
 
@@ -1272,25 +1272,25 @@
 
   .publish-status-text {
     line-height: 16px;
-    border-bottom: 1px dashed #979ba5;
+    border-bottom: 1px dashed #8F9FBD;
   }
 
   .env-instance-table:first-child {
     .env-header {
-      border-top: 1px solid #e8eaec;
+      border-top: 1px solid #e4e9f2;
     }
   }
   .env-header {
-    border: 1px solid #e8eaec;
+    border: 1px solid #e4e9f2;
     border-top: none;
     border-bottom: none;
 
     &.collapsed {
-      border-bottom: 1px solid #e8eaec;
+      border-bottom: 1px solid #e4e9f2;
     }
 
     &:hover {
-      background-color: #eaebf0;
+      background-color: #e9edf5;
     }
   }
 
@@ -1324,11 +1324,8 @@
     }
     :deep(.bk-table-head) {
       th {
-        background-color: #fafbfd;
+        background-color: #fbfcfe;
       }
-    }
-    :deep(.bk-vxe-table-pagination-wrapper) {
-      padding: 5px 16px;
     }
     :deep([class~='vxe-table--body-prepend-wrapper']) {
       border: none;

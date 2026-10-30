@@ -25,7 +25,7 @@
     >
       <slot name="text"></slot>
       <Button
-        class="text-[#979BA5] ml-[5px]"
+        class="text-[#8F9FBD] ml-[5px]"
         :disabled="disabled"
         text
         @click="handleClickEdit"
@@ -63,7 +63,7 @@
         </Button>
         <Divider
           class="h-[10px] !mx-[8px]"
-          color="#DCDEE5"
+          color="#E4E9F2"
           direction="vertical"
           type="solid"
         />

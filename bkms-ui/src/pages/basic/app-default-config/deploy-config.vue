@@ -25,9 +25,9 @@
       <div
         v-for="index in 2"
         :key="index"
-        class="overflow-hidden rounded-[2px] bg-[#fff] shadow-[0_2px_4px_0_#1919290d]"
+        class="overflow-hidden rounded-[6px] bg-[#fff] shadow-[0_2px_4px_0_#1919290d]"
       >
-        <div class="flex h-[42px] items-center justify-between bg-[#f0f1f5] px-[16px]">
+        <div class="flex h-[42px] items-center justify-between bg-[#E9EDF5] px-[16px]">
           <Layout.shape
             class="shrink-0"
             height="20px"
@@ -42,7 +42,7 @@
         </div>
         <div class="bg-[#fff] pl-[16px] pr-[24px]">
           <div
-            class="grid min-h-[44px] items-center gap-[24px] border-b border-[#f0f1f5]"
+            class="grid min-h-[44px] items-center gap-[24px] border-b border-[#E9EDF5]"
             :style="skeletonTableStyle"
           >
             <Layout.shape
@@ -56,7 +56,7 @@
           <div
             v-for="(row, rowIndex) in skeletonRowWidths"
             :key="`row-${index}-${rowIndex}`"
-            class="grid min-h-[42px] items-center gap-[24px] border-b border-[#f0f1f5]"
+            class="grid min-h-[42px] items-center gap-[24px] border-b border-[#E9EDF5]"
             :style="skeletonTableStyle"
           >
             <Layout.shape
@@ -233,24 +233,24 @@
     justify-content: center;
     width: 100%;
     height: 52px;
-    color: #3a84ff;
+    color: #3B6EF5;
     font-size: 14px;
     background-color: #ffffff;
-    border: 1px dashed #c4c6cc;
-    border-radius: 2px;
+    border: 1px dashed #C1CDE5;
+    border-radius: 6px;
     box-shadow: 0 2px 4px 0 #1919290d;
     cursor: pointer;
 
-    &:hover {
-      background-color: #f6f7fb;
+    &:hover:not(.is-disabled) {
+      background-color: #E5EDFF;
     }
 
     /* 全部配置项已添加：整行禁用，不可打开菜单 */
     &.is-disabled {
-      color: #c4c6cc;
+      color: #C1CDE5;
       cursor: not-allowed;
-      background-color: #fafbfd;
-      border-color: #dcdee5;
+      background-color: #F7F9FD;
+      border-color: #E4E9F2;
       box-shadow: none;
     }
   }
@@ -274,7 +274,7 @@
 
   .add-config-menu__title {
     padding: 16px;
-    color: #313238;
+    color: #111214;
     font-size: 14px;
     font-weight: 700;
     line-height: 22px;
@@ -294,7 +294,7 @@
     align-items: center;
     justify-content: space-between;
     padding: 8px 0;
-    border-top: 1px solid #eaebf0;
+    border-top: 1px solid #e9edf5;
   }
 
   .add-config-menu__info {
@@ -304,13 +304,13 @@
   }
 
   .add-config-menu__label {
-    color: #4d4f56;
+    color: #4A5973;
     font-weight: 700;
     line-height: 20px;
   }
 
   .add-config-menu__desc {
-    color: #979ba5;
+    color: #8F9FBD;
     line-height: 20px;
   }
 
@@ -318,7 +318,7 @@
     display: flex;
     flex-shrink: 0;
     align-items: center;
-    color: #3a84ff;
+    color: #3B6EF5;
     font-size: 12px;
     line-height: 20px;
   }

@@ -29,12 +29,12 @@
           icon="bkms-icon-tishi"
           :width="42"
         />
-        <span class="text-[#313238] text-[20px] leading-[32px] text-center mt-[18px]">
+        <span class="text-[#111214] text-[20px] leading-[32px] text-center mt-[18px]">
           {{ dialogTitle }}
         </span>
       </div>
     </template>
-    <div class="flex flex-col items-center text-[12px] text-[#4D4F56]">
+    <div class="flex flex-col items-center text-[12px] text-[#4A5973]">
       <p class="h-[34px] w-full !text-start">
         {{ tipsText }}
       </p>

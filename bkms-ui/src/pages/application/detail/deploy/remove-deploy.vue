@@ -30,12 +30,12 @@
           icon="bkms-icon-tishi"
           :width="42"
         />
-        <span class="text-[#313238] text-[20px] leading-[32px] text-center mt-[18px]">
+        <span class="text-[#111214] text-[20px] leading-[32px] text-center mt-[18px]">
           {{ $t('确认移除部署') }} ?
         </span>
       </div>
     </template>
-    <div class="mb-[16px] px-[16px] py-[12px] bg-[#F5F6FA] rounded-[2px]">
+    <div class="mb-[16px] px-[16px] py-[12px] bg-[#F5F6FA] rounded-[6px]">
       <div class="font-bold mb-[6px]">
         {{ $t('将移除应用在「{0}」的全部实例，移除后', [trpcDeployStore.curEnvItem?.displayName ?? '']) }}:
       </div>

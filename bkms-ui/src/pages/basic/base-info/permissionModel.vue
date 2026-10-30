@@ -59,13 +59,13 @@
       <template #default="{ row }">
         <Done
           v-if="row.admin"
-          :fill="curColumn === 'admin' ? '#2CAF5E' : '#C4C6CC'"
+          :fill="curColumn === 'admin' ? '#2CAF5E' : '#C1CDE5'"
           :height="26"
           :width="24"
         />
         <Error
           v-else
-          :fill="curColumn === 'admin' ? '#EA3636' : '#C4C6CC'"
+          :fill="curColumn === 'admin' ? '#EA3636' : '#C1CDE5'"
           :height="26"
           :width="18"
         />
@@ -78,13 +78,13 @@
       <template #default="{ row }">
         <Done
           v-if="row.developer"
-          :fill="curColumn === 'developer' ? '#2CAF5E' : '#C4C6CC'"
+          :fill="curColumn === 'developer' ? '#2CAF5E' : '#C1CDE5'"
           :height="26"
           :width="24"
         />
         <Error
           v-else
-          :fill="curColumn === 'developer' ? '#EA3636' : '#C4C6CC'"
+          :fill="curColumn === 'developer' ? '#EA3636' : '#C1CDE5'"
           :height="26"
           :width="18"
         />
@@ -97,13 +97,13 @@
       <template #default="{ row }">
         <Done
           v-if="row.sre"
-          :fill="curColumn === 'sre' ? '#2CAF5E' : '#C4C6CC'"
+          :fill="curColumn === 'sre' ? '#2CAF5E' : '#C1CDE5'"
           :height="26"
           :width="24"
         />
         <Error
           v-else
-          :fill="curColumn === 'sre' ? '#EA3636' : '#C4C6CC'"
+          :fill="curColumn === 'sre' ? '#EA3636' : '#C1CDE5'"
           :height="26"
           :width="18"
         />
@@ -116,13 +116,13 @@
       <template #default="{ row }">
         <Done
           v-if="row.operator"
-          :fill="curColumn === 'operator' ? '#2CAF5E' : '#C4C6CC'"
+          :fill="curColumn === 'operator' ? '#2CAF5E' : '#C1CDE5'"
           :height="26"
           :width="24"
         />
         <Error
           v-else
-          :fill="curColumn === 'operator' ? '#EA3636' : '#C4C6CC'"
+          :fill="curColumn === 'operator' ? '#EA3636' : '#C1CDE5'"
           :height="26"
           :width="18"
         />
@@ -187,10 +187,10 @@
    */
   function handleCellClassName({ column }: { column: IColumn }) {
     if (curColumn.value === column.field && column.field === 'operator') {
-      return 'bg-[#F0F5FF] border-[#3A84FF] border-l-[1px] border-r-[2px] active-cell';
+      return 'bg-[#F0F4FF] border-[#3B6EF5] border-l-[1px] border-r-[2px] active-cell';
     }
     if (curColumn.value === column.field) {
-      return 'bg-[#F0F5FF] border-[#3A84FF] border-x active-cell';
+      return 'bg-[#F0F4FF] border-[#3B6EF5] border-x active-cell';
     }
     return '';
   }
@@ -199,10 +199,10 @@
    */
   function handleHeaderCellClassName({ column }: { column: IColumn }) {
     if (curColumn.value === column.field && column.field === 'operator') {
-      return 'border-[#3A84FF] border border-r-[2px] border-t-[2px] border-b-0';
+      return 'border-[#3B6EF5] border border-r-[2px] border-t-[2px] border-b-0';
     }
     if (curColumn.value === column.field) {
-      return 'border-[#3A84FF] border border-t-[2px] border-b-0';
+      return 'border-[#3B6EF5] border border-t-[2px] border-b-0';
     }
     return '';
   }
@@ -231,10 +231,10 @@
 <style scoped lang="postcss">
   :deep(.vxe-body--row.last-row) {
     .active-cell {
-      border-bottom: 2px solid #3a84ff;
+      border-bottom: 2px solid #3B6EF5;
     }
   }
   .col--current {
-    --vxe-ui-table-border-color: #3a84ff;
+    --vxe-ui-table-border-color: #3B6EF5;
   }
 </style>

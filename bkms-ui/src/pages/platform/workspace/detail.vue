@@ -17,13 +17,13 @@
 -->
 
 <template>
-  <section class="min-h-full bg-[#F5F7FA]">
+  <section class="min-h-full bg-[#F0F4FA]">
     <MsHeader
       :title="t('空间详情')"
       :trigger-back="handleBack"
     >
-      <span class="mx-[8px] h-[20px] w-[1px] bg-[#dcdee5]"></span>
-      <span class="text-[16px] leading-[24px] text-[#979ba5]">{{ workspaceTitle }}</span>
+      <span class="mx-[8px] h-[20px] w-[1px] bg-[#E4E9F2]"></span>
+      <span class="text-[16px] leading-[24px] text-[#8F9FBD]">{{ workspaceTitle }}</span>
     </MsHeader>
 
     <div class="p-[24px]">
@@ -111,16 +111,16 @@
         </template>
 
         <!-- 空间基本信息 -->
-        <div class="flex items-center min-h-[160px] p-[24px] pt-[28px] bg-white shadow-[0_2px_4px_0_#1919290d]">
+        <div class="flex min-h-[160px] items-center overflow-hidden rounded-[6px] bg-white p-[24px] pt-[28px] shadow-[0_2px_4px_0_#1919290d]">
           <!-- 首字母头像 -->
           <div
-            class="relative flex shrink-0 items-center justify-center w-[72px] h-[72px] text-[32px] font-bold text-white rounded-[8px] bg-[#3a84ff]"
+            class="relative flex shrink-0 items-center justify-center w-[72px] h-[72px] text-[32px] font-bold text-white rounded-[8px] bg-[#3B6EF5]"
           >
             {{ workspaceInitial }}
           </div>
 
           <div class="min-w-0 ml-[26px] flex flex-col">
-            <div class="text-[16px] font-bold text-[#313238] truncate">
+            <div class="text-[16px] font-bold text-[#111214] truncate">
               {{ workspaceTitle }}
             </div>
             <div class="flex flex-col">
@@ -182,7 +182,7 @@
             </div>
             <div
               v-else-if="!imageRegistry?.registry"
-              class="text-[14px] text-[#979ba5]"
+              class="text-[14px] text-[#8F9FBD]"
             >
               {{ t('暂未配置镜像仓库') }}
             </div>
@@ -221,9 +221,9 @@
           :collapsible="true"
           :title="t('快捷操作')"
         >
-          <div class="flex items-center h-[100px] px-[120px] text-[14px] text-[#63656e] bg-[#fff]">
+          <div class="flex items-center h-[100px] px-[120px] text-[14px] text-[#4A5973] bg-[#fff]">
             <span>{{ t('空间权限') }}：</span>
-            <span class="mr-[12px] text-[#313238]">{{ quickPermissionText }}</span>
+            <span class="mr-[12px] text-[#111214]">{{ quickPermissionText }}</span>
             <!-- 管理员：退出空间 | 非管理员：成为管理员 -->
             <Button
               :class="{ 'mr-[1px]': !isCurrentUserWorkspaceAdmin }"
@@ -243,7 +243,7 @@
             >
               <Button
                 class="!min-w-[32px] !px-0"
-                style="border-radius: 0 2px 2px 0"
+                style="border-radius: 0 6px 6px 0"
                 theme="primary"
               >
                 <AngleDownLine class="text-[12px]" />
@@ -524,6 +524,6 @@
 <style lang="postcss" scoped>
   /* 折叠面板标题背景 */
   :deep(.bkms-content-title) {
-    background-color: #eaebf0;
+    background-color: #e4e9f2;
   }
 </style>

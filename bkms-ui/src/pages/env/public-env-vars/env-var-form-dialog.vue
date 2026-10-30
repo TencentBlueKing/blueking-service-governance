@@ -100,7 +100,7 @@
             </Radio.Group>
             <div
               v-if="formData.scopeType === 'envType'"
-              class="mt-[12px] px-[10px] py-[6px] bg-[#F5F7FA] rounded-[2px]"
+              class="mt-[12px] px-[10px] py-[6px] bg-[#F0F4FA] rounded-[6px]"
             >
               <Radio.Group
                 v-model="formData.scopeValue"

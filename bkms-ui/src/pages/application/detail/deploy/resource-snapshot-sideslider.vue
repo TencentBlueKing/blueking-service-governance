@@ -43,7 +43,7 @@
           <template #nodeType="node">
             <i
               class="bkms-icon mr-[12px] text-[16px]"
-              :class="node.type === 'group' ? 'bkms-icon-folder text-[#979BA5]' : 'bkms-icon-file text-[#4D4F56]'"
+              :class="node.type === 'group' ? 'bkms-icon-folder text-[#8F9FBD]' : 'bkms-icon-file text-[#4A5973]'"
             ></i>
           </template>
         </Tree>
@@ -328,8 +328,8 @@
 
     &.is-selected,
     &:hover {
-      color: #3a84ff;
-      background-color: #e1ecff;
+      color: #3B6EF5;
+      background-color: #E5EDFF;
     }
   }
 </style>

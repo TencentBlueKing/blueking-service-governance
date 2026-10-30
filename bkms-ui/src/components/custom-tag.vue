@@ -35,9 +35,9 @@
 
 <style lang="postcss" scoped>
   .default {
-    background-color: #fafbfd;
-    color: #4d4f56;
-    border-color: #dcdee5;
+    background-color: #F7F9FD;
+    color: #4A5973;
+    border-color: #E4E9F2;
   }
   .success {
     background-color: #daf6e5;

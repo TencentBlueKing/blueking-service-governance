@@ -138,8 +138,9 @@
               :label="$t('高级命令')"
             >
               <ToggleCard
-                class="bg-[#fff] rounded-[2px] border-[1px] border-[#e5e5e5]"
+                class="overflow-hidden rounded-[6px] border-[1px] border-[#e5e5e5] bg-[#fff]"
                 content-class="p-[16px]"
+                header-class="!rounded-none"
                 :model-value="false"
                 type="normal"
               >
@@ -149,7 +150,7 @@
                 </template>
                 <div class="mb-[24px] last:mb-0">
                   <div class="flex items-center gap-[8px] mb-[8px]">
-                    <span class="text-[14px] text-[#313238]">{{ $t('编译前置命令') }}</span>
+                    <span class="text-[14px] text-[#111214]">{{ $t('编译前置命令') }}</span>
                     <Tag theme="info">{{ $t('builder 阶段') }}</Tag>
                   </div>
                   <Input
@@ -161,7 +162,7 @@
                 </div>
                 <div class="mb-[24px] last:mb-0">
                   <div class="flex items-center gap-[8px] mb-[8px]">
-                    <span class="text-[14px] text-[#313238]">{{ $t('编译命令') }}</span>
+                    <span class="text-[14px] text-[#111214]">{{ $t('编译命令') }}</span>
                     <Tag theme="info">{{ $t('builder 阶段') }}</Tag>
                   </div>
                   <Input
@@ -177,7 +178,7 @@
                 </div>
                 <div class="mb-[24px] last:mb-0">
                   <div class="flex items-center gap-[8px] mb-[8px]">
-                    <span class="text-[14px] text-[#313238]">{{ $t('打包额外文件') }}</span>
+                    <span class="text-[14px] text-[#111214]">{{ $t('打包额外文件') }}</span>
                     <Tag theme="success">{{ $t('runner 阶段') }}</Tag>
                   </div>
                   <Input
@@ -186,7 +187,7 @@
                     :rows="4"
                     type="textarea"
                   />
-                  <p class="mt-[4px] leading-[20px] text-[#c4c6cc]">
+                  <p class="mt-[4px] leading-[20px] text-[#C1CDE5]">
                     {{
                       $t(
                         '文件会按相对路径打包到运行镜像的 /app 目录，例如 data/privatekey.pem 打包后为 /app/data/privatekey.pem。',
@@ -196,7 +197,7 @@
                 </div>
                 <div class="mb-[24px] last:mb-0">
                   <div class="flex items-center gap-[8px] mb-[8px]">
-                    <span class="text-[14px] text-[#313238]">{{ $t('运行环境命令') }}</span>
+                    <span class="text-[14px] text-[#111214]">{{ $t('运行环境命令') }}</span>
                     <Tag theme="success">{{ $t('runner 阶段') }}</Tag>
                   </div>
                   <Input
@@ -208,7 +209,7 @@
                 </div>
                 <div class="mb-[24px] last:mb-0">
                   <div class="flex items-center gap-[8px] mb-[8px]">
-                    <span class="text-[14px] text-[#313238]">{{ $t('镜像入口命令') }}</span>
+                    <span class="text-[14px] text-[#111214]">{{ $t('镜像入口命令') }}</span>
                     <Tag theme="success">{{ $t('runner 阶段') }}</Tag>
                   </div>
                   <Input
@@ -217,7 +218,7 @@
                     :rows="4"
                     type="textarea"
                   />
-                  <p class="mt-[4px] leading-[20px] text-[#c4c6cc]">
+                  <p class="mt-[4px] leading-[20px] text-[#C1CDE5]">
                     {{ $t('写入镜像的默认启动方式（ENTRYPOINT），构建时固化到镜像中。部署时可被「运行命令」覆盖') }}
                   </p>
                 </div>
@@ -251,7 +252,7 @@
               :workspace="spaceStore.currentSpace"
               @update:model-value="getParamsData"
             />
-            <div class="text-[12px] text-[#979ba5]">
+            <div class="text-[12px] text-[#8F9FBD]">
               {{ $t('需要保证流水线会将构建的镜像推送到当前空间的镜像仓库下') }}
               <Button
                 text
@@ -270,7 +271,7 @@
           >
             <div
               v-bkloading="{ loading: paramsLoading }"
-              class="bg-[#F5F7FA] px-[24px] pt-[16px]"
+              class="bg-[#F0F4FA] px-[24px] pt-[16px]"
             >
               <PipelineParamsForm
                 ref="pipelineParamsRef"

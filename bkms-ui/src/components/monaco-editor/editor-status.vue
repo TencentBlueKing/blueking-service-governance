@@ -69,7 +69,7 @@
     border-left: 4px solid;
     padding: 8px 0px 8px 16px;
     background: #2e2e2e;
-    border-radius: 0px 0px 2px 2px;
+    border-radius: 0px 0px 6px 6px;
     display: flex;
     align-items: flex-start;
     position: absolute;
@@ -87,7 +87,7 @@
     }
     .message {
       margin-left: 8px;
-      color: #dcdee5;
+      color: #E4E9F2;
       line-height: 20px;
       font-size: 12px;
       white-space: wrap;

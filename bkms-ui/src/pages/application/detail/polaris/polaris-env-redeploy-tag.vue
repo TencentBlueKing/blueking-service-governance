@@ -48,7 +48,7 @@
           </template>
         </div>
         <Button
-          class="mt-[6px] !px-0 text-[#3A84FF]"
+          class="mt-[6px] !px-0 text-[#3B6EF5]"
           text
           theme="primary"
           @click.stop="emit('go-deploy', envName)"

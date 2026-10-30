@@ -17,7 +17,7 @@
 -->
 
 <template>
-  <span class="flex items-center justify-center border-r-[1px] border-[#C4C6CC] bg-[#FAFBFD] px-[8px] text-[#4D4F56]">
+  <span class="flex items-center justify-center border-r-[1px] border-[#C1CDE5] bg-[#F7F9FD] px-[8px] text-[#4A5973]">
     {{ label }}
   </span>
 </template>

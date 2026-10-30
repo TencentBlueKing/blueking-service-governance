@@ -18,13 +18,13 @@
 
 <template>
   <i18n-t
-    class="text-[#4D4F56]"
+    class="text-[#4A5973]"
     :class="compact ? 'text-[12px] leading-[20px]' : 'text-[14px] leading-[22px]'"
     keypath="可嵌入蓝鲸监控仪表盘，查看应用指标。配置步骤见 {0}"
     tag="span"
   >
     <a
-      class="text-[#3A84FF]"
+      class="text-[#3B6EF5]"
       :href="docUrl"
       rel="noopener noreferrer"
       target="_blank"
