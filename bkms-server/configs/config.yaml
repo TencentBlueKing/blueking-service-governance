@@ -71,6 +71,8 @@ bcs:
   # 联邦 Host 集群 ID 列表。创建/更新环境时 clusterID 命中则视为联邦集群，部署使用原生 Deployment
   # 跟 BCS 侧确认只能通过配置项来判断
   federationClusterIDs: []
+  # BCS 侧分配的 WeTerm 环境 ID（bkBcsEnvID），用于生成 WeTerm 登录容器链接；为空表示不支持 WeTerm（如社区版）
+  weTermEnvID: ""
 # 蓝盾配置，用于项目初始化 & 流水线模板加载
 bkci:
   # 流水线模板存放目录

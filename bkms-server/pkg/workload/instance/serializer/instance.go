@@ -577,6 +577,17 @@ type CreateAppInstanceWebConsoleOutput struct {
 	Data *WebConsoleInfoOutputObj `json:"data"`
 }
 
+// WeTermInfoOutputObj WeTerm 登录容器的链接信息。
+type WeTermInfoOutputObj struct {
+	// WeTerm 登录链接（weterm:// 协议，由本地 WeTerm 客户端打开）
+	URL string `json:"url"`
+}
+
+// CreateAppInstanceWeTermOutput 获取应用实例 WeTerm 登录链接的响应。
+type CreateAppInstanceWeTermOutput struct {
+	Data *WeTermInfoOutputObj `json:"data"`
+}
+
 // -----------------------------------------------------------------------------
 // 实例日志
 

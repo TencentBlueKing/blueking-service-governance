@@ -29,6 +29,7 @@ type Handler interface {
 	BatchDeleteAppInstances(c *gin.Context)
 	UpdateAppInstancePolaris(c *gin.Context)
 	CreateAppInstanceWebConsole(c *gin.Context)
+	CreateAppInstanceWeTerm(c *gin.Context)
 	ListAppInstanceLogs(c *gin.Context)
 	ListEvents(c *gin.Context)
 	ListTrpcAdminCmds(c *gin.Context)
@@ -53,6 +54,8 @@ func Register(rg *gin.RouterGroup, h Handler) {
 	rg.PUT("/apps/:appID/envs/:envName/instances/operations/polaris", h.UpdateAppInstancePolaris)
 	// 创建应用运行实例（Pod）WebConsole
 	rg.POST("/apps/:appID/envs/:envName/instances/:instanceID/web-console", h.CreateAppInstanceWebConsole)
+	// 获取应用运行实例（Pod）WeTerm 登录链接
+	rg.POST("/apps/:appID/envs/:envName/instances/:instanceID/weterm", h.CreateAppInstanceWeTerm)
 	// 获取应用运行实例（Pod）日志
 	rg.GET("/apps/:appID/envs/:envName/instances/:instanceID/logs", h.ListAppInstanceLogs)
 	// 获取指定环境的事件列表

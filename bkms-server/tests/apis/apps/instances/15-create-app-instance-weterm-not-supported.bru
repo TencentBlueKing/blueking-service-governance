@@ -1,0 +1,27 @@
+meta {
+  name: 15-create-app-instance-weterm-not-supported
+  type: http
+  seq: 15
+}
+
+post {
+  url: {{serviceURL}}/apps/not-exist-app/envs/test/instances/not-exist-pod/weterm
+  body: none
+  auth: inherit
+}
+
+assert {
+  res.status: eq 501
+  res.body: isJson
+}
+
+tests {
+  test("should reject WeTerm when weTermEnvID is not configured", () => {
+    expect(res.body.error.code).to.equal("NOT_IMPLEMENTED");
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

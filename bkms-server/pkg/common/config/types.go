@@ -107,6 +107,9 @@ type BCSConfig struct {
 	// FederationClusterIDs 联邦 Host 集群 ID 列表。
 	// 创建/更新环境时，用户提交的 clusterID 命中此列表则视为联邦集群。
 	FederationClusterIDs []string
+	// WeTermEnvID BCS 侧为当前部署环境分配的 WeTerm 环境 ID（bkBcsEnvID），用于生成 WeTerm 登录容器链接。
+	// 为空表示不支持 WeTerm（如社区版）。
+	WeTermEnvID string
 }
 
 // BKCIProjInitConfig 蓝盾项目初始化默认配置

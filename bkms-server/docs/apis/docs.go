@@ -10248,6 +10248,64 @@ const docTemplate = `{
                 }
             }
         },
+        "/apps/{appID}/envs/{envName}/instances/{instanceID}/weterm": {
+            "post": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "description": "未配置 WeTerm 环境 ID（如社区版）时返回 NOT_IMPLEMENTED。",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "instance"
+                ],
+                "summary": "获取应用运行实例（Pod）WeTerm 登录链接",
+                "operationId": "CreateAppInstanceWeTerm",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "应用 ID",
+                        "name": "appID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "部署环境名称",
+                        "name": "envName",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "实例 ID",
+                        "name": "instanceID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.CreateAppInstanceWeTermOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
         "/apps/{appID}/envs/{envName}/resource-topology": {
             "get": {
                 "security": [
@@ -25558,6 +25616,14 @@ const docTemplate = `{
                 }
             }
         },
+        "serializer.CreateAppInstanceWeTermOutput": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/serializer.WeTermInfoOutputObj"
+                }
+            }
+        },
         "serializer.CreateAppInstanceWebConsoleInput": {
             "type": "object",
             "properties": {
@@ -35251,6 +35317,15 @@ const docTemplate = `{
                 },
                 "value": {
                     "description": "变量值",
+                    "type": "string"
+                }
+            }
+        },
+        "serializer.WeTermInfoOutputObj": {
+            "type": "object",
+            "properties": {
+                "url": {
+                    "description": "WeTerm 登录链接（weterm:// 协议，由本地 WeTerm 客户端打开）",
                     "type": "string"
                 }
             }

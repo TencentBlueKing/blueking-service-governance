@@ -231,6 +231,8 @@ const (
 	AttributeInstance Attribute = "instance"
 	// AttributeWebConsole Web 控制台
 	AttributeWebConsole Attribute = "webConsole"
+	// AttributeWeTerm WeTerm 终端
+	AttributeWeTerm Attribute = "weTerm"
 	// AttributePortForward 端口转发
 	AttributePortForward Attribute = "portForward"
 	// AttributeAdminCommand 管理命令
@@ -284,6 +286,8 @@ func (t Attribute) DisplayName() string {
 		return "应用实例"
 	case AttributeWebConsole:
 		return "WebConsole"
+	case AttributeWeTerm:
+		return "WeTerm"
 	case AttributePortForward:
 		return "端口转发"
 	case AttributeAdminCommand:

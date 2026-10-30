@@ -3481,6 +3481,11 @@ definitions:
     - name
     - type
     type: object
+  serializer.CreateAppInstanceWeTermOutput:
+    properties:
+      data:
+        $ref: '#/definitions/serializer.WeTermInfoOutputObj'
+    type: object
   serializer.CreateAppInstanceWebConsoleInput:
     properties:
       trafficLaneName:
@@ -10144,6 +10149,12 @@ definitions:
         description: 变量值
         type: string
     type: object
+  serializer.WeTermInfoOutputObj:
+    properties:
+      url:
+        description: WeTerm 登录链接（weterm:// 协议，由本地 WeTerm 客户端打开）
+        type: string
+    type: object
   serializer.WebConsoleInfoOutputObj:
     properties:
       url:
@@ -16596,6 +16607,43 @@ paths:
       - BkUserInfo: []
       - BkUserCredential: []
       summary: 创建应用运行实例（Pod）WebConsole
+      tags:
+      - instance
+  /apps/{appID}/envs/{envName}/instances/{instanceID}/weterm:
+    post:
+      description: 未配置 WeTerm 环境 ID（如社区版）时返回 NOT_IMPLEMENTED。
+      operationId: CreateAppInstanceWeTerm
+      parameters:
+      - description: 应用 ID
+        in: path
+        name: appID
+        required: true
+        type: string
+      - description: 部署环境名称
+        in: path
+        name: envName
+        required: true
+        type: string
+      - description: 实例 ID
+        in: path
+        name: instanceID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.CreateAppInstanceWeTermOutput'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 获取应用运行实例（Pod）WeTerm 登录链接
       tags:
       - instance
   /apps/{appID}/envs/{envName}/instances/admin-cmds:
