@@ -98,7 +98,7 @@
             </Form.FormItem>
           </template>
           <!-- 平台通用构建 -->
-          <template v-else-if="builderData!.repoBuildConfig!.imageBuildMode === 'platform'">
+          <template v-else-if="platformBuildSupported && builderData!.repoBuildConfig!.imageBuildMode === 'platform'">
             <Form.FormItem
               :label="$t('构建镜像')"
               required
@@ -298,6 +298,11 @@
       <div class="flex items-center">
         <Button
           class="min-w-[88px]"
+          :disabled="
+            currentBuilderType === 'codeRepository' &&
+            builderData.repoBuildConfig?.imageBuildMode === 'platform' &&
+            !platformBuildSupported
+          "
           theme="primary"
           @click="handleSave"
         >
@@ -329,11 +334,13 @@
   import CardRadio, { type CardRadioOption } from '~/components/card-radio.vue';
   import TagConfigForm from '~/components/tag-config-form.vue';
   import ToggleCard from '~/components/toggle-card.vue';
+  import { isRuntimeModSupported } from '~/composables/use-app-runtime';
   import useLeaveConfirm from '~/composables/use-leave-confirm';
   import BuildOutputHint from '~/pages/application/components/build-output-hint.vue';
   import GoBuildArgs from '~/pages/application/components/go-build-args.vue';
   import ImageModeSelect from '~/pages/application/components/image-mode-select.vue';
   import PipelineParamsForm from '~/pages/application/components/pipeline-params-form.vue';
+  import { useAppDetail } from '~/stores/app-detail';
   import { useSpaceStore } from '~/stores/space';
 
   // BuildConfigOutputObj 已包含 tagConfig 字段，使用 Partial 使其可选
@@ -356,6 +363,8 @@
   const props = defineProps<IProps>();
   const emit = defineEmits(['confirm']);
   const spaceStore = useSpaceStore();
+  const appDetailStore = useAppDetail();
+  const platformBuildSupported = computed(() => isRuntimeModSupported(appDetailStore.runtime, 'platformBuild'));
 
   /** 空间镜像仓库信息（供 ImageModeSelect 复用，避免 builder/runner 两个实例重复请求 getWorkspace） */
   const workspaceRepoInfo = ref<null | { password: string; repositoryAddress: string; username: string }>(null);
@@ -423,20 +432,34 @@
   });
 
   // ========== 构建方式选项 ==========
-  const buildTypeOptions = ref<CardRadioOption[]>([
-    {
-      value: 'platform',
-      label: t('平台通用构建'),
-      description: t('无需编写和维护 Dockerfile，平台按标准框架自动完成构建。可按需在「高级命令」补充构建步骤。'),
+  const buildTypeOptions = computed<CardRadioOption[]>(() =>
+    [
+      {
+        value: 'platform',
+        label: t('平台通用构建'),
+        description: t('无需编写和维护 Dockerfile，平台按标准框架自动完成构建。可按需在「高级命令」补充构建步骤。'),
+      },
+      {
+        value: 'repositoryDockerfile',
+        label: t('使用仓库 Dockerfile'),
+        description: t(
+          '完全使用代码仓库中你自己维护的 Dockerfile 构建，平台不介入生成，构建过程以仓库内的 Dockerfile 为准。',
+        ),
+      },
+    ].filter(option => option.value !== 'platform' || platformBuildSupported.value),
+  );
+
+  watch(
+    [platformBuildSupported, () => isShow.value, () => builderData.value.repoBuildConfig?.imageBuildMode],
+    ([supported, visible, mode]) => {
+      const repo = builderData.value.repoBuildConfig;
+      // 加载失败不重写已有配置；确认为不支持后才切换构建方式。
+      if (visible && appDetailStore.runtime && !supported && mode === 'platform' && repo) {
+        repo.imageBuildMode = 'repositoryDockerfile';
+        repo.platformBuildConfig = undefined;
+      }
     },
-    {
-      value: 'repositoryDockerfile',
-      label: t('使用仓库 Dockerfile'),
-      description: t(
-        '完全使用代码仓库中你自己维护的 Dockerfile 构建，平台不介入生成，构建过程以仓库内的 Dockerfile 为准。',
-      ),
-    },
-  ]);
+  );
 
   // ========== 构建方式互斥 ==========
   // 切到 platform → 清空 dockerfile（镜像列表由 ImageModeSelect 组件挂载后自行拉取）
@@ -637,6 +660,12 @@
   const pipelineParamsRef = ref();
   /** 保存编辑 */
   const handleSave = async () => {
+    if (
+      currentBuilderType.value === 'codeRepository' &&
+      builderData.value.repoBuildConfig?.imageBuildMode === 'platform' &&
+      !platformBuildSupported.value
+    )
+      return;
     // 表单校验，主要用于 源码仓库
     const formValid = await formRef.value.validate().catch(() => false);
     if (!formValid) return;

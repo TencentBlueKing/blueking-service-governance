@@ -16,6 +16,8 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
+import { ref } from 'vue';
+
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useConfigFileDefs } from '~/pages/application/detail/app-config/use-config-file-defs';
 
@@ -59,6 +61,24 @@ beforeEach(() => {
 });
 
 describe('配置文件元信息保存', () => {
+  it('能力未知或不支持时仅保留普通文件，能力恢复后框架文件重新可见', async () => {
+    const supported = ref(false);
+    mocks.list.mockResolvedValue({
+      items: [file, { ...file, id: 'plain-id', configKind: 'plain', name: 'extra.yaml' }],
+    });
+    const state = useConfigFileDefs('app-id', supported);
+    await state.fetchDefs();
+    expect(state.defs.value.map(item => item.id)).toEqual(['plain-id']);
+    expect(state.activeDefID.value).toBe('plain-id');
+    supported.value = true;
+    expect(state.defs.value.map(item => item.id)).toEqual(['def-id', 'plain-id']);
+    state.activeDefID.value = 'def-id';
+    supported.value = false;
+    expect(state.activeDefID.value).toBe('plain-id');
+    expect(state.activeDef.value?.configKind).toBe('plain');
+    expect(mocks.list).toHaveBeenCalledTimes(1);
+  });
+
   it('使用 def ID 保存并返回服务端元信息，不合并或刷新列表与详情', async () => {
     const state = useConfigFileDefs('app-id');
     await state.fetchDefs();

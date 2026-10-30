@@ -32,10 +32,11 @@
  */
 import { ref } from 'vue';
 
-import { mount } from '@vue/test-utils';
+import { flushPromises, mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import AppDetailShell from '~/pages/application/detail.vue';
+import { useAppDetail } from '~/stores/app-detail';
 
 import type { VueWrapper } from '@vue/test-utils';
 import type { RouteLocationNormalizedGeneric } from 'vue-router';
@@ -43,6 +44,10 @@ import type { RouteLocationNormalizedGeneric } from 'vue-router';
 const mocks = vi.hoisted(() => ({
   /** 捕获 detail.vue 注册的 onBeforeRouteUpdate 守卫回调（每次 mount 清空，取最新注册） */
   routeUpdateGuards: [] as Array<(to: RouteLocationNormalizedGeneric, from: RouteLocationNormalizedGeneric) => unknown>,
+  space: '',
+  apps: vi.fn(),
+  detail: vi.fn(),
+  runtime: vi.fn(),
 }));
 
 /** 挂载壳层并捕获守卫回调；调用方负责 unmount（§3.8 VTU 须自行清理） */
@@ -59,6 +64,12 @@ function mountShell(): {
       plugins: [pinia],
       // RouterView 由 vue-router mock 提供，但模板按全局组件解析——注册以消除 resolve 告警
       components: { RouterView: { template: '<div />' } },
+      stubs: {
+        CustomNavigation: { template: '<div><slot /><slot name="side-header" /></div>' },
+        Alert: { template: '<div role="alert"><slot name="title" /><slot /></div>' },
+        Button: { template: '<button><slot /></button>' },
+      },
+      mocks: { $t: (text: string) => text },
       // bkui-vue 指令垫片：未装 bkui-vue 全量插件，空指令消除解析警告
       directives: { bkloading: {}, 'bk-tooltips': {} },
     },
@@ -71,8 +82,23 @@ function mountShell(): {
 // ── 重依赖 mock：与 height-chain 同源（掐断 API 链，mount 只为注册守卫）──────────
 
 // API mock 工厂见 helpers/mock-api.ts（§3.7 共享 helpers；同款 mock 亦用于 height-chain）
-vi.mock('~/api/modules/bkmsserver', async () => (await import('../helpers/mock-api')).bkmsserverShellMockFactory());
+vi.mock('~/api/modules/bkmsserver', async () => {
+  const base = (await import('../helpers/mock-api')).bkmsserverShellMockFactory();
+  return { ApiServerService: { ...base.ApiServerService, GetApp: mocks.detail } };
+});
 vi.mock('~/api/modules/v1', async () => (await import('../helpers/mock-api')).v1ProxyMockFactory());
+vi.mock('~/api/modules/v1/app', () => ({
+  AppService: { listApps: mocks.apps, getAppRuntimeMods: mocks.runtime },
+}));
+vi.mock('~/stores/space', () => ({ useSpaceStore: () => ({ currentSpace: mocks.space }) }));
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  mocks.space = '';
+  mocks.apps.mockResolvedValue([]);
+  mocks.detail.mockResolvedValue(undefined);
+  mocks.runtime.mockResolvedValue(undefined);
+});
 
 // vue-router：捕获守卫回调（非 no-op——本场景的验证对象就是回调逻辑本身）
 vi.mock('vue-router', () => {
@@ -187,5 +213,55 @@ describe('应用详情壳层：特性环境应用切换守卫', () => {
 
     expect(guard(to, from)).toBeUndefined();
     wrapper.unmount();
+  });
+});
+
+describe('应用详情壳层：能力局部加载', () => {
+  it('能力尚在加载时，详情完成即可挂载通用子页面', async () => {
+    mocks.space = 'ws-1';
+    mocks.apps.mockResolvedValue([{ id: 'a', name: 'a', type: 'bkmsApp', framework: 'blank', language: 'go' }]);
+    mocks.detail.mockResolvedValue({ id: 'a', name: 'a', type: 'bkmsApp', framework: 'blank', language: 'go' });
+    let complete!: (value: object) => void;
+    mocks.runtime.mockReturnValue(
+      new Promise(resolve => {
+        complete = resolve;
+      }),
+    );
+    const { wrapper } = mountShell();
+    try {
+      await flushPromises();
+      expect(mocks.detail).toHaveBeenCalledWith({ appID: 'a' });
+      expect(mocks.runtime).toHaveBeenCalledWith({ appID: 'a' }, { interceptorErr: false });
+      expect(useAppDetail().runtimeLoading).toBe(true);
+      expect(wrapper.findComponent({ name: 'RouterView' }).exists()).toBe(true);
+      complete({ type: 'bkmsApp', framework: 'blank', mods: {} });
+      await flushPromises();
+    } finally {
+      wrapper.unmount();
+    }
+  });
+
+  it('能力失败仍保留子页面，重试恢复后不覆盖真实应用类型', async () => {
+    mocks.space = 'ws-1';
+    mocks.apps.mockResolvedValue([{ id: 'a', name: 'a', type: 'trpc', framework: 'trpc', language: 'go' }]);
+    mocks.detail.mockResolvedValue({ id: 'a', name: 'a', type: 'trpc', framework: 'trpc', language: 'go' });
+    mocks.runtime.mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce({
+      type: 'bkmsApp',
+      framework: 'trpc',
+      mods: { devMode: { supported: true } },
+    });
+    const { wrapper } = mountShell();
+    try {
+      await flushPromises();
+      expect(wrapper.findComponent({ name: 'RouterView' }).exists()).toBe(true);
+      expect(wrapper.get('[role="alert"]').text()).toContain('应用能力加载失败，部分功能暂不可用');
+      await wrapper.get('[role="alert"] button').trigger('click');
+      await flushPromises();
+      expect(wrapper.find('[role="alert"]').exists()).toBe(false);
+      expect(useAppDetail().runtime?.mods?.devMode?.supported).toBe(true);
+      expect(useAppDetail().appType).toBe('trpc');
+    } finally {
+      wrapper.unmount();
+    }
   });
 });

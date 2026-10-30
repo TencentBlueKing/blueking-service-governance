@@ -16,6 +16,8 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
+import { ref } from 'vue';
+
 import { flushPromises, shallowMount } from '@vue/test-utils';
 import { Radio } from 'bkui-vue';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -25,6 +27,7 @@ import { i18nGlobalMocks } from '../helpers/mock-i18n';
 import { MockedApiError } from '../helpers/mocked-api-error';
 
 import type * as BkuiVue from 'bkui-vue';
+import type { PublicView } from '~/@types/v1/app';
 import type { DefDetailObj, UpdateDefInput } from '~/@types/v1/app-config-file-defs';
 
 const mocks = vi.hoisted(() => ({
@@ -39,6 +42,7 @@ const mocks = vi.hoisted(() => ({
   editorValue: '',
   saveContent: vi.fn(),
 }));
+const runtimeState = ref<null | PublicView | undefined>();
 vi.mock('vue-i18n', async importOriginal => ({
   ...(await importOriginal<object>()),
   useI18n: () => ({
@@ -53,14 +57,18 @@ vi.mock('~/stores/app-detail', () => ({
   useAppDetail: () => ({
     appID: 'app-id',
     loading: false,
+    get runtime() {
+      return runtimeState.value === undefined
+        ? {
+            framework: mocks.appType,
+            mods: { frameworkFile: { supported: true, props: { format: mocks.appType === 'taf' ? 'taf' : 'yaml' } } },
+          }
+        : runtimeState.value;
+    },
     fetchAppDetail: mocks.appDetail,
     appDetail: { appModelSpec: { tafSpec: { fileName: 'old-spec.conf', filePath: '/old-spec' } } },
   }),
 }));
-vi.mock('~/composables/use-spec-field', async () => {
-  const { computed } = await import('vue');
-  return { default: () => ({ appType: computed(() => mocks.appType) }) };
-});
 vi.mock('~/composables/use-leave-confirm', () => ({ default: () => ({ confirmBox: async () => true }) }));
 vi.mock('~/api/modules/v1', () => ({
   AppConfigFileDefsService: {
@@ -117,6 +125,7 @@ const container = { template: '<div><slot /></div>' };
 beforeEach(() => {
   vi.resetAllMocks();
   mocks.appType = 'taf';
+  runtimeState.value = undefined;
   mocks.editorValue = '';
   savedFile = {
     id: 'def-id',
@@ -189,6 +198,84 @@ async function save() {
 }
 
 describe('配置文件信息编辑', () => {
+  it('能力重试成功时，仍选中的普通文件保留内容编辑草稿', async () => {
+    runtimeState.value = null;
+    savedFile = {
+      ...savedFile,
+      id: 'plain-id',
+      configKind: 'plain',
+      content: 'original content',
+      editableContentField: 'content',
+    };
+    mocks.list.mockImplementation(async () => ({
+      items: [{ ...savedFile, id: 'framework-id', configKind: 'framework' }, savedFile],
+    }));
+    const view = await openEditor();
+    await view
+      .findAll('button')
+      .find(button => button.text() === '取消')!
+      .trigger('click');
+    await view.get('[data-section="文件内容"]').trigger('click');
+    mocks.editorValue = 'unsaved content';
+    view.getComponent({ name: 'MsEditor' }).vm.$emit('change', mocks.editorValue);
+    await flushPromises();
+
+    runtimeState.value = { framework: 'taf', mods: { frameworkFile: { supported: true, props: { format: 'taf' } } } };
+    await flushPromises();
+
+    expect(view.getComponent({ name: 'ConfigFileList' }).props('activeId')).toBe('plain-id');
+    expect(mocks.editorValue).toBe('unsaved content');
+    expect(mocks.detail).toHaveBeenCalledTimes(1);
+    await save();
+    const saveDialog = view.getComponent({ name: 'SaveVersionConfirmDialog' });
+    expect(saveDialog.props('isShow')).toBe(true);
+    saveDialog.vm.$emit('confirm', 'keep draft');
+    await flushPromises();
+    expect(mocks.saveContent).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'plain-id', content: 'unsaved content' }),
+      expect.anything(),
+    );
+  });
+
+  it('能力晚到时，仍选中的普通文件保留名称与目录草稿', async () => {
+    runtimeState.value = null;
+    savedFile = { ...savedFile, id: 'plain-id', configKind: 'plain' };
+    const view = await openEditor();
+    await view.findAll('input')[0].setValue('unsaved.conf');
+    await view.findAll('input')[1].setValue('/unsaved');
+
+    runtimeState.value = { framework: 'taf', mods: { frameworkFile: { supported: true, props: { format: 'taf' } } } };
+    await flushPromises();
+
+    expect(mocks.detail).toHaveBeenCalledTimes(1);
+    expect(view.findAll('input')[0].element.value).toBe('unsaved.conf');
+    expect(view.findAll('input')[1].element.value).toBe('/unsaved');
+    await save();
+    expect(mocks.update).toHaveBeenCalledWith(
+      { appID: 'app-id', id: 'plain-id', name: 'unsaved.conf', mountDir: '/unsaved' },
+      { interceptorErr: false, needRes: true },
+    );
+  });
+
+  it('能力过滤确实移除当前框架文件时，切换到普通文件并加载其内容', async () => {
+    const plainFile = { ...savedFile, id: 'plain-id', configKind: 'plain', content: 'plain content' };
+    mocks.list.mockImplementation(async () => ({ items: [savedFile, plainFile] }));
+    mocks.detail.mockImplementation(async ({ id }: { id: string }) => ({
+      item: id === 'plain-id' ? plainFile : savedFile,
+    }));
+    const view = await openEditor();
+    runtimeState.value = {
+      framework: 'taf',
+      mods: { frameworkFile: { supported: false, reasonCode: 'invalid_stack' } },
+    };
+    await flushPromises();
+
+    expect(view.getComponent({ name: 'ConfigFileList' }).props('activeId')).toBe('plain-id');
+    expect(mocks.editorValue).toBe('plain content');
+    expect(mocks.detail).toHaveBeenLastCalledWith({ appID: 'app-id', id: 'plain-id', envName: '' }, { needRes: true });
+    expect(view.findAll('input')).toHaveLength(0);
+  });
+
   it.each([
     ['a', true],
     ['a'.repeat(59) + '.yaml', true],

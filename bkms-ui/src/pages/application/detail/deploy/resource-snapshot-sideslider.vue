@@ -89,18 +89,14 @@
   import {
     AppModelResourceSnapshot,
     GetAppModelResourceSnapshotOutput,
-    GetTafResourceSnapshotRequest,
-    GetTrpcResourceSnapshotRequest,
-    ListTafResourceSnapshotsRequest,
-    ListTrpcResourceSnapshotsRequest,
+    GetBKMSAppResourceSnapshotRequest,
+    ListBKMSAppResourceSnapshotsRequest,
   } from '~/@types/v1/deploy';
   import { DeployService } from '~/api/modules/v1';
   import MsEditor from '~/components/monaco-editor/ms-editor.vue';
+  import { isAppModelAppType } from '~/composables/app-type';
   import { useAppDetail } from '~/stores/app-detail';
   import { useTrpcDeployStore } from '~/stores/trpc-deploy';
-
-  type GetAppModelResourceSnapshotRequest = GetTafResourceSnapshotRequest | GetTrpcResourceSnapshotRequest;
-  type ListAppModelResourceSnapshotsRequest = ListTafResourceSnapshotsRequest | ListTrpcResourceSnapshotsRequest;
 
   // 资源快照树节点：group 为按 kind 分组的文件夹，snapshot 为叶子节点
   interface ResourceSnapshotTreeNode {
@@ -242,19 +238,14 @@
   }
 
   function getResourceSnapshot(snapshotID: string) {
-    const params: GetAppModelResourceSnapshotRequest = {
+    const params: GetBKMSAppResourceSnapshotRequest = {
       ...getCommonParams(),
       snapshotID,
     };
-    return appDetailStore.appType === 'taf'
-      ? DeployService.getTafResourceSnapshot<GetAppModelResourceSnapshotRequest, GetAppModelResourceSnapshotOutput>(
-          params,
-          { needRes: true },
-        )
-      : DeployService.getTrpcResourceSnapshot<GetAppModelResourceSnapshotRequest, GetAppModelResourceSnapshotOutput>(
-          params,
-          { needRes: true },
-        );
+    return DeployService.getBKMSAppResourceSnapshot<
+      GetBKMSAppResourceSnapshotRequest,
+      GetAppModelResourceSnapshotOutput
+    >(params, { needRes: true });
   }
 
   async function handleNodeClick(node: ResourceSnapshotTreeNode) {
@@ -273,14 +264,12 @@
   }
 
   function listResourceSnapshots(page: number, pageSize: number) {
-    const params: ListAppModelResourceSnapshotsRequest = {
+    const params: ListBKMSAppResourceSnapshotsRequest = {
       ...getCommonParams(),
       page,
       pageSize,
     };
-    return appDetailStore.appType === 'taf'
-      ? DeployService.listTafResourceSnapshots(params)
-      : DeployService.listTrpcResourceSnapshots(params);
+    return DeployService.listBKMSAppResourceSnapshots(params);
   }
 
   function resetState() {
@@ -312,7 +301,7 @@
       trpcDeployStore.curEnvItem?.name,
     ],
     ([show, deployID, appID, appType, envName]) => {
-      if (show && deployID && appID && (appType === 'trpc' || appType === 'taf') && envName) {
+      if (show && deployID && appID && isAppModelAppType(String(appType)) && envName) {
         fetchSnapshotList();
       } else {
         resetState();

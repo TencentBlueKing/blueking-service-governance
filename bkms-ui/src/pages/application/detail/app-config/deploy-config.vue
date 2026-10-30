@@ -143,10 +143,9 @@
           @env-modified-change="handleEnvModifiedChange"
         />
 
-        <!-- 开发模式（仅非默认环境显示） -->
-        <div v-if="!currentExtendedEnv?.isDefault">
+        <!-- 开发模式由技术栈能力控制，默认配置不提供环境级开关。 -->
+        <div v-if="devModeSupported && !currentExtendedEnv?.isDefault">
           <DevModeForm
-            ref="devModeFormRef"
             :current-env="currentExtendedEnv"
             @env-modified-change="handleEnvModifiedChange"
           />
@@ -167,6 +166,7 @@
   import { AppSpecService, EnvService } from '~/api/modules/v1';
   import Layout from '~/components/skeleton/skeleton-layout';
   import Skeleton from '~/components/skeleton/skeleton.vue';
+  import { isRuntimeModSupported } from '~/composables/use-app-runtime';
   import { useAppDetail } from '~/stores/app-detail';
   import { useSpaceStore } from '~/stores/space';
 
@@ -187,6 +187,7 @@
   const router = useRouter();
   const spaceStore = useSpaceStore();
   const appDetailStore = useAppDetail();
+  const devModeSupported = computed(() => isRuntimeModSupported(appDetailStore.runtime, 'devMode'));
 
   const APP_CONFIG_ENV_STORAGE_KEY = 'bkms_app_config_deploy_env';
   const DEFAULT_ENV_NAME = '__default__';
@@ -201,7 +202,6 @@
   // MetadataConfig 暴露 handleEnvChange，和资源规格/更新策略一起参与环境切换确认。
   const metadataConfigRef = ref<InstanceType<typeof MetadataConfig>>();
   const networkAccessRef = ref<InstanceType<typeof NetworkAccess>>();
-  const devModeFormRef = ref<InstanceType<typeof DevModeForm>>();
 
   // 各组件的 loading 状态
   const healthProbeLoading = ref(true);
@@ -369,8 +369,6 @@
     if (envSwitchingLoading.value || networkAccessRef.value?.isSaving()) return;
 
     envSwitchingLoading.value = true;
-    const realName = envName === DEFAULT_ENV_NAME ? '' : envName;
-    const isDefault = realName === '';
 
     try {
       // 构造扩展环境对象
@@ -398,10 +396,6 @@
       saveEnvNameToStorage(envName);
 
       await nextTick();
-      // 开发模式仅在非默认环境时加载
-      if (!isDefault) {
-        await devModeFormRef.value?.handleEnvChange(extendedEnv);
-      }
     } finally {
       envSwitchingLoading.value = false;
     }
@@ -424,9 +418,6 @@
 
     await nextTick();
     await handleAppSpecSectionsEnvChange(extendedEnv);
-    if (!extendedEnv.isDefault) {
-      await devModeFormRef.value?.handleEnvChange(extendedEnv);
-    }
     return true;
   }
 

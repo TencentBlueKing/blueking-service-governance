@@ -17,20 +17,20 @@
 -->
 
 <template>
-  <div class="flex justify-center max-w-[1400px] w-full">
+  <div class="w-full">
     <Form
       ref="formRef"
-      class="w-full p-[20px]"
+      class="w-full"
       :label-width="135"
       :model="formData"
       :rules="rules"
     >
       <ToggleCard
-        class="bg-[#fff] rounded-[2px]"
+        class="bg-[#fff] rounded-[2px] shadow-[0_2px_4px_0_#1919290d]"
         :name="$t('基础信息')"
         type="normal"
       >
-        <div class="px-[245px]">
+        <div class="config-fields">
           <Form.FormItem
             class="row-start-2"
             :label="$t('应用名称')"
@@ -53,29 +53,15 @@
               :placeholder="$t('自动生成')"
             />
           </Form.FormItem>
-          <Form.FormItem
-            :label="$t('语言')"
-            property="appModelSpec.trpcSpec.language"
-            required
-          >
-            <Select v-model="formData.appModelSpec.trpcSpec.language">
-              <Select.Option
-                v-for="item in languageOptions"
-                :key="item"
-                :value="item"
-                >{{ item }}</Select.Option
-              >
-            </Select>
-          </Form.FormItem>
         </div>
       </ToggleCard>
       <!-- 构建配置 -->
       <ToggleCard
-        class="mt-[16px] bg-[#fff] rounded-[2px]"
+        class="mt-[16px] bg-[#fff] rounded-[2px] shadow-[0_2px_4px_0_#1919290d]"
         :name="$t('构建配置')"
         type="normal"
       >
-        <div class="px-[245px]">
+        <div class="config-fields">
           <Form.FormItem
             :label="$t('来源')"
             required
@@ -154,7 +140,7 @@
                 <div v-bkloading="{ loading: repoInfoLoading }">
                   <ImageModeSelect
                     v-model="formData.buildConfig.repoBuildConfig.platformBuildConfig.builderImage"
-                    :language="formData.appModelSpec.trpcSpec.language"
+                    :language="formData.language"
                     :repo-info="workspaceRepoInfo"
                     :repo-info-loading="repoInfoLoading"
                     type="builder"
@@ -169,7 +155,7 @@
                 <div v-bkloading="{ loading: repoInfoLoading }">
                   <ImageModeSelect
                     v-model="formData.buildConfig.repoBuildConfig.platformBuildConfig.runnerImage"
-                    :language="formData.appModelSpec.trpcSpec.language"
+                    :language="formData.language"
                     :peer-image-value="formData.buildConfig.repoBuildConfig.platformBuildConfig.builderImage"
                     :repo-info="workspaceRepoInfo"
                     :repo-info-loading="repoInfoLoading"
@@ -274,7 +260,7 @@
               property="buildConfig.repoBuildConfig.dockerBuildArgs"
             >
               <GoBuildArgs
-                :language="formData.appModelSpec.trpcSpec.language"
+                :language="formData.language"
                 :model-value="formData.buildConfig.repoBuildConfig.dockerBuildArgs"
                 @update:model-value="handleDockerBuildArgsChange"
               />
@@ -324,72 +310,57 @@
           </div>
         </div>
       </ToggleCard>
+      <ToggleCard
+        v-if="formData.framework === 'blank'"
+        class="mt-[16px] bg-[#fff] rounded-[2px] shadow-[0_2px_4px_0_#1919290d]"
+        :name="$t('启用配置')"
+        type="normal"
+      >
+        <div class="config-fields">
+          <Form.FormItem :label="$t('启动命令')">
+            <RepeatableInput
+              v-model="formData.appModelSpec.command"
+              :add-text="$t('添加启动命令')"
+            />
+          </Form.FormItem>
+          <Form.FormItem :label="$t('命令参数')">
+            <RepeatableInput
+              v-model="formData.appModelSpec.args"
+              :add-text="$t('添加命令参数')"
+            />
+          </Form.FormItem>
+        </div>
+      </ToggleCard>
     </Form>
   </div>
 </template>
 <script lang="ts" setup>
-  import type { PropType } from 'vue';
   import { computed, onBeforeMount, ref, watch } from 'vue';
 
-  import { Button, Form, Input, Select, Tag } from 'bkui-vue';
+  import { Button, Form, Input, Tag } from 'bkui-vue';
   import { Share } from 'bkui-vue/lib/icon';
   import { cloneDeep } from 'lodash-es';
   import { useI18n } from 'vue-i18n';
-  import { ApiServerService } from '~/api/modules/bkmsserver';
+  import { AppService } from '~/api/modules/v1/app';
   import { WorkspaceService } from '~/api/modules/v1/workspace';
   import { DOC_LINKS } from '~/common/const';
   import { BKMS_REGEX } from '~/common/const';
   import CardRadio, { type CardRadioOption } from '~/components/card-radio.vue';
+  import RepeatableInput from '~/components/repeatable-input.vue';
   import BuildOutputHint from '~/pages/application/components/build-output-hint.vue';
   import GoBuildArgs from '~/pages/application/components/go-build-args.vue';
   import ImageModeSelect from '~/pages/application/components/image-mode-select.vue';
   import { useSpaceStore } from '~/stores/space';
 
   import PipelineConfig from '../components/pipeline-config.vue';
+  import { type BKMSAppForm, createPlatformBuildConfig } from './use-create-app';
 
-  import type { CreateAppRequest } from '~/@types/app';
-  import type { GetAppIDAutoSuffixResponse } from '~/@types/app';
-  import type {
-    AppModelSpecInput,
-    BuildConfigInput,
-    PipelineBuildConfigInput,
-    RepoBuildConfigInput,
-    TrpcSpecInput,
-  } from '~/@types/v1/app';
   import type { BkCIOAuthGitProjectOutput } from '~/@types/v1/bkintegrations-bkci';
 
-  // 表单场景：repoBuildConfig 和 pipelineBuildConfig 在初始化时即赋值，始终存在
-  // dockerBuildArgs 在表单场景下始终为 {} 初始化，不会是 undefined
-  type TrpcFormRequest = Omit<CreateAppRequest, 'appModelSpec' | 'buildConfig'> & {
-    appModelSpec: Omit<AppModelSpecInput, 'trpcSpec'> & {
-      trpcSpec: TrpcSpecInput;
-    };
-    buildConfig: Omit<BuildConfigInput, 'pipelineBuildConfig' | 'repoBuildConfig'> & {
-      pipelineBuildConfig: PipelineBuildConfigInput;
-      repoBuildConfig: Omit<RepoBuildConfigInput, 'dockerBuildArgs'> & {
-        dockerBuildArgs: Record<string, string>;
-        imageBuildMode: 'platform' | 'repositoryDockerfile';
-        platformBuildConfig: {
-          builderImage: string;
-          commands: {
-            build: string[];
-            preBuild: string[];
-            runtimeEnv: string[];
-            start: string;
-          };
-          extraFiles: string[];
-          runnerImage: string;
-        };
-      };
-    };
-  };
-
-  const props = defineProps({
-    form: {
-      type: Object as PropType<CreateAppRequest>,
-      default: () => ({}),
-    },
-  });
+  const props = defineProps<{
+    form: BKMSAppForm;
+    platformBuildSupported: boolean;
+  }>();
 
   const { t } = useI18n();
 
@@ -400,7 +371,7 @@
   /** 仓库信息加载状态：加载期间 ImageModeSelect 显示 loading 并等待就绪后再初始化 */
   const repoInfoLoading = ref(true);
 
-  const formData = ref<TrpcFormRequest>(props.form as TrpcFormRequest);
+  const formData = ref<BKMSAppForm>(props.form);
   const buildPlaceholder = computed(
     () => `${t('留空则使用平台默认：')}\ngo build -o /out/${formData.value.name || '{{ appName }}'} .`,
   );
@@ -457,37 +428,31 @@
     ],
   });
 
-  const languageOptions = ref(['go', 'cpp']);
-
-  // cpp 语言暂不支持平台通用构建，options 中禁用 platform 项并 hover 提示「暂不支持」
-  const buildTypeOptions = computed<CardRadioOption[]>(() => {
-    const isCpp = formData.value.appModelSpec?.trpcSpec?.language === 'cpp';
-    return [
-      {
-        value: 'platform',
-        label: t('平台通用构建'),
-        description: t('无需编写和维护 Dockerfile，平台按标准框架自动完成构建。可按需在「高级命令」补充构建步骤。'),
-        disabled: isCpp,
-        disabledTip: t('暂不支持'),
-      },
-      {
-        value: 'repositoryDockerfile',
-        label: t('使用仓库 Dockerfile'),
-        description: t(
-          '完全使用代码仓库中你自己维护的 Dockerfile 构建，平台不介入生成，构建过程以仓库内的 Dockerfile 为准。',
-        ),
-      },
-    ];
-  });
-
-  // 切换为 cpp 时，若当前为平台通用构建则自动切回「使用仓库 Dockerfile」
-  watch(
-    () => formData.value.appModelSpec?.trpcSpec?.language,
-    newLang => {
-      if (newLang === 'cpp' && formData.value.buildConfig.repoBuildConfig.imageBuildMode === 'platform') {
-        formData.value.buildConfig.repoBuildConfig.imageBuildMode = 'repositoryDockerfile';
-      }
+  const buildTypeOptions = computed<CardRadioOption[]>(() => [
+    ...(props.platformBuildSupported
+      ? [
+          {
+            value: 'platform',
+            label: t('平台通用构建'),
+            description: t('无需编写和维护 Dockerfile，平台按标准框架自动完成构建。可按需在「高级命令」补充构建步骤。'),
+          },
+        ]
+      : []),
+    {
+      value: 'repositoryDockerfile',
+      label: t('使用仓库 Dockerfile'),
+      description: t(
+        '完全使用代码仓库中你自己维护的 Dockerfile 构建，平台不介入生成，构建过程以仓库内的 Dockerfile 为准。',
+      ),
     },
+  ]);
+
+  watch(
+    () => props.platformBuildSupported,
+    supported => {
+      if (!supported) formData.value.buildConfig.repoBuildConfig.imageBuildMode = 'repositoryDockerfile';
+    },
+    { immediate: true },
   );
 
   // ========== 构建方式互斥 ==========
@@ -572,7 +537,7 @@
     }
     // repositoryDockerfile 模式下移除 platformBuildConfig
     if (data.buildConfig.repoBuildConfig.imageBuildMode === 'repositoryDockerfile') {
-      (data.buildConfig.repoBuildConfig as Record<string, unknown>).platformBuildConfig = undefined;
+      data.buildConfig.repoBuildConfig.platformBuildConfig = createPlatformBuildConfig();
     }
     return data;
   }
@@ -614,13 +579,7 @@
     formData.value.buildConfig.repoBuildConfig.repoAlias = data?.alias ?? '';
   }
 
-  /** input失焦时赋值，配合 PipelineParams 组件内watch逻辑，触发params查询 */
-  const isPipelineEnabled = ref<boolean>(false); // 流水线是否可用
-  const setSearchPipelineId = () => {
-    if (formData.value.buildConfig.pipelineBuildConfig) {
-      formData.value.buildConfig.pipelineBuildConfig.params = {}; // 重置流水线配置
-    }
-  };
+  const isPipelineEnabled = ref(false);
 
   const pipelineConfigRef = ref<InstanceType<typeof PipelineConfig> | null>(null);
   const handleSavePipelineParams = (params: Record<string, string>) => {
@@ -628,12 +587,14 @@
     pipelineConfigRef.value?.validate();
   };
 
-  const appIdSuffix = ref('');
+  const appIdSuffix = ref(
+    formData.value.id.startsWith(formData.value.name) ? formData.value.id.slice(formData.value.name.length) : '',
+  );
   // 获取应用 ID 后缀
   async function getAppIDAutoSuffix() {
-    const ret = (await ApiServerService.GetAppIDAutoSuffix({}, { needRes: true }).catch(() => ({
+    const ret = await AppService.getAppIDAutoSuffix({}, { needRes: true }).catch(() => ({
       suffix: '',
-    }))) as GetAppIDAutoSuffixResponse;
+    }));
     appIdSuffix.value = ret.suffix ?? '';
   }
 
@@ -682,8 +643,8 @@
   });
 
   watch(
-    () => formData.value.name,
-    newVal => {
+    [() => formData.value.name, appIdSuffix],
+    ([newVal]) => {
       if (!newVal) {
         formData.value.id = '';
         return;
@@ -694,9 +655,7 @@
   );
 
   onBeforeMount(() => {
-    setSearchPipelineId();
-    getAppIDAutoSuffix();
-    formData.value.buildConfig.sourceType = 'codeRepository';
+    if (!formData.value.id) getAppIDAutoSuffix();
     // 初始化构建方式默认值：空值按 repositoryDockerfile 兼容
     if (!formData.value.buildConfig.repoBuildConfig.imageBuildMode) {
       formData.value.buildConfig.repoBuildConfig.imageBuildMode = 'repositoryDockerfile';
@@ -758,6 +717,10 @@
 </script>
 
 <style scoped>
+  .config-fields {
+    padding-inline: clamp(24px, calc((100vw - 910px) / 2), 245px);
+  }
+
   .equivalent-build-command {
     font-family: Consolas, 'Courier New', monospace;
   }

@@ -19,44 +19,59 @@
 <template>
   <Form
     ref="formRef"
-    class="flex flex-col p-[20px] !max-w-[1400px] w-full"
+    class="flex flex-col p-[20px] max-w-[1400px] min-w-0 w-full"
     :label-width="135"
     :model="formData"
   >
     <ToggleCard
-      class="bg-[#fff] shadow-sm px-[16px]"
-      :name="$t('应用配置')"
+      class="bg-[#fff] rounded-[2px] shadow-[0_2px_4px_0_#1919290d]"
+      :name="$t('启动配置')"
+      type="normal"
     >
-      <Form.FormItem :label="$t('启动命令')">
-        <StartupCommandInput
-          ref="startupCommandRef"
-          class="max-w-[600px]"
-          default-mode="shell"
-          exec-background
-          :value="formData"
-        />
-      </Form.FormItem>
-      <Form.FormItem
-        class="!mb-0"
-        :label="$t('环境变量')"
-      >
-        <KeyValue
-          v-model="formData.envVars"
-          class="max-w-[600px]"
-          :key-placeholder="$t('请输入变量名')"
-          textarea
-          :value-placeholder="$t('请输入变量值')"
-        />
-      </Form.FormItem>
+      <div class="config-fields pb-[24px]">
+        <Form.FormItem :label="$t('启动命令')">
+          <StartupCommandInput
+            ref="startupCommandRef"
+            default-mode="shell"
+            exec-background
+            :value="formData"
+          />
+        </Form.FormItem>
+        <Form.FormItem
+          class="!mb-0"
+          :label="$t('环境变量')"
+        >
+          <KeyValue
+            v-model="formData.envVars"
+            :key-placeholder="$t('请输入变量名')"
+            textarea
+            :value-placeholder="$t('请输入变量值')"
+          />
+        </Form.FormItem>
+      </div>
     </ToggleCard>
     <ToggleCard
-      :class="['bg-[#fff] shadow-sm p-[16px] mt-[16px] mb-[20px] min-h-0', { 'flex-1 h-full': isYamlCardExpanded }]"
-      content-class="h-full px-[24px] flex flex-col"
+      :class="[
+        'bg-[#fff] rounded-[2px] overflow-hidden shadow-[0_2px_4px_0_#1919290d] mt-[16px] min-h-0',
+        { 'flex-1 h-full': isYamlCardExpanded },
+      ]"
+      content-class="h-full px-[24px] pb-[24px] flex flex-col"
       :name="$t('框架配置')"
+      type="normal"
       @change="handleYamlCardChange"
     >
+      <template #header-right>
+        <IconTextButton
+          v-show="isYamlCardExpanded"
+          :active="showEnvVar"
+          class="text-[12px] !pr-0"
+          icon="bkms-icon bkms-icon-variable"
+          :text="$t('环境变量')"
+          @click="toggleEnvVarShow()"
+        />
+      </template>
       <Form.FormItem
-        class="mb-0"
+        class="mb-[16px]"
         :label="$t('配置文件路径')"
         :label-width="110"
         property="tafSpec.filePath"
@@ -67,18 +82,6 @@
           class="max-w-[600px]"
         />
       </Form.FormItem>
-      <FlexRow>
-        <template #right>
-          <IconTextButton
-            v-show="isYamlCardExpanded"
-            :active="showEnvVar"
-            class="text-[12px] p-[10px] transform-translate-y-[-50%]"
-            icon="bkms-icon bkms-icon-variable"
-            :text="$t('环境变量')"
-            @click="toggleEnvVarShow()"
-          />
-        </template>
-      </FlexRow>
       <ResizeLayout
         ref="resizeLayoutRef"
         :border="false"
@@ -118,6 +121,7 @@
                 ref="msEditorRef"
                 v-model="formData.tafSpec.fileContent"
                 class="h-full"
+                :lang="editorLang || 'xml'"
                 @error="handleEditorErr"
               >
                 <template #title>
@@ -199,7 +203,6 @@
   import { cloneDeep } from 'lodash-es';
   import { useI18n } from 'vue-i18n';
   import { ApiServerService } from '~/api/modules/bkmsserver';
-  import FlexRow from '~/components/flex-row.vue';
   import KeyValue from '~/components/key-value.vue';
   import MsEditor from '~/components/monaco-editor/ms-editor.vue';
   import StartupCommandInput from '~/components/startup-command-input.vue';
@@ -209,6 +212,7 @@
   import type { IMonacoEditorErrorMarkerItem } from '~/common/util';
 
   interface IProps {
+    editorLang?: string;
     value: TafAppModelSpecForm;
   }
 
@@ -380,3 +384,9 @@
     resetStatus,
   });
 </script>
+
+<style scoped>
+  .config-fields {
+    padding-inline: clamp(24px, calc((100vw - 910px) / 2), 245px);
+  }
+</style>

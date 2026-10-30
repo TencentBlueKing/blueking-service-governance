@@ -16,30 +16,36 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
-import { computed } from 'vue';
-
+import { cloneDeep } from 'lodash-es';
 import { AppService } from '~/api/modules/v1';
+import { APP_TYPES } from '~/composables/app-type';
 import { useAppDetail } from '~/stores/app-detail';
 
+import type { AppModelSpecInput, UpdateAppStartupConfigInput } from '~/@types/v1/app';
+
 /**
- * 根据应用类型获取对应的 spec 字段名和更新 API
+ * 根据真实应用类型保存启动配置。
  */
 export default function useSpecField() {
   const appDetailStore = useAppDetail();
 
-  const appType = computed(() => appDetailStore.appType);
-
-  // 根据应用类型获取对应的 spec 字段名
-  const specFieldName = computed(() => (appType.value === 'taf' ? 'tafSpec' : 'trpcSpec'));
-
-  // 根据应用类型获取对应的 API 更新方法
-  const updateSpecApi = computed(() => {
-    return appType.value === 'taf' ? AppService.updateAppTafSpec : AppService.updateAppTrpcSpec;
-  });
+  // 新应用只更新启动字段，存量应用仍通过原 spec 接口保存完整配置。
+  async function updateStartupConfig(
+    startup: Required<Pick<UpdateAppStartupConfigInput, 'args' | 'command' | 'shCommand'>>,
+  ) {
+    const appID = appDetailStore.appID;
+    const appType = appDetailStore.appType;
+    if (appType === APP_TYPES.BKMS_APP) {
+      return AppService.updateAppStartupConfig({ appID, ...startup });
+    }
+    const currentSpec = cloneDeep(appDetailStore.appDetail?.appModelSpec) as AppModelSpecInput | undefined;
+    const appModelSpec: AppModelSpecInput = { ...currentSpec, ...startup };
+    if (appType === APP_TYPES.TAF) return AppService.updateAppTafSpec({ appID, appModelSpec });
+    if (appType === APP_TYPES.TRPC) return AppService.updateAppTrpcSpec({ appID, appModelSpec });
+    throw new Error('Application does not support startup configuration');
+  }
 
   return {
-    appType,
-    specFieldName,
-    updateSpecApi,
+    updateStartupConfig,
   };
 }

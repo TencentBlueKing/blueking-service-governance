@@ -434,16 +434,15 @@
     InstanceExecuteTrpcAdminCmdResultOutputObj,
     ListTrpcAdminCmdsOutputObjs,
   } from '~/@types/v1/instance';
+  import { type Config } from '~/api/interceptors';
   import { InstanceService } from '~/api/modules/v1';
   import ToggleCard from '~/components/toggle-card.vue';
+  import { isRuntimeModSupported } from '~/composables/use-app-runtime';
   import { useAppDetail } from '~/stores/app-detail';
   import { useTrpcDeployStore } from '~/stores/trpc-deploy';
 
-  import { DeployableAppType, useDeployAPIs } from '../../use-deploy';
-
   type InstanceExecuteAdminCmdResult =
-    | InstanceExecuteTafAdminCmdResultOutputObj
-    | InstanceExecuteTrpcAdminCmdResultOutputObj;
+    InstanceExecuteTafAdminCmdResultOutputObj | InstanceExecuteTrpcAdminCmdResultOutputObj;
 
   interface IProps {
     data: string[];
@@ -466,8 +465,8 @@
 
   const appDetail = useAppDetail();
   const trpcDeployStore = useTrpcDeployStore();
-  const isTrpcApp = computed(() => appDetail?.appType === 'trpc');
-  const deployAPIs = useDeployAPIs(appDetail.appType as DeployableAppType);
+  const isTrpcApp = computed(() => appDetail.runtime?.framework === 'trpc');
+  const adminCommandSupported = computed(() => isRuntimeModSupported(appDetail.runtime, 'adminCommand'));
 
   const command = ref<string>('');
   const commandMethod = ref<'GET' | 'POST' | 'PUT'>('GET');
@@ -503,6 +502,7 @@
   };
 
   async function handleGetCommands() {
+    if (!adminCommandSupported.value || !isTrpcApp.value) return;
     loading.value = true;
     adminPrecheckFailed.value = false;
     try {
@@ -532,8 +532,22 @@
   const executeFullList = ref<InstanceExecuteAdminCmdResult[]>([]);
   const successNum = ref<number>(0);
   const failedNum = ref<number>(0);
+  function executeAdminCommand(params: Record<string, unknown>, config: Config) {
+    const common = {
+      appID: appDetail.appID,
+      envName: trpcDeployStore.curEnvItem!.name!,
+      instanceIDs: props.data,
+    };
+    return isTrpcApp.value
+      ? InstanceService.executeTrpcAdminCmd(
+          { ...common, url: command.value, method: commandMethod.value, ...params },
+          config,
+        )
+      : InstanceService.executeTafAdminCmd({ ...common, command: command.value }, config);
+  }
   /** 执行命令 */
   async function handleExecuteCommand() {
+    if (!adminCommandSupported.value || !['trpc', 'taf'].includes(appDetail.runtime?.framework || '')) return;
     let params = {} as Record<string, unknown>;
     if (isTrpcApp.value) {
       const data = tableData.value.reduce(
@@ -564,7 +578,7 @@
     }
 
     executeLoading.value = true;
-    deployAPIs.executeAdminCmd!(
+    executeAdminCommand(
       {
         appID: appDetail.appID,
         envName: trpcDeployStore.curEnvItem!.name,

@@ -23,8 +23,6 @@ export type TrpcFormData = {
   启动命令: string[];
   命令参数: string[];
   应用名称: string;
-  来源: 'git' | 'pipeline';
-  语言: string;
   默认分支: string;
 };
 
@@ -38,20 +36,10 @@ export const TrpcFormSchema: Schema<TrpcFormData> = {
     selector: '代码库',
     type: 'select',
   },
-  语言: {
-    selector: '语言',
-    type: 'select',
-    default: 'go',
-  },
   默认分支: {
     selector: '默认分支',
     type: 'input',
-    default: '',
-  },
-  来源: {
-    selector: '源码来源',
-    type: 'select',
-    default: 'git',
+    default: 'master',
   },
   启动命令: {
     selector: '启动命令',

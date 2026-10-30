@@ -15,14 +15,25 @@
  * We undertake not to change the open source license (MIT license) applicable
  * to the current version of the project delivered to anyone in the future.
  */
+
 import BasePage from './base.page';
 
 export default class DeployPage extends BasePage {
   async chooseAppType(label: string) {
-    await this.page.getByText(label).first().click();
+    const labels: Record<string, string> = {
+      TRPC: 'tRPC',
+      'tRPC 应用': 'tRPC',
+      'Helm 应用': 'Helm Chart',
+      'Agones 应用': 'Agones',
+    };
+    const templateLabel = labels[label] || label;
+    await this.page
+      .getByRole('button', { name: new RegExp(templateLabel) })
+      .first()
+      .click();
   }
 
   async goto() {
-    await this.page.goto(`/#/${this.config.space}/app`);
+    await this.page.goto('/#/' + this.config.space + '/app');
   }
 }

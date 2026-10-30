@@ -1,0 +1,60 @@
+<!--
+ - TencentBlueKing is pleased to support the open source community by making
+ - 蓝鲸智云 - 服务治理 (BlueKing Service Governance) available.
+ - Copyright (C) Tencent. All rights reserved.
+ - Licensed under the MIT License (the "License"); you may not use this file except
+ - in compliance with the License. You may obtain a copy of the License at
+ -
+ -  http://opensource.org/licenses/MIT
+ -
+ - Unless required by applicable law or agreed to in writing, software distributed under
+ - the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
+ - either express or implied. See the License for the specific language governing permissions and
+ - limitations under the License.
+ -
+ - We undertake not to change the open source license (MIT license) applicable
+ - to the current version of the project delivered to anyone in the future.
+-->
+
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <rect width="64" height="64" rx="8" fill="#1A1A1A"/>
+  <defs>
+    <linearGradient id="bkms-nodejs-g1" x1="30.33" y1="8.56" x2="14.9" y2="44.7" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#3F8B3D"/>
+      <stop offset=".64" stop-color="#3F873F"/>
+      <stop offset=".93" stop-color="#3DA92E"/>
+      <stop offset="1" stop-color="#3DAE2B"/>
+    </linearGradient>
+    <linearGradient id="bkms-nodejs-g2" x1="18.8" y1="26.8" x2="68" y2=".4" gradientUnits="userSpaceOnUse">
+      <stop offset=".14" stop-color="#3F873F"/>
+      <stop offset=".4" stop-color="#52A044"/>
+      <stop offset=".71" stop-color="#64B749"/>
+      <stop offset=".91" stop-color="#6ABF4B"/>
+    </linearGradient>
+    <linearGradient id="bkms-nodejs-g3" x1=".25" y1="24.5" x2="44" y2="24.5" gradientUnits="userSpaceOnUse">
+      <stop offset=".09" stop-color="#6ABF4B"/>
+      <stop offset=".29" stop-color="#64B749"/>
+      <stop offset=".6" stop-color="#52A044"/>
+      <stop offset=".86" stop-color="#3F873F"/>
+    </linearGradient>
+    <clipPath id="bkms-nodejs-clip">
+      <path d="M22.873.417a2.36 2.36 0 0 0-2.348 0L1.151 11.669C.414 12.086 0 12.873 0 13.707v22.551c0 .834.46 1.621 1.15 2.038l19.375 11.253a2.36 2.36 0 0 0 2.348 0l19.374-11.253c.737-.417 1.15-1.204 1.15-2.038V13.707c0-.834-.46-1.62-1.15-2.038z"/>
+    </clipPath>
+  </defs>
+  <g transform="translate(10.75 7.55) scale(0.977)">
+    <path
+      fill="url(#bkms-nodejs-g1)"
+      d="M22.873.417a2.36 2.36 0 0 0-2.348 0L1.151 11.669C.414 12.086 0 12.873 0 13.707v22.551c0 .834.46 1.621 1.15 2.038l19.375 11.253a2.36 2.36 0 0 0 2.348 0l19.374-11.253c.737-.417 1.15-1.204 1.15-2.038V13.707c0-.834-.46-1.62-1.15-2.038z"
+    />
+    <path
+      fill="url(#bkms-nodejs-g2)"
+      clip-path="url(#bkms-nodejs-clip)"
+      d="m21.699-1.047 21.506 12.995L21.7 51.073.153 38.055z"
+    />
+    <path
+      fill="url(#bkms-nodejs-g3)"
+      clip-path="url(#bkms-nodejs-clip)"
+      d="M21.699-1.047.153 11.948l21.546 39.125 21.506-13.018z"
+    />
+  </g>
+</svg>

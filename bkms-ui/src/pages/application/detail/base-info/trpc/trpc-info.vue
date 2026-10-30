@@ -86,10 +86,14 @@
             >
               <template #value>
                 <div class="shrink-0">
-                  <TypeIcon :type="appType">
+                  <TypeIcon
+                    :framework="appData?.framework"
+                    :language="appData?.language"
+                    :type="appType"
+                  >
                     <template #label>
                       <span class="text-[#313238] leading-[20px] text-[14px] font-bold ml-[6px]">
-                        {{ appType === 'trpc' ? $t('tRPC 应用') : $t('TAF 应用') }}
+                        {{ $t(getAppDisplayLabel(getAppDisplayKind(appData || { type: appType }))) }}
                       </span>
                     </template>
                   </TypeIcon>
@@ -392,7 +396,7 @@
         v-model:builder-data="builderData"
         v-model:is-show="showBuilderDialog"
         :app-name="appData?.name"
-        :language="appData?.appModelSpec?.trpcSpec?.language"
+        :language="appData?.language"
         :type="builderType"
         @confirm="handleUpdateApp('buildConfig', builderData)"
       />
@@ -411,6 +415,7 @@
   import { BuildsService } from '~/api/modules/v1';
   import Layout from '~/components/skeleton/skeleton-layout';
   import ToggleCard from '~/components/toggle-card.vue';
+  import { getAppDisplayKind, getAppDisplayLabel } from '~/composables/app-type';
   import { getTagConfigDisplayText, normalizeTagConfig } from '~/composables/use-tag-config';
   import DeleteAppDialog from '~/pages/application/components/delete-app-dialog.vue';
   import TypeIcon from '~/pages/application/components/type-icon.vue';

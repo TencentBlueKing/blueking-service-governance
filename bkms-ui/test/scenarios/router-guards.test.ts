@@ -61,7 +61,8 @@ function setHistory(back: null | string) {
 /** 挂一个空 app 安装真实 router 模块，取出 router 实例（install 内部自建 router，需经 app 获取） */
 async function setup(initial?: Record<string, unknown> | string) {
   const app = createApp({ render: () => null });
-  installRouter({ app } as never);
+  const context = { app };
+  installRouter(context as never);
   const router = app.config.globalProperties.$router as Router;
   if (initial) await router.push(initial as string);
   return { app, router };
@@ -112,7 +113,8 @@ describe('路由：智能返回', () => {
 
   it('当上级路由无名称时，应回退到它的默认子路由', async () => {
     const { router } = await setup('/ws-1/app/create/trpc');
-    expect(router.currentRoute.value.name).toBe('createTrpcTemplateApp');
+    expect(router.currentRoute.value.name).toBe('createBKMSAppTemplateApp');
+    expect(router.currentRoute.value.query).toEqual({ framework: 'trpc', language: 'go' });
     setHistory(null);
     (router.back as unknown as () => void)();
     await waitFor(() => expect(router.currentRoute.value.name).toBe('createApplication'));

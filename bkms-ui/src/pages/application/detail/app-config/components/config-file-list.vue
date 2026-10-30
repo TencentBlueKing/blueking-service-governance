@@ -94,7 +94,12 @@
             </div>
           </div>
         </template>
-        <div class="px-[12px] py-[6px] text-[12px] text-[#979BA5]">{{ $t('框架配置文件') }}</div>
+        <div
+          v-if="frameworkFileSupported"
+          class="px-[12px] py-[6px] text-[12px] text-[#979BA5]"
+        >
+          {{ $t('框架配置文件') }}
+        </div>
         <FileItem
           v-for="file in frameworkFiles"
           :key="file.id"
@@ -104,7 +109,9 @@
         />
 
         <div class="mt-[8px] flex items-center justify-between px-[12px] py-[6px]">
-          <span class="text-[12px] text-[#979BA5]">{{ $t('其他配置文件') }}（{{ plainFiles.length }}）</span>
+          <span class="text-[12px] text-[#979BA5]"
+            >{{ $t(frameworkFileSupported ? '其他配置文件' : '配置文件') }}（{{ plainFiles.length }}）</span
+          >
           <Button
             :disabled="createDisabled"
             text
@@ -138,7 +145,9 @@
           >
             <template #title><span /></template>
             <template #description>
-              <span class="text-[12px] leading-[20px] text-[#979BA5]">{{ $t('暂无其他配置文件，可点击新建') }}</span>
+              <span class="text-[12px] leading-[20px] text-[#979BA5]">
+                {{ $t(frameworkFileSupported ? '暂无其他配置文件，可点击新建' : '暂无配置文件，可点击新建') }}
+              </span>
             </template>
           </Exception>
         </div>
@@ -164,9 +173,10 @@
       activeId?: string;
       createDisabled?: boolean;
       files: ConfigFileListItem[];
+      frameworkFileSupported?: boolean;
       loading?: boolean;
     }>(),
-    { activeId: '', createDisabled: false, loading: false },
+    { activeId: '', createDisabled: false, frameworkFileSupported: true, loading: false },
   );
 
   const emit = defineEmits<{
@@ -175,7 +185,9 @@
     select: [id: string];
   }>();
 
-  const frameworkFiles = computed(() => props.files.filter(file => file.configKind === 'framework'));
+  const frameworkFiles = computed(() =>
+    props.frameworkFileSupported ? props.files.filter(file => file.configKind === 'framework') : [],
+  );
   const plainFiles = computed(() => props.files.filter(file => file.configKind === 'plain'));
   const configFileDocUrl = `${import.meta.env.BK_DOC_URL}${DOC_LINKS.CONFIG_FILE_GUIDE}`;
 </script>

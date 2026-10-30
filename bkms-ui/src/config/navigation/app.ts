@@ -287,6 +287,7 @@ export const HELM_NAVIGATION: NavigationItem[] = [
  * 应用导航配置映射
  */
 export const appNavigationConfig: Record<AppNavigationType, NavigationItem[]> = {
+  bkmsApp: TRPC_NAVIGATION,
   taf: TRPC_NAVIGATION,
   trpc: TRPC_NAVIGATION,
   helm: HELM_NAVIGATION,

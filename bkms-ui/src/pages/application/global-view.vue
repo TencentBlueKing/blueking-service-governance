@@ -626,6 +626,8 @@
         classes: 'inline-flex shrink-0',
         showLabel: false,
         type: row.type,
+        framework: row.framework,
+        language: row.language,
       }),
       h(
         Button,

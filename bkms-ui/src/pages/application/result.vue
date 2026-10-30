@@ -114,7 +114,7 @@
   import { Alert, Button, Loading } from 'bkui-vue';
   import { Close, Success } from 'bkui-vue/lib/icon';
   import { useRouter } from 'vue-router';
-  import { type IAppType, APP_TYPES, isHelmLikeAppType } from '~/composables/app-type';
+  import { type IAppType, isHelmLikeAppType } from '~/composables/app-type';
   import { useAppDetail } from '~/stores/app-detail';
 
   export interface IResultData {
@@ -146,14 +146,15 @@
     router.push({ name: 'app' });
   }
 
-  // 仅trpc应用有跳转至详情button
+  // 使用创建响应中的真实类型进入应用详情。
   function handleToBasicInfo() {
+    appDetailStore.reset();
     router.push({
       name: 'detail',
       params: {
         name: props.data?.name,
         menuName: 'info',
-        type: APP_TYPES.TRPC,
+        type: props.appType,
       },
     });
   }

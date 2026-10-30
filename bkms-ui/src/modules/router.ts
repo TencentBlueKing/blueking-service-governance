@@ -24,10 +24,9 @@ import NotFound from '~/pages/app/404.vue';
 import Application from '~/pages/application/application.vue';
 import createApplication from '~/pages/application/create.vue';
 import detail from '~/pages/application/detail.vue';
+import createBKMSAppTemplate from '~/pages/application/template/bkms-app/index.vue';
 import createHelmTemplateApp from '~/pages/application/template/helm-chart/index.vue';
 import templateAppIndex from '~/pages/application/template/index.vue';
-import createTAFTemplate from '~/pages/application/template/taf/index.vue';
-import createTRPCTemplate from '~/pages/application/template/trpc/index.vue';
 import SpaceLayout from '~/pages/basic/space-layout.vue';
 import clusterPortPool from '~/pages/env/cluster-components/port-pool/index.vue';
 import clusterHealthDiagnosis from '~/pages/env/cluster-health-diagnosis/cluster-health-diagnosis.vue';
@@ -111,9 +110,19 @@ const routes = setupLayouts([
             },
           },
           {
+            path: 'bkmsapp',
+            name: 'createBKMSAppTemplateApp',
+            component: createBKMSAppTemplate,
+            meta: { menuId: 'APP' },
+          },
+          {
             path: 'trpc',
             name: 'createTrpcTemplateApp',
-            component: createTRPCTemplate,
+            redirect: to => ({
+              name: 'createBKMSAppTemplateApp',
+              params: to.params,
+              query: { framework: 'trpc', language: 'go' },
+            }),
             meta: {
               menuId: 'APP',
             },
@@ -129,7 +138,11 @@ const routes = setupLayouts([
           {
             path: 'taf',
             name: 'createTAFTemplateApp',
-            component: createTAFTemplate,
+            redirect: to => ({
+              name: 'createBKMSAppTemplateApp',
+              params: to.params,
+              query: { framework: 'taf', language: 'cpp' },
+            }),
             meta: {
               menuId: 'APP',
             },

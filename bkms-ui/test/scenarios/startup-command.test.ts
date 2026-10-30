@@ -37,6 +37,7 @@ import type { AppModelSpecInput } from '~/@types/v1/app';
 const mocks = vi.hoisted(() => ({
   updateTrpc: vi.fn(),
   updateTaf: vi.fn(),
+  updateStartup: vi.fn(),
   getApp: vi.fn(),
   message: vi.fn(),
 }));
@@ -47,7 +48,11 @@ vi.mock('bkui-vue', async importOriginal => ({
   Message: mocks.message,
 }));
 vi.mock('~/api/modules/v1', () => ({
-  AppService: { updateAppTrpcSpec: mocks.updateTrpc, updateAppTafSpec: mocks.updateTaf },
+  AppService: {
+    updateAppTrpcSpec: mocks.updateTrpc,
+    updateAppTafSpec: mocks.updateTaf,
+    updateAppStartupConfig: mocks.updateStartup,
+  },
 }));
 vi.mock('~/api/modules/v1/app', () => ({ AppService: {} }));
 vi.mock('~/api/modules/bkmsserver', () => ({ ApiServerService: { GetApp: mocks.getApp } }));
@@ -76,6 +81,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.updateTrpc.mockResolvedValue(undefined);
   mocks.updateTaf.mockResolvedValue(undefined);
+  mocks.updateStartup.mockResolvedValue(undefined);
 });
 
 describe('启动命令输入', () => {
@@ -213,7 +219,7 @@ describe('创建应用的启动配置', () => {
   });
 });
 
-function mountProgram(type: 'taf' | 'trpc', spec: AppModelSpecInput = EXEC_SPEC) {
+function mountProgram(type: 'bkmsApp' | 'taf' | 'trpc', spec: AppModelSpecInput = EXEC_SPEC) {
   const pinia = createPinia();
   setActivePinia(pinia);
   const store = useAppDetail();
@@ -229,6 +235,44 @@ function mountProgram(type: 'taf' | 'trpc', spec: AppModelSpecInput = EXEC_SPEC)
 }
 
 describe('部署启动配置', () => {
+  it('bkmsApp 使用平铺启动接口提交完整字段，不带框架配置与环境变量', async () => {
+    const { wrapper, ui } = mountProgram('bkmsApp', {
+      ...EXEC_SPEC,
+      envVars: [{ key: 'PORT', value: '8000' }],
+    });
+    mocks.getApp.mockResolvedValue({ id: 'app-1', type: 'bkmsApp', appModelSpec: { shCommand: SCRIPT } });
+    await userEvent.click(ui.getByRole('button', { name: '编辑' }));
+    await userEvent.click(ui.getByText('shell', { exact: true }));
+    await wrapper.get('textarea').setValue(SCRIPT);
+    await userEvent.click(ui.getByRole('button', { name: '保存' }));
+    await waitFor(() =>
+      expect(mocks.updateStartup).toHaveBeenCalledWith({
+        appID: 'app-1',
+        command: [],
+        args: [],
+        shCommand: SCRIPT,
+      }),
+    );
+    expect(mocks.updateTrpc).not.toHaveBeenCalled();
+    expect(mocks.updateTaf).not.toHaveBeenCalled();
+  });
+
+  it('bkmsApp 从脚本切换到空命令时完整清空三项启动字段', async () => {
+    const { ui } = mountProgram('bkmsApp', { shCommand: SCRIPT });
+    mocks.getApp.mockResolvedValue({ id: 'app-1', type: 'bkmsApp', appModelSpec: {} });
+    await userEvent.click(ui.getByRole('button', { name: '编辑' }));
+    await userEvent.click(ui.getByText('exec', { exact: true }));
+    await userEvent.click(ui.getByRole('button', { name: '保存' }));
+    await waitFor(() =>
+      expect(mocks.updateStartup).toHaveBeenCalledWith({
+        appID: 'app-1',
+        command: [],
+        args: [],
+        shCommand: '',
+      }),
+    );
+  });
+
   it.each(['trpc', 'taf'] as const)('%s 从 exec 保存为 shell，清空旧字段并保留其他配置', async type => {
     const frameworkSpec =
       type === 'trpc' ? { trpcSpec: { language: 'go' as const } } : { tafSpec: { fileContent: 'config' } };

@@ -25,6 +25,24 @@
       v-bkloading="{ loading: detailLoading }"
       class="h-full min-h-full"
     >
+      <Alert
+        v-if="isAppModelAppType(type) && appDetailStore.runtimeError"
+        class="mx-[24px] mt-[16px]"
+        theme="warning"
+      >
+        <template #title>
+          <div class="flex items-center gap-[12px]">
+            <span>{{ $t('应用能力加载失败，部分功能暂不可用') }}</span>
+            <Button
+              :loading="appDetailStore.runtimeLoading"
+              text
+              theme="primary"
+              @click="appDetailStore.fetchAppRuntimeMods()"
+              >{{ $t('重试') }}</Button
+            >
+          </div>
+        </template>
+      </Alert>
       <RouterView
         v-if="!detailLoading"
         :key="routerViewKey"
@@ -52,6 +70,8 @@
             <div class="flex items-center min-w-[43px] overflow-hidden">
               <TypeIcon
                 classes="min-w-[43px] inline-block"
+                :framework="currentApplication?.framework"
+                :language="currentApplication?.language"
                 :show-label="false"
                 :type="type"
               />
@@ -91,7 +111,9 @@
         >
           <div class="flex items-center gap-[5px]">
             <TypeIcon
-              :classes="`min-w-[20px] inline-block ${item.type === 'trpc' ? 'text-[6px]' : 'text-[19px]'}`"
+              classes="min-w-[20px] inline-block"
+              :framework="item.framework"
+              :language="item.language"
               :show-label="false"
               :type="item.type"
             />
@@ -106,11 +128,11 @@
 <script setup lang="ts">
   import { computed, onMounted, ref, watch } from 'vue';
 
-  import { Button, Loading, Select } from 'bkui-vue';
+  import { Alert, Button, Loading, Select } from 'bkui-vue';
   import { AngleDownFill, Plus } from 'bkui-vue/lib/icon';
   import { onBeforeRouteUpdate, useRoute, useRouter } from 'vue-router';
   import { AppService } from '~/api/modules/v1/app';
-  import { isHelmLikeAppType } from '~/composables/app-type';
+  import { isAppModelAppType, isHelmLikeAppType } from '~/composables/app-type';
   import { getMenuList } from '~/composables/use-router-menu';
   import { useAppDetail } from '~/stores/app-detail';
   import { useSpaceStore } from '~/stores/space';
@@ -167,10 +189,11 @@
   const currentApplication = computed(() =>
     applicationList.value.find(item => item.name === currentApplicationName.value),
   );
-  // 优先使用当前应用的 type，确保切换应用时能立即响应
-  // 只有在应用信息还未加载时才使用路由参数中的 type
+  // 当前应用详情是真实类型来源；切换过程先使用列表中的类型。
   const type = computed(() => {
-    const appType = currentApplication.value?.type;
+    const detail = appDetailStore.appDetail;
+    const appType =
+      detail?.id && detail.id === currentApplication.value?.id ? detail.type : currentApplication.value?.type;
     const routeType = router.currentRoute.value.params.type as string;
     return (appType || routeType || '') as AppNavigationType;
   });
@@ -277,7 +300,7 @@
         appDetailStore.updateAppType(type);
       }
       // 如果是trpc或者helm，且key在notHas中，跳转到基本信息
-      if (type === 'trpc' && TrpcSpecNotHas.includes(key as string)) {
+      if (isAppModelAppType(type) && TrpcSpecNotHas.includes(key as string)) {
         activeKey.value = 'info';
       } else if (isHelmLikeAppType(type) && HelmSpecNotHas.includes(key as string)) {
         activeKey.value = 'info';
@@ -322,6 +345,8 @@
     // 先置 loading 卸载子页：若等 push 完成后再 loading，routerViewKey 会先变并挂载一次，
     // 随后 loading 再卸/挂，网络访问等页接口会打两次。
     detailLoading.value = true;
+    // 路由同步也可能等待；先切换应用作用域，立即失效旧详情请求与能力。
+    appDetailStore.updateAppID(currentAppId);
     // 捕获本轮看到的 sync Promise；不清空他人的最新 pending，避免快速连切时抢清空
     const routeSync = pendingRouteSync;
     if (routeSync) {
@@ -331,12 +356,12 @@
         pendingRouteSync = null;
       }
     }
-    // 快速连切 A→B→C：过期回调在此退出，避免 updateAppID 把已切到 C 的 store 写回 B
+    // 快速连切 A→B→C：过期回调在此退出，避免为旧应用再次发起请求。
     if (generation !== appSwitchGeneration) {
       return;
     }
-    appDetailStore.updateAppID(currentAppId);
     try {
+      if (isAppModelAppType(app?.type)) void appDetailStore.fetchAppRuntimeMods(currentAppId);
       await appDetailStore.fetchAppDetail(currentAppId);
     } finally {
       // 仅最新一轮且 appID 仍匹配时解锁；过期请求的覆盖由 store 层 appID 校验丢弃

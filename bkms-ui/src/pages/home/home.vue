@@ -177,6 +177,8 @@
                         <div class="flex items-center leading-[22px]">
                           <TypeIcon
                             classes="min-w-[40px] inline-block"
+                            :framework="row.framework"
+                            :language="row.language"
                             :show-label="false"
                             :type="row.type"
                           />

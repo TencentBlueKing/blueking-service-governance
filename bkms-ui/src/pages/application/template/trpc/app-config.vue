@@ -17,15 +17,15 @@
 -->
 
 <template>
-  <div class="flex flex-col p-[20px] !max-w-[1400px] w-full">
+  <div class="flex flex-col p-[20px] max-w-[1400px] min-w-0 w-full">
     <ToggleCard
-      class="bg-[#fff] shadow-sm px-[16px]"
-      content-class="overflow-x-auto"
-      :name="$t('应用配置')"
+      class="bg-[#fff] rounded-[2px] shadow-[0_2px_4px_0_#1919290d]"
+      :name="$t('启动配置')"
+      type="normal"
     >
       <Form
         ref="formRef"
-        class="mx-auto w-[calc(100%-490px)] min-w-[640px]"
+        class="config-fields pb-[24px]"
         :label-width="135"
         :model="formData"
       >
@@ -51,16 +51,20 @@
       </Form>
     </ToggleCard>
     <ToggleCard
-      :class="['bg-[#fff] shadow-sm p-[16px] mt-[16px]', { 'h-full': isYamlCardExpanded }]"
-      content-class="h-full"
+      :class="[
+        'bg-[#fff] rounded-[2px] overflow-hidden shadow-[0_2px_4px_0_#1919290d] mt-[16px]',
+        { 'h-full': isYamlCardExpanded },
+      ]"
+      content-class="!mt-0 h-full p-[24px]"
       :name="editorTitle"
+      type="normal"
       @change="handleYamlCardChange"
     >
       <template #header-right>
         <IconTextButton
           v-show="isYamlCardExpanded"
           :active="showEnvVar"
-          class="text-[12px] p-[10px]"
+          class="text-[12px] !pr-0"
           icon="bkms-icon bkms-icon-variable"
           :text="$t('环境变量')"
           @click="toggleEnvVarShow()"
@@ -105,7 +109,8 @@
               <MsEditor
                 ref="msEditorRef"
                 class="h-full"
-                :model-value="builderTemplate"
+                :lang="editorLang"
+                :model-value="content ?? builderTemplate"
                 :title="editorTitle"
                 @error="handleEditorErr"
               />
@@ -125,6 +130,8 @@
   import builderTemplate from './trpc-go-template.yaml?raw';
 
   const props = defineProps<{
+    content?: string;
+    editorLang?: string;
     editorTitle?: string;
     value: { appModelSpec: AppModelSpecInput };
   }>();
@@ -147,7 +154,7 @@
   }>({
     command: props.value.appModelSpec.command || [],
     args: props.value.appModelSpec.args || [],
-    env: [],
+    env: (props.value.appModelSpec.envVars || []).map(item => ({ key: item.key, value: item.value ?? '' })),
     shCommand: props.value.appModelSpec.shCommand || '',
   });
 
@@ -163,9 +170,14 @@
   });
   const errorRef = ref<InstanceType<typeof ResizeLayout> | null>(null);
   function getValue() {
-    formData.value.env = formData.value.env.map(item => ({ key: item.key, value: item.value }));
+    const env = formData.value.env.map(item => ({
+      ...props.value.appModelSpec.envVars?.find(variable => variable.key === item.key),
+      key: item.key,
+      value: item.value,
+    }));
     return {
       ...formData.value,
+      env,
       ...startupCommandRef.value?.getValue(),
       content: msEditorRef.value?.getValue() || '',
     };
@@ -247,6 +259,10 @@
 </script>
 
 <style lang="postcss" scoped>
+  .config-fields {
+    padding-inline: clamp(24px, calc((100vw - 910px) / 2), 245px);
+  }
+
   .yaml-sideslider-layout > :deep(.bk-resize-layout-main) {
     padding-right: 16px;
   }

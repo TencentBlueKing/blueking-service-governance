@@ -176,6 +176,8 @@
               <TypeIcon
                 class="w-[100px]"
                 classes="min-w-[40px] inline-block"
+                :framework="row.framework"
+                :language="row.language"
                 :show-label="false"
                 :type="row?.type"
               />
@@ -341,6 +343,7 @@
   import CustomFilter from '~/components/custom-filter.vue';
   import MoreTag from '~/components/more-tag.vue';
   import Layout from '~/components/skeleton/skeleton-layout';
+  import { getAppDisplayKind, getAppDisplayLabel } from '~/composables/app-type';
   import { useDeployStatusMap } from '~/composables/use-deploy-status';
   import { useElementHeight } from '~/composables/use-element-height';
   import usePersistentStorage from '~/composables/use-persistent-storage';
@@ -481,7 +484,8 @@
         case 'kind':
           filteredList = filteredList.filter(
             item =>
-              (selectedValues.includes(EMPTY_FILTER_ID) && !item.type) || selectedValues.includes(item.type || ''),
+              (selectedValues.includes(EMPTY_FILTER_ID) && !getAppDisplayKind(item)) ||
+              selectedValues.includes(getAppDisplayKind(item)),
           );
           break;
         case 'language':
@@ -620,8 +624,9 @@
     let hasEmptyEnvs = false;
 
     for (const item of data) {
-      if (item.type) {
-        kindSet.set(item.type, item.type);
+      const kind = getAppDisplayKind(item);
+      if (kind) {
+        kindSet.set(kind, t(getAppDisplayLabel(kind)));
       } else {
         hasEmptyKind = true;
       }

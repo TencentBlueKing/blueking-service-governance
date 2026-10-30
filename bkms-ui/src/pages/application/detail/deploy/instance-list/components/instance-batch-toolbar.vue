@@ -65,6 +65,7 @@
       </template>
     </Popover>
     <Button
+      v-if="adminCommandSupported"
       v-bk-tooltips="{
         content: $t('跨页全选后暂不支持执行管理命令'),
         disabled: !selectedCount || !disableAdminCommand,
@@ -122,6 +123,8 @@
 
   import { Button, Dropdown, Popover } from 'bkui-vue';
   import { useI18n } from 'vue-i18n';
+  import { isRuntimeModSupported } from '~/composables/use-app-runtime';
+  import { useAppDetail } from '~/stores/app-detail';
 
   const props = withDefaults(
     defineProps<{
@@ -151,6 +154,8 @@
   }>();
 
   const { t } = useI18n();
+  const appDetailStore = useAppDetail();
+  const adminCommandSupported = computed(() => isRuntimeModSupported(appDetailStore.runtime, 'adminCommand'));
   const removeDeployPopoverRef = ref<InstanceType<typeof Popover> | null>(null);
 
   // 是否有任意实例被选中

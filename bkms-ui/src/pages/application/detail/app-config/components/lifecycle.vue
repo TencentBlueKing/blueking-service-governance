@@ -283,6 +283,7 @@
   import CommandModeHint from '~/components/command-mode-hint.vue';
   import FieldItem from '~/components/field-item.vue';
   import RepeatableInput from '~/components/repeatable-input.vue';
+  import { isAppModelAppType } from '~/composables/app-type';
   import { useAppDetail } from '~/stores/app-detail';
 
   import EnvScopeTag from './env-scope-tag.vue';
@@ -743,11 +744,11 @@
     formModel.value.terminationGracePeriodSeconds = 30;
   }
 
-  // 监听环境切换，重新拉取数据（仅 trpc/taf 应用）
+  // 监听环境切换，重新拉取平台托管应用配置。
   watch(
     () => props.currentEnv?.name,
     async () => {
-      if (!['trpc', 'taf'].includes(appDetailStore.appType)) return;
+      if (!isAppModelAppType(appDetailStore.appType)) return;
       isEditing.value = false;
       await fetchLifecycleData();
     },
@@ -757,7 +758,7 @@
   watch(
     () => appDetailStore.appID,
     async newVal => {
-      if (newVal && ['trpc', 'taf'].includes(appDetailStore.appType)) {
+      if (newVal && isAppModelAppType(appDetailStore.appType)) {
         defaultCache = null;
         await fetchLifecycleData();
       }

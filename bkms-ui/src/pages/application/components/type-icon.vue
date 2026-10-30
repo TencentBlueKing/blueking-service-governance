@@ -21,11 +21,29 @@
     v-if="curTypeIconData"
     class="flex items-center"
   >
-    <i :class="[curTypeIconData.icon, classes]"></i>
-    <span v-if="!$slots.label && showLabel">{{ curTypeIconData.label }}</span>
+    <span
+      :class="['inline-flex shrink-0 items-center justify-center', classes]"
+      :title="$t(curTypeIconData.label)"
+    >
+      <component
+        :is="languageLogo"
+        v-if="languageLogo"
+        class="size-[20px]"
+      />
+      <span
+        v-else-if="displayKind === 'cpp'"
+        class="text-[12px] font-bold"
+        >C++</span
+      >
+      <i
+        v-else
+        :class="curTypeIconData.icon"
+      ></i>
+    </span>
+    <span v-if="!$slots.label && showLabel">{{ $t(curTypeIconData.label) }}</span>
     <slot
       v-else
-      :label="curTypeIconData?.label || emptyPlaceholder"
+      :label="$t(curTypeIconData.label)"
       name="label"
     ></slot>
   </div>
@@ -36,6 +54,12 @@
 
 <script lang="ts" setup>
   import { computed } from 'vue';
+  import type { Component } from 'vue';
+
+  import GoLogo from '~/assets/lang-icons/go.svg';
+  import NodejsLogo from '~/assets/lang-icons/nodejs.svg';
+  import PythonLogo from '~/assets/lang-icons/python.svg';
+  import { getAppDisplayKind, getAppDisplayLabel } from '~/composables/app-type';
 
   import type { AppType } from '~/composables/app-type';
 
@@ -47,6 +71,8 @@
   interface IProps {
     classes?: string;
     emptyPlaceholder?: string;
+    framework?: string;
+    language?: string;
     showLabel?: boolean;
     type?: AppType | string;
   }
@@ -58,7 +84,7 @@
   });
 
   const typeIconMap: Record<
-    AppType,
+    string,
     {
       icon: string;
       label: string;
@@ -66,24 +92,33 @@
   > = {
     trpc: {
       icon: 'bkms-icon bkms-icon-trpc text-[#1B44C8] text-[8px]',
-      label: 'trpc',
+      label: 'tRPC',
     },
     taf: {
       icon: 'bkms-icon bkms-icon-taf text-[#1b44c8] text-[20px]',
-      label: 'taf',
+      label: 'TAF',
     },
     helm: {
       icon: 'bkms-icon bkms-icon-HelmCharts text-[#0F1689] text-[16px]',
-      label: 'helm',
+      label: 'Helm Chart',
     },
     agones: {
       icon: 'bkms-icon bkms-icon-agones text-[#0F1689] text-[16px]',
-      label: 'agones',
+      label: 'Agones',
+    },
+    bkmsApp: {
+      icon: 'bkms-icon bkms-icon-chuangjianyingyong text-[#3A84FF] text-[16px]',
+      label: '平台托管应用',
     },
   };
 
+  const displayKind = computed(() => getAppDisplayKind(props));
+  const languageLogos: Record<string, Component> = { go: GoLogo, python: PythonLogo, nodejs: NodejsLogo };
+  const languageLogo = computed(() => languageLogos[displayKind.value]);
   const curTypeIconData = computed(() => {
-    const result = props?.type && typeIconMap?.[props.type as AppType] ? typeIconMap[props.type as AppType] : null;
-    return result;
+    if (['go', 'python', 'nodejs', 'cpp'].includes(displayKind.value)) {
+      return { icon: '', label: getAppDisplayLabel(displayKind.value) };
+    }
+    return typeIconMap[displayKind.value] || null;
   });
 </script>
