@@ -30,21 +30,37 @@ const (
 	maxIDLength = 63
 )
 
-// AppCreateSpec 面向用户的 YAML 结构体，用于创建应用
-// 结构与后端 CreateAppInput 一致，可直接序列化为后端 API 请求体
+// AppCreateSpec 面向用户的 YAML 结构体，用于创建应用。
+// Helm / Agones 应用使用 type 字段；平台托管应用使用 framework + language 字段（旧写法 type: trpc/taf 仍兼容）。
 type AppCreateSpec struct {
-	// ID 应用 ID（可选，不填时由 name + 随机后缀自动生成）
-	ID string `yaml:"id" json:"id" validate:"omitempty,app_name"`
+	// ID 已废弃：应用 ID 固定由服务端返回的后缀与 name 拼接生成，填写会报错
+	ID string `yaml:"id" json:"-"`
 	// Name 应用名称（必填）
 	Name string `yaml:"name" json:"name" validate:"required,app_name"`
-	// Type 应用类型：trpc | taf | helm | agones（必填）
-	Type string `yaml:"type" json:"type" validate:"required,oneof=trpc taf helm agones"`
+	// Type 应用类型：helm | agones；旧写法兼容 trpc | taf | bkmsApp
+	Type string `yaml:"type" json:"type" validate:"omitempty,oneof=trpc taf helm agones bkmsApp"`
+	// Framework 技术栈框架：trpc | taf | blank，平台托管应用必填（与 type 二选一）
+	Framework string `yaml:"framework" json:"framework" validate:"omitempty,oneof=trpc taf blank"`
+	// Language 应用语言，配置 framework 时必填
+	Language string `yaml:"language" json:"language" validate:"omitempty,oneof=go cpp nodejs python"`
 	// BuildConfig 构建配置（必填）
 	BuildConfig *BuildConfigSpec `yaml:"buildConfig" json:"buildConfig" validate:"required"`
-	// AppModelSpec 应用模型规范（type=trpc/taf 时需要）
+	// AppModelSpec 应用模型规范（平台托管应用必填）
 	AppModelSpec *AppModelSpecSpec `yaml:"appModelSpec,omitempty" json:"appModelSpec,omitempty"`
+	// FrameworkConfigFile 框架配置文件（framework=trpc/taf 必填，blank 不能传）
+	FrameworkConfigFile *FrameworkConfigFileSpec `yaml:"frameworkConfigFile,omitempty" json:"frameworkConfigFile,omitempty"`
 	// HelmSpec Helm 应用描述规范（type=helm/agones 时需要）
 	HelmSpec *HelmSpecSpec `yaml:"helmSpec,omitempty" json:"helmSpec,omitempty"`
+}
+
+// FrameworkConfigFileSpec 框架配置文件
+type FrameworkConfigFileSpec struct {
+	// Name 配置文件名（必填）
+	Name string `yaml:"name" json:"name" validate:"required"`
+	// MountDir 挂载目录（必填）
+	MountDir string `yaml:"mountDir" json:"mountDir" validate:"required"`
+	// Content 文件内容（可选）
+	Content string `yaml:"content,omitempty" json:"content,omitempty"`
 }
 
 // BuildConfigSpec 构建配置
@@ -121,17 +137,19 @@ type PipelineBuildConfigSpec struct {
 	Params map[string]string `yaml:"params,omitempty" json:"params,omitempty"`
 }
 
-// AppModelSpecSpec 应用模型规范（trpc/taf 共用）
+// AppModelSpecSpec 应用模型规范（trpc/taf/blank 共用）
 type AppModelSpecSpec struct {
 	// Command 容器启动命令（可选）
 	Command []string `yaml:"command,omitempty" json:"command,omitempty"`
 	// Args 容器启动参数（可选）
 	Args []string `yaml:"args,omitempty" json:"args,omitempty"`
+	// ShCommand 容器启动脚本，与 command、args 互斥（可选）
+	ShCommand string `yaml:"shCommand,omitempty" json:"shCommand,omitempty"`
 	// EnvVars 容器环境变量（可选）
 	EnvVars []VariableSpec `yaml:"envVars,omitempty" json:"envVars,omitempty"`
-	// TrpcSpec tRPC 框架配置（type=trpc 时需要）
+	// TrpcSpec tRPC 框架配置（旧写法 type=trpc 时的兼容字段，会被转换为 framework + frameworkConfigFile）
 	TrpcSpec *TrpcSpecSpec `yaml:"trpcSpec,omitempty" json:"trpcSpec,omitempty"`
-	// TafSpec TAF 框架配置（type=taf 时需要）
+	// TafSpec TAF 框架配置（旧写法 type=taf 时的兼容字段，会被转换为 framework + frameworkConfigFile）
 	TafSpec *TafSpecSpec `yaml:"tafSpec,omitempty" json:"tafSpec,omitempty"`
 }
 

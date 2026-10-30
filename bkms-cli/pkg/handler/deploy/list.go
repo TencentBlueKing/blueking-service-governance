@@ -83,31 +83,23 @@ func listDeployForEnv(
 	app *client.AppMinimal,
 	envName, trafficLane, keyword string,
 ) ([]any, error) {
-	switch app.Type {
-	case constant.AppTypeHelm:
+	if app.Type == constant.AppTypeHelm {
 		records, err := cli.ListHelmDeployRecords(ctx, app.ID, envName, trafficLane, keyword)
 		if err != nil {
 			return nil, err
 		}
 		return toAnySlice(records), nil
-
-	case constant.AppTypeTrpc:
-		records, err := cli.ListTrpcDeployRecords(ctx, app.ID, envName, keyword, trafficLane)
-		if err != nil {
-			return nil, err
-		}
-		return toAnySlice(records), nil
-
-	case constant.AppTypeTaf:
-		records, err := cli.ListTafDeployRecords(ctx, app.ID, envName, keyword, trafficLane)
-		if err != nil {
-			return nil, err
-		}
-		return toAnySlice(records), nil
-
-	default:
-		return nil, errors.Errorf("unsupported app type %s", app.Type)
 	}
+
+	if !client.IsAppModelType(app.Type) {
+		return nil, errors.Errorf("unsupported app type: %s", app.Type)
+	}
+
+	records, err := cli.ListAppModelDeployRecords(ctx, app.ID, envName, keyword, trafficLane)
+	if err != nil {
+		return nil, err
+	}
+	return toAnySlice(records), nil
 }
 
 // toAnySlice 将具体类型的切片转换为 []any

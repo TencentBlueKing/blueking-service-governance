@@ -24,6 +24,18 @@ stderr 'is invalid'
 ! exec $BKMS_CLI_BIN app create -f invalid-helm-repo-type.yaml
 stderr 'is invalid'
 
+! exec $BKMS_CLI_BIN app create -f id-not-allowed.yaml
+stderr '''id'' is not supported'
+
+! exec $BKMS_CLI_BIN app create -f blank-with-framework-file.yaml
+stderr 'not supported for framework ''blank'''
+
+! exec $BKMS_CLI_BIN app create -f missing-framework.yaml
+stderr 'either ''framework'
+
+! exec $BKMS_CLI_BIN app create -f framework-missing-language.yaml
+stderr '''language'' is required'
+
 -- missing-name.yaml --
 type: trpc
 buildConfig:
@@ -105,3 +117,46 @@ helmSpec:
     helmRepoConfig:
       repoURL: https://charts.example.com
       chartName: my-chart
+
+-- id-not-allowed.yaml --
+name: my-app
+id: my-app-abc123
+type: trpc
+buildConfig:
+  sourceType: imageRegistry
+  imageBuildConfig:
+    name: example.com/myns/my-app
+appModelSpec:
+  trpcSpec:
+    language: go
+    fileName: trpc_go.yaml
+    filePath: /app/conf
+
+-- blank-with-framework-file.yaml --
+name: my-app
+framework: blank
+language: go
+buildConfig:
+  sourceType: imageRegistry
+  imageBuildConfig:
+    name: example.com/myns/my-app
+appModelSpec: {}
+frameworkConfigFile:
+  name: trpc_go.yaml
+  mountDir: /app/conf
+
+-- missing-framework.yaml --
+name: my-app
+buildConfig:
+  sourceType: imageRegistry
+  imageBuildConfig:
+    name: example.com/myns/my-app
+
+-- framework-missing-language.yaml --
+name: my-app
+framework: blank
+buildConfig:
+  sourceType: imageRegistry
+  imageBuildConfig:
+    name: example.com/myns/my-app
+appModelSpec: {}

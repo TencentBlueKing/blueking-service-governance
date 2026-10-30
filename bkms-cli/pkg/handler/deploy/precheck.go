@@ -24,11 +24,10 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/client"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/constant"
 )
 
-// Precheck 根据应用类型路由到对应的部署前检查接口。
-// helm 类型不支持预检，返回错误；trpc/taf 返回检查结果。
+// Precheck 执行部署前检查。
+// helm 类型不支持预检，返回错误；trpc、taf、bkmsApp 统一走 bkmsapp-deploys/precheck。
 func Precheck(ctx context.Context, appID, envName string) (*client.DeployPrecheckResult, error) {
 	cli := client.New()
 
@@ -37,12 +36,8 @@ func Precheck(ctx context.Context, appID, envName string) (*client.DeployPrechec
 		return nil, errors.Wrap(err, "get app")
 	}
 
-	switch app.Type {
-	case constant.AppTypeTrpc:
-		return cli.PreCheckTrpcDeploy(ctx, appID, envName)
-	case constant.AppTypeTaf:
-		return cli.PreCheckTafDeploy(ctx, appID, envName)
-	default:
-		return nil, errors.Errorf("precheck is not supported for app type '%s' (only trpc/taf)", app.Type)
+	if !client.IsAppModelType(app.Type) {
+		return nil, errors.Errorf("precheck is not supported for app type '%s' (only appmodel apps)", app.Type)
 	}
+	return cli.PreCheckAppModelDeploy(ctx, appID, envName)
 }

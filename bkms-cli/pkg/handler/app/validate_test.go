@@ -82,16 +82,93 @@ var _ = Describe("AppCreateSpec Validate", func() {
 
 	// ==================== type 校验（oneof 枚举） ====================
 	Describe("type field", func() {
-		It("should return error when type is empty", func() {
+		It("should return error when neither type nor framework is set", func() {
 			spec := validTrpcSpec()
 			spec.Type = ""
-			Expect(spec.Validate()).To(MatchError(ContainSubstring("'type' is required")))
+			Expect(spec.Validate()).To(MatchError(ContainSubstring("either 'framework")))
 		})
 
 		It("should return error when type is invalid", func() {
 			spec := validTrpcSpec()
 			spec.Type = "unknown"
 			Expect(spec.Validate()).To(MatchError(ContainSubstring("'type' is invalid")))
+		})
+	})
+
+	// ==================== id 不再允许用户指定 ====================
+	Describe("id field", func() {
+		It("should reject user-specified id", func() {
+			spec := validTrpcSpec()
+			spec.ID = "my-app-abc123"
+			Expect(spec.Validate()).To(MatchError(ContainSubstring("'id' is not supported")))
+		})
+	})
+
+	// ==================== framework + language 新写法 ====================
+	Describe("framework field", func() {
+		It("should pass for blank framework without frameworkConfigFile", func() {
+			spec := validTrpcSpec()
+			spec.Type = ""
+			spec.Framework = "blank"
+			spec.Language = "python"
+			spec.AppModelSpec = &AppModelSpecSpec{Command: []string{"python3"}}
+			Expect(spec.Validate()).NotTo(HaveOccurred())
+		})
+
+		It("should return error when language is missing", func() {
+			spec := validTrpcSpec()
+			spec.Type = ""
+			spec.Framework = "blank"
+			spec.AppModelSpec = &AppModelSpecSpec{}
+			Expect(spec.Validate()).To(MatchError(ContainSubstring("'language' is required")))
+		})
+
+		It("should reject frameworkConfigFile for blank", func() {
+			spec := validTrpcSpec()
+			spec.Type = ""
+			spec.Framework = "blank"
+			spec.Language = "go"
+			spec.AppModelSpec = &AppModelSpecSpec{}
+			spec.FrameworkConfigFile = &FrameworkConfigFileSpec{Name: "a.yaml", MountDir: "/app"}
+			Expect(spec.Validate()).To(MatchError(ContainSubstring("not supported for framework 'blank'")))
+		})
+
+		It("should require frameworkConfigFile for trpc", func() {
+			spec := validTrpcSpec()
+			spec.Type = ""
+			spec.Framework = "trpc"
+			spec.Language = "go"
+			spec.AppModelSpec = &AppModelSpecSpec{}
+			Expect(spec.Validate()).To(MatchError(ContainSubstring("'frameworkConfigFile' is required")))
+		})
+
+		It("should reject framework on helm apps", func() {
+			spec := validTrpcSpec()
+			spec.Type = "helm"
+			spec.Framework = "trpc"
+			Expect(spec.Validate()).To(MatchError(ContainSubstring("not supported for helm")))
+		})
+
+		It("should convert legacy type: trpc to framework + frameworkConfigFile", func() {
+			spec := validTrpcSpec()
+			Expect(spec.Validate()).NotTo(HaveOccurred())
+			Expect(spec.Framework).To(Equal("trpc"))
+			Expect(spec.Language).To(Equal("go"))
+			Expect(spec.FrameworkConfigFile).To(Equal(&FrameworkConfigFileSpec{
+				Name: "trpc_go.yaml", MountDir: "/app/conf",
+			}))
+		})
+
+		It("should default language to cpp for legacy taf", func() {
+			spec := validTrpcSpec()
+			spec.Type = "taf"
+			spec.AppModelSpec = &AppModelSpecSpec{
+				TafSpec: &TafSpecSpec{FileName: "config.conf", FilePath: "/app/conf"},
+			}
+			Expect(spec.Validate()).NotTo(HaveOccurred())
+			Expect(spec.Framework).To(Equal("taf"))
+			Expect(spec.Language).To(Equal("cpp"))
+			Expect(spec.FrameworkConfigFile.Name).To(Equal("config.conf"))
 		})
 	})
 

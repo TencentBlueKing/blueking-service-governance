@@ -34,6 +34,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/config"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/constant"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/version"
 )
 
@@ -596,6 +597,22 @@ func (c *SvcBasedClient) CreateApp(ctx context.Context, workspaceID string, body
 	return &respData.Data, nil
 }
 
+// CreateBKMSApp 创建平台托管应用（trpc / taf / blank）
+func (c *SvcBasedClient) CreateBKMSApp(ctx context.Context, workspaceID string, body any) (*AppMinimal, error) {
+	path := fmt.Sprintf("/bkms/v1/bkms-server/workspaces/%s/bkmsapps", url.PathEscape(workspaceID))
+
+	var respData CreateAppRespData
+	resp, err := c.cli.R().SetContext(ctx).SetBody(body).SetResult(&respData).Post(path)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode() != http.StatusOK && resp.StatusCode() != http.StatusCreated {
+		return nil, formatAPIError(resp, "create app")
+	}
+
+	return &respData.Data, nil
+}
+
 // CreateAppBuild 执行应用构建
 func (c *SvcBasedClient) CreateAppBuild(ctx context.Context, appID string, opts BuildOptions) error {
 	body := map[string]any{
@@ -982,40 +999,13 @@ func (c *SvcBasedClient) ListHelmDeployRecords(
 	return respData.Data.Results, nil
 }
 
-// CreateAppTrpcDeploy 执行 Trpc 应用部署
-func (c *SvcBasedClient) CreateAppTrpcDeploy(
-	ctx context.Context,
-	appID, envName string,
-	opts AppModelDeployOptions,
-) error {
-	path := fmt.Sprintf(
-		"/bkms/v1/bkms-server/apps/%s/envs/%s/trpc-deploys",
-		url.PathEscape(appID),
-		url.PathEscape(envName),
-	)
-	body := map[string]any{
-		"imageTag":        opts.ImageTag,
-		"replicas":        opts.Replicas,
-		"trafficLaneName": opts.TrafficLaneName,
-	}
-
-	resp, err := c.cli.R().SetContext(ctx).SetBody(body).Post(path)
-	if err != nil {
-		return err
-	}
-	if resp.StatusCode() != http.StatusOK {
-		return formatAPIError(resp, "create app trpc deploy")
-	}
-
-	return nil
-}
-
-// ListTrpcDeployRecords 获取最近的应用 Trpc 部署记录
-func (c *SvcBasedClient) ListTrpcDeployRecords(
+// ListAppModelDeployRecords 获取最近的应用部署记录（因 cli 场景，默认只提供前 10 条）
+// trpc、taf、bkmsApp 三种平台托管应用共用同一接口。
+func (c *SvcBasedClient) ListAppModelDeployRecords(
 	ctx context.Context, appID, envName, keyword, trafficLaneName string,
 ) ([]AppModelDeployRecord, error) {
 	path := fmt.Sprintf(
-		"/bkms/v1/bkms-server/apps/%s/envs/%s/trpc-deploys",
+		"/bkms/v1/bkms-server/apps/%s/envs/%s/bkmsapp-deploys",
 		url.PathEscape(appID),
 		url.PathEscape(envName),
 	)
@@ -1032,10 +1022,68 @@ func (c *SvcBasedClient) ListTrpcDeployRecords(
 		return nil, err
 	}
 	if resp.StatusCode() != http.StatusOK {
-		return nil, formatAPIError(resp, "list trpc deploy records")
+		return nil, formatAPIError(resp, "list app model deploy records")
 	}
 
 	return respData.Data.Results, nil
+}
+
+// CreateAppModelDeploy 执行平台托管应用部署
+func (c *SvcBasedClient) CreateAppModelDeploy(
+	ctx context.Context, appID, envName string, opts AppModelDeployOptions,
+) error {
+	path := fmt.Sprintf(
+		"/bkms/v1/bkms-server/apps/%s/envs/%s/bkmsapp-deploys",
+		url.PathEscape(appID),
+		url.PathEscape(envName),
+	)
+	body := map[string]any{
+		"imageTag":        opts.ImageTag,
+		"replicas":        opts.Replicas,
+		"trafficLaneName": opts.TrafficLaneName,
+	}
+
+	resp, err := c.cli.R().SetContext(ctx).SetBody(body).Post(path)
+	if err != nil {
+		return err
+	}
+	if resp.StatusCode() != http.StatusOK {
+		return formatAPIError(resp, "create app model deploy")
+	}
+
+	return nil
+}
+
+// DeleteAppModelDeploy 删除平台托管应用部署
+func (c *SvcBasedClient) DeleteAppModelDeploy(ctx context.Context, appID, envName string) error {
+	path := fmt.Sprintf(
+		"/bkms/v1/bkms-server/apps/%s/envs/%s/bkmsapp-deploys",
+		url.PathEscape(appID),
+		url.PathEscape(envName),
+	)
+
+	resp, err := c.cli.R().SetContext(ctx).Delete(path)
+	if err != nil {
+		return err
+	}
+	if resp.StatusCode() != http.StatusOK && resp.StatusCode() != http.StatusNoContent {
+		return formatAPIError(resp, "delete app model deploy")
+	}
+
+	return nil
+}
+
+// PreCheckAppModelDeploy 平台托管应用部署前检查
+func (c *SvcBasedClient) PreCheckAppModelDeploy(
+	ctx context.Context,
+	appID, envName string,
+) (*DeployPrecheckResult, error) {
+	path := fmt.Sprintf(
+		"/bkms/v1/bkms-server/apps/%s/envs/%s/bkmsapp-deploys/precheck",
+		url.PathEscape(appID),
+		url.PathEscape(envName),
+	)
+	return c.preCheckDeploy(ctx, path, "precheck app model deploy")
 }
 
 // DeleteHelmDeploy 删除 Helm 部署
@@ -1263,105 +1311,6 @@ func (c *SvcBasedClient) ExecuteTafAdminCmd(
 	return respData.Data.Results, nil
 }
 
-// CreateAppTafDeploy 执行 TAF 应用部署
-func (c *SvcBasedClient) CreateAppTafDeploy(
-	ctx context.Context, appID, envName string, opts AppModelDeployOptions,
-) error {
-	path := fmt.Sprintf(
-		"/bkms/v1/bkms-server/apps/%s/envs/%s/taf-deploys",
-		url.PathEscape(appID),
-		url.PathEscape(envName),
-	)
-	body := map[string]any{
-		"imageTag":        opts.ImageTag,
-		"replicas":        opts.Replicas,
-		"trafficLaneName": opts.TrafficLaneName,
-	}
-
-	resp, err := c.cli.R().SetContext(ctx).SetBody(body).Post(path)
-	if err != nil {
-		return err
-	}
-	if resp.StatusCode() != http.StatusOK {
-		return formatAPIError(resp, "create app taf deploy")
-	}
-
-	return nil
-}
-
-// ListTafDeployRecords 获取最近的应用 TAF 部署记录（因 cli 场景，默认只提供前 10 条）
-func (c *SvcBasedClient) ListTafDeployRecords(
-	ctx context.Context, appID, envName, keyword, trafficLaneName string,
-) ([]AppModelDeployRecord, error) {
-	path := fmt.Sprintf(
-		"/bkms/v1/bkms-server/apps/%s/envs/%s/taf-deploys",
-		url.PathEscape(appID),
-		url.PathEscape(envName),
-	)
-	queryParams := map[string]string{
-		"keyword":         keyword,
-		"trafficLaneName": trafficLaneName,
-		"page":            "1",
-		"pageSize":        "10",
-	}
-
-	var respData AppModelDeployRecordsResp
-	resp, err := c.cli.R().SetContext(ctx).SetQueryParams(queryParams).SetResult(&respData).Get(path)
-	if err != nil {
-		return nil, err
-	}
-	if resp.StatusCode() != http.StatusOK {
-		return nil, formatAPIError(resp, "list taf deploy records")
-	}
-
-	return respData.Data.Results, nil
-}
-
-// DeleteTrpcDeploy 删除 Trpc 部署
-func (c *SvcBasedClient) DeleteTrpcDeploy(ctx context.Context, appID, envName string) error {
-	path := fmt.Sprintf(
-		"/bkms/v1/bkms-server/apps/%s/envs/%s/trpc-deploys",
-		url.PathEscape(appID),
-		url.PathEscape(envName),
-	)
-
-	resp, err := c.cli.R().SetContext(ctx).Delete(path)
-	if err != nil {
-		return err
-	}
-	if resp.StatusCode() != http.StatusOK && resp.StatusCode() != http.StatusNoContent {
-		return formatAPIError(resp, "delete trpc deploy")
-	}
-
-	return nil
-}
-
-// PreCheckTrpcDeploy 部署前检查 Trpc 应用
-func (c *SvcBasedClient) PreCheckTrpcDeploy(
-	ctx context.Context,
-	appID, envName string,
-) (*DeployPrecheckResult, error) {
-	path := fmt.Sprintf(
-		"/bkms/v1/bkms-server/apps/%s/envs/%s/trpc-deploys/precheck",
-		url.PathEscape(appID),
-		url.PathEscape(envName),
-	)
-	return c.preCheckDeploy(ctx, path, "precheck trpc deploy")
-}
-
-// PreCheckTafDeploy 部署前检查 TAF 应用
-func (c *SvcBasedClient) PreCheckTafDeploy(
-	ctx context.Context,
-	appID, envName string,
-) (*DeployPrecheckResult, error) {
-	path := fmt.Sprintf(
-		"/bkms/v1/bkms-server/apps/%s/envs/%s/taf-deploys/precheck",
-		url.PathEscape(appID),
-		url.PathEscape(envName),
-	)
-	return c.preCheckDeploy(ctx, path, "precheck taf deploy")
-}
-
 func (c *SvcBasedClient) preCheckDeploy(ctx context.Context, path, op string) (*DeployPrecheckResult, error) {
 	var respData DeployPrecheckResult
 	resp, err := c.cli.R().SetContext(ctx).SetResult(&respData).Get(path)
@@ -1373,25 +1322,6 @@ func (c *SvcBasedClient) preCheckDeploy(ctx context.Context, path, op string) (*
 	}
 	respData.Normalize()
 	return &respData, nil
-}
-
-// DeleteTafDeploy 删除 TAF 部署
-func (c *SvcBasedClient) DeleteTafDeploy(ctx context.Context, appID, envName string) error {
-	path := fmt.Sprintf(
-		"/bkms/v1/bkms-server/apps/%s/envs/%s/taf-deploys",
-		url.PathEscape(appID),
-		url.PathEscape(envName),
-	)
-
-	resp, err := c.cli.R().SetContext(ctx).Delete(path)
-	if err != nil {
-		return err
-	}
-	if resp.StatusCode() != http.StatusOK && resp.StatusCode() != http.StatusNoContent {
-		return formatAPIError(resp, "delete taf deploy")
-	}
-
-	return nil
 }
 
 // --- AppSpec method implementations ---
@@ -1535,12 +1465,15 @@ func (c *SvcBasedClient) DeleteAppSpecEnvSection(
 }
 
 // UpdateAppStartCommand updates the app start command via the appropriate API based on app type.
+// bkmsApp 应用使用 startup-config（请求体平铺），旧 trpc / taf 应用继续使用各自的 spec 接口。
 func (c *SvcBasedClient) UpdateAppStartCommand(ctx context.Context, appID, appType string, body any) error {
 	var specPath string
-	switch appType {
-	case "trpc":
+	switch {
+	case IsBKMSApp(appType):
+		specPath = "startup-config"
+	case appType == constant.AppTypeTrpc:
 		specPath = "trpc-spec"
-	case "taf":
+	case appType == constant.AppTypeTaf:
 		specPath = "taf-spec"
 	default:
 		return errors.Errorf("app type %q does not support start command configuration", appType)

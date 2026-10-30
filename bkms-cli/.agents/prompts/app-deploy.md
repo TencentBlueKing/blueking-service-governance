@@ -61,7 +61,7 @@ valuesFile: values-prod
 trafficLane: canary
 ```
 
-**trpc / taf 应用**
+**平台托管应用（trpc / taf / blank）**
 ```yaml
 # 镜像 tag（必填）
 imageTag: v1.0.0
@@ -72,7 +72,7 @@ replicas: 3
 ### 常用场景
 
 ```bash
-# trpc/taf 应用部署
+# 平台托管应用部署
 bkms-cli app deploy create --app myapp --env prod -f trpc-deploy.yaml
 
 # 同时部署到多个环境
@@ -149,7 +149,7 @@ bkms-cli app deploy list --app myapp --env prod -o 'jq=.[0].imageTag'
 
 ## update
 
-更新已有部署。仅支持 trpc 和 taf 应用。支持四种更新模式：
+更新已有部署。仅支持平台托管应用（trpc、taf、blank）。支持四种更新模式：
 
 | 模式 | YAML 字段 | 说明 |
 |------|-----------|------|
@@ -226,12 +226,12 @@ instanceIDs: "pod1;pod2"
 删除（卸载）应用在指定环境的部署。此操作会从集群中移除工作负载。`--env` 支持逗号分隔多环境，`--env-type` 支持按环境类型批量卸载。
 
 - **helm 应用**：需通过 `--deploy-id` 指定要删除的部署记录 ID（从 `deploy list` 获取），且一次仅支持单个环境。
-- **trpc / taf 应用**：删除整个环境部署，无需 `--deploy-id`。
+- **平台托管应用（trpc / taf / blank）**：删除整个环境部署，无需 `--deploy-id`。
 
 ### 常用场景
 
 ```bash
-# 删除 trpc/taf 应用部署
+# 删除平台托管应用部署
 bkms-cli app deploy delete --app myapp --env test
 
 # 删除 helm 应用的指定部署

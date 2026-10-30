@@ -37,13 +37,12 @@ var _ = Describe("appModelUpdateSpec.handler", func() {
 			UpdateMode: imageUpdateMode,
 			ImageTag:   "v2",
 			Strategy:   inplaceUpdateStrategy,
-			appType:    constant.AppTypeTrpc,
 		}
 	}
 
 	It("skips env without deploy record", func() {
 		cli := mocks.NewMockClient(GinkgoT())
-		cli.EXPECT().ListTrpcDeployRecords(ctx, "app-1", "test", "", "").
+		cli.EXPECT().ListAppModelDeployRecords(ctx, "app-1", "test", "", "").
 			Return([]client.AppModelDeployRecord{}, nil).Once()
 
 		err := newSpec().handler(ctx, cli, "app-1", "test")
@@ -52,7 +51,7 @@ var _ = Describe("appModelUpdateSpec.handler", func() {
 
 	It("skips env whose latest deploy is uninstalled", func() {
 		cli := mocks.NewMockClient(GinkgoT())
-		cli.EXPECT().ListTrpcDeployRecords(ctx, "app-1", "test", "", "").
+		cli.EXPECT().ListAppModelDeployRecords(ctx, "app-1", "test", "", "").
 			Return([]client.AppModelDeployRecord{{Status: constant.DeployStatusUninstalled}}, nil).Once()
 
 		err := newSpec().handler(ctx, cli, "app-1", "test")
@@ -61,7 +60,7 @@ var _ = Describe("appModelUpdateSpec.handler", func() {
 
 	It("updates env that has been deployed", func() {
 		cli := mocks.NewMockClient(GinkgoT())
-		cli.EXPECT().ListTrpcDeployRecords(ctx, "app-1", "test", "", "").
+		cli.EXPECT().ListAppModelDeployRecords(ctx, "app-1", "test", "", "").
 			Return([]client.AppModelDeployRecord{{Status: "deployed", ImageTag: "v1", Replicas: 2}}, nil).Once()
 		cli.EXPECT().BatchUpdateInstance(ctx, "app-1", "test", "v2", string(inplaceUpdateStrategy)).
 			Return(nil).Once()

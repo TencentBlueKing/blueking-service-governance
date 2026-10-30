@@ -35,8 +35,8 @@ var _ = Describe("DeleteDeployBatch", func() {
 
 	It("deletes deployment for each environment", func() {
 		cli := mocks.NewMockClient(GinkgoT())
-		cli.EXPECT().DeleteTrpcDeploy(ctx, "app-1", "test").Return(nil).Once()
-		cli.EXPECT().DeleteTrpcDeploy(ctx, "app-1", "staging").Return(nil).Once()
+		cli.EXPECT().DeleteAppModelDeploy(ctx, "app-1", "test").Return(nil).Once()
+		cli.EXPECT().DeleteAppModelDeploy(ctx, "app-1", "staging").Return(nil).Once()
 
 		err := DeleteDeployBatch(ctx, cli, constant.AppTypeTrpc, "app-1", []string{"test", "staging"}, "")
 		Expect(err).NotTo(HaveOccurred())
@@ -44,8 +44,8 @@ var _ = Describe("DeleteDeployBatch", func() {
 
 	It("aggregates failures across environments", func() {
 		cli := mocks.NewMockClient(GinkgoT())
-		cli.EXPECT().DeleteTrpcDeploy(ctx, "app-1", "test").Return(context.DeadlineExceeded).Once()
-		cli.EXPECT().DeleteTrpcDeploy(ctx, "app-1", "staging").Return(nil).Once()
+		cli.EXPECT().DeleteAppModelDeploy(ctx, "app-1", "test").Return(context.DeadlineExceeded).Once()
+		cli.EXPECT().DeleteAppModelDeploy(ctx, "app-1", "staging").Return(nil).Once()
 
 		err := DeleteDeployBatch(ctx, cli, constant.AppTypeTrpc, "app-1", []string{"test", "staging"}, "")
 		Expect(err).To(HaveOccurred())

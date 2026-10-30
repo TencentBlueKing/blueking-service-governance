@@ -28,6 +28,18 @@ const (
 	AppTypeHelm = "helm"
 	// AppTypeAgones agones 应用类型
 	AppTypeAgones = "agones"
+	// AppTypeBKMSApp 平台托管应用（新接口创建的应用），技术栈由 framework 字段决定
+	AppTypeBKMSApp = "bkmsApp"
+)
+
+// 应用框架（AppModel 应用的技术栈）
+const (
+	// FrameworkTrpc tRPC 框架
+	FrameworkTrpc = "trpc"
+	// FrameworkTaf TAF 框架
+	FrameworkTaf = "taf"
+	// FrameworkBlank 不使用框架，只有语言相关的通用能力
+	FrameworkBlank = "blank"
 )
 
 // 构建来源类型

@@ -168,13 +168,23 @@ func EditStartCommandHandler(ctx context.Context, appID, specFile string) error 
 		return err
 	}
 
-	if !isAppModelType(app.Type) {
-		return errors.Errorf("app type %q does not support start command (only trpc/taf apps are supported)", app.Type)
+	if !client.IsAppModelType(app.Type) {
+		return errors.Errorf("app type %q does not support start command (only appmodel apps are supported)", app.Type)
 	}
 
 	input, err := ParseStartCommandFile(specFile)
 	if err != nil {
 		return err
+	}
+
+	// bkmsApp 应用使用 startup-config，请求体平铺，且没有框架 spec 需要回填
+	if client.IsBKMSApp(app.Type) {
+		body := &StartCommandInput{
+			Command:   input.Command,
+			Args:      input.Args,
+			ShCommand: input.ShCommand,
+		}
+		return cli.UpdateAppStartCommand(ctx, appID, app.Type, body)
 	}
 
 	// 服务端要求 trpcSpec/tafSpec 必填，从当前配置中获取并回填
@@ -198,10 +208,6 @@ func ResetHandler(ctx context.Context, appID, envName string, section client.App
 }
 
 // --- internal helpers ---
-
-func isAppModelType(appType string) bool {
-	return appType == "trpc" || appType == "taf"
-}
 
 // setSectionHandler 获取 section 输入，包装为请求体后写入默认级或环境级配置。
 // load 负责产出输入（从 YAML 文件解析，或直接由命令行参数构造），

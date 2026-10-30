@@ -47,7 +47,7 @@ func NewListAdminCmdsCmd() *cobra.Command {
 		Long: `List available admin commands for the specified application instances.
 
 This command queries the admin command list from application instances
-via the admin port. Only Trpc type applications are supported.`,
+via the admin port. Only applications using the trpc framework are supported.`,
 		Example: `  # List admin commands
   bkms-cli app instance list-admin-cmds --app myapp --env test --instance-ids pod1,pod2`,
 		PreRunE: cmdutil.ResolveAppPreRunE,
@@ -58,13 +58,16 @@ via the admin port. Only Trpc type applications are supported.`,
 				return errors.Wrap(err, "get instance IDs")
 			}
 
-			// 检查 app 是否为 trpc 类型
+			// 管理命令按框架区分，仅 tRPC 框架支持列出命令
 			app, err := client.New().GetAppMinimal(cmd.Context(), workspaceID, appID)
 			if err != nil {
 				return errors.Wrap(err, "get app info")
 			}
-			if app.Type != constant.AppTypeTrpc {
-				return errors.Errorf("list-admin-cmds is only supported for Trpc app, got app type: %s", app.Type)
+			if framework := client.FrameworkOf(app.Type, app.Framework); framework != constant.FrameworkTrpc {
+				return errors.Errorf(
+					"list-admin-cmds is only supported for trpc framework, got framework: %q",
+					framework,
+				)
 			}
 
 			results, err := handler.ListTrpcAdminCmds(cmd.Context(), appID, envName, instanceIDs)

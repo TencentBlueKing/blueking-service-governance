@@ -141,7 +141,7 @@ bkms-cli app deploy create --app myapp --env prod -f deploy.yaml
 
 ## list-admin-cmds
 
-查询应用实例上可用的管理命令列表。仅支持 trpc 应用。
+查询应用实例上可用的管理命令列表。仅支持 tRPC 框架的应用（trpc，或 framework=trpc 的 bkmsApp）。
 
 ```bash
 # 查询 pod1 上可用的管理命令
@@ -163,7 +163,7 @@ bkms-cli app instance list-admin-cmds --app myapp --env test --instance-ids pod1
 
 ## exec-admin-cmd
 
-在应用实例上执行管理命令。根据应用类型自动路由：
+在应用实例上执行管理命令。根据应用框架（framework）自动路由，blank 框架不支持管理命令：
 - **trpc**：需要 `--method`、`--url`；可选 `--params`、`--body`
 - **taf**：需要 `--command`（如 `taf.viewversion`、`taf.setloglevel DEBUG`）
 

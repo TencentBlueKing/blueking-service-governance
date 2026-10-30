@@ -754,6 +754,75 @@ func (_c *MockClient_CreateAppHelmDeploy_Call) RunAndReturn(run func(ctx context
 	return _c
 }
 
+// CreateAppModelDeploy provides a mock function for the type MockClient
+func (_mock *MockClient) CreateAppModelDeploy(ctx context.Context, appID string, envName string, opts client.AppModelDeployOptions) error {
+	ret := _mock.Called(ctx, appID, envName, opts)
+
+	if len(ret) == 0 {
+		panic("no return value specified for CreateAppModelDeploy")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, client.AppModelDeployOptions) error); ok {
+		r0 = returnFunc(ctx, appID, envName, opts)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockClient_CreateAppModelDeploy_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'CreateAppModelDeploy'
+type MockClient_CreateAppModelDeploy_Call struct {
+	*mock.Call
+}
+
+// CreateAppModelDeploy is a helper method to define mock.On call
+//   - ctx context.Context
+//   - appID string
+//   - envName string
+//   - opts client.AppModelDeployOptions
+func (_e *MockClient_Expecter) CreateAppModelDeploy(ctx any, appID any, envName any, opts any) *MockClient_CreateAppModelDeploy_Call {
+	return &MockClient_CreateAppModelDeploy_Call{Call: _e.mock.On("CreateAppModelDeploy", ctx, appID, envName, opts)}
+}
+
+func (_c *MockClient_CreateAppModelDeploy_Call) Run(run func(ctx context.Context, appID string, envName string, opts client.AppModelDeployOptions)) *MockClient_CreateAppModelDeploy_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 string
+		if args[2] != nil {
+			arg2 = args[2].(string)
+		}
+		var arg3 client.AppModelDeployOptions
+		if args[3] != nil {
+			arg3 = args[3].(client.AppModelDeployOptions)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+		)
+	})
+	return _c
+}
+
+func (_c *MockClient_CreateAppModelDeploy_Call) Return(err error) *MockClient_CreateAppModelDeploy_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockClient_CreateAppModelDeploy_Call) RunAndReturn(run func(ctx context.Context, appID string, envName string, opts client.AppModelDeployOptions) error) *MockClient_CreateAppModelDeploy_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // CreateAppPolarisConfig provides a mock function for the type MockClient
 func (_mock *MockClient) CreateAppPolarisConfig(ctx context.Context, appID string, body any) (string, error) {
 	ret := _mock.Called(ctx, appID, body)
@@ -826,38 +895,48 @@ func (_c *MockClient_CreateAppPolarisConfig_Call) RunAndReturn(run func(ctx cont
 	return _c
 }
 
-// CreateAppTafDeploy provides a mock function for the type MockClient
-func (_mock *MockClient) CreateAppTafDeploy(ctx context.Context, appID string, envName string, opts client.AppModelDeployOptions) error {
-	ret := _mock.Called(ctx, appID, envName, opts)
+// CreateBKMSApp provides a mock function for the type MockClient
+func (_mock *MockClient) CreateBKMSApp(ctx context.Context, workspaceID string, body any) (*client.AppMinimal, error) {
+	ret := _mock.Called(ctx, workspaceID, body)
 
 	if len(ret) == 0 {
-		panic("no return value specified for CreateAppTafDeploy")
+		panic("no return value specified for CreateBKMSApp")
 	}
 
-	var r0 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, client.AppModelDeployOptions) error); ok {
-		r0 = returnFunc(ctx, appID, envName, opts)
-	} else {
-		r0 = ret.Error(0)
+	var r0 *client.AppMinimal
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, any) (*client.AppMinimal, error)); ok {
+		return returnFunc(ctx, workspaceID, body)
 	}
-	return r0
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, any) *client.AppMinimal); ok {
+		r0 = returnFunc(ctx, workspaceID, body)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*client.AppMinimal)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, any) error); ok {
+		r1 = returnFunc(ctx, workspaceID, body)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
 }
 
-// MockClient_CreateAppTafDeploy_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'CreateAppTafDeploy'
-type MockClient_CreateAppTafDeploy_Call struct {
+// MockClient_CreateBKMSApp_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'CreateBKMSApp'
+type MockClient_CreateBKMSApp_Call struct {
 	*mock.Call
 }
 
-// CreateAppTafDeploy is a helper method to define mock.On call
+// CreateBKMSApp is a helper method to define mock.On call
 //   - ctx context.Context
-//   - appID string
-//   - envName string
-//   - opts client.AppModelDeployOptions
-func (_e *MockClient_Expecter) CreateAppTafDeploy(ctx any, appID any, envName any, opts any) *MockClient_CreateAppTafDeploy_Call {
-	return &MockClient_CreateAppTafDeploy_Call{Call: _e.mock.On("CreateAppTafDeploy", ctx, appID, envName, opts)}
+//   - workspaceID string
+//   - body any
+func (_e *MockClient_Expecter) CreateBKMSApp(ctx any, workspaceID any, body any) *MockClient_CreateBKMSApp_Call {
+	return &MockClient_CreateBKMSApp_Call{Call: _e.mock.On("CreateBKMSApp", ctx, workspaceID, body)}
 }
 
-func (_c *MockClient_CreateAppTafDeploy_Call) Run(run func(ctx context.Context, appID string, envName string, opts client.AppModelDeployOptions)) *MockClient_CreateAppTafDeploy_Call {
+func (_c *MockClient_CreateBKMSApp_Call) Run(run func(ctx context.Context, workspaceID string, body any)) *MockClient_CreateBKMSApp_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -867,99 +946,25 @@ func (_c *MockClient_CreateAppTafDeploy_Call) Run(run func(ctx context.Context, 
 		if args[1] != nil {
 			arg1 = args[1].(string)
 		}
-		var arg2 string
+		var arg2 any
 		if args[2] != nil {
-			arg2 = args[2].(string)
-		}
-		var arg3 client.AppModelDeployOptions
-		if args[3] != nil {
-			arg3 = args[3].(client.AppModelDeployOptions)
+			arg2 = args[2].(any)
 		}
 		run(
 			arg0,
 			arg1,
 			arg2,
-			arg3,
 		)
 	})
 	return _c
 }
 
-func (_c *MockClient_CreateAppTafDeploy_Call) Return(err error) *MockClient_CreateAppTafDeploy_Call {
-	_c.Call.Return(err)
+func (_c *MockClient_CreateBKMSApp_Call) Return(appMinimal *client.AppMinimal, err error) *MockClient_CreateBKMSApp_Call {
+	_c.Call.Return(appMinimal, err)
 	return _c
 }
 
-func (_c *MockClient_CreateAppTafDeploy_Call) RunAndReturn(run func(ctx context.Context, appID string, envName string, opts client.AppModelDeployOptions) error) *MockClient_CreateAppTafDeploy_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
-// CreateAppTrpcDeploy provides a mock function for the type MockClient
-func (_mock *MockClient) CreateAppTrpcDeploy(ctx context.Context, appID string, envName string, opts client.AppModelDeployOptions) error {
-	ret := _mock.Called(ctx, appID, envName, opts)
-
-	if len(ret) == 0 {
-		panic("no return value specified for CreateAppTrpcDeploy")
-	}
-
-	var r0 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, client.AppModelDeployOptions) error); ok {
-		r0 = returnFunc(ctx, appID, envName, opts)
-	} else {
-		r0 = ret.Error(0)
-	}
-	return r0
-}
-
-// MockClient_CreateAppTrpcDeploy_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'CreateAppTrpcDeploy'
-type MockClient_CreateAppTrpcDeploy_Call struct {
-	*mock.Call
-}
-
-// CreateAppTrpcDeploy is a helper method to define mock.On call
-//   - ctx context.Context
-//   - appID string
-//   - envName string
-//   - opts client.AppModelDeployOptions
-func (_e *MockClient_Expecter) CreateAppTrpcDeploy(ctx any, appID any, envName any, opts any) *MockClient_CreateAppTrpcDeploy_Call {
-	return &MockClient_CreateAppTrpcDeploy_Call{Call: _e.mock.On("CreateAppTrpcDeploy", ctx, appID, envName, opts)}
-}
-
-func (_c *MockClient_CreateAppTrpcDeploy_Call) Run(run func(ctx context.Context, appID string, envName string, opts client.AppModelDeployOptions)) *MockClient_CreateAppTrpcDeploy_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 context.Context
-		if args[0] != nil {
-			arg0 = args[0].(context.Context)
-		}
-		var arg1 string
-		if args[1] != nil {
-			arg1 = args[1].(string)
-		}
-		var arg2 string
-		if args[2] != nil {
-			arg2 = args[2].(string)
-		}
-		var arg3 client.AppModelDeployOptions
-		if args[3] != nil {
-			arg3 = args[3].(client.AppModelDeployOptions)
-		}
-		run(
-			arg0,
-			arg1,
-			arg2,
-			arg3,
-		)
-	})
-	return _c
-}
-
-func (_c *MockClient_CreateAppTrpcDeploy_Call) Return(err error) *MockClient_CreateAppTrpcDeploy_Call {
-	_c.Call.Return(err)
-	return _c
-}
-
-func (_c *MockClient_CreateAppTrpcDeploy_Call) RunAndReturn(run func(ctx context.Context, appID string, envName string, opts client.AppModelDeployOptions) error) *MockClient_CreateAppTrpcDeploy_Call {
+func (_c *MockClient_CreateBKMSApp_Call) RunAndReturn(run func(ctx context.Context, workspaceID string, body any) (*client.AppMinimal, error)) *MockClient_CreateBKMSApp_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -1493,6 +1498,69 @@ func (_c *MockClient_DeleteAppDefinedEnvVar_Call) RunAndReturn(run func(ctx cont
 	return _c
 }
 
+// DeleteAppModelDeploy provides a mock function for the type MockClient
+func (_mock *MockClient) DeleteAppModelDeploy(ctx context.Context, appID string, envName string) error {
+	ret := _mock.Called(ctx, appID, envName)
+
+	if len(ret) == 0 {
+		panic("no return value specified for DeleteAppModelDeploy")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) error); ok {
+		r0 = returnFunc(ctx, appID, envName)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockClient_DeleteAppModelDeploy_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'DeleteAppModelDeploy'
+type MockClient_DeleteAppModelDeploy_Call struct {
+	*mock.Call
+}
+
+// DeleteAppModelDeploy is a helper method to define mock.On call
+//   - ctx context.Context
+//   - appID string
+//   - envName string
+func (_e *MockClient_Expecter) DeleteAppModelDeploy(ctx any, appID any, envName any) *MockClient_DeleteAppModelDeploy_Call {
+	return &MockClient_DeleteAppModelDeploy_Call{Call: _e.mock.On("DeleteAppModelDeploy", ctx, appID, envName)}
+}
+
+func (_c *MockClient_DeleteAppModelDeploy_Call) Run(run func(ctx context.Context, appID string, envName string)) *MockClient_DeleteAppModelDeploy_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 string
+		if args[2] != nil {
+			arg2 = args[2].(string)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockClient_DeleteAppModelDeploy_Call) Return(err error) *MockClient_DeleteAppModelDeploy_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockClient_DeleteAppModelDeploy_Call) RunAndReturn(run func(ctx context.Context, appID string, envName string) error) *MockClient_DeleteAppModelDeploy_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // DeleteAppPolarisConfig provides a mock function for the type MockClient
 func (_mock *MockClient) DeleteAppPolarisConfig(ctx context.Context, appID string, configName string) error {
 	ret := _mock.Called(ctx, appID, configName)
@@ -1810,132 +1878,6 @@ func (_c *MockClient_DeleteScopedEnvVar_Call) Return(err error) *MockClient_Dele
 }
 
 func (_c *MockClient_DeleteScopedEnvVar_Call) RunAndReturn(run func(ctx context.Context, workspaceID string, scopedEnvVarID string) error) *MockClient_DeleteScopedEnvVar_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
-// DeleteTafDeploy provides a mock function for the type MockClient
-func (_mock *MockClient) DeleteTafDeploy(ctx context.Context, appID string, envName string) error {
-	ret := _mock.Called(ctx, appID, envName)
-
-	if len(ret) == 0 {
-		panic("no return value specified for DeleteTafDeploy")
-	}
-
-	var r0 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) error); ok {
-		r0 = returnFunc(ctx, appID, envName)
-	} else {
-		r0 = ret.Error(0)
-	}
-	return r0
-}
-
-// MockClient_DeleteTafDeploy_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'DeleteTafDeploy'
-type MockClient_DeleteTafDeploy_Call struct {
-	*mock.Call
-}
-
-// DeleteTafDeploy is a helper method to define mock.On call
-//   - ctx context.Context
-//   - appID string
-//   - envName string
-func (_e *MockClient_Expecter) DeleteTafDeploy(ctx any, appID any, envName any) *MockClient_DeleteTafDeploy_Call {
-	return &MockClient_DeleteTafDeploy_Call{Call: _e.mock.On("DeleteTafDeploy", ctx, appID, envName)}
-}
-
-func (_c *MockClient_DeleteTafDeploy_Call) Run(run func(ctx context.Context, appID string, envName string)) *MockClient_DeleteTafDeploy_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 context.Context
-		if args[0] != nil {
-			arg0 = args[0].(context.Context)
-		}
-		var arg1 string
-		if args[1] != nil {
-			arg1 = args[1].(string)
-		}
-		var arg2 string
-		if args[2] != nil {
-			arg2 = args[2].(string)
-		}
-		run(
-			arg0,
-			arg1,
-			arg2,
-		)
-	})
-	return _c
-}
-
-func (_c *MockClient_DeleteTafDeploy_Call) Return(err error) *MockClient_DeleteTafDeploy_Call {
-	_c.Call.Return(err)
-	return _c
-}
-
-func (_c *MockClient_DeleteTafDeploy_Call) RunAndReturn(run func(ctx context.Context, appID string, envName string) error) *MockClient_DeleteTafDeploy_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
-// DeleteTrpcDeploy provides a mock function for the type MockClient
-func (_mock *MockClient) DeleteTrpcDeploy(ctx context.Context, appID string, envName string) error {
-	ret := _mock.Called(ctx, appID, envName)
-
-	if len(ret) == 0 {
-		panic("no return value specified for DeleteTrpcDeploy")
-	}
-
-	var r0 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) error); ok {
-		r0 = returnFunc(ctx, appID, envName)
-	} else {
-		r0 = ret.Error(0)
-	}
-	return r0
-}
-
-// MockClient_DeleteTrpcDeploy_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'DeleteTrpcDeploy'
-type MockClient_DeleteTrpcDeploy_Call struct {
-	*mock.Call
-}
-
-// DeleteTrpcDeploy is a helper method to define mock.On call
-//   - ctx context.Context
-//   - appID string
-//   - envName string
-func (_e *MockClient_Expecter) DeleteTrpcDeploy(ctx any, appID any, envName any) *MockClient_DeleteTrpcDeploy_Call {
-	return &MockClient_DeleteTrpcDeploy_Call{Call: _e.mock.On("DeleteTrpcDeploy", ctx, appID, envName)}
-}
-
-func (_c *MockClient_DeleteTrpcDeploy_Call) Run(run func(ctx context.Context, appID string, envName string)) *MockClient_DeleteTrpcDeploy_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 context.Context
-		if args[0] != nil {
-			arg0 = args[0].(context.Context)
-		}
-		var arg1 string
-		if args[1] != nil {
-			arg1 = args[1].(string)
-		}
-		var arg2 string
-		if args[2] != nil {
-			arg2 = args[2].(string)
-		}
-		run(
-			arg0,
-			arg1,
-			arg2,
-		)
-	})
-	return _c
-}
-
-func (_c *MockClient_DeleteTrpcDeploy_Call) Return(err error) *MockClient_DeleteTrpcDeploy_Call {
-	_c.Call.Return(err)
-	return _c
-}
-
-func (_c *MockClient_DeleteTrpcDeploy_Call) RunAndReturn(run func(ctx context.Context, appID string, envName string) error) *MockClient_DeleteTrpcDeploy_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -4111,6 +4053,92 @@ func (_c *MockClient_ListAppInstances_Call) RunAndReturn(run func(ctx context.Co
 	return _c
 }
 
+// ListAppModelDeployRecords provides a mock function for the type MockClient
+func (_mock *MockClient) ListAppModelDeployRecords(ctx context.Context, appID string, envName string, keyword string, trafficLaneName string) ([]client.AppModelDeployRecord, error) {
+	ret := _mock.Called(ctx, appID, envName, keyword, trafficLaneName)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ListAppModelDeployRecords")
+	}
+
+	var r0 []client.AppModelDeployRecord
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, string, string) ([]client.AppModelDeployRecord, error)); ok {
+		return returnFunc(ctx, appID, envName, keyword, trafficLaneName)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, string, string) []client.AppModelDeployRecord); ok {
+		r0 = returnFunc(ctx, appID, envName, keyword, trafficLaneName)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]client.AppModelDeployRecord)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string, string, string) error); ok {
+		r1 = returnFunc(ctx, appID, envName, keyword, trafficLaneName)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockClient_ListAppModelDeployRecords_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ListAppModelDeployRecords'
+type MockClient_ListAppModelDeployRecords_Call struct {
+	*mock.Call
+}
+
+// ListAppModelDeployRecords is a helper method to define mock.On call
+//   - ctx context.Context
+//   - appID string
+//   - envName string
+//   - keyword string
+//   - trafficLaneName string
+func (_e *MockClient_Expecter) ListAppModelDeployRecords(ctx any, appID any, envName any, keyword any, trafficLaneName any) *MockClient_ListAppModelDeployRecords_Call {
+	return &MockClient_ListAppModelDeployRecords_Call{Call: _e.mock.On("ListAppModelDeployRecords", ctx, appID, envName, keyword, trafficLaneName)}
+}
+
+func (_c *MockClient_ListAppModelDeployRecords_Call) Run(run func(ctx context.Context, appID string, envName string, keyword string, trafficLaneName string)) *MockClient_ListAppModelDeployRecords_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 string
+		if args[2] != nil {
+			arg2 = args[2].(string)
+		}
+		var arg3 string
+		if args[3] != nil {
+			arg3 = args[3].(string)
+		}
+		var arg4 string
+		if args[4] != nil {
+			arg4 = args[4].(string)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+			arg4,
+		)
+	})
+	return _c
+}
+
+func (_c *MockClient_ListAppModelDeployRecords_Call) Return(appModelDeployRecords []client.AppModelDeployRecord, err error) *MockClient_ListAppModelDeployRecords_Call {
+	_c.Call.Return(appModelDeployRecords, err)
+	return _c
+}
+
+func (_c *MockClient_ListAppModelDeployRecords_Call) RunAndReturn(run func(ctx context.Context, appID string, envName string, keyword string, trafficLaneName string) ([]client.AppModelDeployRecord, error)) *MockClient_ListAppModelDeployRecords_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // ListAppPolarisConfigs provides a mock function for the type MockClient
 func (_mock *MockClient) ListAppPolarisConfigs(ctx context.Context, appID string) ([]client.PolarisConfig, error) {
 	ret := _mock.Called(ctx, appID)
@@ -4759,92 +4787,6 @@ func (_c *MockClient_ListPublicEnvVars_Call) RunAndReturn(run func(ctx context.C
 	return _c
 }
 
-// ListTafDeployRecords provides a mock function for the type MockClient
-func (_mock *MockClient) ListTafDeployRecords(ctx context.Context, appID string, envName string, keyword string, trafficLaneName string) ([]client.AppModelDeployRecord, error) {
-	ret := _mock.Called(ctx, appID, envName, keyword, trafficLaneName)
-
-	if len(ret) == 0 {
-		panic("no return value specified for ListTafDeployRecords")
-	}
-
-	var r0 []client.AppModelDeployRecord
-	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, string, string) ([]client.AppModelDeployRecord, error)); ok {
-		return returnFunc(ctx, appID, envName, keyword, trafficLaneName)
-	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, string, string) []client.AppModelDeployRecord); ok {
-		r0 = returnFunc(ctx, appID, envName, keyword, trafficLaneName)
-	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).([]client.AppModelDeployRecord)
-		}
-	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string, string, string) error); ok {
-		r1 = returnFunc(ctx, appID, envName, keyword, trafficLaneName)
-	} else {
-		r1 = ret.Error(1)
-	}
-	return r0, r1
-}
-
-// MockClient_ListTafDeployRecords_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ListTafDeployRecords'
-type MockClient_ListTafDeployRecords_Call struct {
-	*mock.Call
-}
-
-// ListTafDeployRecords is a helper method to define mock.On call
-//   - ctx context.Context
-//   - appID string
-//   - envName string
-//   - keyword string
-//   - trafficLaneName string
-func (_e *MockClient_Expecter) ListTafDeployRecords(ctx any, appID any, envName any, keyword any, trafficLaneName any) *MockClient_ListTafDeployRecords_Call {
-	return &MockClient_ListTafDeployRecords_Call{Call: _e.mock.On("ListTafDeployRecords", ctx, appID, envName, keyword, trafficLaneName)}
-}
-
-func (_c *MockClient_ListTafDeployRecords_Call) Run(run func(ctx context.Context, appID string, envName string, keyword string, trafficLaneName string)) *MockClient_ListTafDeployRecords_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 context.Context
-		if args[0] != nil {
-			arg0 = args[0].(context.Context)
-		}
-		var arg1 string
-		if args[1] != nil {
-			arg1 = args[1].(string)
-		}
-		var arg2 string
-		if args[2] != nil {
-			arg2 = args[2].(string)
-		}
-		var arg3 string
-		if args[3] != nil {
-			arg3 = args[3].(string)
-		}
-		var arg4 string
-		if args[4] != nil {
-			arg4 = args[4].(string)
-		}
-		run(
-			arg0,
-			arg1,
-			arg2,
-			arg3,
-			arg4,
-		)
-	})
-	return _c
-}
-
-func (_c *MockClient_ListTafDeployRecords_Call) Return(appModelDeployRecords []client.AppModelDeployRecord, err error) *MockClient_ListTafDeployRecords_Call {
-	_c.Call.Return(appModelDeployRecords, err)
-	return _c
-}
-
-func (_c *MockClient_ListTafDeployRecords_Call) RunAndReturn(run func(ctx context.Context, appID string, envName string, keyword string, trafficLaneName string) ([]client.AppModelDeployRecord, error)) *MockClient_ListTafDeployRecords_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
 // ListTrpcAdminCmds provides a mock function for the type MockClient
 func (_mock *MockClient) ListTrpcAdminCmds(ctx context.Context, appID string, envName string, instanceIDs []string) ([]string, error) {
 	ret := _mock.Called(ctx, appID, envName, instanceIDs)
@@ -4921,92 +4863,6 @@ func (_c *MockClient_ListTrpcAdminCmds_Call) Return(strings []string, err error)
 }
 
 func (_c *MockClient_ListTrpcAdminCmds_Call) RunAndReturn(run func(ctx context.Context, appID string, envName string, instanceIDs []string) ([]string, error)) *MockClient_ListTrpcAdminCmds_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
-// ListTrpcDeployRecords provides a mock function for the type MockClient
-func (_mock *MockClient) ListTrpcDeployRecords(ctx context.Context, appID string, envName string, keyword string, trafficLaneName string) ([]client.AppModelDeployRecord, error) {
-	ret := _mock.Called(ctx, appID, envName, keyword, trafficLaneName)
-
-	if len(ret) == 0 {
-		panic("no return value specified for ListTrpcDeployRecords")
-	}
-
-	var r0 []client.AppModelDeployRecord
-	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, string, string) ([]client.AppModelDeployRecord, error)); ok {
-		return returnFunc(ctx, appID, envName, keyword, trafficLaneName)
-	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, string, string) []client.AppModelDeployRecord); ok {
-		r0 = returnFunc(ctx, appID, envName, keyword, trafficLaneName)
-	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).([]client.AppModelDeployRecord)
-		}
-	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string, string, string) error); ok {
-		r1 = returnFunc(ctx, appID, envName, keyword, trafficLaneName)
-	} else {
-		r1 = ret.Error(1)
-	}
-	return r0, r1
-}
-
-// MockClient_ListTrpcDeployRecords_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ListTrpcDeployRecords'
-type MockClient_ListTrpcDeployRecords_Call struct {
-	*mock.Call
-}
-
-// ListTrpcDeployRecords is a helper method to define mock.On call
-//   - ctx context.Context
-//   - appID string
-//   - envName string
-//   - keyword string
-//   - trafficLaneName string
-func (_e *MockClient_Expecter) ListTrpcDeployRecords(ctx any, appID any, envName any, keyword any, trafficLaneName any) *MockClient_ListTrpcDeployRecords_Call {
-	return &MockClient_ListTrpcDeployRecords_Call{Call: _e.mock.On("ListTrpcDeployRecords", ctx, appID, envName, keyword, trafficLaneName)}
-}
-
-func (_c *MockClient_ListTrpcDeployRecords_Call) Run(run func(ctx context.Context, appID string, envName string, keyword string, trafficLaneName string)) *MockClient_ListTrpcDeployRecords_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 context.Context
-		if args[0] != nil {
-			arg0 = args[0].(context.Context)
-		}
-		var arg1 string
-		if args[1] != nil {
-			arg1 = args[1].(string)
-		}
-		var arg2 string
-		if args[2] != nil {
-			arg2 = args[2].(string)
-		}
-		var arg3 string
-		if args[3] != nil {
-			arg3 = args[3].(string)
-		}
-		var arg4 string
-		if args[4] != nil {
-			arg4 = args[4].(string)
-		}
-		run(
-			arg0,
-			arg1,
-			arg2,
-			arg3,
-			arg4,
-		)
-	})
-	return _c
-}
-
-func (_c *MockClient_ListTrpcDeployRecords_Call) Return(appModelDeployRecords []client.AppModelDeployRecord, err error) *MockClient_ListTrpcDeployRecords_Call {
-	_c.Call.Return(appModelDeployRecords, err)
-	return _c
-}
-
-func (_c *MockClient_ListTrpcDeployRecords_Call) RunAndReturn(run func(ctx context.Context, appID string, envName string, keyword string, trafficLaneName string) ([]client.AppModelDeployRecord, error)) *MockClient_ListTrpcDeployRecords_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -5296,12 +5152,12 @@ func (_c *MockClient_PatchAppPolarisConfig_Call) RunAndReturn(run func(ctx conte
 	return _c
 }
 
-// PreCheckTafDeploy provides a mock function for the type MockClient
-func (_mock *MockClient) PreCheckTafDeploy(ctx context.Context, appID string, envName string) (*client.DeployPrecheckResult, error) {
+// PreCheckAppModelDeploy provides a mock function for the type MockClient
+func (_mock *MockClient) PreCheckAppModelDeploy(ctx context.Context, appID string, envName string) (*client.DeployPrecheckResult, error) {
 	ret := _mock.Called(ctx, appID, envName)
 
 	if len(ret) == 0 {
-		panic("no return value specified for PreCheckTafDeploy")
+		panic("no return value specified for PreCheckAppModelDeploy")
 	}
 
 	var r0 *client.DeployPrecheckResult
@@ -5324,20 +5180,20 @@ func (_mock *MockClient) PreCheckTafDeploy(ctx context.Context, appID string, en
 	return r0, r1
 }
 
-// MockClient_PreCheckTafDeploy_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'PreCheckTafDeploy'
-type MockClient_PreCheckTafDeploy_Call struct {
+// MockClient_PreCheckAppModelDeploy_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'PreCheckAppModelDeploy'
+type MockClient_PreCheckAppModelDeploy_Call struct {
 	*mock.Call
 }
 
-// PreCheckTafDeploy is a helper method to define mock.On call
+// PreCheckAppModelDeploy is a helper method to define mock.On call
 //   - ctx context.Context
 //   - appID string
 //   - envName string
-func (_e *MockClient_Expecter) PreCheckTafDeploy(ctx any, appID any, envName any) *MockClient_PreCheckTafDeploy_Call {
-	return &MockClient_PreCheckTafDeploy_Call{Call: _e.mock.On("PreCheckTafDeploy", ctx, appID, envName)}
+func (_e *MockClient_Expecter) PreCheckAppModelDeploy(ctx any, appID any, envName any) *MockClient_PreCheckAppModelDeploy_Call {
+	return &MockClient_PreCheckAppModelDeploy_Call{Call: _e.mock.On("PreCheckAppModelDeploy", ctx, appID, envName)}
 }
 
-func (_c *MockClient_PreCheckTafDeploy_Call) Run(run func(ctx context.Context, appID string, envName string)) *MockClient_PreCheckTafDeploy_Call {
+func (_c *MockClient_PreCheckAppModelDeploy_Call) Run(run func(ctx context.Context, appID string, envName string)) *MockClient_PreCheckAppModelDeploy_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -5360,86 +5216,12 @@ func (_c *MockClient_PreCheckTafDeploy_Call) Run(run func(ctx context.Context, a
 	return _c
 }
 
-func (_c *MockClient_PreCheckTafDeploy_Call) Return(deployPrecheckResult *client.DeployPrecheckResult, err error) *MockClient_PreCheckTafDeploy_Call {
+func (_c *MockClient_PreCheckAppModelDeploy_Call) Return(deployPrecheckResult *client.DeployPrecheckResult, err error) *MockClient_PreCheckAppModelDeploy_Call {
 	_c.Call.Return(deployPrecheckResult, err)
 	return _c
 }
 
-func (_c *MockClient_PreCheckTafDeploy_Call) RunAndReturn(run func(ctx context.Context, appID string, envName string) (*client.DeployPrecheckResult, error)) *MockClient_PreCheckTafDeploy_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
-// PreCheckTrpcDeploy provides a mock function for the type MockClient
-func (_mock *MockClient) PreCheckTrpcDeploy(ctx context.Context, appID string, envName string) (*client.DeployPrecheckResult, error) {
-	ret := _mock.Called(ctx, appID, envName)
-
-	if len(ret) == 0 {
-		panic("no return value specified for PreCheckTrpcDeploy")
-	}
-
-	var r0 *client.DeployPrecheckResult
-	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) (*client.DeployPrecheckResult, error)); ok {
-		return returnFunc(ctx, appID, envName)
-	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) *client.DeployPrecheckResult); ok {
-		r0 = returnFunc(ctx, appID, envName)
-	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*client.DeployPrecheckResult)
-		}
-	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string) error); ok {
-		r1 = returnFunc(ctx, appID, envName)
-	} else {
-		r1 = ret.Error(1)
-	}
-	return r0, r1
-}
-
-// MockClient_PreCheckTrpcDeploy_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'PreCheckTrpcDeploy'
-type MockClient_PreCheckTrpcDeploy_Call struct {
-	*mock.Call
-}
-
-// PreCheckTrpcDeploy is a helper method to define mock.On call
-//   - ctx context.Context
-//   - appID string
-//   - envName string
-func (_e *MockClient_Expecter) PreCheckTrpcDeploy(ctx any, appID any, envName any) *MockClient_PreCheckTrpcDeploy_Call {
-	return &MockClient_PreCheckTrpcDeploy_Call{Call: _e.mock.On("PreCheckTrpcDeploy", ctx, appID, envName)}
-}
-
-func (_c *MockClient_PreCheckTrpcDeploy_Call) Run(run func(ctx context.Context, appID string, envName string)) *MockClient_PreCheckTrpcDeploy_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 context.Context
-		if args[0] != nil {
-			arg0 = args[0].(context.Context)
-		}
-		var arg1 string
-		if args[1] != nil {
-			arg1 = args[1].(string)
-		}
-		var arg2 string
-		if args[2] != nil {
-			arg2 = args[2].(string)
-		}
-		run(
-			arg0,
-			arg1,
-			arg2,
-		)
-	})
-	return _c
-}
-
-func (_c *MockClient_PreCheckTrpcDeploy_Call) Return(deployPrecheckResult *client.DeployPrecheckResult, err error) *MockClient_PreCheckTrpcDeploy_Call {
-	_c.Call.Return(deployPrecheckResult, err)
-	return _c
-}
-
-func (_c *MockClient_PreCheckTrpcDeploy_Call) RunAndReturn(run func(ctx context.Context, appID string, envName string) (*client.DeployPrecheckResult, error)) *MockClient_PreCheckTrpcDeploy_Call {
+func (_c *MockClient_PreCheckAppModelDeploy_Call) RunAndReturn(run func(ctx context.Context, appID string, envName string) (*client.DeployPrecheckResult, error)) *MockClient_PreCheckAppModelDeploy_Call {
 	_c.Call.Return(run)
 	return _c
 }

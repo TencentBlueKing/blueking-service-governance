@@ -185,21 +185,16 @@ var _ = Describe("Output Formatting", func() {
 		})
 	})
 
-	Describe("isAppModelType", func() {
-		It("should return true for trpc", func() {
-			Expect(isAppModelType("trpc")).To(BeTrue())
+	Describe("client.IsAppModelType", func() {
+		It("should return true for trpc, taf and bkmsApp", func() {
+			Expect(client.IsAppModelType("trpc")).To(BeTrue())
+			Expect(client.IsAppModelType("taf")).To(BeTrue())
+			Expect(client.IsAppModelType("bkmsApp")).To(BeTrue())
 		})
 
-		It("should return true for taf", func() {
-			Expect(isAppModelType("taf")).To(BeTrue())
-		})
-
-		It("should return false for helm", func() {
-			Expect(isAppModelType("helm")).To(BeFalse())
-		})
-
-		It("should return false for agones", func() {
-			Expect(isAppModelType("agones")).To(BeFalse())
+		It("should return false for helm and agones", func() {
+			Expect(client.IsAppModelType("helm")).To(BeFalse())
+			Expect(client.IsAppModelType("agones")).To(BeFalse())
 		})
 	})
 })

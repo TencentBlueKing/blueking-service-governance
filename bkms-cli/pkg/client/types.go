@@ -95,8 +95,10 @@ type Client interface {
 	GetAppMinimal(ctx context.Context, workspaceID, appID string) (*AppMinimal, error)
 	// GetApp 获取应用完整定义（含 BuildConfig / AppModelSpec）
 	GetApp(ctx context.Context, appID string) (*AppFull, error)
-	// CreateApp 创建应用
+	// CreateApp 创建 Helm / Agones 应用
 	CreateApp(ctx context.Context, workspaceID string, body any) (*AppMinimal, error)
+	// CreateBKMSApp 创建平台托管应用（trpc / taf / blank）
+	CreateBKMSApp(ctx context.Context, workspaceID string, body any) (*AppMinimal, error)
 	// DeleteApp 删除应用
 	DeleteApp(ctx context.Context, appID string) error
 	// UpdateAppBuildConfig 更新应用构建配置
@@ -148,32 +150,20 @@ type Client interface {
 	// DeleteHelmDeploy 删除 Helm 部署
 	DeleteHelmDeploy(ctx context.Context, appID, envName, deployID string) error
 
-	// --- Trpc ---
-	// CreateAppTrpcDeploy 执行 Trpc 应用部署
+	// --- AppModel（trpc / taf / bkmsApp 共用 bkmsapp-deploys 接口）---
+	// CreateAppModelDeploy 执行平台托管应用部署
 	// image 镜像，完整镜像地址（必填）。
 	// replicas 副本数/实例数量，发布实例数量必须大于或等于 1（必填）。
-	CreateAppTrpcDeploy(ctx context.Context, appID, envName string, opts AppModelDeployOptions) error
-	// ListTrpcDeployRecords 获取最近的应用 Trpc 部署记录
+	CreateAppModelDeploy(ctx context.Context, appID, envName string, opts AppModelDeployOptions) error
+	// ListAppModelDeployRecords 获取最近的应用部署记录
 	// appID,envName 应用/环境 必填
-	ListTrpcDeployRecords(
+	ListAppModelDeployRecords(
 		ctx context.Context, appID, envName, keyword, trafficLaneName string,
 	) ([]AppModelDeployRecord, error)
-	// DeleteTrpcDeploy 删除 Trpc 部署
-	DeleteTrpcDeploy(ctx context.Context, appID, envName string) error
-	// PreCheckTrpcDeploy 部署前检查 Trpc 应用
-	PreCheckTrpcDeploy(ctx context.Context, appID, envName string) (*DeployPrecheckResult, error)
-
-	// --- TAF ---
-	// CreateAppTafDeploy 执行 TAF 应用部署
-	CreateAppTafDeploy(ctx context.Context, appID, envName string, opts AppModelDeployOptions) error
-	// ListTafDeployRecords 获取最近的应用 TAF 部署记录
-	ListTafDeployRecords(
-		ctx context.Context, appID, envName, keyword, trafficLaneName string,
-	) ([]AppModelDeployRecord, error)
-	// DeleteTafDeploy 删除 TAF 部署
-	DeleteTafDeploy(ctx context.Context, appID, envName string) error
-	// PreCheckTafDeploy 部署前检查 TAF 应用
-	PreCheckTafDeploy(ctx context.Context, appID, envName string) (*DeployPrecheckResult, error)
+	// DeleteAppModelDeploy 删除平台托管应用部署
+	DeleteAppModelDeploy(ctx context.Context, appID, envName string) error
+	// PreCheckAppModelDeploy 平台托管应用部署前检查
+	PreCheckAppModelDeploy(ctx context.Context, appID, envName string) (*DeployPrecheckResult, error)
 
 	// --- 通用 ---
 	// GrayscaleUpdateInstance 灰度更新 AppModel 实例

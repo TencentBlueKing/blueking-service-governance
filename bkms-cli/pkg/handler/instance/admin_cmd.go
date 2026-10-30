@@ -16,7 +16,7 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
-// Package instance 管理命令，根据 appType 分流处理 Trpc/Taf 管理命令。
+// Package instance 管理命令，根据应用框架（framework）分流处理 Trpc/Taf 管理命令。
 package instance
 
 import (
@@ -34,7 +34,8 @@ func ListTrpcAdminCmds(ctx context.Context, appID, envName string, instanceIDs [
 	return client.New().ListTrpcAdminCmds(ctx, appID, envName, instanceIDs)
 }
 
-// ExecAdminCmd 执行管理命令：校验类型必填参数 → 按 appType 路由到 Trpc/Taf API。
+// ExecAdminCmd 执行管理命令：校验类型必填参数 → 按 framework 路由到 Trpc/Taf API。
+// trpc、taf 与 bkmsApp 应用都按 framework 判断；blank 框架没有管理命令。
 func ExecAdminCmd(
 	ctx context.Context,
 	workspaceID, appID, envName string,
@@ -45,13 +46,13 @@ func ExecAdminCmd(
 		return nil, errors.Wrap(err, "get app info")
 	}
 
-	switch app.Type {
-	case constant.AppTypeTrpc:
+	switch framework := client.FrameworkOf(app.Type, app.Framework); framework {
+	case constant.FrameworkTrpc:
 		return execTrpcAdminCmd(ctx, appID, envName, opts)
-	case constant.AppTypeTaf:
+	case constant.FrameworkTaf:
 		return execTafAdminCmd(ctx, appID, envName, opts)
 	default:
-		return nil, errors.Errorf("unsupported app type for admin cmd: %s", app.Type)
+		return nil, errors.Errorf("app %s (framework %q) does not support admin commands", appID, framework)
 	}
 }
 

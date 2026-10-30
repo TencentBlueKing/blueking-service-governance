@@ -84,9 +84,6 @@ type appModelUpdateSpec struct {
 
 	// podNames 实例名称，最终提交给后端的字段
 	podNames []string
-
-	// appType 应用类型 [trpc, taf]
-	appType string
 }
 
 // UpdateDeploy 更新部署，支持多环境（逗号分隔名称）或按环境类型批量部署
@@ -122,12 +119,11 @@ func UpdateDeploy(
 	case constant.AppTypeHelm:
 		return errors.New("helm app type is not supported yet")
 
-	case constant.AppTypeTrpc, constant.AppTypeTaf:
+	case constant.AppTypeTrpc, constant.AppTypeTaf, constant.AppTypeBKMSApp:
 		spec := new(appModelUpdateSpec)
 		if err = yaml.Unmarshal(fileContent, spec); err != nil {
 			return errors.Wrapf(err, "parse update spec file %s", updateSpecFilePath)
 		}
-		spec.appType = app.Type
 		if err = spec.Validate(); err != nil {
 			return err
 		}
@@ -162,19 +158,8 @@ func UpdateDeploy(
 // 2. 配置更新，走发布接口重新发布一次，参数：config；对应页面的仅配置更新功能（全量更新）
 // 3. 镜像更新，走实例更新接口，参数：imageTag、strategy；对应页面的仅镜像更新功能（全量更新）
 // 4. 灰度更新，走实例更新接口，参数：imageTag、instanceIDs(pod名称)；对应页面的灰度更新功能（灰度更新）
-// NOTE: 目前通过 switch-case 来处理不同 appType 的差异，后续如果还有新增 AppType， 考虑在下层抽象一层来屏蔽差异。
 func (s *appModelUpdateSpec) handler(ctx context.Context, cli client.Client, appID, envName string) error {
-	var records []client.AppModelDeployRecord
-	var err error
-
-	switch s.appType {
-	case constant.AppTypeTrpc:
-		records, err = cli.ListTrpcDeployRecords(ctx, appID, envName, "", "")
-	case constant.AppTypeTaf:
-		records, err = cli.ListTafDeployRecords(ctx, appID, envName, "", "")
-	default:
-		return errors.Errorf("unknown app type: %s", s.appType)
-	}
+	records, err := cli.ListAppModelDeployRecords(ctx, appID, envName, "", "")
 	if err != nil {
 		return err
 	}
@@ -190,28 +175,14 @@ func (s *appModelUpdateSpec) handler(ctx context.Context, cli client.Client, app
 			ImageTag: s.ImageTag,
 			Replicas: cast.ToUint64(release.Replicas),
 		}
-		switch s.appType {
-		case constant.AppTypeTrpc:
-			return cli.CreateAppTrpcDeploy(ctx, appID, envName, opts)
-		case constant.AppTypeTaf:
-			return cli.CreateAppTafDeploy(ctx, appID, envName, opts)
-		default:
-			return errors.Errorf("unknown app type: %s", s.appType)
-		}
+		return cli.CreateAppModelDeploy(ctx, appID, envName, opts)
 
 	case configUpdateMode:
 		opts := client.AppModelDeployOptions{
 			ImageTag: release.ImageTag,
 			Replicas: cast.ToUint64(release.Replicas),
 		}
-		switch s.appType {
-		case constant.AppTypeTrpc:
-			return cli.CreateAppTrpcDeploy(ctx, appID, envName, opts)
-		case constant.AppTypeTaf:
-			return cli.CreateAppTafDeploy(ctx, appID, envName, opts)
-		default:
-			return errors.Errorf("unknown app type: %s", s.appType)
-		}
+		return cli.CreateAppModelDeploy(ctx, appID, envName, opts)
 
 	case imageUpdateMode:
 		return cli.BatchUpdateInstance(ctx, appID, envName, s.ImageTag, string(s.Strategy))

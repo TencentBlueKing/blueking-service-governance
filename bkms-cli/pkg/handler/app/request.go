@@ -25,14 +25,32 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/constant"
 )
 
-// createAppRequest 创建应用后端 API 请求体
+// createAppRequest 创建 Helm / Agones 应用的后端 API 请求体
 type createAppRequest struct {
-	ID           string            `json:"id"`
-	Name         string            `json:"name"`
-	Type         string            `json:"type"`
-	BuildConfig  *BuildConfigSpec  `json:"buildConfig"`
-	AppModelSpec *AppModelSpecSpec `json:"appModelSpec,omitempty"`
-	HelmSpec     *HelmSpecSpec     `json:"helmSpec,omitempty"`
+	ID          string           `json:"id"`
+	Name        string           `json:"name"`
+	Type        string           `json:"type"`
+	BuildConfig *BuildConfigSpec `json:"buildConfig"`
+	HelmSpec    *HelmSpecSpec    `json:"helmSpec,omitempty"`
+}
+
+// createBKMSAppRequest 创建平台托管应用（trpc / taf / blank）的后端 API 请求体
+type createBKMSAppRequest struct {
+	ID                  string                   `json:"id"`
+	Name                string                   `json:"name"`
+	Framework           string                   `json:"framework"`
+	Language            string                   `json:"language"`
+	BuildConfig         *BuildConfigSpec         `json:"buildConfig"`
+	AppModelSpec        *bkmsAppModelSpec        `json:"appModelSpec"`
+	FrameworkConfigFile *FrameworkConfigFileSpec `json:"frameworkConfigFile,omitempty"`
+}
+
+// bkmsAppModelSpec 平台托管应用的启动配置
+type bkmsAppModelSpec struct {
+	Command   []string       `json:"command,omitempty"`
+	Args      []string       `json:"args,omitempty"`
+	ShCommand string         `json:"shCommand,omitempty"`
+	EnvVars   []VariableSpec `json:"envVars,omitempty"`
 }
 
 // buildAppID 根据应用名称与 API 返回的后缀拼接应用 ID
@@ -47,30 +65,44 @@ func buildAppID(name, suffix string) (string, error) {
 	return id, nil
 }
 
-// buildCreateAppRequest 构建后端 API 创建应用请求体
-func buildCreateAppRequest(appID string, spec *AppCreateSpec) (*createAppRequest, error) {
-	req := &createAppRequest{
-		ID:          appID,
-		Name:        spec.Name,
-		Type:        spec.Type,
-		BuildConfig: spec.BuildConfig,
-	}
-
-	// 根据应用类型设置对应的 spec
-	switch spec.Type {
-	case constant.AppTypeTrpc, constant.AppTypeTaf:
-		req.AppModelSpec = spec.AppModelSpec
-	case constant.AppTypeHelm, constant.AppTypeAgones:
+// buildCreateAppRequest 构建后端 API 创建应用请求体。
+// Helm / Agones 返回 legacy，平台托管应用（trpc / taf / blank）返回 bkms。
+// 调用前需先执行 spec.Validate()，其中已完成旧写法的归一化。
+func buildCreateAppRequest(appID string, spec *AppCreateSpec) (*createAppRequest, *createBKMSAppRequest, error) {
+	if spec.Type == constant.AppTypeHelm || spec.Type == constant.AppTypeAgones {
 		if spec.HelmSpec != nil {
 			// 填充 valueFiles 默认值
 			fillHelmValueFilesDefault(spec.HelmSpec)
 		}
-		req.HelmSpec = spec.HelmSpec
-	default:
-		return nil, errors.Errorf("unsupported app type: %s", spec.Type)
+		return &createAppRequest{
+			ID:          appID,
+			Name:        spec.Name,
+			Type:        spec.Type,
+			BuildConfig: spec.BuildConfig,
+			HelmSpec:    spec.HelmSpec,
+		}, nil, nil
 	}
 
-	return req, nil
+	if spec.Framework == "" {
+		return nil, nil, errors.Errorf("unsupported app type: %s", spec.Type)
+	}
+
+	modelSpec := &bkmsAppModelSpec{}
+	if spec.AppModelSpec != nil {
+		modelSpec.Command = spec.AppModelSpec.Command
+		modelSpec.Args = spec.AppModelSpec.Args
+		modelSpec.ShCommand = spec.AppModelSpec.ShCommand
+		modelSpec.EnvVars = spec.AppModelSpec.EnvVars
+	}
+	return nil, &createBKMSAppRequest{
+		ID:                  appID,
+		Name:                spec.Name,
+		Framework:           spec.Framework,
+		Language:            spec.Language,
+		BuildConfig:         spec.BuildConfig,
+		AppModelSpec:        modelSpec,
+		FrameworkConfigFile: spec.FrameworkConfigFile,
+	}, nil
 }
 
 // fillHelmValueFilesDefault 填充 helmSpec.helmSource.valueFiles 默认值

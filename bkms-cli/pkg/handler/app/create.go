@@ -27,6 +27,8 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/client"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/constant"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/utils/console"
 )
 
 // CreateApp 创建应用，读取 YAML 文件并调用后端 API
@@ -47,27 +49,32 @@ func CreateApp(ctx context.Context, workspaceID, specFile string) (*client.AppMi
 		return nil, errors.Wrap(err, "validate app spec")
 	}
 
-	// 确定应用 ID：用户指定则使用，否则自动生成
-	appID := spec.ID
-	if appID == "" {
-		cli := client.New()
-		suffix, autoErr := cli.GetAppIDAutoSuffix(ctx)
-		if autoErr != nil {
-			return nil, errors.Wrap(autoErr, "get app id auto suffix")
-		}
-		var buildErr error
-		appID, buildErr = buildAppID(spec.Name, suffix)
-		if buildErr != nil {
-			return nil, buildErr
-		}
+	// 应用 ID 固定由服务端返回的后缀与 name 拼接生成，不允许用户指定
+	suffix, err := client.New().GetAppIDAutoSuffix(ctx)
+	if err != nil {
+		return nil, errors.Wrap(err, "get app id auto suffix")
+	}
+	appID, err := buildAppID(spec.Name, suffix)
+	if err != nil {
+		return nil, err
+	}
+
+	// 旧的 type: trpc/taf 写法在 Validate 中已归一化为 framework + language
+	if spec.Type == constant.AppTypeTrpc || spec.Type == constant.AppTypeTaf {
+		console.Tips("'type: %s' is deprecated, please use 'framework: %s' with 'frameworkConfigFile' instead",
+			spec.Type, spec.Framework)
 	}
 
 	// 构建后端 API 请求体
-	body, err := buildCreateAppRequest(appID, spec)
+	legacyBody, bkmsBody, err := buildCreateAppRequest(appID, spec)
 	if err != nil {
 		return nil, errors.Wrap(err, "build create app request")
 	}
 
 	// 调用后端 API 创建应用
-	return client.New().CreateApp(ctx, workspaceID, body)
+	cli := client.New()
+	if bkmsBody != nil {
+		return cli.CreateBKMSApp(ctx, workspaceID, bkmsBody)
+	}
+	return cli.CreateApp(ctx, workspaceID, legacyBody)
 }

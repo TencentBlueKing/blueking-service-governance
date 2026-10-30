@@ -89,8 +89,7 @@ func createDeployForEnv(
 	file []byte,
 	deploySpecFile string,
 ) error {
-	switch app.Type {
-	case constant.AppTypeHelm:
+	if app.Type == constant.AppTypeHelm {
 		opts := new(client.HelmDeployOptions)
 		if err := yaml.Unmarshal(file, opts); err != nil {
 			return errors.Wrapf(err, "parse deploy spec file %s failed", deploySpecFile)
@@ -99,27 +98,18 @@ func createDeployForEnv(
 			return err
 		}
 		return cli.CreateAppHelmDeploy(ctx, app.ID, envName, *opts)
-
-	case constant.AppTypeTrpc:
-		opts := new(client.AppModelDeployOptions)
-		if err := yaml.Unmarshal(file, opts); err != nil {
-			return errors.Wrapf(err, "parse deploy spec file %s failed", deploySpecFile)
-		}
-		if err := opts.Validate(); err != nil {
-			return err
-		}
-		return cli.CreateAppTrpcDeploy(ctx, app.ID, envName, *opts)
-
-	case constant.AppTypeTaf:
-		opts := new(client.AppModelDeployOptions)
-		if err := yaml.Unmarshal(file, opts); err != nil {
-			return errors.Wrapf(err, "parse deploy spec file %s failed", deploySpecFile)
-		}
-		if err := opts.Validate(); err != nil {
-			return err
-		}
-		return cli.CreateAppTafDeploy(ctx, app.ID, envName, *opts)
-	default:
-		return errors.Errorf("unknown app type: %s", app.Type)
 	}
+
+	if !client.IsAppModelType(app.Type) {
+		return errors.Errorf("unsupported app type for deploy: %s", app.Type)
+	}
+
+	opts := new(client.AppModelDeployOptions)
+	if err := yaml.Unmarshal(file, opts); err != nil {
+		return errors.Wrapf(err, "parse deploy spec file %s failed", deploySpecFile)
+	}
+	if err := opts.Validate(); err != nil {
+		return err
+	}
+	return cli.CreateAppModelDeploy(ctx, app.ID, envName, *opts)
 }

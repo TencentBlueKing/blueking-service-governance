@@ -42,12 +42,13 @@ var _ = Describe("buildCreateAppRequest", func() {
 		})
 	})
 
-	// ==================== trpc 类型请求组装 ====================
-	Describe("trpc type", func() {
-		It("should assemble request with correct fields", func() {
-			spec := &AppCreateSpec{
-				Name: "my-trpc-app",
-				Type: "trpc",
+	// ==================== 平台托管应用请求组装（trpc 新写法） ====================
+	Describe("appmodel trpc type", func() {
+		newSpec := func() *AppCreateSpec {
+			return &AppCreateSpec{
+				Name:      "my-trpc-app",
+				Framework: "trpc",
+				Language:  "go",
 				BuildConfig: &BuildConfigSpec{
 					SourceType: "imageRegistry",
 					ImageBuildConfig: &ImageBuildConfigSpec{
@@ -60,42 +61,70 @@ var _ = Describe("buildCreateAppRequest", func() {
 					EnvVars: []VariableSpec{
 						{Key: "ENV", Value: "prod", Description: "环境"},
 					},
-					TrpcSpec: &TrpcSpecSpec{
-						Language: "go",
-						FileName: "trpc_go.yaml",
-						FilePath: "/app/conf",
-					},
+				},
+				FrameworkConfigFile: &FrameworkConfigFileSpec{
+					Name:     "trpc_go.yaml",
+					MountDir: "/app/conf",
 				},
 			}
+		}
 
-			req, err := buildCreateAppRequest("test-app-id", spec)
+		It("should build the bkmsApp request", func() {
+			spec := newSpec()
+			Expect(spec.Validate()).To(Succeed())
+
+			legacy, req, err := buildCreateAppRequest("test-app-id", spec)
 			Expect(err).NotTo(HaveOccurred())
+			Expect(legacy).To(BeNil())
 
 			Expect(req.ID).To(Equal("test-app-id"))
 			Expect(req.Name).To(Equal("my-trpc-app"))
-			Expect(req.Type).To(Equal("trpc"))
+			Expect(req.Framework).To(Equal("trpc"))
+			Expect(req.Language).To(Equal("go"))
 
 			// buildConfig 直接透传
 			Expect(req.BuildConfig).To(Equal(spec.BuildConfig))
-			Expect(req.BuildConfig.SourceType).To(Equal("imageRegistry"))
-			Expect(req.BuildConfig.ImageBuildConfig.Name).To(Equal("mirrors.tencent.com/myns/my-trpc-app"))
 
-			// appModelSpec 直接透传
-			Expect(req.AppModelSpec).To(Equal(spec.AppModelSpec))
-			Expect(req.AppModelSpec.TrpcSpec.Language).To(Equal("go"))
-			Expect(req.AppModelSpec.TrpcSpec.FileName).To(Equal("trpc_go.yaml"))
+			// 启动配置平铺，不再包含框架 spec
 			Expect(req.AppModelSpec.Command).To(Equal([]string{"/app/bin/server"}))
 			Expect(req.AppModelSpec.EnvVars).To(HaveLen(1))
 			Expect(req.AppModelSpec.EnvVars[0].Key).To(Equal("ENV"))
 
-			// 不应有 helmSpec
-			Expect(req.HelmSpec).To(BeNil())
+			// 框架配置文件
+			Expect(
+				req.FrameworkConfigFile,
+			).To(Equal(&FrameworkConfigFileSpec{Name: "trpc_go.yaml", MountDir: "/app/conf"}))
 		})
-	})
 
-	// ==================== taf 类型请求组装 ====================
-	Describe("taf type", func() {
-		It("should assemble request with correct fields", func() {
+		It("should convert the legacy type: trpc spec", func() {
+			spec := &AppCreateSpec{
+				Name: "my-trpc-app",
+				Type: "trpc",
+				BuildConfig: &BuildConfigSpec{
+					SourceType: "imageRegistry",
+					ImageBuildConfig: &ImageBuildConfigSpec{
+						Name: "mirrors.tencent.com/myns/my-trpc-app",
+					},
+				},
+				AppModelSpec: &AppModelSpecSpec{
+					TrpcSpec: &TrpcSpecSpec{
+						Language: "cpp",
+						FileName: "trpc_cpp.yaml",
+						FilePath: "/usr/local/trpc/bin",
+					},
+				},
+			}
+			Expect(spec.Validate()).To(Succeed())
+
+			_, req, err := buildCreateAppRequest("test-app-id", spec)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(req.Framework).To(Equal("trpc"))
+			Expect(req.Language).To(Equal("cpp"))
+			Expect(req.FrameworkConfigFile.Name).To(Equal("trpc_cpp.yaml"))
+			Expect(req.FrameworkConfigFile.MountDir).To(Equal("/usr/local/trpc/bin"))
+		})
+
+		It("should build the taf request with cpp language", func() {
 			spec := &AppCreateSpec{
 				Name: "my-taf-app",
 				Type: "taf",
@@ -112,14 +141,35 @@ var _ = Describe("buildCreateAppRequest", func() {
 					},
 				},
 			}
+			Expect(spec.Validate()).To(Succeed())
 
-			req, err := buildCreateAppRequest("test-app-id", spec)
+			_, req, err := buildCreateAppRequest("test-app-id", spec)
 			Expect(err).NotTo(HaveOccurred())
+			Expect(req.Framework).To(Equal("taf"))
+			Expect(req.Language).To(Equal("cpp"))
+			Expect(req.FrameworkConfigFile.Content).To(BeEmpty())
+		})
 
-			Expect(req.AppModelSpec).To(Equal(spec.AppModelSpec))
-			Expect(req.AppModelSpec.TafSpec.FileName).To(Equal("config.conf"))
-			Expect(req.AppModelSpec.TrpcSpec).To(BeNil())
-			Expect(req.HelmSpec).To(BeNil())
+		It("should build the blank request without frameworkConfigFile", func() {
+			spec := &AppCreateSpec{
+				Name:      "my-blank-app",
+				Framework: "blank",
+				Language:  "python",
+				BuildConfig: &BuildConfigSpec{
+					SourceType:       "imageRegistry",
+					ImageBuildConfig: &ImageBuildConfigSpec{Name: "img"},
+				},
+				AppModelSpec: &AppModelSpecSpec{
+					Command: []string{"python3", "app.py"},
+				},
+			}
+			Expect(spec.Validate()).To(Succeed())
+
+			_, req, err := buildCreateAppRequest("test-app-id", spec)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(req.Framework).To(Equal("blank"))
+			Expect(req.Language).To(Equal("python"))
+			Expect(req.FrameworkConfigFile).To(BeNil())
 		})
 	})
 
@@ -146,13 +196,13 @@ var _ = Describe("buildCreateAppRequest", func() {
 				},
 			}
 
-			req, err := buildCreateAppRequest("test-app-id", spec)
+			req, bkms, err := buildCreateAppRequest("test-app-id", spec)
 			Expect(err).NotTo(HaveOccurred())
+			Expect(bkms).To(BeNil())
 
 			Expect(req.HelmSpec.HelmSource.ValueFiles).To(Equal([]string{"values.yaml"}))
 			Expect(req.HelmSpec.HelmSource.RepoType).To(Equal("HelmRepo"))
 			Expect(req.HelmSpec.HelmSource.HelmRepoConfig.ChartName).To(Equal("my-chart"))
-			Expect(req.AppModelSpec).To(BeNil())
 		})
 
 		It("should use user-specified valueFiles", func() {
@@ -180,8 +230,9 @@ var _ = Describe("buildCreateAppRequest", func() {
 				},
 			}
 
-			req, err := buildCreateAppRequest("test-app-id", spec)
+			req, bkms, err := buildCreateAppRequest("test-app-id", spec)
 			Expect(err).NotTo(HaveOccurred())
+			Expect(bkms).To(BeNil())
 
 			Expect(req.HelmSpec.HelmSource.ValueFiles).To(Equal([]string{"values.yaml", "values-prod.yaml"}))
 			Expect(req.HelmSpec.HelmSource.GitRepoConfig.Type).To(Equal("TGit"))
@@ -210,7 +261,7 @@ var _ = Describe("buildCreateAppRequest", func() {
 				},
 			}
 
-			req, err := buildCreateAppRequest("test-app-id", spec)
+			req, _, err := buildCreateAppRequest("test-app-id", spec)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(req.Type).To(Equal("agones"))
 			Expect(req.HelmSpec.HelmSource.BCSRepoConfig.ProjectCode).To(Equal("my-project"))
@@ -221,8 +272,9 @@ var _ = Describe("buildCreateAppRequest", func() {
 	Describe("build config passthrough", func() {
 		It("should pass through codeRepository build config", func() {
 			spec := &AppCreateSpec{
-				Name: "my-repo-app",
-				Type: "trpc",
+				Name:      "my-repo-app",
+				Framework: "trpc",
+				Language:  "go",
 				BuildConfig: &BuildConfigSpec{
 					SourceType: "codeRepository",
 					RepoBuildConfig: &RepoBuildConfigSpec{
@@ -235,16 +287,12 @@ var _ = Describe("buildCreateAppRequest", func() {
 						DockerBuildArgs: map[string]string{"GO_VERSION": "1.21"},
 					},
 				},
-				AppModelSpec: &AppModelSpecSpec{
-					TrpcSpec: &TrpcSpecSpec{
-						Language: "go",
-						FileName: "trpc_go.yaml",
-						FilePath: "/app/conf",
-					},
-				},
+				AppModelSpec:        &AppModelSpecSpec{},
+				FrameworkConfigFile: &FrameworkConfigFileSpec{Name: "trpc_go.yaml", MountDir: "/app/conf"},
 			}
+			Expect(spec.Validate()).To(Succeed())
 
-			req, err := buildCreateAppRequest("test-app-id", spec)
+			_, req, err := buildCreateAppRequest("test-app-id", spec)
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(req.BuildConfig.SourceType).To(Equal("codeRepository"))
@@ -255,8 +303,9 @@ var _ = Describe("buildCreateAppRequest", func() {
 
 		It("should pass through pipeline build config", func() {
 			spec := &AppCreateSpec{
-				Name: "my-pipe-app",
-				Type: "trpc",
+				Name:      "my-pipe-app",
+				Framework: "trpc",
+				Language:  "go",
 				BuildConfig: &BuildConfigSpec{
 					SourceType: "pipeline",
 					PipelineBuildConfig: &PipelineBuildConfigSpec{
@@ -264,16 +313,12 @@ var _ = Describe("buildCreateAppRequest", func() {
 						Params:     map[string]string{"env": "prod"},
 					},
 				},
-				AppModelSpec: &AppModelSpecSpec{
-					TrpcSpec: &TrpcSpecSpec{
-						Language: "go",
-						FileName: "trpc_go.yaml",
-						FilePath: "/app/conf",
-					},
-				},
+				AppModelSpec:        &AppModelSpecSpec{},
+				FrameworkConfigFile: &FrameworkConfigFileSpec{Name: "trpc_go.yaml", MountDir: "/app/conf"},
 			}
+			Expect(spec.Validate()).To(Succeed())
 
-			req, err := buildCreateAppRequest("test-app-id", spec)
+			_, req, err := buildCreateAppRequest("test-app-id", spec)
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(req.BuildConfig.SourceType).To(Equal("pipeline"))
@@ -295,7 +340,7 @@ var _ = Describe("buildCreateAppRequest", func() {
 					},
 				},
 			}
-			_, err := buildCreateAppRequest("test-app-id", spec)
+			_, _, err := buildCreateAppRequest("test-app-id", spec)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("unsupported app type"))
 		})
