@@ -132,7 +132,7 @@
             width="150"
           >
             <template #default="{ row }">
-              {{ envNameMapping?.[row?.group?.envName] || '--' }}
+              {{ envNameMapping[row.group?.envName || ''] || row.group?.envName || '--' }}
             </template>
           </TableColumn>
           <TableColumn
@@ -217,7 +217,7 @@
   // 引入国际化
   const { t } = useI18n();
   const { createPlaceholder } = useSearchPlaceholder();
-  const { envNameMapping, generateEnvNameMapping, handleGetEnvList } = useEnvManager();
+  const { envNameMapping, generateEnvNameMapping, getAppEnvList } = useEnvManager();
   const spaceStore = useSpaceStore();
   const appDetailStore = useAppDetail();
   const { maxHeight } = useDynamicsHeight(96, ['.header-right', '.container-header']);
@@ -284,7 +284,7 @@
 
   /** 生成环境名称映射关系 */
   async function GenerateEnvNameMapping() {
-    await handleGetEnvList();
+    await getAppEnvList(appDetailStore.appID);
     generateEnvNameMapping();
   }
 
