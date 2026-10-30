@@ -19,8 +19,11 @@
 package appcfg
 
 import (
+	"github.com/MakeNowJust/heredoc"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 )
 
 var _ = Describe("mergeYAMLContent", func() {
@@ -363,7 +366,238 @@ alertmanager:
 			})
 		})
 	})
+
+	Context("when base is an empty document", func() {
+		DescribeTable("should apply the overlay as if base were an empty map",
+			func(base string) {
+				overlay := heredoc.Doc(`
+					a:
+					  b: 1
+					c: 2
+				`)
+				result, err := mergeYAMLContent(base, &overlay)
+
+				Expect(err).NotTo(HaveOccurred())
+				// 精确比对：确保输出为 block 风格，而不是 {a: {b: 1}, c: 2}
+				Expect(result).To(Equal(overlay))
+			},
+			Entry("empty string", ""),
+			Entry("newline only", "\n"),
+			Entry("blank", "   \n"),
+			Entry("comment only", "# comment\n"),
+			Entry("document separator only", "---\n"),
+			Entry("null", "null\n"),
+			Entry("tilde", "~\n"),
+			Entry("empty flow map", "{}\n"),
+		)
+
+		It("should apply version 2 patches in sequence", func() {
+			overlay := heredoc.Doc(`
+				overlayVersion: "2"
+				patches:
+				  - a: 1
+				  - b: 2
+			`)
+			result, err := mergeYAMLContent("", &overlay)
+
+			Expect(err).NotTo(HaveOccurred())
+			expectYAMLEqual(result, heredoc.Doc(`
+				a: 1
+				b: 2
+			`))
+		})
+
+		It("should return base when overlay is empty", func() {
+			overlay := ""
+			result, err := mergeYAMLContent("", &overlay)
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).To(BeEmpty())
+		})
+	})
+
+	Context("when base root is not a map", func() {
+		It("should return an error for a scalar base", func() {
+			overlay := "a: 1"
+			_, err := mergeYAMLContent("abc", &overlay)
+
+			Expect(err).To(HaveOccurred())
+		})
+	})
+
+	Context("when there are null fields", func() {
+		It("should keep null fields of base untouched by overlay", func() {
+			base := heredoc.Doc(`
+				a:
+				b: 1
+				d: null
+				e: ~
+			`)
+			overlay := "c: 2"
+			result, err := mergeYAMLContent(base, &overlay)
+
+			Expect(err).NotTo(HaveOccurred())
+			// 精确比对：null 字段保留原始写法与位置
+			Expect(result).To(Equal(heredoc.Doc(`
+				a:
+				b: 1
+				d: null
+				e: ~
+				c: 2
+			`)))
+		})
+
+		It("should keep nested null fields of base", func() {
+			base := heredoc.Doc(`
+				x:
+				  a:
+				  b: 1
+			`)
+			overlay := heredoc.Doc(`
+				x:
+				  b: 2
+			`)
+			result, err := mergeYAMLContent(base, &overlay)
+
+			Expect(err).NotTo(HaveOccurred())
+			// 精确比对：null 字段保留原始写法与位置
+			Expect(result).To(Equal(heredoc.Doc(`
+				x:
+				  a:
+				  b: 2
+			`)))
+		})
+
+		It("should override null fields of base with overlay values", func() {
+			base := heredoc.Doc(`
+				a:
+				c: 0
+			`)
+			overlay := heredoc.Doc(`
+				a:
+				  b: 1
+			`)
+			result, err := mergeYAMLContent(base, &overlay)
+
+			Expect(err).NotTo(HaveOccurred())
+			expectYAMLEqual(result, heredoc.Doc(`
+				a:
+				  b: 1
+				c: 0
+			`))
+		})
+
+		DescribeTable("should set the field to null when overlay sets it to null",
+			func(base, overlay, expected string) {
+				result, err := mergeYAMLContent(base, &overlay)
+
+				Expect(err).NotTo(HaveOccurred())
+				expectYAMLEqual(result, expected)
+			},
+			Entry("map value",
+				heredoc.Doc(`
+					a:
+					  b: 1
+					c: 2
+				`),
+				"a:",
+				heredoc.Doc(`
+					a: null
+					c: 2
+				`),
+			),
+			Entry("scalar value",
+				heredoc.Doc(`
+					a: 1
+					c: 2
+				`),
+				"a:",
+				heredoc.Doc(`
+					a: null
+					c: 2
+				`),
+			),
+			Entry("list value",
+				heredoc.Doc(`
+					a:
+					  - 1
+					c: 2
+				`),
+				"a:",
+				heredoc.Doc(`
+					a: null
+					c: 2
+				`),
+			),
+			Entry("list of maps value",
+				heredoc.Doc(`
+					env:
+					  - name: A
+					    value: "1"
+					c: 2
+				`),
+				"env:",
+				heredoc.Doc(`
+					env: null
+					c: 2
+				`),
+			),
+			Entry("nested value",
+				heredoc.Doc(`
+					x:
+					  a: 1
+					  b: 2
+				`),
+				heredoc.Doc(`
+					x:
+					  a:
+				`),
+				heredoc.Doc(`
+					x:
+					  a: null
+					  b: 2
+				`),
+			),
+			Entry("missing field",
+				"c: 2",
+				heredoc.Doc(`
+					x:
+					  a:
+				`),
+				heredoc.Doc(`
+					c: 2
+					x:
+					  a: null
+				`),
+			),
+		)
+
+		It("should delete a map field with the $patch: delete directive", func() {
+			base := heredoc.Doc(`
+				a:
+				  b: 1
+				c: 2
+			`)
+			overlay := heredoc.Doc(`
+				a:
+				  $patch: delete
+			`)
+			result, err := mergeYAMLContent(base, &overlay)
+
+			Expect(err).NotTo(HaveOccurred())
+			expectYAMLEqual(result, "c: 2")
+		})
+	})
 })
+
+// expectYAMLEqual asserts that two YAML documents are semantically equal, a null field
+// and a missing field are considered different.
+func expectYAMLEqual(actual, expected string) {
+	GinkgoHelper()
+	equal, err := testutil.YAMLEqual(actual, expected)
+	Expect(err).NotTo(HaveOccurred())
+	Expect(equal).To(BeTrue(), "actual:\n%s\nexpected:\n%s", actual, expected)
+}
 
 var _ = Describe("mergeContent", func() {
 	Context("when selecting merge function by format", func() {

@@ -267,9 +267,10 @@ patches:
 			result, err := newLocalAppConfigFileEditor(db, overlayAcf).GetCompiledContent(ctx)
 			Expect(err).ToNot(HaveOccurred())
 
-			// Compare the result with the expected merged content
+			// Compare the result with the expected merged content, null in overlay sets the field to null
 			expectedYAML := `global:
   image: myapp:v2.0
+  replicas: null
   env: production`
 
 			equal, err := testutil.YAMLEqual(result, expectedYAML)
