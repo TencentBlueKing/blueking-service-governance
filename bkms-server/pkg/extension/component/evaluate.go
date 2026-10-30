@@ -89,7 +89,8 @@ func (a *AppComponentApplier) Evaluate(
 		return nil, errors.Wrap(err, "building properties")
 	}
 
-	compDef, err := a.defs.Get(ctx, ByNameVersion(comp.Type, comp.Version))
+	compDef, err := a.defs.Get(ctx, ByNameVersion(comp.Type, comp.Version),
+		store.TenantWithPlatform(BuiltinShared()))
 	if err != nil {
 		return nil, errors.Wrap(err, "getting component definition")
 	}
@@ -201,7 +202,8 @@ func (b *AppPropertiesBuilder) BuildRaw(
 	comp Component,
 	envID bson.ObjectID,
 ) (map[string]PropValue, error) {
-	compDef, err := b.defs.Get(ctx, ByNameVersion(comp.Type, comp.Version))
+	compDef, err := b.defs.Get(ctx, ByNameVersion(comp.Type, comp.Version),
+		store.TenantWithPlatform(BuiltinShared()))
 	if err != nil {
 		return nil, errors.Wrap(err, "getting component definition")
 	}

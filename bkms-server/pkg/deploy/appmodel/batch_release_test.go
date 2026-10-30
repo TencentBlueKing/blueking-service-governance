@@ -271,7 +271,7 @@ var _ = Describe("deleteRollout", func() {
 	)
 
 	BeforeEach(func() {
-		ctx = testutil.WithTenantOrDefault(context.Background())
+		ctx = testutil.NewDefaultTenantContext()
 		fake = newFakeCluster()
 		server = httptest.NewServer(fake)
 		cfg = &cluster.Config{Rest: &rest.Config{Host: server.URL}, ClusterID: "BCS-K8S-00000"}
@@ -335,7 +335,7 @@ var _ = Describe("workloadRollout", func() {
 	}
 
 	BeforeEach(func() {
-		ctx = testutil.WithTenantOrDefault(context.Background())
+		ctx = testutil.NewDefaultTenantContext()
 		fake = newFakeCluster()
 		server = httptest.NewServer(fake)
 		cfg = &cluster.Config{Rest: &rest.Config{Host: server.URL}, ClusterID: "BCS-K8S-00000"}
@@ -571,7 +571,7 @@ var _ = Describe("UpdateInstances with a leftover rollout", func() {
 	}
 
 	BeforeEach(func() {
-		ctx = auth.WithUser(testutil.WithTenantOrDefault(context.Background()), auth.User{ID: "tester"})
+		ctx = auth.WithUser(testutil.NewDefaultTenantContext(), auth.User{ID: "tester"})
 		fake = newFakeCluster()
 		server = httptest.NewServer(fake)
 		cfg := &cluster.Config{Rest: &rest.Config{Host: server.URL}, ClusterID: "BCS-K8S-00000"}

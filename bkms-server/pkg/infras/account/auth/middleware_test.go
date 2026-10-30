@@ -174,6 +174,26 @@ var _ = Describe("User authentication middleware", func() {
 			Expect(user).To(Equal(User{ID: "api-test-user", Cred: UserCredential{BkTicket: "xxx"}}))
 		})
 
+		// 测的是：请求头中的用户可以带上所属租户。API 测试据此以不同租户的用户发起请求，
+		// 多租户模式下 tenant 中间件直接用这个租户校验租户头，测试环境无需 bk-user
+		It("carries the tenant of the user from headers", func() {
+			request.Header.Set(BKAuthKey, `{"userId":"api-test-user","tenantId":"tenant-a"}`)
+			result := authenticate(
+				context.Background(),
+				request,
+				authBackend,
+				BackendBkTicket,
+				usertoken.NewMockTokenClient(GinkgoT()),
+				true,
+			)
+
+			user, ok := result.RequestUser.(User)
+			Expect(ok).To(BeTrue())
+			Expect(user).To(Equal(User{
+				ID: "api-test-user", TenantID: "tenant-a", Cred: UserCredential{BkTicket: "xxx"},
+			}))
+		})
+
 		It("ignores the headers when the switch is disabled", func() {
 			authBackend.EXPECT().GetUserCredential(request).Return("")
 

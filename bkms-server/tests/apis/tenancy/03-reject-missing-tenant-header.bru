@@ -1,0 +1,28 @@
+docs {
+  测的是：多租户模式下不带租户头的请求被拒绝（400），而不是落到某个默认租户。
+}
+
+meta {
+  name: 03-reject-missing-tenant-header
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{serviceURL}}/workspaces
+  body: none
+  auth: inherit
+}
+
+script:pre-request {
+  req.deleteHeader("X-Bk-Tenant-Id");
+}
+
+assert {
+  res.status: eq 400
+}
+
+settings {
+  encodeUrl: true
+  timeout: 10000
+}

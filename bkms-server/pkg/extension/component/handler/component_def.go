@@ -74,7 +74,9 @@ func (h *Handler) ListComponentDefs(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	compDefs, err := h.componentDefs().List(ctx, queryInput.ToListOpt())
+	compDefs, err := h.componentDefs().List(
+		ctx, queryInput.ToListOpt(), store.TenantWithPlatform(component.BuiltinShared()),
+	)
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list component defs"))
 		return
@@ -176,8 +178,10 @@ func (h *Handler) PatchComponentDef(c *gin.Context) {
 
 	ctx := c.Request.Context()
 	defs := h.componentDefs()
+	// 带上内置定义，同名的内置定义要明确拒绝，而不是当作不存在
 	existingCompDef, err := defs.Get(
 		ctx, component.ByNameVersion(uriInput.CompDefName, component.DefaultComponentDefVersion),
+		store.TenantWithPlatform(component.BuiltinShared()),
 	)
 	if err != nil {
 		if errors.Is(err, component.ErrComponentDefNotFound) {
@@ -247,7 +251,8 @@ func (h *Handler) DeleteComponentDef(c *gin.Context) {
 	ctx := c.Request.Context()
 	defs := h.componentDefs()
 	name, version := uriInput.CompDefName, component.DefaultComponentDefVersion
-	existingCompDef, err := defs.Get(ctx, component.ByNameVersion(name, version))
+	existingCompDef, err := defs.Get(ctx, component.ByNameVersion(name, version),
+		store.TenantWithPlatform(component.BuiltinShared()))
 	if err != nil {
 		if errors.Is(err, component.ErrComponentDefNotFound) {
 			ginutils.OK(c, serializer.EmptyOutput{})

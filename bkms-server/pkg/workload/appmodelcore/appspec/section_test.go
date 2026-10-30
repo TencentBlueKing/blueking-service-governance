@@ -42,7 +42,7 @@ var _ = Describe("AppSpec Sections", func() {
 		var db *mongo.Database
 
 		BeforeEach(func() {
-			ctx = testutil.WithTenantOrDefault(context.Background())
+			ctx = testutil.NewDefaultTenantContext()
 			appStore = testutil.NewStore(GinkgoT(), bkmsapp.AppMeta)
 			db = testutil.NewDB(GinkgoT())
 		})
@@ -222,7 +222,7 @@ var _ = Describe("AppSpec Sections", func() {
 		var db *mongo.Database
 
 		BeforeEach(func() {
-			ctx = testutil.WithTenantOrDefault(context.Background())
+			ctx = testutil.NewDefaultTenantContext()
 			appStore = testutil.NewStore(GinkgoT(), bkmsapp.AppMeta)
 			db = testutil.NewDB(GinkgoT())
 		})

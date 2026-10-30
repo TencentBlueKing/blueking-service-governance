@@ -35,7 +35,7 @@ var _ = Describe("Builder", func() {
 
 	BeforeEach(func() {
 		builder = NewBuilder()
-		ctx = testutil.WithTenantOrDefault(context.Background())
+		ctx = testutil.NewDefaultTenantContext()
 	})
 
 	Describe("Build", func() {

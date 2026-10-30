@@ -19,7 +19,6 @@
 package appmodel
 
 import (
-	"context"
 	"time"
 
 	tkex "github.com/Tencent/bk-bcs/bcs-scenarios/kourse/pkg/apis/tkex/v1alpha1"
@@ -90,7 +89,7 @@ var _ = Describe("injectDeployID", func() {
 
 var _ = Describe("syncBuildAutoDeployStatus", func() {
 	It("should update linked build auto deploy record by deploy ID", func() {
-		ctx := testutil.WithTenantOrDefault(context.Background())
+		ctx := testutil.NewDefaultTenantContext()
 		db := testutil.NewDB(GinkgoT())
 		records := store.Of(db, autodeploy.RecordMeta)
 		appID := "app-" + stringx.Random(6)

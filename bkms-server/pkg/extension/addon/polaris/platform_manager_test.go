@@ -48,7 +48,7 @@ var _ = Describe("PolarisPlatformManager", func() {
 	)
 
 	BeforeEach(func() {
-		ctx = testutil.WithTenantOrDefault(context.Background())
+		ctx = testutil.NewDefaultTenantContext()
 		appStore = testutil.NewStore(GinkgoT(), bkmsapp.AppMeta)
 		diApp = fxtest.New(
 			GinkgoT(),

@@ -51,7 +51,7 @@ var _ = Describe("Service", func() {
 	}
 
 	BeforeEach(func() {
-		ctx = testutil.WithTenantOrDefault(context.Background())
+		ctx = testutil.NewDefaultTenantContext()
 		workspaceID = "ws-" + stringx.Random(8)
 
 		diApp := fxtest.New(GinkgoT(), bkmsenv.FxModule, fx.Populate(&envSvc))

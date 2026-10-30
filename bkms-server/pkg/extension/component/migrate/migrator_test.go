@@ -98,10 +98,14 @@ var _ = Describe("Component patch migration", func() {
 	)
 
 	BeforeEach(func() {
-		ctx = testutil.WithTenantOrDefault(context.Background())
+		ctx = testutil.NewDefaultTenantContext()
 		Expect(testutil.CleanupCollection(componentDefsCollection)).To(Succeed())
 		db = database.Client().Database(database.Name())
 		migrator = migrate.New(db)
+		platform, err := tenant.PlatformTenantID()
+		Expect(err).NotTo(HaveOccurred())
+		// 旧格式数据按真实部署分布：自建定义在请求租户，内置定义在平台租户。
+		// 多租户模式下两者不同，内置定义放错租户会让后续 LoadBuiltinFromFolder 另写一份而不是覆盖
 		insertLegacyComponents = func() {
 			_, err := db.Collection(componentDefsCollection).InsertMany(ctx, []any{
 				bson.M{
@@ -109,7 +113,7 @@ var _ = Describe("Component patch migration", func() {
 					"properties": bson.A{}, "output": "patcher:\n  spec.replicas: 2\n",
 				},
 				bson.M{
-					"tenantID": tenant.DefaultTenantID, "name": importPolarisComponentName,
+					"tenantID": platform, "name": importPolarisComponentName,
 					"version": component.DefaultComponentDefVersion, "properties": bson.A{},
 					"output": legacyImportPolarisOutput, "isBuiltin": true,
 				},
@@ -171,6 +175,7 @@ var _ = Describe("Component patch migration", func() {
 		)).To(Succeed())
 		loadedImportPolaris, err := defs.Get(
 			ctx, component.ByNameVersion(importPolarisComponentName, component.DefaultComponentDefVersion),
+			store.TenantWithPlatform(component.BuiltinShared()),
 		)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(loadedImportPolaris.Patchers).To(Equal(migratedImportPolaris.Patchers))

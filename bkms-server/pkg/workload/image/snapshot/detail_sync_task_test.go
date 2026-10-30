@@ -54,7 +54,7 @@ var _ = Describe("DetailSyncManager Handle", func() {
 	)
 
 	BeforeEach(func() {
-		ctx = testutil.WithTenantOrDefault(context.Background())
+		ctx = testutil.NewDefaultTenantContext()
 		mgr = NewDetailSyncManager(testutil.NewDB(GinkgoT()))
 	})
 

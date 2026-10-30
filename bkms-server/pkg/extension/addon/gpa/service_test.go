@@ -57,7 +57,7 @@ var _ = Describe("GPAService K8s interactions", func() {
 
 	BeforeEach(func() {
 		svc = &GPAService{}
-		ctx = testutil.WithTenantOrDefault(context.Background())
+		ctx = testutil.NewDefaultTenantContext()
 		env = newTestEnv()
 	})
 

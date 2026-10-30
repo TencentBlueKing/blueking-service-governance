@@ -57,7 +57,7 @@ var _ = Describe("DeployStateGetter", func() {
 		// Set up the mocker to make the syncer always use the test config.
 		mocker = mockey.Mock(cluster.NewConfig).Return(cfg).Build()
 
-		ctx = testutil.WithTenantOrDefault(context.Background())
+		ctx = testutil.NewDefaultTenantContext()
 		record = &Record{
 			WorkspaceID:     "test-workspace",
 			AppID:           "test-app",

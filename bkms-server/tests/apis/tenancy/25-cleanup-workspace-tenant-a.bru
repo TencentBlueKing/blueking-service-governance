@@ -1,0 +1,24 @@
+docs {
+  清理：租户 A 删除自己的工作空间。
+}
+
+meta {
+  name: 25-cleanup-workspace-tenant-a
+  type: http
+  seq: 25
+}
+
+delete {
+  url: {{serviceURL}}/workspaces/{{tenancyWorkspaceID}}
+  body: none
+  auth: inherit
+}
+
+assert {
+  res.status: eq 200
+}
+
+settings {
+  encodeUrl: true
+  timeout: 10000
+}

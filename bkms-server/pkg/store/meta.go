@@ -24,8 +24,6 @@
 // 两种写法等价，代码中优先使用 bson 字段名。
 package store
 
-import "go.mongodb.org/mongo-driver/v2/bson"
-
 // Meta 描述一个数据模型的存储元信息
 //
 // 三类钩子的分工（每类可以有多个，按顺序执行，任一失败即中止）：
@@ -44,14 +42,9 @@ type Meta[T any] struct {
 	Collection string
 	// TenantScoped 集合中的数据是否按租户划分。
 	// 零值 false 表示全系统共用一份；为 true 时模型必须有 tenantID 字段，两者不一致时 New 返回错误。
-	// true 时读写默认按 ctx 中的租户过滤，但不代表禁止跨租户访问：平台管理等场景可显式传 TenantAll
+	// true 时读写默认按 ctx 中的租户过滤，但不代表禁止跨租户访问：平台管理等场景可显式传 TenantAll，
+	// 读取平台共享给租户的数据时传 TenantWithPlatform
 	TenantScoped bool
-	// SharedFromPlatform 平台租户（见 tenant.PlatformTenantID）中满足该条件的文档对所有租户可读，
-	// 仅 TenantScoped 集合可用。只作用于租户取自 ctx 的读操作（Get、List、ListPage、Exists、Count、
-	// ListLatestBy、Aggregate），此时匹配「本租户的文档」或「平台租户中满足条件的文档」；
-	// 写操作与显式传了 TenantAll / TenantOf 的操作不受影响。
-	// 共享后不同租户可能读到同名文档，同名时以哪个为准由业务决定
-	SharedFromPlatform bson.D
 	// NotFound 文档不存在时返回的业务错误，返回的 error 同时满足 errors.Is(err, ErrNotFound)
 	NotFound error
 	// Duplicate 唯一键冲突时返回的业务错误，返回的 error 同时满足 errors.Is(err, ErrDuplicate)

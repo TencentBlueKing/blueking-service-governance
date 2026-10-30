@@ -91,7 +91,8 @@ func LoadBuiltinFromFolder(ctx context.Context, defs *ComponentDefStore, folderP
 	if err := checkCustomDefConflicts(ctx, defs, compDefs); err != nil {
 		return err
 	}
-	// 内置定义写入平台租户，由 SharedFromPlatform 共享给所有租户；只覆盖已有的内置定义
+	// 内置定义写入平台租户，各租户读取时传 store.TenantWithPlatform(BuiltinShared()) 共享；
+	// 只覆盖已有的内置定义
 	platform, tenantErr := tenant.PlatformTenantID()
 	if tenantErr != nil {
 		return tenantErr

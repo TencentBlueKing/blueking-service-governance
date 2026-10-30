@@ -46,6 +46,7 @@ import (
 //	ArrayFilterOpt ArrayFilters                                     Modify、ModifyMany
 //	TenantOpt      TenantOf                                         全部操作（仅 TenantScoped 集合）
 //	TenantOpt      TenantAll                                        读、Update、Modify、删除（仅 TenantScoped 集合）
+//	TenantOpt      TenantWithPlatform                               读（仅 TenantScoped 集合）
 //
 // 只有 CondOpt 与 TenantOpt 影响匹配哪些文档，其余选项只决定结果的顺序、数量、读出哪些字段或写入哪些字段。
 // TenantOpt 必须直接写在调用点，不能被 Combine 包住，见 TenantAll / TenantOf。
@@ -83,10 +84,12 @@ const (
 	kindTenantFixed
 	// kindTenantAll 跨租户（TenantAll），写入整个文档的操作不支持
 	kindTenantAll
+	// kindTenantWithPlatform 本租户加平台共享数据（TenantWithPlatform），只有读操作支持
+	kindTenantWithPlatform
 )
 
 // kindTenantAny 任一租户选项，用于判断某个 Opt 是否携带了租户范围
-const kindTenantAny = kindTenantFixed | kindTenantAll
+const kindTenantAny = kindTenantFixed | kindTenantAll | kindTenantWithPlatform
 
 // 各操作支持的选项类别分两步确定。第一步：按操作自身的语义列出租户以外的类别
 const (
@@ -104,19 +107,23 @@ const (
 	insertKinds optKind = 0
 )
 
-// 第二步：按是否写入整个文档，二选一地加上租户选项。
-//   - 读、局部更新（Update / Modify）与删除只作用于已存在的文档，接受全部租户选项，平台管理可以跨租户
+// 第二步：按操作对数据的影响，加上对应的租户选项。
+//   - 读操作接受全部租户选项，包括只读的 TenantWithPlatform
+//   - 局部更新（Update / Modify）与删除只作用于已存在的文档，接受 TenantOf 与 TenantAll，平台管理可以跨租户；
+//     不接受 TenantWithPlatform，租户改不到平台数据
 //   - 可能产生新文档的操作（Create / Replace / Upsert / ModifyOrCreate），新文档的 tenantID 必须是确定值，
-//     因此只接受 TenantOf，不接受 TenantAll
+//     因此只接受 TenantOf
 const (
-	getOpts          = getKinds | kindTenantAny
-	listOpts         = listKinds | kindTenantAny
-	latestOpts       = latestKinds | kindTenantAny
-	pageOpts         = pageKinds | kindTenantAny
-	getAndDeleteOpts = getAndDeleteKinds | kindTenantAny
-	condOpts         = condKinds | kindTenantAny
-	updateOpts       = updateKinds | kindTenantAny
-	modifyOpts       = modifyKinds | kindTenantAny
+	getOpts      = getKinds | kindTenantAny
+	listOpts     = listKinds | kindTenantAny
+	latestOpts   = latestKinds | kindTenantAny
+	pageOpts     = pageKinds | kindTenantAny
+	readCondOpts = condKinds | kindTenantAny
+
+	getAndDeleteOpts = getAndDeleteKinds | kindTenantFixed | kindTenantAll
+	condOpts         = condKinds | kindTenantFixed | kindTenantAll
+	updateOpts       = updateKinds | kindTenantFixed | kindTenantAll
+	modifyOpts       = modifyKinds | kindTenantFixed | kindTenantAll
 
 	upsertOpts         = upsertKinds | kindTenantFixed
 	modifyOrCreateOpts = condKinds | kindTenantFixed
@@ -127,7 +134,7 @@ const (
 // kindNames 按位序排列，与上面的 kindXxx 一一对应
 var kindNames = []string{
 	"condition", "sort", "limit", "update fields", "projection", "page", "keep updatedAt", "array filters",
-	"tenant", "all tenants",
+	"tenant", "all tenants", "tenant with platform",
 }
 
 func (k optKind) String() string {

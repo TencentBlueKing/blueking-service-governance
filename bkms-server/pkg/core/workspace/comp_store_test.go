@@ -69,7 +69,7 @@ var _ = Describe("Workspace component store", func() {
 	}
 
 	BeforeEach(func() {
-		ctx = testutil.WithTenantOrDefault(context.Background())
+		ctx = testutil.NewDefaultTenantContext()
 		db = testutil.NewDB(GinkgoT())
 		comps = store.Of(db, ComponentMeta)
 		defs = testutil.NewStore(GinkgoT(), component.ComponentDefMeta)

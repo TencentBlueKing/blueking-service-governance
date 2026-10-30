@@ -52,7 +52,7 @@ var _ = Describe("ConfigStore", func() {
 
 		configs = testutil.NewStore(GinkgoT(), ConfigMeta)
 
-		ctx = testutil.WithTenantOrDefault(context.Background())
+		ctx = testutil.NewDefaultTenantContext()
 		codeRepoAppID = "code-repo-app-id-" + stringx.Random(6)
 		imageAppID = "image-app-id-" + stringx.Random(6)
 
@@ -217,7 +217,7 @@ var _ = Describe("RecordStore", func() {
 		db = testutil.NewDB(GinkgoT())
 		records = store.Of(db, RecordMeta)
 
-		ctx = testutil.WithTenantOrDefault(context.Background())
+		ctx = testutil.NewDefaultTenantContext()
 		workspaceID = "test-workspace-" + stringx.Random(6)
 		appID = "test-app-" + stringx.Random(6) + "-" + stringx.Random(6)
 		buildID1, buildID2 = "b-123", "b-456"
@@ -423,7 +423,7 @@ var _ = Describe("CreateRecord Auto-increment Num", func() {
 
 	BeforeEach(func() {
 		db = testutil.NewDB(GinkgoT())
-		ctx = testutil.WithTenantOrDefault(context.Background())
+		ctx = testutil.NewDefaultTenantContext()
 	})
 
 	It("should assign Num=1 for the first build record of an AppID", func() {

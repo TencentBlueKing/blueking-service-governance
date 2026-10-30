@@ -1,0 +1,24 @@
+docs {
+  清理：租户 A 删除自己的应用。
+}
+
+meta {
+  name: 24-cleanup-app-tenant-a
+  type: http
+  seq: 24
+}
+
+delete {
+  url: {{serviceURL}}/apps/{{tenancyAppID}}
+  body: none
+  auth: inherit
+}
+
+assert {
+  res.status: eq 200
+}
+
+settings {
+  encodeUrl: true
+  timeout: 10000
+}

@@ -65,7 +65,7 @@ var _ = Describe("DeployRecordStore", func() {
 		db = testutil.NewDB(GinkgoT())
 		recordStore = store.Of(db, RecordMeta)
 
-		ctx = testutil.WithTenantOrDefault(context.Background())
+		ctx = testutil.NewDefaultTenantContext()
 		workspaceID = "test-workspace-" + stringx.Random(6)
 		projectCode := "bkms-" + workspaceID
 		appName = "test-app-" + stringx.Random(6)

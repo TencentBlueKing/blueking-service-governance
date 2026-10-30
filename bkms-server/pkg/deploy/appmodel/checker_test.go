@@ -19,8 +19,6 @@
 package appmodel_test
 
 import (
-	"context"
-
 	"github.com/TencentBlueKing/gopkg/stringx"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -33,13 +31,13 @@ import (
 var _ = Describe("CheckIfTrafficLaneDeployed", func() {
 	DescribeTable("checks the latest record of the lane",
 		func(status appmodel.Status, deployed bool) {
-			ctx := testutil.WithTenantOrDefault(context.Background())
+			ctx := testutil.NewDefaultTenantContext()
 			db := testutil.NewDB(GinkgoT())
 			appID := "lane-check-" + stringx.Random(6)
 			records := store.Of(db, appmodel.RecordMeta)
 			DeferCleanup(func() {
 				_, _ = records.DeleteMany(
-					testutil.WithTenantOrDefault(context.Background()),
+					testutil.NewDefaultTenantContext(),
 					store.Where("appID", appID),
 				)
 			})

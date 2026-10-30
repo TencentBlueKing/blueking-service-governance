@@ -1,0 +1,30 @@
+docs {
+  测的是：租户 B 按 ID 直接访问租户 A 的工作空间得到 404，而不是 403。
+  403 会暴露"这个 ID 存在、只是没权限"，跨租户时连存在性也不能泄露。
+}
+
+meta {
+  name: 06-get-workspace-tenant-b
+  type: http
+  seq: 6
+}
+
+get {
+  url: {{serviceURL}}/workspaces/{{tenancyWorkspaceID}}
+  body: none
+  auth: inherit
+}
+
+script:pre-request {
+  const {actAs} = require("./helpers/tenancy");
+  actAs(req, "B");
+}
+
+assert {
+  res.status: eq 404
+}
+
+settings {
+  encodeUrl: true
+  timeout: 10000
+}

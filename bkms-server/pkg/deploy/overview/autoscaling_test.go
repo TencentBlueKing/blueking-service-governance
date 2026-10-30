@@ -42,7 +42,7 @@ var _ = Describe("autoscaling helpers", func() {
 		)
 
 		BeforeEach(func() {
-			ctx = testutil.WithTenantOrDefault(context.Background())
+			ctx = testutil.NewDefaultTenantContext()
 			sem = semaphore.NewWeighted(maxConcurrentK8sRequests)
 			client = &gpa.ClusterClient{}
 			target = autoscalingTarget{envName: "prod", namespace: "ns-1", crName: "gpa-app"}

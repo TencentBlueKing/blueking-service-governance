@@ -1,0 +1,41 @@
+docs {
+  多租户隔离用例：以两个租户的用户、带各自的租户头访问 API，验证数据只在所属租户内可见、可改。
+  
+  运行前提：
+  - bkms-server 以多租户模式启动（tenant.enableMultiTenantMode: true）
+  - 设置环境变量 RUN_MULTI_TENANT_API_TESTS=1，未设置时本目录全部跳过（单租户模式下租户头只接受 default）
+  - 用户身份由 X-Bk-Authed-User-Info 中的 tenantId 声明，tenant 中间件据此校验租户头，无需 bk-user
+  
+  运行：RUN_MULTI_TENANT_API_TESTS=1 bru run tenancy -r --env e2e --sandbox=developer
+  
+  可选环境变量 tenancyTenantA / tenancyTenantB 覆盖两个租户的 ID，默认 tenant-a / tenant-b。
+  用例按 seq 顺序执行：租户 A 先建数据，租户 B 尝试读写，最后由租户 A 清理。
+}
+
+meta {
+  name: tenancy
+  seq: 30
+}
+
+auth {
+  mode: inherit
+}
+
+script:pre-request {
+  if (!bru.getProcessEnv("RUN_MULTI_TENANT_API_TESTS")) {
+    console.log("tenancy skipped: RUN_MULTI_TENANT_API_TESTS not set");
+    bru.runner.skipRequest();
+    return;
+  }
+
+  const tenantA = bru.getEnvVar("tenancyTenantA") || "tenant-a";
+  const tenantB = bru.getEnvVar("tenancyTenantB") || "tenant-b";
+  bru.setVar("tenancyTenantA", tenantA);
+  bru.setVar("tenancyTenantB", tenantB);
+  bru.setVar("tenancyUserA", "tenancy-user-a");
+  bru.setVar("tenancyUserB", "tenancy-user-b");
+
+  // 默认以租户 A 的用户发起请求；需要租户 B 的用例在请求脚本中调用 actAs(req, "B")
+  const {actAs} = require("./helpers/tenancy");
+  actAs(req, "A");
+}

@@ -50,7 +50,7 @@ var _ = Describe("HelmRepoCredential store", func() {
 	)
 
 	BeforeEach(func() {
-		ctx = testutil.WithTenantOrDefault(context.Background())
+		ctx = testutil.NewDefaultTenantContext()
 		credStore = setUpCredStore()
 	})
 

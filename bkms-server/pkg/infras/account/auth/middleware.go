@@ -202,6 +202,8 @@ func authenticate(
 // 用于保存来自于请求头的用户信息，供测试和开发环境使用。
 type headerUserInfo struct {
 	UserID string `json:"userId"`
+	// TenantID 用户所属租户，可选；多租户模式下 tenant 中间件据此校验租户头，不再回源 bk-user
+	TenantID string `json:"tenantId"`
 }
 
 // 从请求头中获取用户信息，仅在允许通过请求头设置用户的环境中使用。
@@ -221,13 +223,13 @@ func getUserFromHeaders(request *http.Request) (User, error) {
 	// Get the optional credential field
 	rawCredential := request.Header.Get(BKCredentialKey)
 	if rawCredential == "" {
-		return User{ID: userInfo.UserID, Cred: UserCredential{}}, nil
+		return User{ID: userInfo.UserID, TenantID: userInfo.TenantID, Cred: UserCredential{}}, nil
 	}
 	credential := UserCredential{}
 	if err := json.Unmarshal([]byte(rawCredential), &credential); err != nil {
 		return User{}, errors.Wrapf(err, "unmarshal %s header", BKCredentialKey)
 	}
-	return User{ID: userInfo.UserID, Cred: credential}, nil
+	return User{ID: userInfo.UserID, TenantID: userInfo.TenantID, Cred: credential}, nil
 }
 
 func newCredential(backendType, userCredential string) UserCredential {

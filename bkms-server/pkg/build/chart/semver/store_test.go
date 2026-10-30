@@ -43,7 +43,7 @@ var _ = Describe("Counter", func() {
 	)
 
 	BeforeEach(func() {
-		ctx = testutil.WithTenantOrDefault(context.Background())
+		ctx = testutil.NewDefaultTenantContext()
 		db = testutil.NewDB(GinkgoT())
 		appID = "semver-test-" + stringx.Random(8)
 	})

@@ -44,7 +44,7 @@ var _ = Describe("Application store", func() {
 		db = testutil.NewDB(GinkgoT())
 		apps = testutil.NewStore(GinkgoT(), bkmsapp.AppMeta)
 
-		ctx = testutil.WithTenantOrDefault(context.Background())
+		ctx = testutil.NewDefaultTenantContext()
 		appID = "test-appid-" + stringx.Random(6)
 		appName = "test-app-" + stringx.Random(6)
 		workspaceID = "test-workspace-" + stringx.Random(6)

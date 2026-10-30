@@ -44,7 +44,7 @@ var _ = Describe("ListSortByOpTime", func() {
 	var opStore *audit.OperationRecordStore
 
 	BeforeEach(func() {
-		ctx = testutil.WithTenantOrDefault(context.Background())
+		ctx = testutil.NewDefaultTenantContext()
 
 		db = testutil.NewDB(GinkgoT())
 		wsStore = store.Of(db, bkmsworkspace.Meta)
@@ -182,7 +182,7 @@ var _ = Describe("ListRoleMembers", func() {
 	var ctx context.Context
 
 	BeforeEach(func() {
-		ctx = testutil.WithTenantOrDefault(context.Background())
+		ctx = testutil.NewDefaultTenantContext()
 	})
 
 	It("aggregates members from given roles, deduped and sorted", func() {

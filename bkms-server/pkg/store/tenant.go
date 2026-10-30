@@ -22,6 +22,7 @@ import (
 	"context"
 
 	"github.com/pkg/errors"
+	"github.com/samber/lo"
 	"go.mongodb.org/mongo-driver/v2/bson"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/tenant"
@@ -70,25 +71,32 @@ func explicitTenantScopeRequired(ctx context.Context) bool {
 	return required
 }
 
-// TenantOpt 租户范围，由 TenantAll / TenantOf 创建，决定本次操作按哪个租户过滤。
+// TenantOpt 租户范围，由 TenantAll / TenantOf / TenantWithPlatform 创建，决定本次操作按哪个租户过滤。
 // 不传时租户取自 ctx，取不到则返回 ErrTenantIDRequired；
-// ctx 被 RequireExplicitTenantScope 标记过时必须传，否则返回 ErrTenantScopeRequired
+// ctx 被 RequireExplicitTenantScope 标记过时必须传 TenantAll / TenantOf，否则返回 ErrTenantScopeRequired
 type TenantOpt struct {
 	all bool
 	id  string
+	// platformShared 非 nil 表示 TenantWithPlatform，为平台租户中共享给本租户读取的文档的条件
+	platformShared bson.D
 }
 
 func (o TenantOpt) kind() optKind {
-	if o.all {
+	switch {
+	case o.all:
 		return kindTenantAll
+	case o.platformShared != nil:
+		return kindTenantWithPlatform
+	default:
+		return kindTenantFixed
 	}
-	return kindTenantFixed
 }
 
 func (o TenantOpt) apply(q *query) {
 	q.tenantOptCount++
 	q.tenantAll = o.all
 	q.tenantID = o.id
+	q.platformShared = o.platformShared
 }
 
 // TenantAll 跨租户访问，不按租户过滤，用于平台管理与运维命令。
@@ -105,6 +113,32 @@ func TenantAll() TenantOpt {
 // 用于 ctx 里没有租户的场景，如运维命令按租户遍历。tenantID 为空时返回 ErrTenantIDRequired
 func TenantOf(tenantID string) TenantOpt {
 	return TenantOpt{id: tenantID}
+}
+
+// ScopeOpts 把租户范围转成 Opt，供只接受租户范围（scope ...store.TenantOpt）的领域函数透传给 store。
+// 每次返回新切片，调用方可以直接 append 其它选项
+func ScopeOpts(scope []TenantOpt) []Opt {
+	return lo.Map(scope, func(s TenantOpt, _ int) Opt { return s })
+}
+
+// TenantWithPlatform 读取 ctx 中租户的文档，以及平台租户（见 tenant.PlatformTenantID）中满足 shared 条件的文档，
+// 用于平台维护、所有租户只读共用的数据，如内置组件定义。
+//
+// 只有读操作接受它。写操作不接受，租户改不到平台数据，平台数据只能由平台路径用 TenantOf 写入。
+// 租户的取法与不传租户选项相同，ctx 被 RequireExplicitTenantScope 标记过时同样返回 ErrTenantScopeRequired；
+// ctx 中的租户就是平台租户时只按本租户过滤。
+// shared 为空时返回错误，避免把平台租户的全部数据共享出去。
+//
+// 与 TenantAll 一样应写在调用点上，让读取超出本租户这件事可见、可被 grep 找全；
+// 领域包只封装共享条件，不封装本选项，例如：
+//
+//	def, err := defs.Get(ctx, component.ByNameVersion(name, version),
+//		store.TenantWithPlatform(component.BuiltinShared()))
+func TenantWithPlatform(shared bson.D) TenantOpt {
+	if shared == nil {
+		shared = bson.D{}
+	}
+	return TenantOpt{platformShared: shared}
 }
 
 // resolveTenant 决定本次操作的租户范围：
@@ -130,7 +164,7 @@ func (s *GenericStore[T]) resolveTenant(
 	if q.tenantAll {
 		return "", false, nil
 	}
-	if q.tenantOptCount > 0 {
+	if q.tenantOptCount > 0 && q.platformShared == nil {
 		if q.tenantID == "" {
 			return fail(ErrTenantIDRequired)
 		}
@@ -154,9 +188,8 @@ func (s *GenericStore[T]) resolveTenant(
 // 会退化成 $and，调用方的条件仍会参与匹配），而静默丢弃又会让「以为自己在按租户过滤」的代码继续跑。
 // TenantAll 下不做这个检查，此时按 tenantID 过滤是平台管理筛选租户的正常用法。
 //
-// read 为 true、集合声明了 SharedFromPlatform 且租户取自 ctx 时，条件放宽为
-// 「本租户」或「平台租户中满足共享条件」
-func (s *GenericStore[T]) injectTenant(ctx context.Context, op string, q *query, read bool) error {
+// 传了 TenantWithPlatform 时，条件放宽为「本租户」或「平台租户中满足共享条件」
+func (s *GenericStore[T]) injectTenant(ctx context.Context, op string, q *query) error {
 	id, filterByTenant, err := s.resolveTenant(ctx, op, q)
 	if err != nil {
 		return err
@@ -171,23 +204,36 @@ func (s *GenericStore[T]) injectTenant(ctx context.Context, op string, q *query,
 			op, s.coll.Name(), keyTenantID,
 		)
 	}
-	cond := bson.E{Key: keyTenantID, Value: id}
-	if read && len(s.meta.SharedFromPlatform) > 0 && q.tenantOptCount == 0 {
-		platform, err := tenant.PlatformTenantID()
-		if err != nil {
-			return errors.Wrapf(err, "%s %s", op, s.coll.Name())
-		}
-		if platform != id {
-			shared, err := mapFilterKeys(s.meta.SharedFromPlatform, s.schema.resolveKey)
-			if err != nil {
-				return errors.Wrapf(err, "%s %s: SharedFromPlatform", op, s.coll.Name())
-			}
-			sharedCond := append(bson.D{{Key: keyTenantID, Value: platform}}, shared...)
-			cond = bson.E{Key: "$or", Value: bson.A{bson.D{cond}, sharedCond}}
-		}
+	cond, err := s.tenantCond(id, q.platformShared)
+	if err != nil {
+		return errors.Wrapf(err, "%s %s", op, s.coll.Name())
 	}
 	q.conds = append(q.conds, cond)
 	return nil
+}
+
+// tenantCond 生成按租户 id 过滤的条件；platformShared 非 nil 时同时匹配平台租户中满足该条件的文档
+func (s *GenericStore[T]) tenantCond(id string, platformShared bson.D) (bson.E, error) {
+	cond := bson.E{Key: keyTenantID, Value: id}
+	if platformShared == nil {
+		return cond, nil
+	}
+	if len(platformShared) == 0 {
+		return bson.E{}, errors.New("TenantWithPlatform requires a non-empty shared condition")
+	}
+	platform, err := tenant.PlatformTenantID()
+	if err != nil {
+		return bson.E{}, err
+	}
+	if platform == id {
+		return cond, nil
+	}
+	shared, err := mapFilterKeys(platformShared, s.schema.resolveKey)
+	if err != nil {
+		return bson.E{}, errors.Wrap(err, "TenantWithPlatform")
+	}
+	sharedCond := append(bson.D{{Key: keyTenantID, Value: platform}}, shared...)
+	return bson.E{Key: "$or", Value: bson.A{bson.D{cond}, sharedCond}}, nil
 }
 
 // tenantForWrite 返回写入整个文档时要填入的租户，非租户集合返回空字符串。

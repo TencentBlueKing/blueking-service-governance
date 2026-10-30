@@ -3,6 +3,8 @@ help:
     @echo ""
     @echo "  just up                Start the API test stack (compose up -d)"
     @echo "  just up-locbin         Start the stack with a locally built bkms-server binary"
+    @echo "  just up-multi-tenant   Start the stack in multi-tenant mode (all cases as tenant-a + tenancy cases)"
+    @echo "  just up-multi-tenant-locbin  Multi-tenant mode with a locally built bkms-server binary"
     @echo "  just up-podman         Start the API test stack with Podman"
     @echo "  just up-podman-locbin  Start the Podman stack with a locally built bkms-server binary"
     @echo "  just down              Stop the stack (compose down -v --remove-orphans)"
@@ -61,6 +63,37 @@ up:
 # local code without rebuilding the image.
 up-locbin:
     @just _up locbin "{{COMPOSE}}" "-f docker-compose.yaml" ""
+
+# Bring up the API test stack in multi-tenant mode.
+#
+# 服务端使用由 configs/config.yaml 生成的多租户配置；e2e 以 BKMS_API_TEST_TENANT_ID 指定的租户
+# （默认 tenant-a，不是平台租户 system）运行全部用例，并启用 apis/tenancy 的跨租户隔离用例。
+up-multi-tenant:
+    @just _up-multi-tenant normal "-f docker-compose.yaml"
+
+# Multi-tenant mode with a locally built bkms-server binary (see up-locbin).
+up-multi-tenant-locbin:
+    @just _up-multi-tenant locbin "-f docker-compose.yaml"
+
+_up-multi-tenant mode compose_files:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    generated=configs/config.multi-tenant.generated.yaml
+    # 只替换两个开关，其余配置与单租户保持一致，避免两份配置各自演进
+    sed -e 's/^\(  enableMultiTenantMode:\) false/\1 true/' \
+        -e 's/^\(  enableBkUserTenantVerify:\) false/\1 true/' \
+        configs/config.yaml > "${generated}"
+    for key in enableMultiTenantMode enableBkUserTenantVerify; do
+        if ! grep -Eq "^  ${key}: true" "${generated}"; then
+            echo "ERROR: failed to enable ${key} in ${generated}, check configs/config.yaml" >&2
+            exit 1
+        fi
+    done
+    export BKMS_APITEST_CONFIG="./${generated}"
+    export BKMS_API_TEST_TENANT_ID="${BKMS_API_TEST_TENANT_ID:-tenant-a}"
+    export RUN_MULTI_TENANT_API_TESTS=1
+    echo "Multi-tenant mode: config=${BKMS_APITEST_CONFIG}, tenant=${BKMS_API_TEST_TENANT_ID}"
+    just _up {{mode}} "{{COMPOSE}}" "{{compose_files}}" ""
 
 # Bring up the API test stack with Podman: podman compose + 宿主 apiserver 走
 # host.containers.internal，不再需要额外的 compose 覆盖文件。

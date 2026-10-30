@@ -41,7 +41,7 @@ var _ = Describe("Test AppArranger", func() {
 
 		appStore = testutil.NewStore(GinkgoT(), bkmsapp.AppMeta)
 
-		ctx = testutil.WithTenantOrDefault(context.Background())
+		ctx = testutil.NewDefaultTenantContext()
 		appName := "test-app-" + stringx.Random(6)
 		app = bkmsapp.Application{
 			ID:          appName + stringx.Random(6),

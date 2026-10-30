@@ -41,7 +41,7 @@ var _ = Describe("Service", func() {
 	)
 
 	BeforeEach(func() {
-		ctx = testutil.WithTenantOrDefault(context.Background())
+		ctx = testutil.NewDefaultTenantContext()
 		db = testutil.NewDB(GinkgoT())
 		records = store.Of(db, appmodeldeploy.RecordMeta)
 	})

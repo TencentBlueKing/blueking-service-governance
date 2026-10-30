@@ -20,7 +20,6 @@ package workspace
 
 import (
 	"context"
-	"slices"
 
 	"github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -69,10 +68,12 @@ func DefaultOrder() store.Opt {
 	return store.Combine(store.Desc("updatedAt"), store.Asc("id"))
 }
 
-// Update 更新已经存在的工作空间的可变字段，不存在时返回 ErrWorkspaceNotFound
-func Update(ctx context.Context, workspaces *WorkspaceStore, ws *Workspace, opts ...store.Opt) error {
+// Update 更新已经存在的工作空间的可变字段，不存在时返回 ErrWorkspaceNotFound。
+// scope 选择租户范围，不传时使用 ctx 中的租户；运维命令跨租户更新时传 store.TenantAll()。
+// 写操作只接受 TenantAll / TenantOf，传 TenantWithPlatform 会返回错误
+func Update(ctx context.Context, workspaces *WorkspaceStore, ws *Workspace, scope ...store.TenantOpt) error {
 	mutable := store.UpdateSelected("displayName", "description", "bkSystems", "imageRegistryType", "state", "updater")
-	if err := workspaces.Update(ctx, ws, append(slices.Clone(opts), mutable, ByWorkspaceID(ws.ID))...); err != nil {
+	if err := workspaces.Update(ctx, ws, append(store.ScopeOpts(scope), mutable, ByWorkspaceID(ws.ID))...); err != nil {
 		return errors.Wrapf(err, "update workspace %s", ws.ID)
 	}
 	return nil

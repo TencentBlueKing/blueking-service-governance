@@ -154,7 +154,7 @@ var _ = Describe("initProject", func() {
 	)
 
 	BeforeEach(func() {
-		ctx = testutil.WithTenantOrDefault(context.Background())
+		ctx = testutil.NewDefaultTenantContext()
 		manager = newTestManager()
 		projectID = "proj-" + stringx.Random(8)
 	})
@@ -190,7 +190,7 @@ var _ = Describe("initRepositories", func() {
 	)
 
 	BeforeEach(func() {
-		ctx = testutil.WithTenantOrDefault(context.Background())
+		ctx = testutil.NewDefaultTenantContext()
 		manager = newTestManager()
 		projectID = "proj-" + stringx.Random(8)
 	})
@@ -248,7 +248,7 @@ var _ = Describe("initImageRegistryCredentials", func() {
 	)
 
 	BeforeEach(func() {
-		ctx = testutil.WithTenantOrDefault(context.Background())
+		ctx = testutil.NewDefaultTenantContext()
 		manager = newTestManager()
 	})
 
@@ -315,7 +315,7 @@ var _ = Describe("initHelmRepoCredentials", func() {
 	)
 
 	BeforeEach(func() {
-		ctx = testutil.WithTenantOrDefault(context.Background())
+		ctx = testutil.NewDefaultTenantContext()
 		manager = newTestManager()
 	})
 
@@ -353,7 +353,7 @@ var _ = Describe("Initialize", func() {
 	)
 
 	BeforeEach(func() {
-		ctx = testutil.WithTenantOrDefault(context.Background())
+		ctx = testutil.NewDefaultTenantContext()
 		manager = newTestManager()
 	})
 

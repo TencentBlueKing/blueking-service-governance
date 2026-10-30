@@ -45,7 +45,7 @@ var _ = Describe("StartAndScheduleBuild", func() {
 	)
 
 	BeforeEach(func() {
-		ctx = testutil.WithTenantOrDefault(context.Background())
+		ctx = testutil.NewDefaultTenantContext()
 		app = &bkmsapp.Application{ID: "app-1", WorkspaceID: "ws-1"}
 		buildService = &Service{}
 	})

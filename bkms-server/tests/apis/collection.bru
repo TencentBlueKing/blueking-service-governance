@@ -1,6 +1,14 @@
 script:pre-request {
+  // Run every case as this tenant against a multi-tenant server; unset means single-tenant mode, no tenant header
+  const tenantID = bru.getProcessEnv("BKMS_API_TEST_TENANT_ID") || "";
+  bru.setVar("apiTestTenantID", tenantID);
+  if (tenantID) {
+    req.setHeader("X-Bk-Tenant-Id", tenantID);
+  }
+
   // Set the auth header to force authenticated as "api-test-user"
-  req.setHeader('X-Bk-Authed-User-Info', '{"userId":"api-test-user"}')
+  const {userInfo} = require("./helpers/tenancy");
+  req.setHeader('X-Bk-Authed-User-Info', userInfo("api-test-user"))
   req.setHeader('X-Bk-Authed-User-Credential', '{"bkTicket": "xxx"}')
   
   // Create a random suffix to avoid conflicts when creating the resources

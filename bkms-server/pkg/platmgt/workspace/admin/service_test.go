@@ -50,7 +50,7 @@ var _ = Describe("WorkspaceAdminService", func() {
 	)
 
 	BeforeEach(func() {
-		ctx = testutil.WithTenantOrDefault(context.Background())
+		ctx = testutil.NewDefaultTenantContext()
 		platCtx = store.RequireExplicitTenantScope(ctx)
 		roleMgr = &stubRoleManager{roleID: "fake-admin-role"}
 

@@ -281,6 +281,16 @@ var _ = Describe("Test tenant scope", func() {
 			Expect(ticketNames(list)).To(Equal([]string{"b1"}))
 		})
 
+		It("ScopeOpts passes tenant scopes through to the store", func() {
+			opts := store.ScopeOpts([]store.TenantOpt{store.TenantOf(tenantB)})
+			Expect(opts).To(HaveLen(1))
+
+			list, err := f.tickets.List(f.ctxA, append(opts, f.byOwner())...)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ticketNames(list)).To(Equal([]string{"b1"}))
+			Expect(store.ScopeOpts(nil)).To(BeEmpty())
+		})
+
 		It("TenantOf works without a tenant in the context", func() {
 			list, err := f.tickets.List(f.ctx, f.byOwner(), store.TenantOf(tenantA))
 			Expect(err).NotTo(HaveOccurred())
@@ -485,18 +495,17 @@ var _ = Describe("Test tenant scope", func() {
 		})
 	})
 
-	Context("shared from the platform tenant", func() {
+	Context("TenantWithPlatform", func() {
+		const unsupported = "option not supported by this operation"
 		var (
-			shared      *store.GenericStore[Ticket]
 			platform    string
 			ctxPlatform context.Context
 		)
+		withPlatform := func() store.TenantOpt {
+			return store.TenantWithPlatform(bson.D{{Key: "Priority", Value: 9}})
+		}
 
 		BeforeEach(func() {
-			meta := ticketMeta
-			meta.SharedFromPlatform = bson.D{{Key: "Priority", Value: 9}}
-			shared = store.Of(f.db, meta)
-
 			var err error
 			platform, err = tenant.PlatformTenantID()
 			Expect(err).NotTo(HaveOccurred())
@@ -512,46 +521,86 @@ var _ = Describe("Test tenant scope", func() {
 				{f.ctxA, "a1", 1},
 				{f.ctxB, "b1", 1},
 			} {
-				Expect(shared.Create(t.ctx, &Ticket{OwnerID: f.owner, Name: t.name, Priority: t.priority})).
+				Expect(f.tickets.Create(t.ctx, &Ticket{OwnerID: f.owner, Name: t.name, Priority: t.priority})).
 					To(Succeed())
 			}
 		})
 
 		It("reads its own documents and the shared platform documents", func() {
-			list, err := shared.List(f.ctxA, f.byOwner())
+			list, err := f.tickets.List(f.ctxA, f.byOwner(), withPlatform())
 			Expect(err).NotTo(HaveOccurred())
 			Expect(ticketNames(list)).To(ConsistOf("a1", "p-shared"))
 
-			got, err := shared.Get(f.ctxB, f.byName("p-shared"))
+			got, err := f.tickets.Get(f.ctxB, f.byName("p-shared"), withPlatform())
 			Expect(err).NotTo(HaveOccurred())
 			Expect(got.TenantID).To(Equal(platform))
 
-			n, err := shared.Count(f.ctxA, f.byOwner())
+			n, err := f.tickets.Count(f.ctxA, f.byOwner(), withPlatform())
 			Expect(err).NotTo(HaveOccurred())
 			Expect(n).To(Equal(int64(2)))
-			Expect(shared.Exists(f.ctxA, f.byName("p-private"))).To(BeFalse())
+			Expect(f.tickets.Exists(f.ctxA, f.byName("p-private"), withPlatform())).To(BeFalse())
+
+			page, err := f.tickets.ListPage(f.ctxA, 1, 10, f.byOwner(), withPlatform())
+			Expect(err).NotTo(HaveOccurred())
+			Expect(page.Total).To(Equal(int64(2)))
+		})
+
+		It("does not share without the option", func() {
+			list, err := f.tickets.List(f.ctxA, f.byOwner())
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ticketNames(list)).To(Equal([]string{"a1"}))
+		})
+
+		It("reads only its own documents when the context tenant is the platform tenant", func() {
+			list, err := f.tickets.List(ctxPlatform, f.byOwner(), withPlatform())
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ticketNames(list)).To(ConsistOf("p-shared", "p-private"))
 		})
 
 		It("keeps the caller's own $or conditions", func() {
-			list, err := shared.List(f.ctxA, f.byOwner(), store.Filter(bson.M{
+			list, err := f.tickets.List(f.ctxA, f.byOwner(), withPlatform(), store.Filter(bson.M{
 				"$or": []bson.M{{"name": "a1"}, {"name": "p-private"}},
 			}))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(ticketNames(list)).To(Equal([]string{"a1"}))
 		})
 
-		It("does not share with explicit tenant scopes", func() {
-			list, err := shared.List(f.ctxA, f.byOwner(), store.TenantOf(tenantA))
-			Expect(err).NotTo(HaveOccurred())
-			Expect(ticketNames(list)).To(Equal([]string{"a1"}))
+		It("rejects an empty shared condition instead of sharing every platform document", func() {
+			_, err := f.tickets.List(f.ctxA, f.byOwner(), store.TenantWithPlatform(nil))
+			Expect(err).To(MatchError(ContainSubstring("non-empty shared condition")))
+			_, err = f.tickets.List(f.ctxA, f.byOwner(), store.TenantWithPlatform(bson.D{}))
+			Expect(err).To(MatchError(ContainSubstring("non-empty shared condition")))
 		})
 
-		It("does not share with writes", func() {
-			err := shared.Update(f.ctxA, bson.M{"priority": 1}, f.byName("p-shared"))
-			Expect(errors.Is(err, store.ErrNotFound)).To(BeTrue())
-			Expect(errors.Is(shared.Delete(f.ctxA, f.byName("p-shared")), store.ErrNotFound)).To(BeTrue())
+		It("rejects it together with another tenant scope", func() {
+			_, err := f.tickets.List(f.ctxA, f.byOwner(), withPlatform(), store.TenantOf(tenantA))
+			Expect(errors.Is(err, store.ErrTenantScopeDuplicated)).To(BeTrue())
+		})
 
-			got, err := shared.Get(ctxPlatform, f.byName("p-shared"))
+		It("rejects it inside Combine", func() {
+			_, err := f.tickets.List(f.ctxA, store.Combine(f.byOwner(), withPlatform()))
+			Expect(errors.Is(err, store.ErrTenantScopeCombined)).To(BeTrue())
+		})
+
+		It("rejects it on a collection that is not tenant scoped", func() {
+			_, err := f.widgets.List(f.ctx, f.byOwner(), withPlatform())
+			Expect(errors.Is(err, store.ErrTenantScopeNotSupported)).To(BeTrue())
+		})
+
+		It("still requires an explicit scope on a marked context", func() {
+			_, err := f.tickets.List(store.RequireExplicitTenantScope(f.ctxA), f.byOwner(), withPlatform())
+			Expect(errors.Is(err, store.ErrTenantScopeRequired)).To(BeTrue(), "got %v", err)
+		})
+
+		It("is rejected by writes", func() {
+			err := f.tickets.Update(f.ctxA, bson.M{"priority": 1}, f.byName("p-shared"), withPlatform())
+			Expect(err).To(MatchError(ContainSubstring(unsupported)))
+			err = f.tickets.Delete(f.ctxA, f.byName("p-shared"), withPlatform())
+			Expect(err).To(MatchError(ContainSubstring(unsupported)))
+			err = f.tickets.Create(f.ctxA, &Ticket{OwnerID: f.owner, Name: "c1"}, withPlatform())
+			Expect(err).To(MatchError(ContainSubstring(unsupported)))
+
+			got, err := f.tickets.Get(ctxPlatform, f.byName("p-shared"))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(got.Priority).To(Equal(9))
 		})
@@ -588,13 +637,6 @@ var _ = Describe("Test tenancy declaration", func() {
 		_, err := store.New(db, store.Meta[Ticket]{Collection: ticketCollection})
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("set TenantScoped to true"))
-	})
-
-	It("rejects SharedFromPlatform on a collection that is not tenant scoped", func() {
-		_, err := store.New(db, store.Meta[Widget]{
-			Collection: widgetCollection, SharedFromPlatform: bson.D{{Key: "priority", Value: 1}},
-		})
-		Expect(err).To(MatchError(ContainSubstring("SharedFromPlatform requires TenantScoped")))
 	})
 
 	It("rejects a tenantID field that is not a string", func() {

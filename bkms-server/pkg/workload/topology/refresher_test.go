@@ -111,7 +111,7 @@ var _ = Describe("supplementOwnerRefChain", func() {
 	)
 
 	BeforeEach(func() {
-		ctx = testutil.WithTenantOrDefault(context.Background())
+		ctx = testutil.NewDefaultTenantContext()
 		refresher = &Refresher{}
 		clusterResources = make(map[string]*unstructured.Unstructured)
 		mu = sync.Mutex{}
@@ -345,7 +345,7 @@ var _ = Describe("Refresher", func() {
 		)
 
 		BeforeEach(func() {
-			ctx = testutil.WithTenantOrDefault(context.Background())
+			ctx = testutil.NewDefaultTenantContext()
 			// 使用真实测试数据库，用例结束后清空测试数据
 			db = testutil.NewDB(GinkgoT())
 			snapshots = testutil.NewStore(GinkgoT(), ResourceSnapshotMeta)
