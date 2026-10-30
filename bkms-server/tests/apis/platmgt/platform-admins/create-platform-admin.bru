@@ -23,9 +23,8 @@ assert {
 
 script:pre-request {
   const seedUser = bru.getVar("platAdminSeedUser");
-  req.setHeader("X-Bk-Authed-User-Info", JSON.stringify({
-    userId: seedUser,
-  }));
+  const {userInfo} = require("./helpers/tenancy");
+  req.setHeader("X-Bk-Authed-User-Info", userInfo(seedUser));
   req.setHeader("X-Bk-Authed-User-Credential", '{"bkTicket":"xxx"}');
 }
 

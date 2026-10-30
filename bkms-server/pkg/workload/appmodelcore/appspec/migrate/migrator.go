@@ -144,6 +144,8 @@ func (m *Migrator) migrateAppComponents(
 
 	for _, am := range appModels {
 		workspaceID := appWorkspaceIDs[am.AppID]
+		// 应用模型由底层集合直接读出，写入要落在它所属的租户下
+		amCtx := store.ScopeToTenant(ctx, am.TenantID)
 		for _, comp := range am.Components {
 			if comp == nil {
 				continue
@@ -159,10 +161,10 @@ func (m *Migrator) migrateAppComponents(
 				log.Warnf(ctx, "skip appID=%s component=%s: no target envs to migrate", am.AppID, comp.Name)
 				continue
 			}
-			if err = m.writeAppSpecEnvs(ctx, dryRun, am.AppID, envNames, enabledSpec, result); err != nil {
+			if err = m.writeAppSpecEnvs(amCtx, dryRun, am.AppID, envNames, enabledSpec, result); err != nil {
 				return err
 			}
-			if err = m.removeAppComponent(ctx, dryRun, am.AppID, comp.Name, result); err != nil {
+			if err = m.removeAppComponent(amCtx, dryRun, am.AppID, comp.Name, result); err != nil {
 				return err
 			}
 			if _, exists := seenApp[am.AppID]; !exists {
@@ -222,7 +224,7 @@ func (m *Migrator) removeWorkspaceComponents(
 			result.WorkspaceComponentsRemoved++
 			continue
 		}
-		if err := workspace.RemoveComponents(ctx, m.db, wsComp.ID); err != nil {
+		if err := workspace.RemoveComponents(store.ScopeToTenant(ctx, wsComp.TenantID), m.db, wsComp.ID); err != nil {
 			return errors.Wrapf(err, "remove workspace component %s/%s", wsComp.WorkspaceID, wsComp.Name)
 		}
 		result.WorkspaceComponentsRemoved++
@@ -238,7 +240,7 @@ func (m *Migrator) loadAppWorkspaceIDs(
 	for _, am := range appModels {
 		ids = append(ids, am.AppID)
 	}
-	apps, err := bkmsapp.GetAppsByIDs(ctx, m.db, ids)
+	apps, err := bkmsapp.GetAppsByIDs(ctx, m.db, ids, store.TenantAll())
 	if err != nil {
 		return nil, errors.Wrap(err, "load applications for workspace lookup")
 	}

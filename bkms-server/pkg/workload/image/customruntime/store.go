@@ -38,9 +38,10 @@ type Store = store.GenericStore[Image]
 // 索引（由 golang-migrate 维护）：
 // - 唯一：workspaceID + type + name
 var Meta = store.Meta[Image]{
-	Collection: "custom_runtime_images",
-	NotFound:   ErrCustomRuntimeImageNotFound,
-	BeforeSave: []func(*Image) error{normalizeImage},
+	Collection:   "custom_runtime_images",
+	TenantScoped: true,
+	NotFound:     ErrCustomRuntimeImageNotFound,
+	BeforeSave:   []func(*Image) error{normalizeImage},
 }
 
 // normalizeImage 校验记录，并按 trim 后的值落库：后续查询的具名 Opt 也用同一口径，避免空白差异造成查不到

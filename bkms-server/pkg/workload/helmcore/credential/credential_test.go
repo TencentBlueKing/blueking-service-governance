@@ -41,7 +41,7 @@ var _ = Describe("EnsureCredential", func() {
 	)
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = testutil.NewDefaultTenantContext()
 		credStore = setUpCredStore()
 		db = testutil.NewDB(GinkgoT())
 		workspaceID = "ws-ensure-test-" + stringx.Random(8)

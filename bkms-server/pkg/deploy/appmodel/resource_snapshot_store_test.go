@@ -40,7 +40,7 @@ var _ = Describe("ResourceSnapshotStore", func() {
 	}
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = testutil.NewDefaultTenantContext()
 		snapshots = testutil.NewStore(GinkgoT(), ResourceSnapshotMeta)
 	})
 

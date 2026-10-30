@@ -143,6 +143,26 @@ just down-podman
 
 `just up-podman` / `just up-podman-locbin` 会使用 `podman compose`，并将 `kubernetes.default` 映射为 `host.containers.internal` 以触达宿主机上的 K8s apiserver。
 
+#### 多租户模式
+
+```bash
+cd tests/
+
+just up-multi-tenant
+# 或使用本地二进制：just up-multi-tenant-locbin
+
+# 可选：指定运行全部用例的租户，默认 tenant-a
+# BKMS_API_TEST_TENANT_ID=tenant-x just up-multi-tenant
+```
+
+与 `just up` 的区别：
+
+- 服务端改用由 `configs/config.yaml` 生成的 `configs/config.multi-tenant.generated.yaml`，只打开 `tenant.enableMultiTenantMode` 与 `featureIntegrations.enableBkUserTenantVerify` 两个开关，生成文件不入库。
+- 全部用例以 `BKMS_API_TEST_TENANT_ID` 指定的普通租户运行（请求头带上用户所属租户与 `X-Bk-Tenant-Id`），用于发现隐含"平台租户就是请求租户"的问题。
+- 启用 `apis/tenancy` 跨租户隔离用例：租户 A 创建的数据，租户 B 看不到、改不了、删不掉。
+
+两种模式使用同一个 compose project，不能同时运行，切换前先 `just down`。
+
 #### CI 流水线脚本（参考）
 
 CI 上的 kind 已配置为监听 `0.0.0.0:42099`，docker bridge 直接可达，无需任何额外的端口转发。三个步骤参见下文"提交后的 CI 脚本"。

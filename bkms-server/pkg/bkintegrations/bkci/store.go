@@ -55,8 +55,9 @@ type (
 // - 唯一：code
 // - 唯一：workspaceID
 var ProjectMeta = store.Meta[Project]{
-	Collection: "bkci_projects",
-	NotFound:   ErrProjectNotFound,
+	Collection:   "bkci_projects",
+	TenantScoped: true,
+	NotFound:     ErrProjectNotFound,
 }
 
 // PipelineTemplateMeta 流水线模板的存储元数据。
@@ -75,8 +76,9 @@ var PipelineTemplateMeta = store.Meta[PipelineTemplate]{
 // - 唯一：id
 // - 唯一：workspaceID + type
 var PipelineMeta = store.Meta[Pipeline]{
-	Collection: "bkci_pipelines",
-	NotFound:   ErrPipelineNotFound,
+	Collection:   "bkci_pipelines",
+	TenantScoped: true,
+	NotFound:     ErrPipelineNotFound,
 }
 
 // RepositoryMeta 代码仓库的存储元数据。
@@ -85,8 +87,9 @@ var PipelineMeta = store.Meta[Pipeline]{
 // - 唯一：id + projectCode
 // - 唯一：workspaceID + alias
 var RepositoryMeta = store.Meta[Repository]{
-	Collection: "bkci_repositories",
-	NotFound:   ErrRepositoryNotFound,
+	Collection:   "bkci_repositories",
+	TenantScoped: true,
+	NotFound:     ErrRepositoryNotFound,
 }
 
 // ByWorkspace 按工作空间 ID 匹配，适用于 Project、Pipeline 与 Repository

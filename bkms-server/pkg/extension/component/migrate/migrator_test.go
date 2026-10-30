@@ -30,6 +30,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component/migrate"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/tenant"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
@@ -97,19 +98,24 @@ var _ = Describe("Component patch migration", func() {
 	)
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = testutil.NewDefaultTenantContext()
 		Expect(testutil.CleanupCollection(componentDefsCollection)).To(Succeed())
 		db = database.Client().Database(database.Name())
 		migrator = migrate.New(db)
+		platform, err := tenant.PlatformTenantID()
+		Expect(err).NotTo(HaveOccurred())
+		// 旧格式数据按真实部署分布：自建定义在请求租户，内置定义在平台租户。
+		// 多租户模式下两者不同，内置定义放错租户会让后续 LoadBuiltinFromFolder 另写一份而不是覆盖
 		insertLegacyComponents = func() {
 			_, err := db.Collection(componentDefsCollection).InsertMany(ctx, []any{
 				bson.M{
-					"name": "Demo", "version": component.DefaultComponentDefVersion,
+					"tenantID": tenant.DefaultTenantID, "name": "Demo", "version": component.DefaultComponentDefVersion,
 					"properties": bson.A{}, "output": "patcher:\n  spec.replicas: 2\n",
 				},
 				bson.M{
-					"name": importPolarisComponentName, "version": component.DefaultComponentDefVersion,
-					"properties": bson.A{}, "output": legacyImportPolarisOutput, "isBuiltin": true,
+					"tenantID": platform, "name": importPolarisComponentName,
+					"version": component.DefaultComponentDefVersion, "properties": bson.A{},
+					"output": legacyImportPolarisOutput, "isBuiltin": true,
 				},
 			})
 			Expect(err).NotTo(HaveOccurred())
@@ -169,6 +175,7 @@ var _ = Describe("Component patch migration", func() {
 		)).To(Succeed())
 		loadedImportPolaris, err := defs.Get(
 			ctx, component.ByNameVersion(importPolarisComponentName, component.DefaultComponentDefVersion),
+			store.TenantWithPlatform(component.BuiltinShared()),
 		)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(loadedImportPolaris.Patchers).To(Equal(migratedImportPolaris.Patchers))

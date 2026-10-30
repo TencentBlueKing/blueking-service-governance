@@ -42,7 +42,12 @@ var _ = Describe("ChartBuildService revision check", func() {
 		app := &bkmsapp.Application{ID: "helm-app", WorkspaceID: "ws-1", Type: bkmsapp.AppTypeHelm}
 
 		_, err := svc.ExecuteChartBuild(
-			context.Background(), app, "patch", revision.CodeRevision{Type: revision.TypeTag},
+			testutil.WithTenantOrDefault(
+				context.Background(),
+			),
+			app,
+			"patch",
+			revision.CodeRevision{Type: revision.TypeTag},
 		)
 
 		Expect(errors.Is(err, revision.ErrRequired)).To(BeTrue())
@@ -76,7 +81,7 @@ var _ = Describe("buildPipelineParams", func() {
 	DescribeTable("should map revision type to checkout params",
 		func(rev revision.CodeRevision, checkoutBy string) {
 			params, chartVersion, err := svc.buildPipelineParams(
-				context.Background(), app, "patch", rev, "https://helm.example.com",
+				testutil.NewDefaultTenantContext(), app, "patch", rev, "https://helm.example.com",
 			)
 
 			Expect(err).NotTo(HaveOccurred())

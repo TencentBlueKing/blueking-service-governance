@@ -144,7 +144,7 @@ var _ = Describe("Deploy", func() {
 	)
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = testutil.NewDefaultTenantContext()
 
 		// 获取测试集群配置，mock cluster.NewConfig 使所有 k8s/helm 操作走测试集群
 		var err error

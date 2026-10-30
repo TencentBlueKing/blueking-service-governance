@@ -48,6 +48,10 @@ func (h *Handler) componentDefs() *component.ComponentDefStore {
 	return store.Of(h.registry.DB, component.ComponentDefMeta)
 }
 
+func (h *Handler) instanceCounts() *component.InstanceCountStore {
+	return store.Of(h.registry.DB, component.InstanceCountMeta)
+}
+
 // ListComponentDefs 获取组件定义列表。
 //
 //	@ID			ListComponentDefs
@@ -70,7 +74,14 @@ func (h *Handler) ListComponentDefs(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	compDefs, err := h.componentDefs().List(ctx, queryInput.ToListOpt())
+	compDefs, err := h.componentDefs().List(
+		ctx, queryInput.ToListOpt(), store.TenantWithPlatform(component.BuiltinShared()),
+	)
+	if err != nil {
+		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list component defs"))
+		return
+	}
+	counts, err := component.ListInstanceCounts(ctx, h.instanceCounts(), compDefs)
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list component defs"))
 		return
@@ -78,7 +89,9 @@ func (h *Handler) ListComponentDefs(c *gin.Context) {
 
 	output := make([]*serializer.ComponentDefOutputObj, 0, len(compDefs))
 	for i := range compDefs {
-		output = append(output, new(serializer.ComponentDefOutputObj).FromModel(&compDefs[i]))
+		output = append(output, new(serializer.ComponentDefOutputObj).FromModel(
+			&compDefs[i], counts[compDefs[i].Key()],
+		))
 	}
 	ginutils.OK(c, serializer.ListComponentDefsOutput{Data: output})
 }
@@ -107,15 +120,23 @@ func (h *Handler) CreateComponentDef(c *gin.Context) {
 	compDef := input.ToModel(auth.MustGetUser(c.Request.Context()).ID)
 
 	ctx := c.Request.Context()
-	// name + version 全局唯一，由 store.Create 的唯一索引保证，避免并发下先查后写被覆盖。
-	if err := h.componentDefs().Create(ctx, compDef); err != nil {
+	defs := h.componentDefs()
+	alreadyExists := bkerrs.Errorf(
+		bkerrs.ErrCodeAlreadyExists, "component def(%s:%s) already exists", compDef.Name, compDef.Version,
+	)
+	builtinExists, err := component.BuiltinDefExists(ctx, defs, compDef.Name, compDef.Version)
+	if err != nil {
+		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "create component def"))
+		return
+	}
+	if builtinExists {
+		bkerrs.AbortWithErr(c, alreadyExists)
+		return
+	}
+	// 租户内 name + version 唯一，由 store.Create 的唯一索引保证，避免并发下先查后写被覆盖。
+	if err = defs.Create(ctx, compDef); err != nil {
 		if errors.Is(err, component.ErrComponentDefAlreadyExists) {
-			bkerrs.AbortWithErr(c, bkerrs.Errorf(
-				bkerrs.ErrCodeAlreadyExists,
-				"component def(%s:%s) already exists",
-				compDef.Name,
-				compDef.Version,
-			))
+			bkerrs.AbortWithErr(c, alreadyExists)
 			return
 		}
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "create component def"))
@@ -157,8 +178,10 @@ func (h *Handler) PatchComponentDef(c *gin.Context) {
 
 	ctx := c.Request.Context()
 	defs := h.componentDefs()
+	// 带上内置定义，同名的内置定义要明确拒绝，而不是当作不存在
 	existingCompDef, err := defs.Get(
 		ctx, component.ByNameVersion(uriInput.CompDefName, component.DefaultComponentDefVersion),
+		store.TenantWithPlatform(component.BuiltinShared()),
 	)
 	if err != nil {
 		if errors.Is(err, component.ErrComponentDefNotFound) {
@@ -227,8 +250,9 @@ func (h *Handler) DeleteComponentDef(c *gin.Context) {
 
 	ctx := c.Request.Context()
 	defs := h.componentDefs()
-	byKey := component.ByNameVersion(uriInput.CompDefName, component.DefaultComponentDefVersion)
-	existingCompDef, err := defs.Get(ctx, byKey)
+	name, version := uriInput.CompDefName, component.DefaultComponentDefVersion
+	existingCompDef, err := defs.Get(ctx, component.ByNameVersion(name, version),
+		store.TenantWithPlatform(component.BuiltinShared()))
 	if err != nil {
 		if errors.Is(err, component.ErrComponentDefNotFound) {
 			ginutils.OK(c, serializer.EmptyOutput{})
@@ -245,19 +269,30 @@ func (h *Handler) DeleteComponentDef(c *gin.Context) {
 		))
 		return
 	}
-	if existingCompDef.AppCompInstanceCount > 0 || existingCompDef.WorkspaceCompInstanceCount > 0 {
+	counts := h.instanceCounts()
+	countsByKey, err := component.ListInstanceCounts(ctx, counts, []component.ComponentDef{*existingCompDef})
+	if err != nil {
+		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get component instance count"))
+		return
+	}
+	count := countsByKey[existingCompDef.Key()]
+	if count.AppCompInstanceCount > 0 || count.WorkspaceCompInstanceCount > 0 {
 		bkerrs.AbortWithErr(c, bkerrs.Errorf(
 			bkerrs.ErrCodeInvalidRequest,
 			"component def(%s) is still referenced by %d app component(s) and %d workspace component(s), cannot be deleted",
 			uriInput.CompDefName,
-			existingCompDef.AppCompInstanceCount,
-			existingCompDef.WorkspaceCompInstanceCount,
+			count.AppCompInstanceCount,
+			count.WorkspaceCompInstanceCount,
 		))
 		return
 	}
 
-	if err = defs.DeleteIfExists(ctx, byKey); err != nil {
+	if err = defs.DeleteIfExists(ctx, component.ByNameVersion(name, version)); err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "delete component def"))
+		return
+	}
+	if err = counts.DeleteIfExists(ctx, component.ByDef(name, version)); err != nil {
+		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "delete component instance count"))
 		return
 	}
 

@@ -39,14 +39,25 @@ type ComponentDefStore = store.GenericStore[ComponentDef]
 
 // ComponentDefMeta 组件定义的存储元数据，写入前校验完整模型。
 //
+// 集合按租户划分，内置定义存放在平台租户中，读取时传 store.TenantWithPlatform(BuiltinShared()) 才包含它们，
+// 写入只作用于本租户。
+// 租户自建定义不能与内置定义同名：创建时由 BuiltinDefExists 拒绝，加载内置定义时检查各租户已有的自建定义。
+//
 // 索引（由 golang-migrate 维护）：
-// - 唯一：name + version
+// - 唯一：tenantID + name + version
 var ComponentDefMeta = store.Meta[ComponentDef]{
-	Collection: "component_defs",
-	NotFound:   ErrComponentDefNotFound,
-	Duplicate:  ErrComponentDefAlreadyExists,
-	BeforeSave: []func(*ComponentDef) error{validateDef},
-	Encode:     []func(*ComponentDef) error{defaultEmptyFragments},
+	Collection:   "component_defs",
+	TenantScoped: true,
+	NotFound:     ErrComponentDefNotFound,
+	Duplicate:    ErrComponentDefAlreadyExists,
+	BeforeSave:   []func(*ComponentDef) error{validateDef},
+	Encode:       []func(*ComponentDef) error{defaultEmptyFragments},
+}
+
+// BuiltinShared 平台租户中共享给各租户读取的组件定义，即内置定义。
+// 按名称解析定义、列出可用定义时传 store.TenantWithPlatform(BuiltinShared())
+func BuiltinShared() bson.D {
+	return bson.D{{Key: "isBuiltin", Value: true}}
 }
 
 func validateDef(compDef *ComponentDef) error {
@@ -98,42 +109,18 @@ func KeywordMatches(keyword string) store.Opt {
 	return store.ContainsIgnoreCase(keyword, "name", "displayName")
 }
 
-// UpsertDef 按 name + version 创建或覆盖组件定义；实例计数由 UpdateInstanceCount 维护，不会被覆盖
-func UpsertDef(ctx context.Context, defs *ComponentDefStore, compDef *ComponentDef) error {
-	if _, err := defs.Upsert(
-		ctx, compDef,
-		store.UpdateOmit("appCompInstanceCount", "workspaceCompInstanceCount"),
-		ByNameVersion(compDef.Name, compDef.Version),
-	); err != nil {
-		return errors.Wrapf(err, "upsert component def %s:%s", compDef.Name, compDef.Version)
-	}
-	return nil
+// BuiltinDefExists 判断是否存在同名的平台内置定义，租户新建定义时不能与之重名
+func BuiltinDefExists(ctx context.Context, defs *ComponentDefStore, name, version string) (bool, error) {
+	exists, err := defs.Exists(ctx, ByNameVersion(name, version), store.Where("isBuiltin", true),
+		store.TenantWithPlatform(BuiltinShared()))
+	return exists, errors.Wrapf(err, "check builtin component def %s:%s", name, version)
 }
 
-// UpdateInstanceCount 原子更新组件定义的实例计数。
-// 使用 MongoDB $inc 操作符实现原子递增/递减，适用于并发场景。
-//
-// - ctx: The context object for cancellation and timeout
-// - name: 组件定义名称（使用默认版本 DefaultComponentDefVersion）
-// - instanceType: 计数字段，FieldAppCompInstance 或 FieldWorkspaceCompInstance
-// - delta: 增量，正数表示增加，负数表示减少
-func UpdateInstanceCount(
-	ctx context.Context, defs *ComponentDefStore, name string, instanceType InstanceType, delta int,
-) error {
-	var fieldName string
-	switch instanceType {
-	case FieldAppCompInstance:
-		fieldName = "appCompInstanceCount"
-	case FieldWorkspaceCompInstance:
-		fieldName = "workspaceCompInstanceCount"
-	default:
-		return errors.Errorf("invalid instance type: %s", instanceType)
-	}
-	// 计数不是对组件定义的编辑，不刷新 updatedAt；组件定义不存在时静默忽略
-	_, err := defs.Modify(ctx, bson.M{"$inc": bson.M{fieldName: delta}},
-		store.Where("name", name), store.Where("version", DefaultComponentDefVersion), store.KeepUpdatedAt())
-	if err = store.IgnoreNotFound(err); err != nil {
-		return errors.Wrapf(err, "incr ref count for component def(%s) field(%s) delta(%d)", name, instanceType, delta)
+// UpsertDef 按 name + version 创建或覆盖组件定义
+func UpsertDef(ctx context.Context, defs *ComponentDefStore, compDef *ComponentDef, opts ...store.Opt) error {
+	opts = append([]store.Opt{ByNameVersion(compDef.Name, compDef.Version)}, opts...)
+	if _, err := defs.Upsert(ctx, compDef, opts...); err != nil {
+		return errors.Wrapf(err, "upsert component def %s:%s", compDef.Name, compDef.Version)
 	}
 	return nil
 }

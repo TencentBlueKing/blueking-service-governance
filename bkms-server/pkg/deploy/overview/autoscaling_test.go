@@ -27,6 +27,7 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/sync/semaphore"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/gpa"
 )
@@ -41,7 +42,7 @@ var _ = Describe("autoscaling helpers", func() {
 		)
 
 		BeforeEach(func() {
-			ctx = context.Background()
+			ctx = testutil.NewDefaultTenantContext()
 			sem = semaphore.NewWeighted(maxConcurrentK8sRequests)
 			client = &gpa.ClusterClient{}
 			target = autoscalingTarget{envName: "prod", namespace: "ns-1", crName: "gpa-app"}

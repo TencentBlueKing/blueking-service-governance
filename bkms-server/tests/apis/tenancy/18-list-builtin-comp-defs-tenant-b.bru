@@ -1,0 +1,38 @@
+docs {
+  测的是：内置组件定义存放在平台租户（system）下，由所有租户共享只读，
+  普通租户 B 的列表中也能看到它们，且标记为内置。
+}
+
+meta {
+  name: 18-list-builtin-comp-defs-tenant-b
+  type: http
+  seq: 18
+}
+
+get {
+  url: {{serviceURL}}/component-defs?keyword=VolumeConfigMap
+  body: none
+  auth: inherit
+}
+
+script:pre-request {
+  const {actAs} = require("./helpers/tenancy");
+  actAs(req, "B");
+}
+
+assert {
+  res.status: eq 200
+}
+
+tests {
+  test("should list the builtin component def shared from the platform tenant", () => {
+    const builtin = res.body.data.find((d) => d.name === "VolumeConfigMap");
+    expect(builtin, "builtin VolumeConfigMap").to.exist;
+    expect(builtin.isBuiltin).to.equal(true);
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 10000
+}

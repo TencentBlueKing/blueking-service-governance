@@ -36,6 +36,8 @@ type EnvInfo struct {
 // 包括实例标识（ApmID、Name）、访问凭证（Token）以及关联的环境列表。
 type ApmInstConfig struct {
 	ID bson.ObjectID `bson:"_id,omitempty"`
+	// TenantID 所属租户，由 store 层自动写入
+	TenantID string `json:"-" bson:"tenantID"`
 
 	// WorkspaceID 工作空间ID
 	WorkspaceID string `bson:"workspaceID" validate:"required"`

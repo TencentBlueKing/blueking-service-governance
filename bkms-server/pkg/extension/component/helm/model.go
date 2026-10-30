@@ -36,6 +36,8 @@ const helmAppComponentCollectionName = "helm_app_components"
 type HelmAppComponent struct {
 	// ID 唯一标识
 	ID bson.ObjectID `bson:"_id,omitempty"`
+	// TenantID 所属租户，由 store 层自动写入
+	TenantID string `json:"-" bson:"tenantID"`
 	// AppID 关联的应用 ID
 	AppID string `bson:"appID" validate:"required"`
 	// EnvName 生效的环境名称

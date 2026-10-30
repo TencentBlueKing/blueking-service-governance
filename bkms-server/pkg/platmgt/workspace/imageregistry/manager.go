@@ -89,11 +89,23 @@ func NewManager(db *mongo.Database) *Manager {
 	}
 }
 
+// scopeToWorkspace 跨租户查出目标空间，返回以该空间所属租户为当前租户的 ctx，
+// 后续空间与镜像仓库记录的读写都落在这个租户下
+func (m *Manager) scopeToWorkspace(
+	ctx context.Context, workspaceID string,
+) (context.Context, *bkmsworkspace.Workspace, error) {
+	ws, err := m.workspaces.Get(ctx, bkmsworkspace.ByWorkspaceID(workspaceID), store.TenantAll())
+	if err != nil {
+		return nil, nil, errors.Wrapf(err, "get workspace %s", workspaceID)
+	}
+	return store.ScopeToTenant(ctx, ws.TenantID), ws, nil
+}
+
 // Get 返回空间当前生效的镜像仓库；记录缺失时只填类型
 func (m *Manager) Get(ctx context.Context, workspaceID string) (*bkmsreg.ImageRegistry, error) {
-	ws, err := m.workspaces.Get(ctx, bkmsworkspace.ByWorkspaceID(workspaceID))
+	ctx, ws, err := m.scopeToWorkspace(ctx, workspaceID)
 	if err != nil {
-		return nil, errors.Wrapf(err, "get workspace %s", workspaceID)
+		return nil, err
 	}
 
 	reg, err := m.getRegistry(ctx, ws.ID, ws.ImageRegistryType)
@@ -112,9 +124,9 @@ func (m *Manager) Get(ctx context.Context, workspaceID string) (*bkmsreg.ImageRe
 func (m *Manager) Update(
 	ctx context.Context, workspaceID string, params UpdateParams,
 ) (*bkmsreg.ImageRegistry, error) {
-	ws, err := m.workspaces.Get(ctx, bkmsworkspace.ByWorkspaceID(workspaceID))
+	ctx, ws, err := m.scopeToWorkspace(ctx, workspaceID)
 	if err != nil {
-		return nil, errors.Wrapf(err, "get workspace %s", workspaceID)
+		return nil, err
 	}
 
 	before, err := m.getRegistry(ctx, ws.ID, ws.ImageRegistryType)

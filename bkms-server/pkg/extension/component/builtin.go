@@ -28,9 +28,12 @@ import (
 	"github.com/mitchellh/mapstructure"
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
+	"go.mongodb.org/mongo-driver/v2/bson"
 	"gopkg.in/yaml.v3"
 
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/tenant"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 // builtinCompCreator is the creator/updater name for built-in components.
@@ -85,15 +88,51 @@ func LoadBuiltinFromFolder(ctx context.Context, defs *ComponentDefStore, folderP
 		}
 	}
 
-	// Save the components to the store
+	if err := checkCustomDefConflicts(ctx, defs, compDefs); err != nil {
+		return err
+	}
+	// 内置定义写入平台租户，各租户读取时传 store.TenantWithPlatform(BuiltinShared()) 共享；
+	// 只覆盖已有的内置定义
+	platform, tenantErr := tenant.PlatformTenantID()
+	if tenantErr != nil {
+		return tenantErr
+	}
 	for _, compDef := range compDefs {
-		if err := UpsertDef(ctx, defs, compDef); err != nil {
+		err := UpsertDef(ctx, defs, compDef, store.TenantOf(platform), store.Where("isBuiltin", true))
+		if err != nil {
 			return errors.Wrap(err, "upserting builtin componentDef")
 		}
 	}
 
 	compDefNames := lo.Map(compDefs, func(c *ComponentDef, _ int) string { return c.Name })
 	log.Infof(ctx, "Loaded builtin components successfully, total=%d, names=%v", len(compDefNames), compDefNames)
+	return nil
+}
+
+// checkCustomDefConflicts 检查各租户是否已有与待加载内置定义同名的自建定义。
+// 内置定义对所有租户可见，与自建定义同名会让按名称解析定义产生歧义
+func checkCustomDefConflicts(ctx context.Context, defs *ComponentDefStore, builtins []*ComponentDef) error {
+	if len(builtins) == 0 {
+		return nil
+	}
+	keys := lo.SliceToMap(builtins, func(c *ComponentDef) (string, struct{}) { return c.Key(), struct{}{} })
+	names := lo.Uniq(lo.Map(builtins, func(c *ComponentDef, _ int) string { return c.Name }))
+	customs, err := defs.List(ctx, store.TenantAll(),
+		store.Where("isBuiltin", false), store.Where("name", bson.M{"$in": names}),
+		store.SelectFields("tenantID", "name", "version"),
+	)
+	if err != nil {
+		return errors.Wrap(err, "listing custom component defs")
+	}
+	conflicts := lo.FilterMap(customs, func(c ComponentDef, _ int) (string, bool) {
+		_, ok := keys[c.Key()]
+		return c.TenantID + "/" + c.Key(), ok
+	})
+	if len(conflicts) > 0 {
+		return errors.Errorf(
+			"builtin component defs conflict with custom defs of the same name %v, rename them first", conflicts,
+		)
+	}
 	return nil
 }
 
@@ -117,5 +156,7 @@ func parseCompFile(path string) (*ComponentDef, error) {
 	// Set the Creator and Updater to "admin" as system reserved
 	compDef.Creator = builtinCompCreator
 	compDef.Updater = builtinCompCreator
+	// 共享读取以 isBuiltin 为准，不依赖文件中的字段，漏写会让内置定义对其他租户不可见
+	compDef.IsBuiltin = true
 	return compDef, nil
 }

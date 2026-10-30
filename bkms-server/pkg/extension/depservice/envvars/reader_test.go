@@ -45,7 +45,7 @@ var _ = Describe("Reader", func() {
 	)
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = testutil.NewDefaultTenantContext()
 		insts = testutil.NewStore(GinkgoT(), model.ServiceInstanceMeta)
 		bindings = testutil.NewStore(GinkgoT(), model.ServiceBindingMeta)
 		reader = depenvvars.NewReader(testutil.NewDB(GinkgoT()))

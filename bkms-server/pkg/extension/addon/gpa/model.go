@@ -61,6 +61,8 @@ type GPATimeRange struct {
 type GPAConfig struct {
 	// Name 配置名称，由 GenerateName 按 "gpa-{appID}" 规则生成，同时作为 GPA CR 的 metadata.name
 	Name string `bson:"name" validate:"required"`
+	// TenantID 所属租户，由 store 层自动写入
+	TenantID string `json:"-" bson:"tenantID"`
 	// AppID 所属应用 ID
 	AppID string `bson:"appID" validate:"required"`
 	// EnvName 生效环境名称，配置在应用 + 环境维度唯一

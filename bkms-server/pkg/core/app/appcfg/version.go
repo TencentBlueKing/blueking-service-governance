@@ -35,9 +35,10 @@ type AppConfigFileVersionStore = store.GenericStore[AppConfigFileVersion]
 // - 查询提速：appID + envName + isDeleted + createdAt(倒序)
 // - 查询提速：appConfigFileID + isDeleted + creator + createdAt(倒序)
 var AppConfigFileVersionMeta = store.Meta[AppConfigFileVersion]{
-	Collection: "app_config_file_versions",
-	NotFound:   ErrAppCfgFileVersionNotFound,
-	Duplicate:  ErrAppCfgFileVersionAlreadyExists,
+	Collection:   "app_config_file_versions",
+	TenantScoped: true,
+	NotFound:     ErrAppCfgFileVersionNotFound,
+	Duplicate:    ErrAppCfgFileVersionAlreadyExists,
 }
 
 // VersionsByApp 按应用 ID 匹配版本记录

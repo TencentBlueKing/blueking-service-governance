@@ -52,7 +52,7 @@ var _ = Describe("ApmService", func() {
 	)
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = testutil.NewDefaultTenantContext()
 
 		// 显式设置 APM 采集地址，避免用例结果依赖本地配置文件中是否配置了该地址
 		oldAPMEndpoint = config.G.BkMonitor.APMEndpoint

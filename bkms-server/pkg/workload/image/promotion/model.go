@@ -24,6 +24,8 @@ import "time"
 type Image struct {
 	// AppID 应用 ID
 	AppID string `bson:"appID"`
+	// TenantID 所属租户，由 store 层自动写入
+	TenantID string `json:"-" bson:"tenantID"`
 	// RepoKey 仓库实例唯一标识，用于与 snapshot.Image 关联
 	RepoKey string `bson:"repoKey"`
 	// Tag 镜像标签名

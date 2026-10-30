@@ -34,6 +34,8 @@ const (
 type ImageRegistry struct {
 	// WorkspaceID 工作空间 ID
 	WorkspaceID string `bson:"workspaceID"`
+	// TenantID 所属租户，由 store 层自动写入
+	TenantID string `json:"-" bson:"tenantID"`
 	// Type 镜像仓库类型，目前分为内置或外部
 	Type ImageRegistryType `bson:"type"`
 	// Registry 镜像仓库地址，形如：mirrors.tencent.com/bkpaas

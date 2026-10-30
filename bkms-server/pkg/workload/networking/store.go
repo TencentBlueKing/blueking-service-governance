@@ -47,10 +47,11 @@ type ServiceStore = store.GenericStore[Service]
 // 索引（由 golang-migrate 维护）：
 // - 唯一：appID + name
 var ServiceMeta = store.Meta[Service]{
-	Collection: "networking_services",
-	NotFound:   ErrServiceNotFound,
-	Duplicate:  ErrServiceAlreadyExists,
-	BeforeSave: []func(*Service) error{validateService},
+	Collection:   "networking_services",
+	TenantScoped: true,
+	NotFound:     ErrServiceNotFound,
+	Duplicate:    ErrServiceAlreadyExists,
+	BeforeSave:   []func(*Service) error{validateService},
 }
 
 func validateService(svc *Service) error {

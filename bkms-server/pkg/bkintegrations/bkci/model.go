@@ -24,6 +24,8 @@ import "time"
 type Project struct {
 	// ID 项目 UID，格式为 32 位字符串
 	ID string `bson:"id"`
+	// TenantID 所属租户，由 store 层自动写入
+	TenantID string `json:"-" bson:"tenantID"`
 	// Code 项目 Code，格式为可读唯一字符串，如：bkms
 	Code string `bson:"code"`
 	// WorkspaceID 工作空间 ID
@@ -54,6 +56,8 @@ type PipelineTemplate struct {
 type Pipeline struct {
 	// ID 流水线 UID，格式类似于：p-5df30e9fe868af903dff8d375dd7b463
 	ID string `bson:"id"`
+	// TenantID 所属租户，由 store 层自动写入
+	TenantID string `json:"-" bson:"tenantID"`
 	// Type 流水线类型，同工作空间下唯一
 	Type string `bson:"type"`
 	// WorkspaceID 工作空间 ID
@@ -78,6 +82,8 @@ type Pipeline struct {
 type Repository struct {
 	// ID 仓库 Hash ID，格式类似于：Zr3Dx
 	ID string `bson:"id"`
+	// TenantID 所属租户，由 store 层自动写入
+	TenantID string `json:"-" bson:"tenantID"`
 	// Alias 仓库别名，格式类似于：bkms
 	Alias string `bson:"alias"`
 	// URL 仓库地址，格式类似于：https://git.example.com/bkms/bkms.git

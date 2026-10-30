@@ -36,7 +36,7 @@ var _ = Describe("EnvBindingStore", func() {
 
 	BeforeEach(func() {
 		store = testutil.NewStore(GinkgoT(), model.EnvBindingMeta)
-		ctx = context.Background()
+		ctx = testutil.NewDefaultTenantContext()
 		testAppID = "test-app-" + stringx.Random(5)
 	})
 

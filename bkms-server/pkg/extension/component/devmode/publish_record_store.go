@@ -38,7 +38,10 @@ type PublishRecordStore = store.GenericStore[PublishRecord]
 // 索引（由 golang-migrate 维护）：
 // - appID + envName + createdAt(desc)：按环境分页列出记录
 // - appID + envName + instance + createdAt(desc)：取每个实例最新的一条记录
-var PublishRecordMeta = store.Meta[PublishRecord]{Collection: "devmode_publish_records"}
+var PublishRecordMeta = store.Meta[PublishRecord]{
+	Collection:   "devmode_publish_records",
+	TenantScoped: true,
+}
 
 // ByAppEnv 按应用与环境匹配
 func ByAppEnv(appID, envName string) store.Opt {

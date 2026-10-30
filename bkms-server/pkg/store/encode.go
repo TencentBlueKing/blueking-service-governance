@@ -19,6 +19,7 @@
 package store
 
 import (
+	"reflect"
 	"slices"
 
 	"github.com/jinzhu/copier"
@@ -48,6 +49,13 @@ func (s *GenericStore[T]) encode(obj *T) (*T, error) {
 		if err := hook(cp); err != nil {
 			return nil, errors.Wrapf(err, "encode document for %s", s.coll.Name())
 		}
+	}
+	// 钩子可能整体重建对象而丢掉租户（如 appspec 的 normalizeSpec），以已填好租户的 obj 为准写回
+	if s.schema.tenantID != nil {
+		s.schema.fillTenant(
+			reflect.ValueOf(cp).Elem(),
+			reflect.ValueOf(obj).Elem().FieldByIndex(s.schema.tenantID).String(),
+		)
 	}
 	return cp, nil
 }

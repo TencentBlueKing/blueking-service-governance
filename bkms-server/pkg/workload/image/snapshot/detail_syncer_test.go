@@ -45,7 +45,7 @@ var _ = Describe("DetailSyncer", func() {
 	)
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = testutil.NewDefaultTenantContext()
 		db = testutil.NewDB(GinkgoT())
 		DeferCleanup(cleanupSnapshotCollections)
 

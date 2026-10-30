@@ -73,7 +73,7 @@ var _ = Describe("GPAService against a real cluster", Label("k8s"), func() {
 		addMock(mockey.Mock((*GPAService).resolveScaleTargetName).Return("it-workload", nil).Build())
 
 		svc = &GPAService{}
-		ctx = context.Background()
+		ctx = testutil.NewDefaultTenantContext()
 		crName = "gpa-it-" + stringx.Random(6)
 		env = &bkmsenv.Environment{Name: "dev", WorkspaceID: "ws-it"}
 		env.Cluster.ClusterID = "test-cluster"

@@ -1,0 +1,29 @@
+docs {
+  测的是：租户 B 按 ID 直接访问租户 A 的应用得到 404。
+}
+
+meta {
+  name: 08-get-app-tenant-b
+  type: http
+  seq: 8
+}
+
+get {
+  url: {{serviceURL}}/apps/{{tenancyAppID}}
+  body: none
+  auth: inherit
+}
+
+script:pre-request {
+  const {actAs} = require("./helpers/tenancy");
+  actAs(req, "B");
+}
+
+assert {
+  res.status: eq 404
+}
+
+settings {
+  encodeUrl: true
+  timeout: 10000
+}

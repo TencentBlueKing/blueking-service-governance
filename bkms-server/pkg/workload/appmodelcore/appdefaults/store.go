@@ -16,9 +16,10 @@ type RuleStore = store.GenericStore[Rule]
 // Indexes are managed by db/migrations, see 000006: the unique index on
 // workspace + section + environment type reports overlapping rules as ErrRuleConflict.
 var RuleMeta = store.Meta[Rule]{
-	Collection: CollectionName,
-	NotFound:   ErrRuleNotFound,
-	Duplicate:  ErrRuleConflict,
+	Collection:   CollectionName,
+	TenantScoped: true,
+	NotFound:     ErrRuleNotFound,
+	Duplicate:    ErrRuleConflict,
 }
 
 // ByWorkspace matches all rules in a workspace.

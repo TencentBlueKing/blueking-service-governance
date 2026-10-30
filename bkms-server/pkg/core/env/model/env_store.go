@@ -89,11 +89,12 @@ type EnvironmentStore = store.GenericStore[Environment]
 // - 唯一（partial）：cluster.clusterID + cluster.namespace（仅非空时生效）
 // - 查询提速：ownerAppID
 var EnvMeta = store.Meta[Environment]{
-	Collection: environmentCollectionName,
-	NotFound:   ErrEnvNotFound,
-	Duplicate:  ErrEnvAlreadyExists,
-	BeforeSave: []func(*Environment) error{setEnvDefaults},
-	Decode:     []func(*Environment) error{fillEnvStatus},
+	Collection:   environmentCollectionName,
+	TenantScoped: true,
+	NotFound:     ErrEnvNotFound,
+	Duplicate:    ErrEnvAlreadyExists,
+	BeforeSave:   []func(*Environment) error{setEnvDefaults},
+	Decode:       []func(*Environment) error{fillEnvStatus},
 }
 
 // -----------------------------------------------------------------------------
@@ -238,7 +239,10 @@ type envCountByWorkspace struct {
 }
 
 // CountByWorkspaceIDs returns standard environment counts grouped by workspace ID.
-func CountByWorkspaceIDs(ctx context.Context, db *mongo.Database, workspaceIDs []string) (map[string]int, error) {
+// scope 选择租户范围，不传时使用 ctx 中的租户；平台管理跨租户统计时传 store.TenantAll()
+func CountByWorkspaceIDs(
+	ctx context.Context, db *mongo.Database, workspaceIDs []string, scope ...store.TenantOpt,
+) (map[string]int, error) {
 	if len(workspaceIDs) == 0 {
 		return map[string]int{}, nil
 	}
@@ -253,7 +257,9 @@ func CountByWorkspaceIDs(ctx context.Context, db *mongo.Database, workspaceIDs [
 			"count": bson.M{"$sum": 1},
 		}}},
 	}
-	results, err := store.Aggregate[envCountByWorkspace](ctx, store.Of(db, EnvMeta), pipeline)
+	results, err := store.Aggregate[envCountByWorkspace](
+		ctx, store.Of(db, EnvMeta), pipeline, store.ScopeOpts(scope)...,
+	)
 	if err != nil {
 		return nil, errors.Wrap(err, "aggregate environment counts by workspace IDs")
 	}

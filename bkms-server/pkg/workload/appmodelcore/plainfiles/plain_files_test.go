@@ -47,7 +47,7 @@ var _ = Describe("BuildPlainConfigFiles", func() {
 	BeforeEach(func() {
 		var err error
 
-		ctx = context.Background()
+		ctx = testutil.NewDefaultTenantContext()
 		err = testutil.CleanupCollection("app_config_file_defs")
 		Expect(err).NotTo(HaveOccurred())
 		err = testutil.CleanupCollection("app_config_files")

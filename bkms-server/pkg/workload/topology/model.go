@@ -30,7 +30,9 @@ import (
 
 // ResourceSnapshot 资源拓扑快照，表示一个 appID + envName + trafficLaneName 作用域下当前可见的资源集合和扩展关系
 type ResourceSnapshot struct {
-	ID              bson.ObjectID      `bson:"_id,omitempty"`
+	ID bson.ObjectID `bson:"_id,omitempty"`
+	// TenantID 所属租户，由 store 层自动写入
+	TenantID        string             `json:"-" bson:"tenantID"`
 	AppID           string             `bson:"appID"`
 	EnvName         string             `bson:"envName"`
 	TrafficLaneName string             `bson:"trafficLaneName"`

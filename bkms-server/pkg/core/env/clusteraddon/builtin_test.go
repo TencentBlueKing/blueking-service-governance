@@ -35,7 +35,7 @@ var _ = Describe("Builtin ClusterAddonDefs Tests", func() {
 	var ctx context.Context
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = testutil.NewDefaultTenantContext()
 		store = testutil.NewStore(GinkgoT(), clusteraddon.ClusterAddonDefMeta)
 	})
 

@@ -48,10 +48,11 @@ type ConfigStore = store.GenericStore[Config]
 // 索引（由 golang-migrate 维护）：
 // - 唯一：appID
 var ConfigMeta = store.Meta[Config]{
-	Collection: "build_configs",
-	NotFound:   ErrConfigNotFound,
-	Encode:     []func(*Config) error{encryptImagePassword},
-	Decode:     []func(*Config) error{decryptImagePassword},
+	Collection:   "build_configs",
+	TenantScoped: true,
+	NotFound:     ErrConfigNotFound,
+	Encode:       []func(*Config) error{encryptImagePassword},
+	Decode:       []func(*Config) error{decryptImagePassword},
 }
 
 func encryptImagePassword(cfg *Config) (err error) {
@@ -90,8 +91,9 @@ type RecordStore = store.GenericStore[Record]
 // 索引（由 golang-migrate 维护）：
 // - 唯一：appID + buildID
 var RecordMeta = store.Meta[Record]{
-	Collection: "build_records",
-	NotFound:   ErrRecordNotFound,
+	Collection:   "build_records",
+	TenantScoped: true,
+	NotFound:     ErrRecordNotFound,
 }
 
 // RecordCounterCollection 构建序号计数器的集合名，文档的 _id 为应用 ID

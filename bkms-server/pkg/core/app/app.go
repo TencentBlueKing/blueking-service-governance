@@ -45,6 +45,8 @@ const (
 type Application struct {
 	// ID is the unique identifier of the application
 	ID string `json:"id" bson:"id,omitempty" validate:"required"`
+	// TenantID 所属租户，由 store 层自动写入
+	TenantID string `json:"-" bson:"tenantID"`
 
 	// WorkspaceID is the workspace of the application
 	WorkspaceID string `json:"workspaceID" bson:"workspaceID"`

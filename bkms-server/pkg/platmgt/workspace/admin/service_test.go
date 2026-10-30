@@ -33,12 +33,14 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil/dbfactory"
 	bkmsworkspace "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/perm"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/tenant"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 var _ = Describe("WorkspaceAdminService", func() {
 	var (
 		ctx            context.Context
+		platCtx        context.Context
 		diApp          *fxtest.App
 		recordStore    *Store
 		workspaceStore *bkmsworkspace.WorkspaceStore
@@ -48,7 +50,8 @@ var _ = Describe("WorkspaceAdminService", func() {
 	)
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = testutil.NewDefaultTenantContext()
+		platCtx = store.RequireExplicitTenantScope(ctx)
 		roleMgr = &stubRoleManager{roleID: "fake-admin-role"}
 
 		diApp = fxtest.New(
@@ -77,14 +80,14 @@ var _ = Describe("WorkspaceAdminService", func() {
 	It("should report target user role membership by role code and username", func() {
 		roleMgr.members = []string{"developer-user"}
 
-		status, err := service.GetRoleStatus(ctx, ws.ID, "developer", "developer-user")
+		status, err := service.GetRoleStatus(platCtx, ws.ID, "developer", "developer-user")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(status.HasRole).To(BeTrue())
 	})
 
 	It("should grant admin as temporary when isTemporary is true", func() {
 		before := time.Now()
-		status, err := service.GrantAdmin(ctx, ws.ID, "temp-user", true)
+		status, err := service.GrantAdmin(platCtx, ws.ID, "temp-user", true)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(status.HasRole).To(BeTrue())
 
@@ -95,7 +98,7 @@ var _ = Describe("WorkspaceAdminService", func() {
 	})
 
 	It("should grant admin as permanent when isTemporary is false", func() {
-		status, err := service.GrantAdmin(ctx, ws.ID, "perm-user", false)
+		status, err := service.GrantAdmin(platCtx, ws.ID, "perm-user", false)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(status.HasRole).To(BeTrue())
 		Expect(roleMgr.members).To(ContainElement("perm-user"))
@@ -107,15 +110,15 @@ var _ = Describe("WorkspaceAdminService", func() {
 	It("should reject grant when current user is already a workspace admin", func() {
 		roleMgr.members = []string{"admin"}
 
-		_, err := service.GrantAdmin(ctx, ws.ID, "admin", true)
+		_, err := service.GrantAdmin(platCtx, ws.ID, "admin", true)
 		Expect(err).To(MatchError(ErrWorkspaceAdminAlreadyExists))
 	})
 
 	It("should reject duplicate temporary grant once user already has admin role", func() {
-		_, err := service.GrantAdmin(ctx, ws.ID, "temp-user", true)
+		_, err := service.GrantAdmin(platCtx, ws.ID, "temp-user", true)
 		Expect(err).NotTo(HaveOccurred())
 
-		_, err = service.GrantAdmin(ctx, ws.ID, "temp-user", true)
+		_, err = service.GrantAdmin(platCtx, ws.ID, "temp-user", true)
 		Expect(err).To(MatchError(ErrWorkspaceAdminAlreadyExists))
 	})
 
@@ -133,17 +136,17 @@ var _ = Describe("WorkspaceAdminService", func() {
 		}
 		Expect(recordStore.Create(ctx, record)).To(Succeed())
 
-		_, err := service.GrantAdmin(ctx, ws.ID, "temp-user", true)
+		_, err := service.GrantAdmin(platCtx, ws.ID, "temp-user", true)
 		Expect(err).To(MatchError(ErrTempAdminAlreadyExists))
 		Expect(roleMgr.addCalls).To(Equal(0))
 		Expect(roleMgr.members).NotTo(ContainElement("temp-user"))
 	})
 
 	It("should revoke admin and recycle temp grant history when needed", func() {
-		_, err := service.GrantAdmin(ctx, ws.ID, "temp-user", true)
+		_, err := service.GrantAdmin(platCtx, ws.ID, "temp-user", true)
 		Expect(err).NotTo(HaveOccurred())
 
-		status, err := service.RevokeAdmin(ctx, ws.ID, "temp-user")
+		status, err := service.RevokeAdmin(platCtx, ws.ID, "temp-user")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(status.HasRole).To(BeFalse())
 
@@ -158,7 +161,7 @@ var _ = Describe("WorkspaceAdminService", func() {
 	It("should revoke workspace admin even without a temporary admin record", func() {
 		roleMgr.members = []string{"admin"}
 
-		status, err := service.RevokeAdmin(ctx, ws.ID, "admin")
+		status, err := service.RevokeAdmin(platCtx, ws.ID, "admin")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(status.HasRole).To(BeFalse())
 
@@ -167,7 +170,7 @@ var _ = Describe("WorkspaceAdminService", func() {
 	})
 
 	It("should reconcile expired records into recycled state", func() {
-		_, err := service.GrantAdmin(ctx, ws.ID, "temp-user", true)
+		_, err := service.GrantAdmin(platCtx, ws.ID, "temp-user", true)
 		Expect(err).NotTo(HaveOccurred())
 
 		record, err := recordStore.Get(ctx, ByActiveGrant(ws.ID, "temp-user"))
@@ -184,6 +187,41 @@ var _ = Describe("WorkspaceAdminService", func() {
 		record = loadLatestRecord(ctx, recordStore, ws.ID, "temp-user")
 		Expect(record.IsRecycled).To(BeTrue())
 	})
+
+	Context("workspace in another tenant", func() {
+		var otherCtx context.Context
+		var otherWS *bkmsworkspace.Workspace
+
+		BeforeEach(func() {
+			otherCtx = tenant.WithTenantID(context.Background(), "tenant-other")
+			otherWS = dbfactory.Workspace(otherCtx, workspaceStore)
+		})
+
+		It("should grant and record under the tenant of the workspace", func() {
+			_, err := service.GrantAdmin(platCtx, otherWS.ID, "temp-user", true)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(roleMgr.lastTenantID).To(Equal("tenant-other"))
+
+			_, err = recordStore.Get(otherCtx, ByActiveGrant(otherWS.ID, "temp-user"))
+			Expect(err).NotTo(HaveOccurred())
+			_, err = recordStore.Get(ctx, ByActiveGrant(otherWS.ID, "temp-user"))
+			Expect(err).To(MatchError(ErrRecordNotFound))
+		})
+
+		It("should clean up expired records of every tenant from a ctx without tenant", func() {
+			_, err := service.GrantAdmin(platCtx, otherWS.ID, "temp-user", true)
+			Expect(err).NotTo(HaveOccurred())
+			record, err := recordStore.Get(otherCtx, ByActiveGrant(otherWS.ID, "temp-user"))
+			Expect(err).NotTo(HaveOccurred())
+			record.ExpiresAt = time.Now().Add(-time.Hour)
+			Expect(updateRecord(otherCtx, recordStore, record)).To(Succeed())
+
+			Expect(service.CleanupExpiredGrants(context.Background())).To(Succeed())
+			Expect(roleMgr.lastTenantID).To(Equal("tenant-other"))
+			record = loadLatestRecord(otherCtx, recordStore, otherWS.ID, "temp-user")
+			Expect(record.IsRecycled).To(BeTrue())
+		})
+	})
 })
 
 type stubRoleManager struct {
@@ -197,6 +235,8 @@ type stubRoleManager struct {
 	addCalls              int
 	deleteErr             error
 	deleteCalls           int
+	// lastTenantID 最近一次增删角色成员时 ctx 中的租户
+	lastTenantID string
 }
 
 func (m *stubRoleManager) GetRole(_ context.Context, workspaceID, roleCode string) (*role.Role, error) {
@@ -226,8 +266,9 @@ func (m *stubRoleManager) ListRoleMembers(_ context.Context, roleID string) ([]s
 	return append([]string(nil), m.members...), nil
 }
 
-func (m *stubRoleManager) AddRoleForUsers(_ context.Context, _ string, users []string) error {
+func (m *stubRoleManager) AddRoleForUsers(ctx context.Context, _ string, users []string) error {
 	m.addCalls++
+	m.lastTenantID, _ = tenant.GetTenantID(ctx)
 	if m.addErr != nil {
 		return m.addErr
 	}
@@ -235,8 +276,9 @@ func (m *stubRoleManager) AddRoleForUsers(_ context.Context, _ string, users []s
 	return nil
 }
 
-func (m *stubRoleManager) DeleteRoleForUsers(_ context.Context, _ string, users []string) error {
+func (m *stubRoleManager) DeleteRoleForUsers(ctx context.Context, _ string, users []string) error {
 	m.deleteCalls++
+	m.lastTenantID, _ = tenant.GetTenantID(ctx)
 	if m.deleteErr != nil {
 		return m.deleteErr
 	}

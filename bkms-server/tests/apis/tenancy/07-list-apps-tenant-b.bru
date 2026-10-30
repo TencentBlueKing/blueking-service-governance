@@ -1,0 +1,36 @@
+docs {
+  测的是：租户 B 即使知道租户 A 的工作空间 ID，也列不出其中的应用。
+  该接口不校验工作空间本身，只靠存储层的租户过滤保证隔离，因此要单独覆盖。
+}
+
+meta {
+  name: 07-list-apps-tenant-b
+  type: http
+  seq: 7
+}
+
+get {
+  url: {{serviceURL}}/workspaces/{{tenancyWorkspaceID}}/apps
+  body: none
+  auth: inherit
+}
+
+script:pre-request {
+  const {actAs} = require("./helpers/tenancy");
+  actAs(req, "B");
+}
+
+assert {
+  res.status: eq 200
+}
+
+tests {
+  test("should list no apps of tenant A", () => {
+    expect(res.body.data).to.be.an("array").that.is.empty;
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 10000
+}

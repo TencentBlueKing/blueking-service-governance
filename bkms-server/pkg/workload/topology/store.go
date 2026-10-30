@@ -38,7 +38,10 @@ type ResourceSnapshotStore = store.GenericStore[ResourceSnapshot]
 // 索引（由 golang-migrate 维护）：
 // - 唯一：appID + envName + trafficLaneName（SaveWithVersion 的乐观锁依赖它）
 // - 查询提速：appID
-var ResourceSnapshotMeta = store.Meta[ResourceSnapshot]{Collection: "topology_resource_snapshots"}
+var ResourceSnapshotMeta = store.Meta[ResourceSnapshot]{
+	Collection:   "topology_resource_snapshots",
+	TenantScoped: true,
+}
 
 // ByScope 按作用域（应用 + 环境 + 泳道）匹配
 func ByScope(appID, envName, trafficLaneName string) store.Opt {

@@ -89,7 +89,8 @@ func runListBscpProjects(ctx context.Context, srvCfg, workspaceID, operator stri
 	storereg.Init(ctx)
 	reg := storereg.G()
 
-	ws, err := store.Of(reg.DB, bkmsworkspace.Meta).Get(ctx, bkmsworkspace.ByWorkspaceID(workspaceID))
+	ws, err := store.Of(reg.DB, bkmsworkspace.Meta).
+		Get(ctx, bkmsworkspace.ByWorkspaceID(workspaceID), store.TenantAll())
 	if err != nil {
 		return errors.Wrapf(err, "get workspace %s", workspaceID)
 	}

@@ -29,6 +29,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bkci"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/tof"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/tenant"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
@@ -81,10 +82,17 @@ func (m *ProjectManager) Initialize(
 		return nil, errors.Errorf("workspace %s already has project %s", m.workspaceID, proj.Code)
 	}
 
-	// 2. 检查 projectCode 是否已经被占用
-	if proj, gErr := projStore.Get(ctx, ByCode(projectCode)); gErr != nil && !errors.Is(gErr, ErrProjectNotFound) {
+	// 2. 检查 projectCode 是否已经被占用。蓝盾项目 Code 全局唯一（code_1 唯一索引不含 tenantID），
+	// 只查本租户会漏掉其他租户已绑定的项目，直到写库时才撞上唯一索引
+	proj, gErr := projStore.Get(ctx, ByCode(projectCode), store.TenantAll())
+	if gErr != nil && !errors.Is(gErr, ErrProjectNotFound) {
 		return nil, errors.Wrapf(gErr, "get project %s", projectCode)
-	} else if proj != nil {
+	}
+	if proj != nil {
+		if tenantID, _ := tenant.GetTenantID(ctx); proj.TenantID != tenantID {
+			// 不向当前租户暴露其他租户的工作空间
+			return nil, errors.Wrapf(ErrProjectCodeAlreadyUsed, "project %s used by another tenant", projectCode)
+		}
 		return nil, errors.Wrapf(
 			ErrProjectCodeAlreadyUsed, "project %s used by workspace %s", projectCode, proj.WorkspaceID,
 		)

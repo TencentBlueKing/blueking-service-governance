@@ -106,7 +106,7 @@ var _ = Describe("PipelineManager Initialize build-trigger guard", func() {
 	)
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = testutil.NewDefaultTenantContext()
 		manager = NewPipelineManager(testutil.NewDB(GinkgoT()), managerTestWorkspaceID)
 		_, pipelineStore, _ = setupManagerTestStores()
 	})
@@ -145,7 +145,7 @@ var _ = Describe("TriggerPipelineManager", func() {
 	)
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = testutil.NewDefaultTenantContext()
 		manager = NewTriggerPipelineManager(managerTestWorkspaceID)
 		projectStore, pipelineStore, templateStore = setupManagerTestStores()
 		Expect(projectStore.Create(ctx, mockProject())).To(Succeed())

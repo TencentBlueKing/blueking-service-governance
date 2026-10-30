@@ -1,0 +1,29 @@
+docs {
+  测的是：租户 B 删除不了租户 A 的工作空间，返回 404；工作空间仍存在由 12 号用例验证。
+}
+
+meta {
+  name: 11-delete-workspace-tenant-b
+  type: http
+  seq: 11
+}
+
+delete {
+  url: {{serviceURL}}/workspaces/{{tenancyWorkspaceID}}
+  body: none
+  auth: inherit
+}
+
+script:pre-request {
+  const {actAs} = require("./helpers/tenancy");
+  actAs(req, "B");
+}
+
+assert {
+  res.status: eq 404
+}
+
+settings {
+  encodeUrl: true
+  timeout: 10000
+}

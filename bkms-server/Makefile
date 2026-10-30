@@ -45,6 +45,10 @@ ifndef BKMS_SERVER_CONFIG_PATH
 endif
 	$(GINKGO) -gcflags="all=-l -N" --cover --coverprofile cover.out ./...
 
+.PHONY: test-multi-tenant
+test-multi-tenant:  ## Run the tests in multi-tenant mode (platform tenant is system)
+	BKMS_TEST_MULTI_TENANT=true $(MAKE) test
+
 .PHONY: apidocs
 apidocs: swag  ## Generate Swagger docs for Gin APIs
 	$(SWAG) init -g main.go -o ./docs/apis --parseInternal --outputTypes go,json,yaml

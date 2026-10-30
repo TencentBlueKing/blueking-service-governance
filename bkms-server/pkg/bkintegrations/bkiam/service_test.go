@@ -190,7 +190,7 @@ var _ = Describe("IAMService", func() {
 	)
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = testutil.NewDefaultTenantContext()
 		client = newFakeIAMClient()
 		gradeManagers = testutil.NewStore(GinkgoT(), role.GradeManagerMeta)
 		svc = NewIAMService(client, testutil.NewDB(GinkgoT()))

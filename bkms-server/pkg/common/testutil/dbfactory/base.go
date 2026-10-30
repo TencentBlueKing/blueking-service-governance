@@ -27,6 +27,7 @@ import (
 	"github.com/go-playground/validator/v10"
 	"github.com/onsi/gomega"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
@@ -38,7 +39,9 @@ import (
 
 var validate = validator.New()
 
-// Workspace 创建一个已持久化的测试用 Workspace，其名称和 ID 使用随机后缀避免冲突
+// Workspace 创建一个已持久化的测试用 Workspace，其名称和 ID 使用随机后缀避免冲突。
+// ctx 里没有租户时写入默认租户，但只作用于这一次 Create，不会改写调用方的 ctx：
+// 用例后续读写 workspaces 仍要用 testutil.WithTenantOrDefault 构造的 ctx
 func Workspace(ctx context.Context, store *bkmsworkspace.WorkspaceStore) *bkmsworkspace.Workspace {
 	workspaceName := "test-workspace-" + stringx.Random(6)
 	ws := &bkmsworkspace.Workspace{
@@ -46,7 +49,7 @@ func Workspace(ctx context.Context, store *bkmsworkspace.WorkspaceStore) *bkmswo
 		DisplayName: workspaceName,
 		State:       bkmsworkspace.StateReady,
 	}
-	err := store.Create(ctx, ws)
+	err := store.Create(testutil.WithTenantOrDefault(ctx), ws)
 	gomega.Expect(err).NotTo(gomega.HaveOccurred())
 	return ws
 }

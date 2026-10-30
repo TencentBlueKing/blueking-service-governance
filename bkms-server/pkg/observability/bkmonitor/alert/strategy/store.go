@@ -43,10 +43,11 @@ type Store = store.GenericStore[AlertStrategy]
 // - 查询提速：workspaceID + appID + remoteRefs.envID + remoteRefs.trafficLaneName
 // - 唯一约束：workspaceID + appID + displayName（集合中唯一的唯一索引，因此冲突即表示策略名称重复）
 var Meta = store.Meta[AlertStrategy]{
-	Collection: "bkmonitor_alert_strategy",
-	NotFound:   ErrNotFound,
-	Duplicate:  ErrDisplayNameAlreadyExists,
-	BeforeSave: []func(*AlertStrategy) error{validateStrategy, defaultEmptySlices},
+	Collection:   "bkmonitor_alert_strategy",
+	TenantScoped: true,
+	NotFound:     ErrNotFound,
+	Duplicate:    ErrDisplayNameAlreadyExists,
+	BeforeSave:   []func(*AlertStrategy) error{validateStrategy, defaultEmptySlices},
 }
 
 // validateStrategy 写入完整策略前校验结构体与生效范围

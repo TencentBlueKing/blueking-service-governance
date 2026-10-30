@@ -67,7 +67,7 @@ var _ = Describe("Service", func() {
 	)
 
 	BeforeEach(func() {
-		testCtx = context.Background()
+		testCtx = testutil.NewDefaultTenantContext()
 
 		diApp = fxtest.New(
 			GinkgoT(),

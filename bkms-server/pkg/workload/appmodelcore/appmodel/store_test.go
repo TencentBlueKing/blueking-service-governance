@@ -56,7 +56,7 @@ var _ = Describe("AppModel store", func() {
 		Expect(err).NotTo(HaveOccurred())
 		svccfg.G = &svccfg.Config{Encrypt: svccfg.EncryptConfig{Secret: secret}}
 
-		ctx = context.Background()
+		ctx = testutil.NewDefaultTenantContext()
 		db = testutil.NewDB(GinkgoT())
 		appStore = testutil.NewStore(GinkgoT(), bkmsapp.AppMeta)
 		models = store.Of(db, appmodel.AppModelMeta)
@@ -880,7 +880,7 @@ var _ = Describe("ComponentDef ref count maintained by AppModel functions", func
 		Expect(err).NotTo(HaveOccurred())
 		svccfg.G = &svccfg.Config{Encrypt: svccfg.EncryptConfig{Secret: secret}}
 
-		ctx = context.Background()
+		ctx = testutil.NewDefaultTenantContext()
 
 		appStore = testutil.NewStore(GinkgoT(), bkmsapp.AppMeta)
 		db = testutil.NewDB(GinkgoT())
@@ -897,9 +897,10 @@ var _ = Describe("ComponentDef ref count maintained by AppModel functions", func
 	})
 
 	getAppCompInstanceCount := func() int32 {
-		def, err := compDefStore.Get(ctx, component.ByNameVersion(compDefName, component.DefaultComponentDefVersion))
+		counts, err := component.ListInstanceCounts(ctx, store.Of(db, component.InstanceCountMeta),
+			[]component.ComponentDef{{Name: compDefName, Version: component.DefaultComponentDefVersion}})
 		Expect(err).NotTo(HaveOccurred())
-		return def.AppCompInstanceCount
+		return counts[compDefName+":"+component.DefaultComponentDefVersion].AppCompInstanceCount
 	}
 
 	It("should track appCompInstanceCount through the full AppModel lifecycle", func() {

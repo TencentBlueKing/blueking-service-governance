@@ -163,8 +163,14 @@ func setBscpCfgForApp(
 	appID string,
 	enable bool,
 ) error {
+	app, err := store.Of(reg.DB, bkmsapp.AppMeta).Get(ctx, bkmsapp.ByID(appID), store.TenantAll())
+	if err != nil {
+		return errors.Wrapf(err, "get app %s", appID)
+	}
+	ctx = store.ScopeToTenant(ctx, app.TenantID)
+
 	if enable {
-		return enableBscpCfgForApp(ctx, reg, user, appID)
+		return enableBscpCfgForApp(ctx, reg, user, app)
 	}
 
 	update := map[string]any{"enable": false}
@@ -174,18 +180,15 @@ func setBscpCfgForApp(
 	return nil
 }
 
-// enableBscpCfgForApp 启用指定 appID 的 bscp 配置：初始化 PostHook 与 Metadata，并置 enable 为 true。
+// enableBscpCfgForApp 启用指定应用的 bscp 配置：初始化 PostHook 与 Metadata，并置 enable 为 true。
+// ctx 须已切换到应用所属租户
 func enableBscpCfgForApp(
 	ctx context.Context,
 	reg *storereg.Registry,
 	user auth.User,
-	appID string,
+	app *bkmsapp.Application,
 ) error {
-	app, err := store.Of(reg.DB, bkmsapp.AppMeta).Get(ctx, bkmsapp.ByID(appID))
-	if err != nil {
-		return errors.Wrapf(err, "get app %s", appID)
-	}
-
+	appID := app.ID
 	ws, err := store.Of(reg.DB, workspace.Meta).Get(ctx, workspace.ByWorkspaceID(app.WorkspaceID))
 	if err != nil {
 		return errors.Wrapf(err, "get workspace %s", app.WorkspaceID)

@@ -151,13 +151,14 @@ func runBackfillDefaultAlertStrategies(
 		return nil, errors.New("app-id is required")
 	}
 
-	app, err := deps.appStore.Get(ctx, bkmsapp.ByID(opts.AppID))
+	app, err := deps.appStore.Get(ctx, bkmsapp.ByID(opts.AppID), store.TenantAll())
 	if err != nil {
 		return nil, errors.Wrap(err, "get app")
 	}
 	if app.WorkspaceID != opts.WorkspaceID {
 		return nil, errors.Errorf("app %s does not belong to workspace %s", app.ID, opts.WorkspaceID)
 	}
+	ctx = store.ScopeToTenant(ctx, app.TenantID)
 
 	ws, err := deps.workspaceStore.Get(ctx, workspace.ByWorkspaceID(opts.WorkspaceID))
 	if err != nil {

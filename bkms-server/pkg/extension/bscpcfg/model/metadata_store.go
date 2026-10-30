@@ -42,10 +42,11 @@ type MetadataStore = store.GenericStore[Metadata]
 // 索引（由 golang-migrate 维护）：
 // - 唯一：appID
 var MetadataMeta = store.Meta[Metadata]{
-	Collection: "bscpcfg_metadata",
-	NotFound:   ErrMetadataNotFound,
-	Duplicate:  ErrMetadataAlreadyExists,
-	BeforeSave: []func(*Metadata) error{validateMetadata},
+	Collection:   "bscpcfg_metadata",
+	TenantScoped: true,
+	NotFound:     ErrMetadataNotFound,
+	Duplicate:    ErrMetadataAlreadyExists,
+	BeforeSave:   []func(*Metadata) error{validateMetadata},
 }
 
 func validateMetadata(meta *Metadata) error {

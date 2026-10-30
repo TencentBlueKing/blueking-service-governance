@@ -89,7 +89,7 @@ var _ = Describe("Poller Handle", func() {
 	}
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = testutil.NewDefaultTenantContext()
 		db = testutil.NewDB(GinkgoT())
 		records = store.Of(db, appmodeldeploy.RecordMeta)
 

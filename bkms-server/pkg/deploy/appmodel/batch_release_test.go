@@ -326,7 +326,7 @@ var _ = Describe("deleteRollout", func() {
 	)
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = testutil.NewDefaultTenantContext()
 		fake = newFakeCluster()
 		server = httptest.NewServer(fake)
 		cfg = &cluster.Config{Rest: &rest.Config{Host: server.URL}, ClusterID: "BCS-K8S-00000"}
@@ -390,7 +390,7 @@ var _ = Describe("workloadRollout", func() {
 	}
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = testutil.NewDefaultTenantContext()
 		fake = newFakeCluster()
 		server = httptest.NewServer(fake)
 		cfg = &cluster.Config{Rest: &rest.Config{Host: server.URL}, ClusterID: "BCS-K8S-00000"}
@@ -737,7 +737,7 @@ var _ = Describe("UpdateInstances with a leftover rollout", func() {
 	}
 
 	BeforeEach(func() {
-		ctx = auth.WithUser(context.Background(), auth.User{ID: "tester"})
+		ctx = auth.WithUser(testutil.NewDefaultTenantContext(), auth.User{ID: "tester"})
 		fake = newFakeCluster()
 		server = httptest.NewServer(fake)
 		cfg := &cluster.Config{Rest: &rest.Config{Host: server.URL}, ClusterID: "BCS-K8S-00000"}
@@ -747,8 +747,8 @@ var _ = Describe("UpdateInstances with a leftover rollout", func() {
 		recordStore := store.Of(db, RecordMeta)
 		appID := "rollout-inst-update-" + stringx.Random(6)
 		DeferCleanup(func() {
-			_, _ = recordStore.DeleteMany(context.Background(), store.Where("appID", appID))
-			_, _ = store.Of(db, ResourceSnapshotMeta).DeleteMany(context.Background(), store.Where("appID", appID))
+			_, _ = recordStore.DeleteMany(ctx, store.Where("appID", appID))
+			_, _ = store.Of(db, ResourceSnapshotMeta).DeleteMany(ctx, store.Where("appID", appID))
 		})
 		err := recordStore.Create(ctx, &Record{
 			AppID:         appID,

@@ -20,8 +20,11 @@ package component_test
 
 import (
 	"context"
+	"fmt"
+	"os"
 	"path/filepath"
 
+	"github.com/TencentBlueKing/gopkg/stringx"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"gopkg.in/yaml.v3"
@@ -29,6 +32,8 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/render"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/tenant"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 var _ = Describe("Builtin ComponentDefs Tests", func() {
@@ -36,10 +41,16 @@ var _ = Describe("Builtin ComponentDefs Tests", func() {
 	const testCompsPath = "./assets/testcomps"
 	var compDefStore *component.ComponentDefStore
 	var ctx context.Context
+	// getBuiltin 以请求租户的身份读取内置定义。内置定义写在平台租户中，多租户模式下平台租户（system）
+	// 与请求租户不同，必须带上 TenantWithPlatform 才能读到，不能依赖单租户下两者恰好都是 default
+	getBuiltin := func(name string) (*component.ComponentDef, error) {
+		return compDefStore.Get(ctx, component.ByNameVersion(name, "v1.0.0"),
+			store.TenantWithPlatform(component.BuiltinShared()))
+	}
 
 	BeforeEach(func() {
 		compDefStore = testutil.NewStore(GinkgoT(), component.ComponentDefMeta)
-		ctx = context.Background()
+		ctx = testutil.NewDefaultTenantContext()
 	})
 
 	Context("LoadBuiltinFromFolder valid input", func() {
@@ -48,10 +59,22 @@ var _ = Describe("Builtin ComponentDefs Tests", func() {
 			Expect(err).To(Not(HaveOccurred()))
 
 			// Get the loaded component and verify its content
-			compDef, err := compDefStore.Get(ctx, component.ByNameVersion("MemLimits", "v1.0.0"))
+			compDef, err := getBuiltin("MemLimits")
 			Expect(err).To(Not(HaveOccurred()))
 			Expect(compDef.Name).To(Equal("MemLimits"))
 			Expect(len(compDef.Properties)).To(Equal(2))
+		})
+
+		It("should mark loaded components as builtin and share them with other tenants", func() {
+			// 测试文件中没有写 isBuiltin
+			Expect(component.LoadBuiltinFromFolder(ctx, compDefStore, filepath.Join(testCompsPath, "valid"))).
+				To(Succeed())
+
+			ctxOther := tenant.WithTenantID(context.Background(), "tenant-builtin-test")
+			compDef, err := compDefStore.Get(ctxOther, component.ByNameVersion("MemLimits", "v1.0.0"),
+				store.TenantWithPlatform(component.BuiltinShared()))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(compDef.IsBuiltin).To(BeTrue())
 		})
 
 		It("should load VolumeConfigMap and preserve newlines in data", func() {
@@ -62,7 +85,7 @@ var _ = Describe("Builtin ComponentDefs Tests", func() {
 			)
 			Expect(err).NotTo(HaveOccurred())
 
-			compDef, err := compDefStore.Get(ctx, component.ByNameVersion("VolumeConfigMap", "v1.0.0"))
+			compDef, err := getBuiltin("VolumeConfigMap")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(compDef.Specs).To(HaveLen(1))
 			Expect(component.ValidateFragmentTemplate(compDef.Specs[0])).To(Succeed())
@@ -88,7 +111,7 @@ var _ = Describe("Builtin ComponentDefs Tests", func() {
 			)
 			Expect(err).NotTo(HaveOccurred())
 
-			compDef, err := compDefStore.Get(ctx, component.ByNameVersion("ImportPolaris", "v1.0.0"))
+			compDef, err := getBuiltin("ImportPolaris")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(compDef.Patchers).To(HaveLen(1))
 			Expect(compDef.Specs).To(HaveLen(2))
@@ -118,6 +141,80 @@ var _ = Describe("Builtin ComponentDefs Tests", func() {
 			}
 		})
 	})
+	Context("LoadBuiltinFromFolder in the platform tenant", func() {
+		var platform, name, path string
+
+		writeDef := func(description string) {
+			content := fmt.Sprintf("name: %s\nversion: %s\ndescription: %s\npatchers:\n- 'foo: bar'\n",
+				name, component.DefaultComponentDefVersion, description)
+			Expect(os.WriteFile(path, []byte(content), 0o600)).To(Succeed())
+		}
+		getDef := func() *component.ComponentDef {
+			compDef, err := compDefStore.Get(ctx, component.ByNameVersion(name, component.DefaultComponentDefVersion),
+				store.TenantOf(platform))
+			Expect(err).NotTo(HaveOccurred())
+			return compDef
+		}
+
+		BeforeEach(func() {
+			var err error
+			platform, err = tenant.PlatformTenantID()
+			Expect(err).NotTo(HaveOccurred())
+			name = "Builtin-" + stringx.Random(6)
+			path = filepath.Join(GinkgoT().TempDir(), name+".yaml")
+			DeferCleanup(func() {
+				Expect(
+					compDefStore.DeleteIfExists(
+						ctx,
+						component.ByNameVersion(name, component.DefaultComponentDefVersion),
+						store.TenantAll(),
+					),
+				).To(Succeed())
+			})
+		})
+
+		It("should update an existing builtin definition on reload", func() {
+			writeDef("v1")
+			Expect(component.LoadBuiltinFromFolder(ctx, compDefStore, path)).To(Succeed())
+			writeDef("v2")
+			Expect(component.LoadBuiltinFromFolder(ctx, compDefStore, path)).To(Succeed())
+
+			compDef := getDef()
+			Expect(compDef.Description).To(Equal("v2"))
+			Expect(compDef.IsBuiltin).To(BeTrue())
+		})
+
+		DescribeTable("should reject a custom definition of the same name in any tenant",
+			func(tenantOf func() string) {
+				custom := &component.ComponentDef{
+					Name:        name,
+					Version:     component.DefaultComponentDefVersion,
+					Description: "custom",
+					Patchers:    []string{"foo: custom\n"},
+					ScopeType:   component.ScopeTypeGlobal,
+				}
+				customTenant := tenantOf()
+				Expect(compDefStore.Create(ctx, custom, store.TenantOf(customTenant))).To(Succeed())
+
+				writeDef("builtin")
+				err := component.LoadBuiltinFromFolder(ctx, compDefStore, path)
+				Expect(err).To(MatchError(ContainSubstring(customTenant + "/" + custom.Key())))
+
+				defs, err := compDefStore.List(
+					ctx,
+					component.ByNameVersion(name, component.DefaultComponentDefVersion),
+					store.TenantAll(),
+				)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(defs).To(HaveLen(1))
+				Expect(defs[0].Description).To(Equal("custom"))
+				Expect(defs[0].IsBuiltin).To(BeFalse())
+			},
+			Entry("the platform tenant", func() string { return platform }),
+			Entry("another tenant", func() string { return "tenant-" + stringx.Random(6) }),
+		)
+	})
+
 	Context("LoadBuiltinFromFolder invalid input", func() {
 		It("should fail with bad properties", func() {
 			err := component.LoadBuiltinFromFolder(

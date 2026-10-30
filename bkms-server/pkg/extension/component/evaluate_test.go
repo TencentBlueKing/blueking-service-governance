@@ -62,7 +62,7 @@ var _ = Describe("evaluate tests", func() {
 	var propsBuilder *component.AppPropertiesBuilder
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = testutil.NewDefaultTenantContext()
 
 		appStore = testutil.NewStore(GinkgoT(), bkmsapp.AppMeta)
 		diApp = fxtest.New(

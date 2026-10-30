@@ -49,7 +49,7 @@ var _ = Describe("GPAConfig store", func() {
 
 	BeforeEach(func() {
 		configs = testutil.NewStore(GinkgoT(), gpa.ConfigMeta)
-		ctx = context.Background()
+		ctx = testutil.NewDefaultTenantContext()
 		testAppID = "test-app-" + stringx.Random(5)
 	})
 

@@ -48,7 +48,7 @@ var _ = Describe("ResolveConfig", func() {
 	)
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = testutil.NewDefaultTenantContext()
 		workspaceID = "ws-" + stringx.Random(8)
 		db = testutil.NewDB(GinkgoT())
 		bkciProjectStore = store.Of(db, bkci.ProjectMeta)
