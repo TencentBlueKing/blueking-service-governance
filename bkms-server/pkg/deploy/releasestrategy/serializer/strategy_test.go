@@ -19,12 +19,18 @@
 package serializer_test
 
 import (
+	"encoding/json"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin/binding"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	. "github.com/onsi/gomega/gstruct"
+	"github.com/samber/lo"
+	"go.mongodb.org/mongo-driver/v2/bson"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/releasestrategy"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/releasestrategy/serializer"
 )
 
@@ -85,12 +91,71 @@ var _ = Describe("ReleaseStrategyInput", func() {
 			inputWithBatch(serializer.BatchInput{Target: "101%", PauseMode: "none"}), "Target"),
 
 		// pauseSeconds 仅在 duration 时必填且只能在此时填写
-		Entry("duration pause at lower bound", pauseInput("duration", 60), ""),
-		Entry("duration pause at upper bound", pauseInput("duration", 86400), ""),
+		Entry("duration pause at lower bound", pauseInput("duration", 1), ""),
+		Entry("duration pause longer than a day", pauseInput("duration", 7*86400), ""),
 		Entry("duration pause without seconds", pauseInput("duration", 0), "PauseSeconds"),
-		Entry("duration pause too short", pauseInput("duration", 59), "PauseSeconds"),
-		Entry("duration pause too long", pauseInput("duration", 86401), "PauseSeconds"),
+		Entry("duration pause with negative seconds", pauseInput("duration", -1), "PauseSeconds"),
 		Entry("seconds given for permanent pause", pauseInput("permanent", 120), "PauseSeconds"),
 		Entry("seconds given for no pause", pauseInput("none", 120), "PauseSeconds"),
 	)
+
+	It("accepts every builtin strategy as user input", func() {
+		for _, s := range releasestrategy.BuiltinStrategies() {
+			input := serializer.ReleaseStrategyInput{
+				Name:        s.Name,
+				Description: s.Description,
+				Batches: lo.Map(s.Batches, func(b releasestrategy.Batch, _ int) serializer.BatchInput {
+					return serializer.BatchInput{
+						Target:       b.Target,
+						PauseMode:    string(b.PauseMode),
+						PauseSeconds: b.PauseSeconds,
+					}
+				}),
+			}
+			Expect(binding.Validator.ValidateStruct(input)).To(Succeed(), s.Name)
+		}
+	})
+})
+
+var _ = Describe("ReleaseStrategyOutputObj", func() {
+	It("marks builtin strategies and leaves their audit fields empty", func() {
+		builtin := releasestrategy.BuiltinStrategies()[0]
+		builtin.WorkspaceID = "demo-space"
+		output := new(serializer.ReleaseStrategyOutputObj).FromModel(builtin)
+
+		Expect(output.ID).To(Equal(builtin.ID.Hex()))
+		Expect(output.IsBuiltin).To(BeTrue())
+		Expect(output.WorkspaceID).To(Equal("demo-space"))
+		Expect(output.Creator).To(BeEmpty())
+		Expect(output.Updater).To(BeEmpty())
+		Expect(output.CreatedAt).To(BeNil())
+		Expect(output.UpdatedAt).To(BeNil())
+		Expect(output.Batches).To(HaveLen(len(builtin.Batches)))
+
+		raw, err := json.Marshal(output)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(string(raw)).To(ContainSubstring(`"createdAt":null`))
+		Expect(string(raw)).To(ContainSubstring(`"isBuiltin":true`))
+	})
+
+	It("keeps ownership and audit fields of custom strategies", func() {
+		createdAt := time.Date(2026, 10, 22, 2, 0, 0, 0, time.UTC)
+		output := new(serializer.ReleaseStrategyOutputObj).FromModel(releasestrategy.ReleaseStrategy{
+			ID:          bson.NewObjectID(),
+			WorkspaceID: "demo-space",
+			Name:        "careful",
+			Batches:     []releasestrategy.Batch{{Target: "1", PauseMode: releasestrategy.PauseModeNone}},
+			Creator:     "admin",
+			CreatedAt:   createdAt,
+			Updater:     "operator",
+			UpdatedAt:   createdAt.Add(time.Hour),
+		})
+
+		Expect(output.IsBuiltin).To(BeFalse())
+		Expect(output.WorkspaceID).To(Equal("demo-space"))
+		Expect(output.Creator).To(Equal("admin"))
+		Expect(output.Updater).To(Equal("operator"))
+		Expect(output.CreatedAt).To(PointTo(Equal(createdAt)))
+		Expect(output.UpdatedAt).To(PointTo(Equal(createdAt.Add(time.Hour))))
+	})
 })

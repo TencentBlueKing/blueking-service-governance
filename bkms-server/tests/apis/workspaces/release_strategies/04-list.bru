@@ -16,11 +16,15 @@ assert {
 }
 
 tests {
-  test("should list the updated strategy", () => {
+  test("should list the updated strategy after builtin strategies", () => {
     const strategies = res.body.data;
-    expect(strategies).to.have.lengthOf(1);
-    expect(strategies[0].id).to.equal(bru.getVar("releaseStrategyID"));
-    expect(strategies[0].batches).to.deep.equal([
+    expect(strategies.slice(0, 3).every((s) => s.isBuiltin)).to.equal(true);
+
+    const custom = strategies.slice(3);
+    expect(custom).to.have.lengthOf(1);
+    expect(custom[0].isBuiltin).to.equal(false);
+    expect(custom[0].id).to.equal(bru.getVar("releaseStrategyID"));
+    expect(custom[0].batches).to.deep.equal([
       {target: "2", pauseMode: "permanent", pauseSeconds: 0},
       {target: "100%", pauseMode: "none", pauseSeconds: 0}
     ]);
