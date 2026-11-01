@@ -78,9 +78,11 @@ func restoreEnvelope(ctx context.Context, name string, payload []byte, global bo
 	if !global {
 		if env.TenantID == "" {
 			taskID, _, _ := handlerMeta(ctx)
+			//tenancy:allow default-tenant 告警日志记录旧任务回落到的租户
 			logging.Warnf(ctx, "taskq: task type=%s id=%s has no _tenantID, falling back to tenant %s",
 				name, taskID, tenant.DefaultTenantID)
 		}
+		//tenancy:allow set-tenant,default-tenant 从消息恢复投递方的租户，升级前的旧消息没有 _tenantID
 		ctx = tenant.WithTenantID(ctx, lo.CoalesceOrEmpty(env.TenantID, tenant.DefaultTenantID))
 	}
 	return ctx, env.Args

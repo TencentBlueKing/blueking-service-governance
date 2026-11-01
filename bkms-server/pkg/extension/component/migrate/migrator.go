@@ -47,6 +47,7 @@ func (m *Migrator) Run(ctx context.Context, dryRun bool) (Result, error) {
 	}
 
 	result := Result{DryRun: dryRun, Changes: make([]Change, 0, len(items))}
+	//tenancy:allow raw-collection 迁移原地改写所有租户的组件定义，不改动 tenantID
 	collection := m.db.Collection(componentDefsCollection)
 	for _, item := range items {
 		change := convertComponentDef(item)

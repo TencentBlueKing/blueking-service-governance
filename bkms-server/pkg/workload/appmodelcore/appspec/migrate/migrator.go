@@ -277,6 +277,7 @@ func (m *Migrator) enableTkeRouteEni(
 }
 
 func (m *Migrator) listWorkspaceTkeRouteEni(ctx context.Context) ([]*workspace.Component, error) {
+	//tenancy:allow raw-collection 迁移读取所有租户的旧组件，写回时 ScopeToTenant
 	cursor, err := m.db.Collection("workspace_components").Find(ctx, bson.M{"type": tkeRouteEniComponentName})
 	if err != nil {
 		return nil, errors.Wrap(err, "list workspace tkeRouteEni components")
@@ -294,6 +295,7 @@ func (m *Migrator) listAffectedAppModels(ctx context.Context, wsCompNames []stri
 	if len(wsCompNames) > 0 {
 		orFilters = append(orFilters, bson.M{"components.refWorkspaceCompName": bson.M{"$in": wsCompNames}})
 	}
+	//tenancy:allow raw-collection 迁移按旧格式读取所有租户的应用描述，写回时 ScopeToTenant
 	cursor, err := m.db.Collection(appmodel.CollectionName).Find(ctx, bson.M{"$or": orFilters})
 	if err != nil {
 		return nil, errors.Wrap(err, "list app models with tkeRouteEni mounts")

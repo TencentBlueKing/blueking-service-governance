@@ -96,6 +96,7 @@ func CleanupCollection(collectionName string) error {
 	}
 
 	ctx := context.Background()
+	//tenancy:allow raw-collection 测试按集合清理所有租户的数据
 	collection := database.Client().Database(database.Name()).Collection(collectionName)
 	_, err := collection.DeleteMany(ctx, bson.M{})
 	if err != nil {

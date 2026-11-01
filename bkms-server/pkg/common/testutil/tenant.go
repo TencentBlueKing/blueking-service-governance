@@ -39,5 +39,6 @@ func WithTenantOrDefault(ctx context.Context) context.Context {
 	if _, ok := tenant.GetTenantID(ctx); ok {
 		return ctx
 	}
+	//tenancy:allow set-tenant,default-tenant 测试默认在 default 租户下运行
 	return tenant.WithTenantID(ctx, tenant.DefaultTenantID)
 }

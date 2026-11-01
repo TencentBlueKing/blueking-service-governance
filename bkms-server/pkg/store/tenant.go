@@ -63,6 +63,7 @@ func RequireExplicitTenantScope(ctx context.Context) context.Context {
 // 不能来自请求参数
 func ScopeToTenant(ctx context.Context, tenantID string) context.Context {
 	ctx = context.WithValue(ctx, explicitTenantScopeKey{}, false)
+	//tenancy:allow set-tenant ScopeToTenant 是切换租户的统一入口
 	return tenant.WithTenantID(ctx, tenantID)
 }
 

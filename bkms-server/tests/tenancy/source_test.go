@@ -27,29 +27,90 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/pkg/errors"
 )
 
 const modulePath = "github.com/TencentBlueKing/blueking-service-governance/bkms-server"
 
-// serverRoot 返回 bkms-server 目录的绝对路径，测试的工作目录是本包所在目录
+// serverRoot 从测试的工作目录逐级向上，返回 go.mod 中 module 为 modulePath 的目录，即 bkms-server 模块根目录。
+// 核对模块名是为了不误认路径上其他模块的 go.mod
 func serverRoot() (string, error) {
-	root, err := filepath.Abs(filepath.Join("..", ".."))
-	return root, errors.Wrap(err, "resolve bkms-server root")
+	dir, err := os.Getwd()
+	if err != nil {
+		return "", errors.Wrap(err, "get working directory")
+	}
+	for {
+		content, err := os.ReadFile(filepath.Join(dir, "go.mod"))
+		if err == nil && modFileDeclares(content, modulePath) {
+			return dir, nil
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return "", errors.Errorf("go.mod of module %s not found above the working directory", modulePath)
+		}
+		dir = parent
+	}
+}
+
+// modFileDeclares 判断 go.mod 内容声明的模块是否为 module
+func modFileDeclares(content []byte, module string) bool {
+	for _, line := range strings.Split(string(content), "\n") {
+		if fields := strings.Fields(line); len(fields) == 2 && fields[0] == "module" {
+			return fields[1] == module
+		}
+	}
+	return false
+}
+
+// allowPrefix 豁免注释的前缀，完整格式为 "//tenancy:allow <规则名>[,<规则名>] <理由>"
+const allowPrefix = "//tenancy:allow"
+
+// allowComment 源码中的一条豁免注释
+type allowComment struct {
+	line int
+	// rules 豁免的规则名，注释缺少规则名或理由时为空
+	rules []string
 }
 
 // sourceFile 一个已解析的非测试 Go 源文件
 type sourceFile struct {
-	// rel 相对 bkms-server 的路径，使用 "/" 分隔，用于白名单匹配与报错
-	rel  string
-	fset *token.FileSet
-	file *ast.File
+	// rel 相对 bkms-server 的路径，使用 "/" 分隔，用于报错
+	rel    string
+	fset   *token.FileSet
+	file   *ast.File
+	allows []allowComment
 }
 
-// pos 返回节点的 "相对路径:行号"，便于在失败信息中直接定位
-func (f *sourceFile) pos(n ast.Node) string {
-	return f.rel + ":" + strconv.Itoa(f.fset.Position(n.Pos()).Line)
+// line 返回节点起始位置的行号
+func (f *sourceFile) line(n ast.Node) int {
+	return f.fset.Position(n.Pos()).Line
+}
+
+// pos 返回 "相对路径:行号"，便于在失败信息中直接定位
+func (f *sourceFile) pos(line int) string {
+	return f.rel + ":" + strconv.Itoa(line)
+}
+
+// parseAllows 提取文件中的豁免注释
+func parseAllows(fset *token.FileSet, file *ast.File) []allowComment {
+	var allows []allowComment
+	for _, group := range file.Comments {
+		for _, c := range group.List {
+			rest, ok := strings.CutPrefix(c.Text, allowPrefix)
+			if !ok || rest != "" && !strings.HasPrefix(rest, " ") {
+				continue
+			}
+			a := allowComment{line: fset.Position(c.Pos()).Line}
+			ruleList, reason, _ := strings.Cut(strings.TrimSpace(rest), " ")
+			if ruleList != "" && strings.TrimSpace(reason) != "" {
+				a.rules = strings.Split(ruleList, ",")
+			}
+			allows = append(allows, a)
+		}
+	}
+	return allows
 }
 
 // importName 返回文件中导入 importPath 时使用的包名，未导入时返回空字符串
@@ -76,6 +137,19 @@ func isPkgSelector(expr ast.Expr, pkgName, sel string) bool {
 	return ok && pkgName != "" && id.Name == pkgName
 }
 
+var (
+	sourcesOnce sync.Once
+	sources     []*sourceFile
+	sourcesErr  error
+)
+
+// cachedSources 返回 loadSources 的结果，整个测试进程只解析一次，供各条规则共用；
+// 规则只读取语法树，不能修改
+func cachedSources() ([]*sourceFile, error) {
+	sourcesOnce.Do(func() { sources, sourcesErr = loadSources() })
+	return sources, sourcesErr
+}
+
 // loadSources 解析 bkms-server 下 pkg、cmd 目录的全部非测试 Go 文件。
 // 生成的文件（swag 文档、mockery mock）不含租户相关逻辑，一并跳过
 func loadSources() ([]*sourceFile, error) {
@@ -99,7 +173,7 @@ func loadSources() ([]*sourceFile, error) {
 		if strings.Contains(string(content), "Code generated") && strings.Contains(string(content), "DO NOT EDIT") {
 			return nil
 		}
-		file, err := parser.ParseFile(fset, path, content, 0)
+		file, err := parser.ParseFile(fset, path, content, parser.ParseComments)
 		if err != nil {
 			return errors.Wrapf(err, "parse %s", path)
 		}
@@ -107,7 +181,9 @@ func loadSources() ([]*sourceFile, error) {
 		if err != nil {
 			return errors.Wrapf(err, "relative path of %s", path)
 		}
-		files = append(files, &sourceFile{rel: filepath.ToSlash(rel), fset: fset, file: file})
+		files = append(files, &sourceFile{
+			rel: filepath.ToSlash(rel), fset: fset, file: file, allows: parseAllows(fset, file),
+		})
 		return nil
 	}
 	for _, sub := range []string{"pkg", "cmd"} {
@@ -116,14 +192,4 @@ func loadSources() ([]*sourceFile, error) {
 		}
 	}
 	return files, nil
-}
-
-// matchesAny 判断相对路径是否命中白名单：以 "/" 结尾的条目匹配目录前缀，否则精确匹配文件
-func matchesAny(rel string, allowlist map[string]string) bool {
-	for entry := range allowlist {
-		if strings.HasSuffix(entry, "/") && strings.HasPrefix(rel, entry) || rel == entry {
-			return true
-		}
-	}
-	return false
 }

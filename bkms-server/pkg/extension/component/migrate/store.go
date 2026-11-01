@@ -37,6 +37,7 @@ type currentComponentDef struct {
 }
 
 func (m *Migrator) listCurrentComponentDefs(ctx context.Context) ([]currentComponentDef, error) {
+	//tenancy:allow raw-collection 迁移按旧格式读取所有租户的组件定义
 	cursor, err := m.db.Collection(componentDefsCollection).Find(ctx, bson.M{}, options.Find().SetSort(bson.D{
 		{Key: "name", Value: 1}, {Key: "version", Value: 1},
 	}))

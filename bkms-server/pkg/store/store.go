@@ -77,6 +77,7 @@ func New[T any](db *mongo.Database, meta Meta[T]) (*GenericStore[T], error) {
 	if !meta.TenantScoped && sc.tenantID != nil {
 		return nil, errors.Errorf("meta of %s: model has a %q field, set TenantScoped to true", typ, keyTenantID)
 	}
+	//tenancy:allow raw-collection GenericStore 自身持有集合，由它注入租户条件
 	return &GenericStore[T]{coll: db.Collection(meta.Collection), meta: meta, schema: sc}, nil
 }
 

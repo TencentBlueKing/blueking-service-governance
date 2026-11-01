@@ -157,6 +157,7 @@ func (h *Handler) PortForward(c *gin.Context) {
 	)
 
 	// 独立 context 控制 WebSocket 生命周期，避免 Gin 请求 context 提前取消。
+	//tenancy:allow detached-ctx 只控制隧道读写，不访问 store 与下游服务
 	connCtx, connCancel := context.WithCancel(context.Background())
 	defer connCancel()
 	tunnelConn := websocket.NetConn(connCtx, wsConn, websocket.MessageBinary)

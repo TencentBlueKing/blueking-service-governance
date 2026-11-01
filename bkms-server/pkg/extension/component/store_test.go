@@ -237,14 +237,18 @@ var _ = Describe("ComponentDefStore", func() {
 		})
 	})
 
+	// 内置组件定义存放在平台租户中，通过 TenantWithPlatform(BuiltinShared()) 以只读方式共享给所有租户；
+	// 自建定义按租户隔离。ctxOther 是一个随机的普通租户，单租户和多租户模式下都不是平台租户
 	Describe("tenancy", func() {
 		var ctxOther context.Context
 		var builtin *component.ComponentDef
+		var platform string
 
 		BeforeEach(func() {
 			ctxOther = tenant.WithTenantID(context.Background(), "tenant-"+stringx.Random(6))
 
-			platform, err := tenant.PlatformTenantID()
+			var err error
+			platform, err = tenant.PlatformTenantID()
 			Expect(err).NotTo(HaveOccurred())
 			builtin = &component.ComponentDef{
 				Name:      "Builtin-" + stringx.Random(6),
@@ -260,6 +264,8 @@ var _ = Describe("ComponentDefStore", func() {
 			})
 		})
 
+		// 测的是：普通租户带上共享选项能读到平台租户的内置定义，且读到的确实是内置定义；
+		// 业务上判断"是否与内置定义同名"用的 BuiltinDefExists 也能在普通租户下查到它
 		It("should share builtin definitions of the platform tenant with other tenants", func() {
 			got, err := compDefStore.Get(ctxOther, component.ByNameVersion(builtin.Name, builtin.Version),
 				store.TenantWithPlatform(component.BuiltinShared()))
@@ -268,18 +274,26 @@ var _ = Describe("ComponentDefStore", func() {
 			Expect(component.BuiltinDefExists(ctxOther, compDefStore, builtin.Name, builtin.Version)).To(BeTrue())
 		})
 
+		// 测的是：不带共享选项时普通租户读不到内置定义，证明可见性来自显式的共享选项，
+		// 而不是数据恰好与请求在同一个租户
 		It("should not include builtin definitions without TenantWithPlatform", func() {
 			_, err := compDefStore.Get(ctxOther, component.ByNameVersion(builtin.Name, builtin.Version))
 			Expect(err).To(MatchError(component.ErrComponentDefNotFound))
 		})
 
+		// 测的是：共享只针对内置定义，平台租户自己创建的非内置定义即使带上共享选项也不会被其他租户读到
 		It("should not share custom definitions of the platform tenant", func() {
-			Expect(compDefStore.Create(ctx, compDef)).To(Succeed())
+			Expect(compDefStore.Create(ctx, compDef, store.TenantOf(platform))).To(Succeed())
+			DeferCleanup(func() {
+				Expect(compDefStore.DeleteIfExists(ctx, component.ByNameVersion(compDef.Name, compDef.Version),
+					store.TenantOf(platform))).To(Succeed())
+			})
 			_, err := compDefStore.Get(ctxOther, component.ByNameVersion(compDef.Name, compDef.Version),
 				store.TenantWithPlatform(component.BuiltinShared()))
 			Expect(err).To(MatchError(component.ErrComponentDefNotFound))
 		})
 
+		// 测的是：共享是只读的，其他租户带上共享选项去更新内置定义会被存储层拒绝
 		It("should not allow other tenants to modify builtin definitions", func() {
 			err := compDefStore.Update(ctxOther, bson.M{"description": "changed"},
 				component.ByNameVersion(builtin.Name, builtin.Version),
@@ -287,6 +301,7 @@ var _ = Describe("ComponentDefStore", func() {
 			Expect(err).To(MatchError(ContainSubstring("option not supported by this operation")))
 		})
 
+		// 测的是：唯一索引为 tenantID + name + version，不同租户可以创建同名同版本的自建定义
 		It("should allow the same name in different tenants", func() {
 			Expect(compDefStore.Create(ctx, compDef)).To(Succeed())
 			other := *compDef
@@ -299,6 +314,8 @@ var _ = Describe("ComponentDefStore", func() {
 	})
 })
 
+// 组件定义的实例计数（被多少应用组件 / 工作空间组件引用）单独存放在租户集合 component_def_instance_counts 中，
+// 内置定义被所有租户共用，计数需要按租户各自统计，删除保护也只看本租户的计数
 var _ = Describe("InstanceCount", func() {
 	var counts *component.InstanceCountStore
 	var ctx, ctxOther context.Context
@@ -326,6 +343,7 @@ var _ = Describe("InstanceCount", func() {
 		})
 	})
 
+	// 测的是：首次增加时自动创建计数记录，之后两种实例类型分别累加，减少也能正确扣减
 	It("should create the record on the first increment and accumulate", func() {
 		for range 3 {
 			update(ctx, component.FieldAppCompInstance, 1)
@@ -338,11 +356,13 @@ var _ = Describe("InstanceCount", func() {
 		Expect(got.WorkspaceCompInstanceCount).To(Equal(int32(2)))
 	})
 
+	// 测的是：没有记录时的减少直接忽略，不会创建一条负数计数
 	It("should ignore a decrement without a record", func() {
 		update(ctx, component.FieldAppCompInstance, -1)
 		Expect(counts.Exists(ctx, component.ByDef(name, component.DefaultComponentDefVersion))).To(BeFalse())
 	})
 
+	// 测的是：同一个定义在两个租户下的计数互不影响，各自只看到自己的值
 	It("should count each tenant separately", func() {
 		update(ctx, component.FieldAppCompInstance, 1)
 		update(ctxOther, component.FieldAppCompInstance, 5)
@@ -351,6 +371,7 @@ var _ = Describe("InstanceCount", func() {
 		Expect(countOf(ctxOther).AppCompInstanceCount).To(Equal(int32(5)))
 	})
 
+	// 测的是：未知的实例类型直接报错，避免写出一个不存在的计数字段
 	It("should reject an unknown instance type", func() {
 		Expect(component.UpdateInstanceCount(ctx, counts, name, "unknown", 1)).
 			To(MatchError(ContainSubstring("invalid instance type")))

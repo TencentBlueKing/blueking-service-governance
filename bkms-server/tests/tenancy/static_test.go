@@ -20,48 +20,73 @@ package tenancy_test
 
 import (
 	"go/ast"
+	"slices"
 	"strings"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
+// 规则名，豁免注释通过它指明豁免哪条规则
+const (
+	ruleRawCollection = "raw-collection"
+	ruleDefaultTenant = "default-tenant"
+	ruleSetTenant     = "set-tenant"
+	ruleDetachedCtx   = "detached-ctx"
+)
+
+var knownRules = []string{ruleRawCollection, ruleDefaultTenant, ruleSetTenant, ruleDetachedCtx}
+
 // sourceRule 一条针对业务代码的静态约束。
-// allowlist 的 key 为相对 bkms-server 的路径（以 "/" 结尾表示目录），value 为允许的理由
+// 确有需要的调用点在源码中写 "//tenancy:allow <规则名>[,<规则名>] <理由>" 豁免，
+// 注释放在违规所在行的行尾，或违规所在语句的上一行
 type sourceRule struct {
+	name string
 	// matches 判断节点是否违反约束
-	matches   func(f *sourceFile, n ast.Node) bool
-	allowlist map[string]string
+	matches func(f *sourceFile, n ast.Node) bool
 	// inScope 限定约束生效的文件，为 nil 时对全部文件生效
 	inScope func(rel string) bool
 }
 
-// check 返回不在白名单内的违规位置，以及已经没有命中的白名单条目（白名单过期）
+// check 返回未被豁免的违规位置，以及指明本规则却没有豁免到任何违规的注释位置（豁免过期）
 func (r sourceRule) check(files []*sourceFile) (violations, stale []string) {
-	used := map[string]bool{}
 	for _, f := range files {
-		if r.inScope != nil && !r.inScope(f.rel) {
-			continue
-		}
-		ast.Inspect(f.file, func(n ast.Node) bool {
-			if n == nil || !r.matches(f, n) {
-				return true
-			}
-			allowed := false
-			for entry := range r.allowlist {
-				if matchesAny(f.rel, map[string]string{entry: ""}) {
-					used[entry], allowed = true, true
+		used := make([]bool, len(f.allows))
+		if r.inScope == nil || r.inScope(f.rel) {
+			// stack 为当前节点及其祖先，用于找到违规所在的语句
+			var stack []ast.Node
+			ast.Inspect(f.file, func(n ast.Node) bool {
+				if n == nil {
+					stack = stack[:len(stack)-1]
+					return true
 				}
+				stack = append(stack, n)
+				if !r.matches(f, n) {
+					return true
+				}
+				line, stmtLine := f.line(n), f.line(n)
+				for i := len(stack) - 1; i >= 0; i-- {
+					if stmt, ok := stack[i].(ast.Stmt); ok {
+						stmtLine = f.line(stmt)
+						break
+					}
+				}
+				allowed := false
+				for i, a := range f.allows {
+					if slices.Contains(a.rules, r.name) && (a.line == line || a.line == stmtLine-1) {
+						used[i], allowed = true, true
+					}
+				}
+				if !allowed {
+					violations = append(violations, f.pos(line))
+				}
+				return true
+			})
+		}
+		for i, a := range f.allows {
+			if slices.Contains(a.rules, r.name) && !used[i] {
+				stale = append(stale, f.pos(a.line))
 			}
-			if !allowed {
-				violations = append(violations, f.pos(n))
-			}
-			return true
-		})
-	}
-	for entry := range r.allowlist {
-		if !used[entry] {
-			stale = append(stale, entry)
 		}
 	}
 	return violations, stale
@@ -84,23 +109,41 @@ var _ = Describe("Tenant isolation source rules", func() {
 
 	BeforeEach(func() {
 		var err error
-		files, err = loadSources()
+		files, err = cachedSources()
 		Expect(err).NotTo(HaveOccurred())
 		Expect(files).NotTo(BeEmpty())
 	})
 
 	expectRule := func(rule sourceRule) {
 		violations, stale := rule.check(files)
-		Expect(violations).To(BeEmpty(), "violations outside the allowlist")
-		Expect(stale).To(BeEmpty(), "allowlist entries without any match")
+		Expect(violations).To(BeEmpty(), "violations without a //tenancy:allow %s comment", rule.name)
+		Expect(stale).To(BeEmpty(), "//tenancy:allow %s comments that allow nothing", rule.name)
 	}
+
+	// 测的是：豁免注释格式正确，规则名都存在且写了理由。
+	// 拼错的规则名不会豁免任何违规，但也不会被各规则的过期检查发现
+	It("requires every tenancy:allow comment to name known rules with a reason", func() {
+		var invalid []string
+		for _, f := range files {
+			for _, a := range f.allows {
+				unknown := slices.ContainsFunc(a.rules, func(name string) bool {
+					return !slices.Contains(knownRules, name)
+				})
+				if len(a.rules) == 0 || unknown {
+					invalid = append(invalid, f.pos(a.line))
+				}
+			}
+		}
+		Expect(invalid).To(BeEmpty(), "rule names must be one of %v", knownRules)
+	})
 
 	// 测的是：业务代码不绕过 GenericStore 直接操作 mongo 集合。
 	// 租户过滤与 tenantID 写入都在 GenericStore 里完成，直接调用 Database.Collection(name) 或
 	// GenericStore.Collection() 拿到原生集合后，读会看到所有租户的数据，写不会带 tenantID。
-	// 只有不经过请求租户、自行处理租户的代码（迁移、测试工具）可以直接访问
+	// 只有不经过请求租户、自行处理租户的代码（GenericStore 自身、迁移、测试工具）可以豁免
 	It("forbids raw collection access outside the store and migrations", func() {
 		expectRule(sourceRule{
+			name: ruleRawCollection,
 			matches: func(_ *sourceFile, n ast.Node) bool {
 				call, ok := n.(*ast.CallExpr)
 				if !ok {
@@ -108,13 +151,6 @@ var _ = Describe("Tenant isolation source rules", func() {
 				}
 				sel, ok := call.Fun.(*ast.SelectorExpr)
 				return ok && sel.Sel.Name == "Collection"
-			},
-			allowlist: map[string]string{
-				"pkg/store/":                                 "GenericStore 自身，负责注入租户条件",
-				"pkg/common/testutil/":                       "测试工具按集合清理数据",
-				"cmd/migration/":                             "一次性迁移命令，遍历所有租户的存量数据，写入前显式 ScopeToTenant",
-				"pkg/extension/component/migrate/":           "组件定义迁移，按旧格式读取所有租户的数据",
-				"pkg/workload/appmodelcore/appspec/migrate/": "应用描述迁移，按旧格式读取所有租户的数据，写回时 ScopeToTenant",
 			},
 		})
 	})
@@ -124,12 +160,8 @@ var _ = Describe("Tenant isolation source rules", func() {
 	// 或者让请求读到单租户时期的数据；拿不到租户时应当报错（tenant.GetTenantID 无兜底）
 	It("forbids falling back to the default tenant in business code", func() {
 		expectRule(sourceRule{
+			name:    ruleDefaultTenant,
 			matches: pkgSelectorRule(modulePath+"/pkg/infras/tenant", "DefaultTenantID"),
-			allowlist: map[string]string{
-				"pkg/common/testutil/":         "测试默认在 default 租户下运行",
-				"pkg/infras/taskq/envelope.go": "兼容升级前投递、没有 _tenantID 的旧任务消息，并打告警日志",
-				"cmd/taskq_example.go":         "本地调试用的示例命令",
-			},
 		})
 	})
 
@@ -138,13 +170,8 @@ var _ = Describe("Tenant isolation source rules", func() {
 	// 其余代码需要切换租户时（平台管理、迁移遍历），统一使用 store.ScopeToTenant，方便审计所有切换点
 	It("forbids setting the tenant on ctx outside the middleware, taskq and store", func() {
 		expectRule(sourceRule{
+			name:    ruleSetTenant,
 			matches: pkgSelectorRule(modulePath+"/pkg/infras/tenant", "WithTenantID"),
-			allowlist: map[string]string{
-				"pkg/store/tenant.go":          "ScopeToTenant 的实现",
-				"pkg/infras/taskq/envelope.go": "消费任务时从消息恢复投递方的租户",
-				"pkg/common/testutil/":         "测试构造租户上下文",
-				"cmd/taskq_example.go":         "本地调试用的示例命令",
-			},
 		})
 	})
 
@@ -153,6 +180,7 @@ var _ = Describe("Tenant isolation source rules", func() {
 	// 需要脱离请求生命周期时应使用 context.WithoutCancel(ctx)，它保留租户等请求值
 	It("forbids detaching from the request context in handlers", func() {
 		expectRule(sourceRule{
+			name:    ruleDetachedCtx,
 			inScope: func(rel string) bool { return strings.Contains(rel, "/handler/") },
 			matches: func(f *sourceFile, n ast.Node) bool {
 				call, ok := n.(*ast.CallExpr)
@@ -161,9 +189,6 @@ var _ = Describe("Tenant isolation source rules", func() {
 				}
 				ctxPkg := f.importName("context")
 				return isPkgSelector(call.Fun, ctxPkg, "Background") || isPkgSelector(call.Fun, ctxPkg, "TODO")
-			},
-			allowlist: map[string]string{
-				"pkg/workload/instance/handler/port_forward.go": "只用于控制 WebSocket 隧道的读写生命周期，不访问 store 与下游服务",
 			},
 		})
 	})
