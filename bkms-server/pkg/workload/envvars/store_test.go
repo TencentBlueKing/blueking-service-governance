@@ -59,7 +59,7 @@ var _ = Describe("ScopedEnvVar store", func() {
 	}
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = testutil.NewDefaultTenantContext()
 
 		var mongoClient *mongo.Client
 		var dbName string

@@ -38,6 +38,11 @@ const (
 	// Q: Why not use the flag "--svrCfg" like other commands did?
 	// A: It's would be too complicated for ginkgo command to support the flag.
 	EnvServerConfigPath = "BKMS_SERVER_CONFIG_PATH"
+
+	// EnvMultiTenantMode 为 "true" 时，单测以多租户模式运行，无需另备一份配置文件。
+	// 多租户模式下平台租户为 system，与测试默认使用的 default 租户不同，
+	// 用于发现隐含"平台租户就是请求租户"的代码；CI 应分别以两种模式各跑一遍
+	EnvMultiTenantMode = "BKMS_TEST_MULTI_TENANT"
 )
 
 // SetUpGlobalDatabase sets up the global database client for the project, it tries to connect
@@ -64,6 +69,15 @@ func SetUpGlobalDatabase() error {
 	// TODO: Update tests to not depend on this setting if possible
 	cfg.Development.UseKubeConfigCluster = true
 
+	// 在任意一份测试配置上只翻转多租户开关，免得每份配置再维护一份多租户副本。
+	// cfg 即 config.G，被测代码随之以多租户模式运行；覆盖发生在 config.Load 之后，
+	// 跳过了 validateTenantDependencies（如 bkPlatUrls.bkApiUrlTmpl），单测不调用 bk-user，不需要这些配置
+	if os.Getenv(EnvMultiTenantMode) == "true" {
+		cfg.Tenant.EnableMultiTenantMode = true
+		cfg.FeatureIntegrations.EnableBkUserTenantVerify = true
+		log.Info(ctx, "Running tests in multi-tenant mode")
+	}
+
 	// Change the database name and initialize the global database client
 	mongoCfg := cfg.Mongo
 	mongoCfg.Database = mongoCfg.Database + "_for_test"
@@ -85,6 +99,7 @@ func CleanupCollection(collectionName string) error {
 	}
 
 	ctx := context.Background()
+	//tenancy:allow raw-collection 测试按集合清理所有租户的数据
 	collection := database.Client().Database(database.Name()).Collection(collectionName)
 	_, err := collection.DeleteMany(ctx, bson.M{})
 	if err != nil {

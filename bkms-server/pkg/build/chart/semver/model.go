@@ -37,6 +37,8 @@ const (
 type Counter struct {
 	// AppID 应用 ID（作为文档主键）
 	AppID string `bson:"_id"`
+	// TenantID 所属租户，由 store 层自动写入
+	TenantID string `json:"-" bson:"tenantID"`
 	// Major 主版本号
 	Major int64 `bson:"major"`
 	// Minor 次版本号

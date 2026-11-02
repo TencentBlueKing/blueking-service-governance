@@ -43,10 +43,11 @@ type ServiceBindingStore = store.GenericStore[ServiceBinding]
 // - 唯一：appID + serviceName + name
 // - instanceIDs：按实例反查引用
 var ServiceBindingMeta = store.Meta[ServiceBinding]{
-	Collection: serviceBindingCollName,
-	NotFound:   ErrBindingNotFound,
-	Duplicate:  ErrBindingNameExists,
-	BeforeSave: []func(*ServiceBinding) error{validateBinding},
+	Collection:   serviceBindingCollName,
+	TenantScoped: true,
+	NotFound:     ErrBindingNotFound,
+	Duplicate:    ErrBindingNameExists,
+	BeforeSave:   []func(*ServiceBinding) error{validateBinding},
 }
 
 func validateBinding(binding *ServiceBinding) error {

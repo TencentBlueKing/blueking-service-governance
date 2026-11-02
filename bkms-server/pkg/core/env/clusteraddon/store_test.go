@@ -37,7 +37,7 @@ var _ = Describe("ClusterAddonDef store", func() {
 	)
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = testutil.NewDefaultTenantContext()
 		store = testutil.NewStore(GinkgoT(), clusteraddon.ClusterAddonDefMeta)
 
 		addonDef = &clusteraddon.ClusterAddonDef{

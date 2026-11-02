@@ -54,16 +54,17 @@ type WorkspaceCompsStore = store.GenericStore[Component]
 
 // ComponentMeta 工作空间组件的存储元信息：创建时补齐名称与 Properties，读出时规范化 Properties 中的 BSON 类型。
 //
-// 组件增删会影响 ComponentDef 的引用计数，须通过 AddComponents / RemoveComponents / DeleteComponentsOf 完成。
+// 组件增删会影响组件实例计数（component.InstanceCount），须通过 AddComponents / RemoveComponents / DeleteComponentsOf 完成。
 //
 // 索引（由 golang-migrate 维护）：
 // - 唯一：workspaceID + name
 var ComponentMeta = store.Meta[Component]{
-	Collection: workspaceComponentCollectionName,
-	NotFound:   ErrComponentNotFound,
-	Duplicate:  ErrComponentAlreadyExists,
-	BeforeSave: []func(*Component) error{setComponentDefaults},
-	Decode:     []func(*Component) error{normalizeComponentProperties},
+	Collection:   workspaceComponentCollectionName,
+	TenantScoped: true,
+	NotFound:     ErrComponentNotFound,
+	Duplicate:    ErrComponentAlreadyExists,
+	BeforeSave:   []func(*Component) error{setComponentDefaults},
+	Decode:       []func(*Component) error{normalizeComponentProperties},
 }
 
 // ComponentsIn 匹配工作空间内的组件
@@ -158,7 +159,7 @@ func UpdateComponent(ctx context.Context, db *mongo.Database, compID bson.Object
 	return errors.Wrapf(err, "update workspace component %s", compID.Hex())
 }
 
-// adjustInstanceCounts 按组件类型汇总后调整 ComponentDef.WorkspaceCompInstanceCount，sign 为 1 增加、-1 减少
+// adjustInstanceCounts 按组件类型汇总后调整当前租户的空间组件实例计数，sign 为 1 增加、-1 减少
 func adjustInstanceCounts(ctx context.Context, db *mongo.Database, comps []*Component, sign int) error {
 	typeCounts := map[string]int{}
 	for _, comp := range comps {
@@ -166,10 +167,10 @@ func adjustInstanceCounts(ctx context.Context, db *mongo.Database, comps []*Comp
 			typeCounts[comp.Type]++
 		}
 	}
-	defs := store.Of(db, component.ComponentDefMeta)
+	counts := store.Of(db, component.InstanceCountMeta)
 	for compType, count := range typeCounts {
 		if err := component.UpdateInstanceCount(
-			ctx, defs, compType, component.FieldWorkspaceCompInstance, sign*count,
+			ctx, counts, compType, component.FieldWorkspaceCompInstance, sign*count,
 		); err != nil {
 			return errors.Wrapf(err, "adjust workspaceCompInstanceCount of %s by %d", compType, sign*count)
 		}

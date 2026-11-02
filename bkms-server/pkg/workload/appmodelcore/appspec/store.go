@@ -39,12 +39,13 @@ type AppSpecStore = store.GenericStore[AppSpec]
 // 索引（由 golang-migrate 维护）：
 // - 唯一：appID + envName
 var AppSpecMeta = store.Meta[AppSpec]{
-	Collection: appSpecCollectionName,
-	NotFound:   ErrAppSpecNotFound,
-	Duplicate:  ErrAppSpecAlreadyExists,
-	BeforeSave: []func(*AppSpec) error{Validate},
-	Encode:     []func(*AppSpec) error{normalizeSpec},
-	Decode:     []func(*AppSpec) error{normalizeSpec},
+	Collection:   appSpecCollectionName,
+	TenantScoped: true,
+	NotFound:     ErrAppSpecNotFound,
+	Duplicate:    ErrAppSpecAlreadyExists,
+	BeforeSave:   []func(*AppSpec) error{Validate},
+	Encode:       []func(*AppSpec) error{normalizeSpec},
+	Decode:       []func(*AppSpec) error{normalizeSpec},
 }
 
 // ByApp matches all app specs of an application, including the default (envName="") entry.

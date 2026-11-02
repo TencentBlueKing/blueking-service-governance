@@ -1,0 +1,31 @@
+docs {
+  测的是：租户 B 的修改、删除请求没有影响租户 A 的环境，环境仍在且显示名未变。
+}
+
+meta {
+  name: 25-get-env-tenant-a
+  type: http
+  seq: 25
+}
+
+get {
+  url: {{serviceURL}}/envs/{{tenancyEnvID}}
+  body: none
+  auth: inherit
+}
+
+assert {
+  res.status: eq 200
+}
+
+tests {
+  test("should keep the env of tenant A unchanged", () => {
+    expect(res.body.data.id).to.equal(bru.getVar("tenancyEnvID"));
+    expect(res.body.data.displayName).to.equal(bru.getVar("tenancyEnvDisplayName"));
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 10000
+}

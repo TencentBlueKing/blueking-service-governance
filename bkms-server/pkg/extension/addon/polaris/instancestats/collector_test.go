@@ -53,7 +53,7 @@ var _ = Describe("Collector", func() {
 	)
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = testutil.NewDefaultTenantContext()
 		appID = "test-app-" + stringx.Random(6)
 
 		db = testutil.NewDB(GinkgoT())

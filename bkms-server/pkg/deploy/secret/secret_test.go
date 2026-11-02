@@ -57,7 +57,7 @@ var _ = Describe("imagePullSecretSyncer", func() {
 	)
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = testutil.NewDefaultTenantContext()
 		// 工作空间 ID
 		workspaceID = "test-workspace"
 		// 集群 ID

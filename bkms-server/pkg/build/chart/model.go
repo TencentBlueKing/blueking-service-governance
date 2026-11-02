@@ -43,6 +43,8 @@ const (
 type Record struct {
 	// WorkspaceID 工作空间 ID
 	WorkspaceID string `bson:"workspaceID"`
+	// TenantID 所属租户，由 store 层自动写入
+	TenantID string `json:"-" bson:"tenantID"`
 	// AppID 应用 ID
 	AppID string `bson:"appID"`
 	// Num 构建序号（每个 AppID 独立自增）

@@ -50,9 +50,10 @@ const (
 // 即通过输入 Properties 来渲染 Patchers 和 Specs。
 // 未来，该功能可能会被扩展为支持更多种工作模式。
 type ComponentDef struct {
+	TenantID string `json:"-" bson:"tenantID"`
 	// Name 组件名称，比如 ResourceLimits
 	Name string `bson:"name" validate:"required"`
-	// Version 组件版本，比如 v1.0.0，**一个 Name 和 Version 共同唯一标识一个组件定义**
+	// Version 组件版本，比如 v1.0.0，**同一租户内 Name 和 Version 共同唯一标识一个组件定义**
 	Version string `bson:"version" validate:"required"`
 
 	// DisplayName 是组件的展示用名称
@@ -73,7 +74,8 @@ type ComponentDef struct {
 	// ScopeWorkspaceIDs 组件生效的工作空间列表，当 ScopeType 为 Workspace 时有效
 	ScopeWorkspaceIDs []string `bson:"scopeWorkspaceIDs"`
 
-	// IsBuiltin 是否为官方内置组件, 仅通过 component/assets 目录下的组件文件创建的组件定义会设置为 true
+	// IsBuiltin 是否为官方内置组件，仅由 LoadBuiltinFromFolder 写入平台租户的定义为 true。
+	// 平台租户中为 true 的定义对所有租户可读，见 BuiltinShared
 	IsBuiltin bool `bson:"isBuiltin"`
 
 	// Invisible 标记组件定义是否对前端不可见。当设置为 true 时，该组件定义不会返回给前端，
@@ -82,11 +84,6 @@ type ComponentDef struct {
 
 	// ManagedByWorkspaceIDs 标记在哪些工作空间下可以管理该组件定义，包括在组件管理页查看、编辑
 	ManagedByWorkspaceIDs []string `bson:"managedByWorkspaceIDs"`
-
-	// AppCompInstanceCount 由该组件定义生成的应用组件实例数量
-	AppCompInstanceCount int32 `bson:"appCompInstanceCount"`
-	// WorkspaceCompInstanceCount 由该组件定义生成的空间组件实例数量
-	WorkspaceCompInstanceCount int32 `bson:"workspaceCompInstanceCount"`
 
 	// Creator 创建人
 	Creator string `bson:"creator"`

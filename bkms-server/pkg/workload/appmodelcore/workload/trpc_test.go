@@ -60,7 +60,7 @@ var _ = Describe("TrpcWorkloadBuilder", func() {
 	var configStore *polaris.ConfigStore
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = testutil.NewDefaultTenantContext()
 		db = testutil.NewDB(GinkgoT())
 		appStore = testutil.NewStore(GinkgoT(), bkmsapp.AppMeta)
 		diApp = fxtest.New(

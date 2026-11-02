@@ -67,9 +67,9 @@ type fieldSelection struct {
 //	// 更新对象中除 ownerID 外的全部字段，obj 中为空的 omitempty 字段会从库中删除
 //	err := widgets.Update(ctx, obj, store.UpdateOmit("ownerID"), ByName(name))
 //
-// 支持的选项：CondOpt、UpdateOpt、TimestampOpt
+// 支持的选项：CondOpt、UpdateOpt、TimestampOpt、TenantOpt
 func (s *GenericStore[T]) Update(ctx context.Context, target any, opts ...Opt) error {
-	q, update, err := s.prepareUpdate("update", target, opts)
+	q, update, err := s.prepareUpdate(ctx, "update", target, opts)
 	if err != nil {
 		return err
 	}
@@ -77,9 +77,9 @@ func (s *GenericStore[T]) Update(ctx context.Context, target any, opts ...Opt) e
 }
 
 // UpdateMany 更新全部匹配的文档，返回匹配的文档数量，没有匹配时不返回错误。
-// target 与字段规则同 Update，每个文档写入相同的值。支持的选项：CondOpt、UpdateOpt、TimestampOpt
+// target 与字段规则同 Update，每个文档写入相同的值。支持的选项：CondOpt、UpdateOpt、TimestampOpt、TenantOpt
 func (s *GenericStore[T]) UpdateMany(ctx context.Context, target any, opts ...Opt) (int64, error) {
-	q, update, err := s.prepareUpdate("update many in", target, opts)
+	q, update, err := s.prepareUpdate(ctx, "update many in", target, opts)
 	if err != nil {
 		return 0, err
 	}
@@ -91,8 +91,10 @@ func (s *GenericStore[T]) UpdateMany(ctx context.Context, target any, opts ...Op
 }
 
 // prepareUpdate 解析 Update / UpdateMany 的选项与 target，返回查询条件与更新文档
-func (s *GenericStore[T]) prepareUpdate(op string, target any, opts []Opt) (*query, bson.M, error) {
-	q, err := s.writeQuery(op, opts, updateOpts)
+func (s *GenericStore[T]) prepareUpdate(
+	ctx context.Context, op string, target any, opts []Opt,
+) (*query, bson.M, error) {
+	q, err := s.writeQuery(ctx, op, opts, updateOpts)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -184,7 +186,8 @@ func (sel *fieldSelection) paths(sc *schema) ([]path.Path, error) {
 	var candidates []path.Path
 	if all {
 		for _, key := range sc.keys {
-			if key == keyID || key == keyCreatedAt || key == keyUpdatedAt {
+			// tenantID 与 _id、createdAt 一样由 store 维护：插入时 MongoDB 从过滤条件里取，更新时不允许变更
+			if key == keyID || key == keyCreatedAt || key == keyUpdatedAt || key == keyTenantID {
 				continue
 			}
 			p, err := sc.fields.Resolve(key)
@@ -220,7 +223,8 @@ func (sel *fieldSelection) paths(sc *schema) ([]path.Path, error) {
 	return path.Dedupe(candidates)
 }
 
-// resolveUpdatePath 解析待写入的字段：必须存在于模型中，且不能是 _id 或 createdAt
+// resolveUpdatePath 解析待写入的字段：必须存在于模型中，且不能是 _id、createdAt 或 tenantID。
+// Modify 的字段也经由它校验，因此改租户的 $set / $unset 同样会被拒绝
 func (s *schema) resolveUpdatePath(field string) (path.Path, error) {
 	if isOperatorKey(field) {
 		return path.Path{}, errors.Errorf(
@@ -231,7 +235,7 @@ func (s *schema) resolveUpdatePath(field string) (path.Path, error) {
 	if err != nil {
 		return path.Path{}, err
 	}
-	if top := p.Steps[0].Key; top == keyID || top == keyCreatedAt {
+	if top := p.Steps[0].Key; top == keyID || top == keyCreatedAt || top == keyTenantID {
 		return path.Path{}, errors.Errorf("field %q cannot be updated", field)
 	}
 	return p, nil

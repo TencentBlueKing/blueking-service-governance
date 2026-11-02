@@ -201,6 +201,8 @@ type PipelineConfig struct {
 type Config struct {
 	// AppID 应用 ID
 	AppID string `bson:"appID"`
+	// TenantID 所属租户，由 store 层自动写入
+	TenantID string `json:"-" bson:"tenantID"`
 
 	// SourceType 应用来源 类型
 	SourceType SourceType `bson:"sourceType"`

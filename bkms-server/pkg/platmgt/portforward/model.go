@@ -24,4 +24,6 @@ package portforward
 type WhitelistEntry struct {
 	// EnvID 仅允许非正式环境 ID（同时作为文档 _id）。
 	EnvID string `bson:"_id" json:"envID"`
+	// TenantID 所属租户，由 store 层自动写入
+	TenantID string `json:"-" bson:"tenantID"`
 }

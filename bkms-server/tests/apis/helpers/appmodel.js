@@ -17,7 +17,7 @@
  */
 
 const axios = require('axios');
-const {AUTH_HEADERS} = require('../common');
+const {authHeaders} = require('../common');
 const {pollUntil} = require('./poll');
 
 // Mirror of pkg/deploy/appmodel.Status terminal-ish set used by these tests:
@@ -60,7 +60,7 @@ async function listDeploys(options = {}) {
   const response = await axios.get(
     `${serviceURL}/apps/${options.appID}/envs/${options.envName}/${segment}`,
     {
-      headers: AUTH_HEADERS,
+      headers: authHeaders(),
       params: {
         page: options.page || 1,
         pageSize: options.pageSize || 10,
@@ -87,7 +87,7 @@ async function getLatestStatus(options = {}) {
   const response = await axios.get(
     `${serviceURL}/apps/${options.appID}/envs/${options.envName}/${segment}/latest-status`,
     {
-      headers: AUTH_HEADERS,
+      headers: authHeaders(),
       params: {trafficLaneName: options.trafficLaneName || ''}
     }
   );
@@ -107,7 +107,7 @@ async function listResourceSnapshots(options = {}) {
   const response = await axios.get(
     `${serviceURL}/apps/${options.appID}/envs/${options.envName}/${segment}/${options.deployID}/resource-snapshots`,
     {
-      headers: AUTH_HEADERS,
+      headers: authHeaders(),
       params: {
         page: options.page || 1,
         pageSize: options.pageSize || 10
@@ -134,7 +134,7 @@ async function getResourceSnapshot(options = {}) {
   const serviceURL = bru.getEnvVar('serviceURL');
   const url = `${serviceURL}/apps/${options.appID}/envs/${options.envName}` +
     `/${segment}/${options.deployID}/resource-snapshots/${options.snapshotID}`;
-  const response = await axios.get(url, {headers: AUTH_HEADERS});
+  const response = await axios.get(url, {headers: authHeaders()});
   return response.data?.snapshot;
 }
 

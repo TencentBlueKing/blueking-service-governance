@@ -1,0 +1,30 @@
+docs {
+  测的是：租户 B 按 ID 直接访问租户 A 的环境得到 404。
+  /envs/:envID 不经过工作空间或应用，只能靠环境存储的租户过滤拦住。
+}
+
+meta {
+  name: 21-get-env-tenant-b
+  type: http
+  seq: 21
+}
+
+get {
+  url: {{serviceURL}}/envs/{{tenancyEnvID}}
+  body: none
+  auth: inherit
+}
+
+script:pre-request {
+  const {actAs} = require("./helpers/tenancy");
+  actAs(req, "B");
+}
+
+assert {
+  res.status: eq 404
+}
+
+settings {
+  encodeUrl: true
+  timeout: 10000
+}

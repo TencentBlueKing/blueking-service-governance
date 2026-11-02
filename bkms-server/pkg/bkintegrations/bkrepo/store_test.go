@@ -30,6 +30,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/utils/crypto"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/tenant"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
@@ -40,7 +41,7 @@ var _ = Describe("ProjectStore", func() {
 	)
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = testutil.NewDefaultTenantContext()
 		// 清理测试数据
 		err := testutil.CleanupMetaColl(ProjectMeta)
 		Expect(err).NotTo(HaveOccurred())
@@ -97,6 +98,7 @@ var _ = Describe("ProjectStore", func() {
 		insertRaw := func(id, password string) {
 			_, err := s.Collection().InsertOne(ctx, bson.M{
 				"id": id, "workspaceID": "ws-" + id, "username": "admin", "password": password,
+				"tenantID": tenant.DefaultTenantID,
 			})
 			Expect(err).NotTo(HaveOccurred())
 		}
@@ -163,7 +165,7 @@ var _ = Describe("RepositoryStore", func() {
 	)
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = testutil.NewDefaultTenantContext()
 		// 清理测试数据
 		err := testutil.CleanupMetaColl(RepositoryMeta)
 		Expect(err).NotTo(HaveOccurred())

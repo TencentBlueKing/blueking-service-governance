@@ -132,7 +132,7 @@ var _ = Describe("AlertStrategyService", func() {
 	}
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = testutil.NewDefaultTenantContext()
 
 		err := testutil.CleanupMetaColl(Meta)
 		Expect(err).NotTo(HaveOccurred())

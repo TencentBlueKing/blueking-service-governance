@@ -17,7 +17,7 @@
  */
 
 const axios = require('axios');
-const {AUTH_HEADERS} = require('../common');
+const {authHeaders} = require('../common');
 const {pollUntil} = require('./poll');
 
 /**
@@ -42,7 +42,7 @@ async function listDeploys(options = {}) {
   const response = await axios.get(
     `${serviceURL}/apps/${options.appID}/envs/${options.envName}/helm-deploys`,
     {
-      headers: AUTH_HEADERS,
+      headers: authHeaders(),
       params: {
         page: 1,
         pageSize: options.pageSize || 10,

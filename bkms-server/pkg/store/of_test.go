@@ -19,12 +19,15 @@
 package store_test
 
 import (
+	"context"
 	"sync"
 
 	"github.com/TencentBlueKing/gopkg/stringx"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/pkg/errors"
 	"github.com/samber/lo"
+	"go.mongodb.org/mongo-driver/v2/bson"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
@@ -100,10 +103,42 @@ var _ = Describe("Counter", func() {
 		c := store.NewCounter(f.db, "store_test_counters")
 		a, b := "a-"+stringx.Random(8), "b-"+stringx.Random(8)
 
-		Expect(c.Next(f.ctx, a)).To(Equal(int64(1)))
-		Expect(c.Next(f.ctx, a)).To(Equal(int64(2)))
-		Expect(c.Next(f.ctx, b)).To(Equal(int64(1)))
+		Expect(c.Next(f.ctxA, a)).To(Equal(int64(1)))
+		Expect(c.Next(f.ctxA, a)).To(Equal(int64(2)))
+		Expect(c.Next(f.ctxA, b)).To(Equal(int64(1)))
 	})
+
+	It("should write the tenant in ctx into the counter document", func() {
+		c := store.NewCounter(f.db, "store_test_counters")
+		key := "t-" + stringx.Random(8)
+
+		Expect(c.Next(f.ctxA, key)).To(Equal(int64(1)))
+
+		var raw bson.M
+		Expect(f.db.Collection("store_test_counters").FindOne(f.ctx, bson.M{"_id": key}).Decode(&raw)).To(Succeed())
+		Expect(raw).To(HaveKeyWithValue("tenantID", tenantA))
+	})
+
+	It("should not increase a counter of another tenant", func() {
+		c := store.NewCounter(f.db, "store_test_counters")
+		key := "o-" + stringx.Random(8)
+		Expect(c.Next(f.ctxA, key)).To(Equal(int64(1)))
+
+		_, err := c.Next(f.ctxB, key)
+		Expect(errors.Is(err, store.ErrDuplicate)).To(BeTrue(), "got %v", err)
+		Expect(c.Next(f.ctxA, key)).To(Equal(int64(2)))
+	})
+
+	DescribeTable("should reject a ctx without a usable tenant",
+		func(ctx func(f *storeFixture) context.Context, want error) {
+			_, err := store.NewCounter(f.db, "store_test_counters").Next(ctx(f), "k-"+stringx.Random(8))
+			Expect(errors.Is(err, want)).To(BeTrue(), "got %v", err)
+		},
+		Entry("no tenant", func(f *storeFixture) context.Context { return f.ctx }, store.ErrTenantIDRequired),
+		Entry("explicit tenant scope required", func(f *storeFixture) context.Context {
+			return store.RequireExplicitTenantScope(f.ctxA)
+		}, store.ErrTenantScopeRequired),
+	)
 
 	It("should hand out unique values under concurrency", func() {
 		c := store.NewCounter(f.db, "store_test_counters")
@@ -118,7 +153,7 @@ var _ = Describe("Counter", func() {
 		for range n {
 			wg.Go(func() {
 				defer GinkgoRecover()
-				v, err := c.Next(f.ctx, key)
+				v, err := c.Next(f.ctxA, key)
 				Expect(err).NotTo(HaveOccurred())
 				mu.Lock()
 				got = append(got, v)

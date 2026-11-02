@@ -173,6 +173,7 @@ func runCleanupOrphanAppConfigFileVersions(
 		opts.BatchSize = defaultDeleteBatchSize
 	}
 
+	//tenancy:allow raw-collection 一次性清理命令，孤儿版本可能属于任意租户
 	coll := database.Client().Database(database.Name()).Collection(appConfigFileVersionsCollectionName)
 	count, err := countOrphanAppConfigFileVersions(ctx, coll, opts.AppID)
 	if err != nil {

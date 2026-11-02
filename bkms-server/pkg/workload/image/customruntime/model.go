@@ -62,6 +62,8 @@ const (
 type Image struct {
 	// ID 记录 ID
 	ID string `bson:"_id,omitempty"`
+	// TenantID 所属租户，由 store 层自动写入
+	TenantID string `json:"-" bson:"tenantID"`
 	// WorkspaceID 所属工作空间，官方镜像无此维度
 	WorkspaceID string `bson:"workspaceID"`
 	// Type 镜像类型，取值为 builder 或 runner，决定该镜像出现在构建配置的哪个字段的候选中

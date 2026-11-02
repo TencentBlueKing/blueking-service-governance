@@ -25,14 +25,14 @@ assert {
 script:post-response {
   // 拦截发生在创建记录和触达集群之前，这里顺带查一次列表确认没有残留。
   const axios = require("axios");
-  const {AUTH_HEADERS} = require("./common");
+  const {authHeaders} = require("./common");
 
   const serviceURL = bru.getEnvVar("serviceURL");
   const appID = bru.getVar("visEnvAppID");
   const envName = bru.getVar("visEnvUnlistedEnvName");
   const resp = await axios.get(
     `${serviceURL}/apps/${appID}/envs/${envName}/trpc-deploys`,
-    {headers: AUTH_HEADERS, params: {page: 1, pageSize: 10}}
+    {headers: authHeaders(), params: {page: 1, pageSize: 10}}
   );
   bru.setVar("visEnvDeniedDeployRecords", JSON.stringify(resp.data?.data?.results ?? null));
 }

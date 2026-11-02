@@ -213,12 +213,13 @@ func runRepairTrpcTafFrameworkDefs(
 		Plans:   make([]repairTrpcTafFrameworkDefsAppPlan, 0, len(apps)),
 	}
 	for _, app := range apps {
-		plan, err := buildRepairTrpcTafFrameworkDefsAppPlan(ctx, deps, app)
+		appCtx := store.ScopeToTenant(ctx, app.TenantID)
+		plan, err := buildRepairTrpcTafFrameworkDefsAppPlan(appCtx, deps, app)
 		if err != nil {
 			return nil, errors.Wrapf(err, "plan repair for app %s", app.ID)
 		}
 		if opts.Execute && plan.isApplyable() {
-			if err = applyRepairTrpcTafFrameworkDefsAppPlan(ctx, deps, plan); err != nil {
+			if err = applyRepairTrpcTafFrameworkDefsAppPlan(appCtx, deps, plan); err != nil {
 				return nil, errors.Wrapf(err, "apply repair for app %s", app.ID)
 			}
 			plan.Applied = true
@@ -242,7 +243,7 @@ func listTrpcTafAppsForRepair(
 	opts repairTrpcTafFrameworkDefsOptions,
 ) ([]*bkmsapp.Application, error) {
 	if opts.AppID != "" {
-		app, err := appStore.Get(ctx, bkmsapp.ByID(opts.AppID))
+		app, err := appStore.Get(ctx, bkmsapp.ByID(opts.AppID), store.TenantAll())
 		if err != nil {
 			return nil, errors.Wrap(err, "get app")
 		}
@@ -258,7 +259,7 @@ func listTrpcTafAppsForRepair(
 	}
 	var apps []*bkmsapp.Application
 	for _, appType := range []string{bkmsapp.AppTypeTRPC, bkmsapp.AppTypeTAF} {
-		listed, err := appStore.List(ctx, workspaceOpt, bkmsapp.OfType(appType))
+		listed, err := appStore.List(ctx, workspaceOpt, bkmsapp.OfType(appType), store.TenantAll())
 		if err != nil {
 			return nil, errors.Wrapf(err, "list %s apps", appType)
 		}

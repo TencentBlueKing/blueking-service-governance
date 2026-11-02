@@ -40,6 +40,11 @@ package store
 type Meta[T any] struct {
 	// Collection 集合名，必填
 	Collection string
+	// TenantScoped 集合中的数据是否按租户划分。
+	// 零值 false 表示全系统共用一份；为 true 时模型必须有 tenantID 字段，两者不一致时 New 返回错误。
+	// true 时读写默认按 ctx 中的租户过滤，但不代表禁止跨租户访问：平台管理等场景可显式传 TenantAll，
+	// 读取平台共享给租户的数据时传 TenantWithPlatform
+	TenantScoped bool
 	// NotFound 文档不存在时返回的业务错误，返回的 error 同时满足 errors.Is(err, ErrNotFound)
 	NotFound error
 	// Duplicate 唯一键冲突时返回的业务错误，返回的 error 同时满足 errors.Is(err, ErrDuplicate)

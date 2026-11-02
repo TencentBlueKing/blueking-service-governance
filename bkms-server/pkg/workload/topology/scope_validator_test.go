@@ -28,6 +28,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	k8sclient "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/client"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/cluster"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/discovery"
@@ -44,7 +45,7 @@ var _ = Describe("ScopeValidator", func() {
 	)
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = testutil.NewDefaultTenantContext()
 		cfg = &cluster.Config{}
 		scope = &ResourceSnapshot{
 			ClusterID: "test-cluster",

@@ -72,7 +72,8 @@ func (h *Handler) CreateAppComponent(c *gin.Context) {
 		}
 	} else {
 		def, iErr := store.Of(h.registry.DB, component.ComponentDefMeta).
-			Get(ctx, component.ByNameVersion(newComp.Type, newComp.Version))
+			Get(ctx, component.ByNameVersion(newComp.Type, newComp.Version),
+				store.TenantWithPlatform(component.BuiltinShared()))
 		if iErr != nil {
 			bkerrs.AbortWithErr(c, bkerrs.Wrap(iErr, bkerrs.ErrCodeInternalServerError, "get component def"))
 			return

@@ -41,7 +41,7 @@ var _ = Describe("Local Editor", func() {
 	var normalAcf, overlayAcf *AppConfigFile
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = testutil.NewDefaultTenantContext()
 
 		var err error
 		files = testutil.NewStore(GinkgoT(), AppConfigFileMeta)

@@ -1,0 +1,30 @@
+docs {
+  测的是：租户 B 不能删除租户 A 应用的环境变量，返回 404。
+  环境变量是否仍然存在由 32 号用例验证。
+}
+
+meta {
+  name: 31-delete-app-env-var-tenant-b
+  type: http
+  seq: 31
+}
+
+delete {
+  url: {{serviceURL}}/apps/{{tenancyAppID}}/env-vars/{{tenancyAppEnvVarKey}}
+  body: none
+  auth: inherit
+}
+
+script:pre-request {
+  const {actAs} = require("./helpers/tenancy");
+  actAs(req, "B");
+}
+
+assert {
+  res.status: eq 404
+}
+
+settings {
+  encodeUrl: true
+  timeout: 10000
+}

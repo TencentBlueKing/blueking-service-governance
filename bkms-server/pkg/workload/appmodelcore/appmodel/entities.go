@@ -101,6 +101,8 @@ const (
 type AppModel struct {
 	// AppID 为模型所属的应用唯一标识
 	AppID string `bson:"appID" validate:"required"`
+	// TenantID 所属租户，由 store 层自动写入
+	TenantID string `json:"-" bson:"tenantID"`
 
 	// Labels 为应用标签信息，预留给后续管理扩展
 	Labels map[string]string `bson:"labels,omitempty"`

@@ -94,7 +94,7 @@ func dryRunRefreshWorkspaceBkmonitorPerms(
 	wsStore *workspace.WorkspaceStore,
 	filterIDs []string,
 ) {
-	workspaces, err := wsStore.List(ctx, workspace.InState(workspace.StateReady))
+	workspaces, err := wsStore.List(ctx, workspace.InState(workspace.StateReady), store.TenantAll())
 	if err != nil {
 		log.Fatalf("list workspaces: %v", err)
 	}
@@ -207,7 +207,7 @@ func refreshWorkspaceBkmonitorPerms(
 	permMgr perm.Manager,
 	filterIDs []string,
 ) error {
-	workspaces, err := wsStore.List(ctx, workspace.InState(workspace.StateReady))
+	workspaces, err := wsStore.List(ctx, workspace.InState(workspace.StateReady), store.TenantAll())
 	if err != nil {
 		return errors.Wrap(err, "list workspaces")
 	}
@@ -248,8 +248,11 @@ func refreshWorkspaceBkmonitorPerms(
 			continue
 		}
 
+		// 分级管理员与用户组记录按租户存储，切到该 workspace 所属租户
+		wsCtx := store.ScopeToTenant(ctx, ws.TenantID)
+
 		// 1. 先更新分级管理员的授权范围（PUT 覆盖语义），确保所有系统都在授权范围内
-		if err = permMgr.UpdateWorkspaceAdmin(ctx, data); err != nil {
+		if err = permMgr.UpdateWorkspaceAdmin(wsCtx, data); err != nil {
 			log.Errorf(ctx, "update workspace admin for %s failed: %v", ws.ID, err)
 			failed++
 			failedIDs = append(failedIDs, ws.ID)
@@ -257,7 +260,7 @@ func refreshWorkspaceBkmonitorPerms(
 		}
 
 		// 2. 再刷新用户组 policies（POST 追加语义）
-		if err = permMgr.UpdateWorkspaceScopeBuiltinRoles(ctx, data); err != nil {
+		if err = permMgr.UpdateWorkspaceScopeBuiltinRoles(wsCtx, data); err != nil {
 			log.Errorf(ctx, "update workspace builtin roles for %s failed: %v", ws.ID, err)
 			failed++
 			failedIDs = append(failedIDs, ws.ID)

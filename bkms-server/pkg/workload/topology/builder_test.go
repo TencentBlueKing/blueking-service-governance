@@ -25,6 +25,7 @@ import (
 	. "github.com/onsi/gomega"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	k8sstatus "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/status"
 )
 
@@ -34,7 +35,7 @@ var _ = Describe("Builder", func() {
 
 	BeforeEach(func() {
 		builder = NewBuilder()
-		ctx = context.Background()
+		ctx = testutil.NewDefaultTenantContext()
 	})
 
 	Describe("Build", func() {

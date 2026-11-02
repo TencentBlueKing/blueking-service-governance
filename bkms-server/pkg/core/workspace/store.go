@@ -36,11 +36,16 @@ type WorkspaceStore = store.GenericStore[Workspace]
 
 // Meta 工作空间的存储元数据。模型没有 _id 字段，工作空间 ID 存在 id 字段中，按 ID 查询须用 ByWorkspaceID。
 //
+// 集合按租户划分：租户默认取自 ctx，平台管理与运维命令用 TenantAll / TenantOf 改变范围。
+// id 目前仍是全局唯一，即不同租户不能使用同一个工作空间 ID。
+//
 // 索引（由 golang-migrate 维护）：
 // - 唯一：id
+// - 普通：tenantID
 var Meta = store.Meta[Workspace]{
-	Collection: "workspaces",
-	NotFound:   ErrWorkspaceNotFound,
+	Collection:   "workspaces",
+	TenantScoped: true,
+	NotFound:     ErrWorkspaceNotFound,
 }
 
 // ByWorkspaceID 按工作空间 ID 匹配
@@ -63,10 +68,12 @@ func DefaultOrder() store.Opt {
 	return store.Combine(store.Desc("updatedAt"), store.Asc("id"))
 }
 
-// Update 更新已经存在的工作空间的可变字段，不存在时返回 ErrWorkspaceNotFound
-func Update(ctx context.Context, workspaces *WorkspaceStore, ws *Workspace) error {
+// Update 更新已经存在的工作空间的可变字段，不存在时返回 ErrWorkspaceNotFound。
+// scope 选择租户范围，不传时使用 ctx 中的租户；运维命令跨租户更新时传 store.TenantAll()。
+// 写操作只接受 TenantAll / TenantOf，传 TenantWithPlatform 会返回错误
+func Update(ctx context.Context, workspaces *WorkspaceStore, ws *Workspace, scope ...store.TenantOpt) error {
 	mutable := store.UpdateSelected("displayName", "description", "bkSystems", "imageRegistryType", "state", "updater")
-	if err := workspaces.Update(ctx, ws, mutable, ByWorkspaceID(ws.ID)); err != nil {
+	if err := workspaces.Update(ctx, ws, append(store.ScopeOpts(scope), mutable, ByWorkspaceID(ws.ID))...); err != nil {
 		return errors.Wrapf(err, "update workspace %s", ws.ID)
 	}
 	return nil

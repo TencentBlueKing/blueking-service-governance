@@ -56,10 +56,11 @@ type ConfigStore = store.GenericStore[GPAConfig]
 // 索引（由 golang-migrate 维护）：
 // - 唯一：appID + envName
 var ConfigMeta = store.Meta[GPAConfig]{
-	Collection: "gpa_configs",
-	NotFound:   ErrConfigNotFound,
-	Duplicate:  ErrConfigEnvExists,
-	BeforeSave: []func(*GPAConfig) error{(*GPAConfig).Validate},
+	Collection:   "gpa_configs",
+	TenantScoped: true,
+	NotFound:     ErrConfigNotFound,
+	Duplicate:    ErrConfigEnvExists,
+	BeforeSave:   []func(*GPAConfig) error{(*GPAConfig).Validate},
 }
 
 // ByApp 按应用 ID 匹配 GPA 配置

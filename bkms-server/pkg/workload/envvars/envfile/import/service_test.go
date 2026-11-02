@@ -52,7 +52,7 @@ var _ = Describe("ImportService", func() {
 	)
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = testutil.NewDefaultTenantContext()
 		appStore = testutil.NewStore(GinkgoT(), coreapp.AppMeta)
 		diApp = fxtest.New(
 			GinkgoT(),

@@ -35,7 +35,7 @@ var _ = Describe("Promotion store", func() {
 	)
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = testutil.NewDefaultTenantContext()
 		promotions = testutil.NewStore(GinkgoT(), Meta)
 	})
 

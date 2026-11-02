@@ -20,13 +20,16 @@ package component_test
 
 import (
 	"context"
+	"sync"
 
 	"github.com/TencentBlueKing/gopkg/stringx"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"go.mongodb.org/mongo-driver/v2/bson"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/tenant"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
@@ -53,7 +56,7 @@ var _ = Describe("ComponentDefStore", func() {
 
 	BeforeEach(func() {
 		compDefStore = testutil.NewStore(GinkgoT(), component.ComponentDefMeta)
-		ctx = context.Background()
+		ctx = testutil.NewDefaultTenantContext()
 
 		// The default component for testing
 		compDef = &component.ComponentDef{
@@ -113,22 +116,6 @@ var _ = Describe("ComponentDefStore", func() {
 			Expect(retrieved.Description).To(Equal(compDef.Description))
 			Expect(retrieved.Specs).To(BeEmpty())
 			Expect(retrieved.Specs).NotTo(BeNil())
-		})
-
-		It("should keep instance counts maintained by UpdateInstanceCount", func() {
-			Expect(compDefStore.Create(ctx, compDef)).To(Succeed())
-			Expect(component.UpdateInstanceCount(
-				ctx, compDefStore, compDef.Name, component.FieldWorkspaceCompInstance, 2,
-			)).To(Succeed())
-
-			// 调用方对象中的计数是旧值（0），覆盖时不应写回
-			compDef.DisplayName = "Updated Name"
-			Expect(component.UpsertDef(ctx, compDefStore, compDef)).To(Succeed())
-
-			retrieved, err := get(compDef.Name, compDef.Version)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(retrieved.DisplayName).To(Equal("Updated Name"))
-			Expect(retrieved.WorkspaceCompInstanceCount).To(Equal(int32(2)))
 		})
 
 		It("should update an existing component-def", func() {
@@ -251,75 +238,162 @@ var _ = Describe("ComponentDefStore", func() {
 		})
 	})
 
-	Describe("UpdateInstanceCount", func() {
-		Context("incrementing appCompInstanceCount", func() {
-			It("should accumulate multiple increments", func() {
-				err := compDefStore.Create(ctx, compDef)
-				Expect(err).NotTo(HaveOccurred())
+	// 内置组件定义存放在平台租户中，通过 TenantWithPlatform(BuiltinShared()) 以只读方式共享给所有租户；
+	// 自建定义按租户隔离。ctxOther 是一个随机的普通租户，单租户和多租户模式下都不是平台租户
+	Describe("tenancy", func() {
+		var ctxOther context.Context
+		var builtin *component.ComponentDef
+		var platform string
 
-				for i := 0; i < 5; i++ {
-					err = component.UpdateInstanceCount(
-						ctx,
-						compDefStore,
-						compDef.Name,
-						component.FieldAppCompInstance,
-						1,
-					)
-					Expect(err).NotTo(HaveOccurred())
-				}
+		BeforeEach(func() {
+			ctxOther = tenant.WithTenantID(context.Background(), "tenant-"+stringx.Random(6))
 
-				retrieved, err := get(compDef.Name, compDef.Version)
-				Expect(err).NotTo(HaveOccurred())
-				Expect(retrieved.AppCompInstanceCount).To(Equal(int32(5)))
-			})
-
-			It("should decrement appCompInstanceCount with negative delta", func() {
-				err := compDefStore.Create(ctx, compDef)
-				Expect(err).NotTo(HaveOccurred())
-
-				// 先增加 3
-				err = component.UpdateInstanceCount(ctx, compDefStore, compDef.Name, component.FieldAppCompInstance, 3)
-				Expect(err).NotTo(HaveOccurred())
-
-				// 再减少 2
-				err = component.UpdateInstanceCount(
-					ctx,
-					compDefStore,
-					compDef.Name,
-					component.FieldAppCompInstance,
-					-2,
-				)
-				Expect(err).NotTo(HaveOccurred())
-
-				retrieved, err := get(compDef.Name, compDef.Version)
-				Expect(err).NotTo(HaveOccurred())
-				Expect(retrieved.AppCompInstanceCount).To(Equal(int32(1)))
+			var err error
+			platform, err = tenant.PlatformTenantID()
+			Expect(err).NotTo(HaveOccurred())
+			builtin = &component.ComponentDef{
+				Name:      "Builtin-" + stringx.Random(6),
+				Version:   component.DefaultComponentDefVersion,
+				Patchers:  []string{"foo: bar\n"},
+				ScopeType: component.ScopeTypeGlobal,
+				IsBuiltin: true,
+			}
+			Expect(component.UpsertDef(ctx, compDefStore, builtin, store.TenantOf(platform))).To(Succeed())
+			DeferCleanup(func() {
+				Expect(compDefStore.DeleteIfExists(ctx, component.ByNameVersion(builtin.Name, builtin.Version),
+					store.TenantAll())).To(Succeed())
 			})
 		})
 
-		It("should not refresh updatedAt of the definition", func() {
+		// 测的是：普通租户带上共享选项能读到平台租户的内置定义，且读到的确实是内置定义；
+		// 业务上判断"是否与内置定义同名"用的 BuiltinDefExists 也能在普通租户下查到它
+		It("should share builtin definitions of the platform tenant with other tenants", func() {
+			got, err := compDefStore.Get(ctxOther, component.ByNameVersion(builtin.Name, builtin.Version),
+				store.TenantWithPlatform(component.BuiltinShared()))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(got.IsBuiltin).To(BeTrue())
+			Expect(component.BuiltinDefExists(ctxOther, compDefStore, builtin.Name, builtin.Version)).To(BeTrue())
+		})
+
+		// 测的是：不带共享选项时普通租户读不到内置定义，证明可见性来自显式的共享选项，
+		// 而不是数据恰好与请求在同一个租户
+		It("should not include builtin definitions without TenantWithPlatform", func() {
+			_, err := compDefStore.Get(ctxOther, component.ByNameVersion(builtin.Name, builtin.Version))
+			Expect(err).To(MatchError(component.ErrComponentDefNotFound))
+		})
+
+		// 测的是：共享只针对内置定义，平台租户自己创建的非内置定义即使带上共享选项也不会被其他租户读到
+		It("should not share custom definitions of the platform tenant", func() {
+			Expect(compDefStore.Create(ctx, compDef, store.TenantOf(platform))).To(Succeed())
+			DeferCleanup(func() {
+				Expect(compDefStore.DeleteIfExists(ctx, component.ByNameVersion(compDef.Name, compDef.Version),
+					store.TenantOf(platform))).To(Succeed())
+			})
+			_, err := compDefStore.Get(ctxOther, component.ByNameVersion(compDef.Name, compDef.Version),
+				store.TenantWithPlatform(component.BuiltinShared()))
+			Expect(err).To(MatchError(component.ErrComponentDefNotFound))
+		})
+
+		// 测的是：共享是只读的，其他租户带上共享选项去更新内置定义会被存储层拒绝
+		It("should not allow other tenants to modify builtin definitions", func() {
+			err := compDefStore.Update(ctxOther, bson.M{"description": "changed"},
+				component.ByNameVersion(builtin.Name, builtin.Version),
+				store.TenantWithPlatform(component.BuiltinShared()))
+			Expect(err).To(MatchError(ContainSubstring("option not supported by this operation")))
+		})
+
+		// 测的是：唯一索引为 tenantID + name + version，不同租户可以创建同名同版本的自建定义
+		It("should allow the same name in different tenants", func() {
 			Expect(compDefStore.Create(ctx, compDef)).To(Succeed())
-			before, err := get(compDef.Name, compDef.Version)
-			Expect(err).NotTo(HaveOccurred())
-
-			err = component.UpdateInstanceCount(
-				ctx,
-				compDefStore,
-				compDef.Name,
-				component.FieldWorkspaceCompInstance,
-				1,
-			)
-			Expect(err).NotTo(HaveOccurred())
-
-			after, err := get(compDef.Name, compDef.Version)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(after.WorkspaceCompInstanceCount).To(Equal(before.WorkspaceCompInstanceCount + 1))
-			Expect(after.UpdatedAt).To(Equal(before.UpdatedAt))
+			other := *compDef
+			Expect(compDefStore.Create(ctxOther, &other)).To(Succeed())
+			DeferCleanup(func() {
+				Expect(compDefStore.DeleteIfExists(ctxOther,
+					component.ByNameVersion(other.Name, other.Version))).To(Succeed())
+			})
 		})
+	})
+})
 
-		It("should ignore a missing definition", func() {
-			err := component.UpdateInstanceCount(ctx, compDefStore, "not-exists", component.FieldAppCompInstance, 1)
-			Expect(err).NotTo(HaveOccurred())
+// 组件定义的实例计数（被多少应用组件 / 工作空间组件引用）单独存放在租户集合 component_def_instance_counts 中，
+// 内置定义被所有租户共用，计数需要按租户各自统计，删除保护也只看本租户的计数
+var _ = Describe("InstanceCount", func() {
+	var counts *component.InstanceCountStore
+	var ctx, ctxOther context.Context
+	var name string
+
+	countOf := func(ctx context.Context) component.InstanceCount {
+		got, err := component.ListInstanceCounts(ctx, counts, []component.ComponentDef{
+			{Name: name, Version: component.DefaultComponentDefVersion},
 		})
+		Expect(err).NotTo(HaveOccurred())
+		return got[name+":"+component.DefaultComponentDefVersion]
+	}
+	update := func(ctx context.Context, instanceType component.InstanceType, delta int) {
+		Expect(component.UpdateInstanceCount(ctx, counts, name, instanceType, delta)).To(Succeed())
+	}
+
+	BeforeEach(func() {
+		counts = testutil.NewStore(GinkgoT(), component.InstanceCountMeta)
+		ctx = testutil.NewDefaultTenantContext()
+		ctxOther = tenant.WithTenantID(context.Background(), "tenant-"+stringx.Random(6))
+		name = "Comp-" + stringx.Random(6)
+		DeferCleanup(func() {
+			Expect(counts.DeleteMany(ctx, component.ByDef(name, component.DefaultComponentDefVersion),
+				store.TenantAll())).Error().NotTo(HaveOccurred())
+		})
+	})
+
+	// 测的是：首次增加时自动创建计数记录，之后两种实例类型分别累加，减少也能正确扣减
+	It("should create the record on the first increment and accumulate", func() {
+		for range 3 {
+			update(ctx, component.FieldAppCompInstance, 1)
+		}
+		update(ctx, component.FieldWorkspaceCompInstance, 2)
+		update(ctx, component.FieldAppCompInstance, -1)
+
+		got := countOf(ctx)
+		Expect(got.AppCompInstanceCount).To(Equal(int32(2)))
+		Expect(got.WorkspaceCompInstanceCount).To(Equal(int32(2)))
+	})
+
+	// 测的是：首个实例刚写入就被删除时，扣减可能先于增加到达，扣减不能丢，两者抵消后计数为 0
+	It("should net to zero when the decrement arrives before the first increment", func() {
+		update(ctx, component.FieldAppCompInstance, -1)
+		update(ctx, component.FieldAppCompInstance, 1)
+		Expect(countOf(ctx).AppCompInstanceCount).To(Equal(int32(0)))
+	})
+
+	// 测的是：并发地首次增加同一个计数，记录只创建一条，每次增加都被计入
+	It("should count every concurrent first increment", func() {
+		const n = 10
+		var wg sync.WaitGroup
+		errs := make(chan error, n)
+		for range n {
+			wg.Go(func() {
+				errs <- component.UpdateInstanceCount(ctx, counts, name, component.FieldAppCompInstance, 1)
+			})
+		}
+		wg.Wait()
+		close(errs)
+		for err := range errs {
+			Expect(err).NotTo(HaveOccurred())
+		}
+		Expect(countOf(ctx).AppCompInstanceCount).To(Equal(int32(n)))
+	})
+
+	// 测的是：同一个定义在两个租户下的计数互不影响，各自只看到自己的值
+	It("should count each tenant separately", func() {
+		update(ctx, component.FieldAppCompInstance, 1)
+		update(ctxOther, component.FieldAppCompInstance, 5)
+
+		Expect(countOf(ctx).AppCompInstanceCount).To(Equal(int32(1)))
+		Expect(countOf(ctxOther).AppCompInstanceCount).To(Equal(int32(5)))
+	})
+
+	// 测的是：未知的实例类型直接报错，避免写出一个不存在的计数字段
+	It("should reject an unknown instance type", func() {
+		Expect(component.UpdateInstanceCount(ctx, counts, name, "unknown", 1)).
+			To(MatchError(ContainSubstring("invalid instance type")))
 	})
 })

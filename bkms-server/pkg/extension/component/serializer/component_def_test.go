@@ -113,25 +113,24 @@ var _ = Describe("Component definition serializers", func() {
 		createdAt := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
 		updatedAt := createdAt.Add(time.Hour)
 		model := &component.ComponentDef{
-			Name:                       "custom-comp",
-			Version:                    "v1.0.0",
-			DisplayName:                "Custom Component",
-			Description:                "description",
-			Properties:                 []component.Property{{Name: "replicas", Type: component.PropTypeInt}},
-			Patchers:                   []string{"spec: {}\n"},
-			Specs:                      []string{"apiVersion: v1\nkind: ConfigMap\n"},
-			ScopeType:                  component.ScopeTypeGlobal,
-			IsBuiltin:                  true,
-			ManagedByWorkspaceIDs:      []string{"workspace-1"},
-			Creator:                    "creator",
-			CreatedAt:                  createdAt,
-			Updater:                    "updater",
-			UpdatedAt:                  updatedAt,
-			AppCompInstanceCount:       1,
-			WorkspaceCompInstanceCount: 2,
+			Name:                  "custom-comp",
+			Version:               "v1.0.0",
+			DisplayName:           "Custom Component",
+			Description:           "description",
+			Properties:            []component.Property{{Name: "replicas", Type: component.PropTypeInt}},
+			Patchers:              []string{"spec: {}\n"},
+			Specs:                 []string{"apiVersion: v1\nkind: ConfigMap\n"},
+			ScopeType:             component.ScopeTypeGlobal,
+			IsBuiltin:             true,
+			ManagedByWorkspaceIDs: []string{"workspace-1"},
+			Creator:               "creator",
+			CreatedAt:             createdAt,
+			Updater:               "updater",
+			UpdatedAt:             updatedAt,
 		}
+		count := component.InstanceCount{AppCompInstanceCount: 1, WorkspaceCompInstanceCount: 2}
 
-		output := new(serializer.ComponentDefOutputObj).FromModel(model)
+		output := new(serializer.ComponentDefOutputObj).FromModel(model, count)
 
 		Expect(output.Name).To(Equal("custom-comp"))
 		Expect(output.Properties).To(Equal([]serializer.PropertyDefOutputObj{{
@@ -171,7 +170,7 @@ var _ = Describe("Component definition serializers", func() {
 			ScopeType: component.ScopeTypeGlobal,
 		}
 
-		output := new(serializer.ComponentDefOutputObj).FromModel(model)
+		output := new(serializer.ComponentDefOutputObj).FromModel(model, component.InstanceCount{})
 
 		Expect(output.Properties).To(Equal([]serializer.PropertyDefOutputObj{{
 			Name:    "replicas",

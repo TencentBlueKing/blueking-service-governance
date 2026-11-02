@@ -54,32 +54,37 @@ func NewService(db *mongo.Database) *Service {
 }
 
 // Add 将环境 ID 添加到白名单中，添加前校验环境存在性和非 production 类型；已在白名单中的环境 ID 会被跳过。
+// 环境可以来自不同租户，每条记录归属其环境所在的租户
 func (s *Service) Add(ctx context.Context, envIDs []string) error {
-	envIDs = lo.Uniq(envIDs)
-	if err := s.validateEnvIDs(ctx, envIDs); err != nil {
+	envs, err := s.getEnvs(ctx, lo.Uniq(envIDs))
+	if err != nil {
 		return err
 	}
-	entries := lo.Map(envIDs, func(envID string, _ int) *WhitelistEntry { return &WhitelistEntry{EnvID: envID} })
-	if err := s.whitelist.CreateManyIfAbsent(ctx, entries); err != nil {
-		return errors.Wrap(err, "add env IDs to port-forward whitelist")
+	for tenantID, tenantEnvs := range lo.GroupBy(envs, func(env *envmodel.Environment) string { return env.TenantID }) {
+		entries := lo.Map(tenantEnvs, func(env *envmodel.Environment, _ int) *WhitelistEntry {
+			return &WhitelistEntry{EnvID: env.ID.Hex()}
+		})
+		if err = s.whitelist.CreateManyIfAbsent(ctx, entries, store.TenantOf(tenantID)); err != nil {
+			return errors.Wrapf(err, "add env IDs of tenant %s to port-forward whitelist", tenantID)
+		}
 	}
 	return nil
 }
 
-// Remove 从白名单中移除指定的环境 ID，不存在的环境 ID 会被忽略。
+// Remove 从白名单中移除指定的环境 ID（不限租户），不存在的环境 ID 会被忽略。
 func (s *Service) Remove(ctx context.Context, envIDs []string) error {
 	if len(envIDs) == 0 {
 		return nil
 	}
-	if _, err := s.whitelist.DeleteMany(ctx, ByEnvIDs(lo.Uniq(envIDs))); err != nil {
+	if _, err := s.whitelist.DeleteMany(ctx, ByEnvIDs(lo.Uniq(envIDs)), store.TenantAll()); err != nil {
 		return errors.Wrap(err, "remove env IDs from port-forward whitelist")
 	}
 	return nil
 }
 
-// List 返回当前白名单中所有环境 ID。
+// List 返回白名单中全部租户的环境 ID。
 func (s *Service) List(ctx context.Context) ([]string, error) {
-	entries, err := s.whitelist.List(ctx)
+	entries, err := s.whitelist.List(ctx, store.TenantAll())
 	if err != nil {
 		return nil, errors.Wrap(err, "list port-forward whitelist")
 	}
@@ -99,33 +104,31 @@ func (s *Service) CheckPermission(ctx context.Context, envID string) error {
 	return nil
 }
 
-// validateEnvIDs 校验 envIDs 中每个环境：
+// getEnvs 跨租户查出 envIDs 对应的环境，并校验每个环境：
 // 1. 环境是否存在（通过 envID 查询数据库）
 // 2. 环境类型是否为非 production
-func (s *Service) validateEnvIDs(ctx context.Context, envIDs []string) error {
-	if len(envIDs) == 0 {
-		return nil
-	}
-
+func (s *Service) getEnvs(ctx context.Context, envIDs []string) ([]*envmodel.Environment, error) {
+	envs := make([]*envmodel.Environment, 0, len(envIDs))
 	for _, envID := range envIDs {
 		objID, err := bson.ObjectIDFromHex(envID)
 		if err != nil {
-			return errors.Wrapf(err, "invalid environment ID %q", envID)
+			return nil, errors.Wrapf(err, "invalid environment ID %q", envID)
 		}
 
-		env, err := s.envStore.GetByID(ctx, objID)
+		env, err := s.envStore.GetByID(ctx, objID, store.TenantAll())
 		if err != nil {
 			if errors.Is(err, envmodel.ErrEnvNotFound) {
-				return errors.Wrapf(ErrEnvNotFound, "environment %q", envID)
+				return nil, errors.Wrapf(ErrEnvNotFound, "environment %q", envID)
 			}
-			return err
+			return nil, err
 		}
 
 		// 校验环境类型是否为非 production
 		if bkmsenv.IsProductionType(bkmsenv.Type(env.Type)) {
-			return ErrProductionEnvNotAllowed
+			return nil, ErrProductionEnvNotAllowed
 		}
+		envs = append(envs, env)
 	}
 
-	return nil
+	return envs, nil
 }

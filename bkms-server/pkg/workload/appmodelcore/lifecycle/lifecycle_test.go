@@ -69,7 +69,7 @@ var _ = Describe("Lifecycle", func() {
 	}
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = testutil.NewDefaultTenantContext()
 		db = testutil.NewDB(GinkgoT())
 		workspaceStore = testutil.NewStore(GinkgoT(), bkmsworkspace.Meta)
 		workspace = dbfactory.Workspace(ctx, workspaceStore)

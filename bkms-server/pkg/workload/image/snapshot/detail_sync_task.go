@@ -37,13 +37,14 @@ const (
 	detailSyncMaxRetry = 10
 )
 
-// DetailSyncTask 镜像详情同步任务；init 赋值避免与投递侧引用形成包初始化环
+// DetailSyncTask 镜像详情同步任务；init 赋值避免与投递侧引用形成包初始化环。
+// 快照按仓库去重、各租户共用，任务只读写全局集合，因此声明为 Global
 var DetailSyncTask *taskq.TaskType[ImageDetailSyncArgs]
 
 func init() {
 	DetailSyncTask = taskq.NewTaskType[ImageDetailSyncArgs](
 		detailSyncTaskName, handleImageDetailSync, asynq.MaxRetry(detailSyncMaxRetry),
-	)
+	).Global()
 }
 
 // handleImageDetailSync asynq 入口：使用现网数据库，解密失败停重试，其余错误交给 asynq 重试

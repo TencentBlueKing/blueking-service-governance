@@ -43,7 +43,7 @@ var _ = Describe("isEmptyOrBaselineLane", func() {
 	)
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = testutil.NewDefaultTenantContext()
 		workspaceID = "test-workspace"
 		envName = "staging"
 	})
@@ -105,7 +105,7 @@ var _ = Describe("TrackEnvAddApp", func() {
 	)
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = testutil.NewDefaultTenantContext()
 		envStore = testutil.NewStore(GinkgoT(), envmodel.EnvMeta)
 		diApp = fxtest.New(
 			GinkgoT(),

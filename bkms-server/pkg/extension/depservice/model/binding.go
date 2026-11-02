@@ -31,6 +31,8 @@ const serviceBindingCollName = "depservice_bindings"
 // 同一应用可有多份绑定（靠 Name 区分）；一份绑定内每个环境最多映射一个实例。
 type ServiceBinding struct {
 	ID bson.ObjectID `bson:"_id,omitempty"`
+	// TenantID 所属租户，由 store 层自动写入
+	TenantID string `json:"-" bson:"tenantID"`
 
 	// Name 绑定名称，应用内同 serviceName 下唯一
 	Name string `bson:"name" validate:"required"`

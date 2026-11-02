@@ -1,0 +1,36 @@
+docs {
+  测的是：租户 B 不能按 ID 修改租户 A 的环境，返回 404。
+  修改是否真的没有落库由 25 号用例验证。
+}
+
+meta {
+  name: 22-update-env-tenant-b
+  type: http
+  seq: 22
+}
+
+put {
+  url: {{serviceURL}}/envs/{{tenancyEnvID}}/basic-info
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "displayName": "modified by tenant B"
+  }
+}
+
+script:pre-request {
+  const {actAs} = require("./helpers/tenancy");
+  actAs(req, "B");
+}
+
+assert {
+  res.status: eq 404
+}
+
+settings {
+  encodeUrl: true
+  timeout: 10000
+}

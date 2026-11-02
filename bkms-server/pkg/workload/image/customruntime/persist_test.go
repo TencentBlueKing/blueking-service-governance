@@ -65,7 +65,7 @@ var _ = Describe("PersistManager", func() {
 
 	BeforeEach(func() {
 		images = testutil.NewStore(GinkgoT(), Meta)
-		ctx = context.Background()
+		ctx = testutil.NewDefaultTenantContext()
 		workspaceID = "ws-persist-" + stringx.Random(6)
 		snapshotSvc = &snapshot.Service{}
 	})

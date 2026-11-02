@@ -30,6 +30,7 @@ import (
 
 	imagebuild "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/revision"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/taskq"
 )
@@ -44,7 +45,7 @@ var _ = Describe("StartAndScheduleBuild", func() {
 	)
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = testutil.NewDefaultTenantContext()
 		app = &bkmsapp.Application{ID: "app-1", WorkspaceID: "ws-1"}
 		buildService = &Service{}
 	})

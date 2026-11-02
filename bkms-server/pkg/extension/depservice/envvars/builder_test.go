@@ -24,13 +24,14 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	depenvvars "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/envvars"
 	envvartypes "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars/types"
 )
 
 var _ = Describe("BuildBindingEnvVars", func() {
 	It("renders templates from credentials and skips empty env vars", func() {
-		ctx := context.Background()
+		ctx := testutil.NewDefaultTenantContext()
 		vars, err := depenvvars.BuildBindingEnvVars(ctx, nil, map[string]any{
 			"REDIS_HOST": "127.0.0.1",
 		})

@@ -1,0 +1,36 @@
+docs {
+  测的是：租户 B 即使知道租户 A 的工作空间 ID，也列不出其中的环境。
+  该接口只做工作空间权限检查、不校验工作空间是否存在，与 06 号用例一样只靠存储层的租户过滤保证隔离。
+}
+
+meta {
+  name: 24-list-envs-tenant-b
+  type: http
+  seq: 24
+}
+
+get {
+  url: {{serviceURL}}/workspaces/{{tenancyWorkspaceID}}/envs
+  body: none
+  auth: inherit
+}
+
+script:pre-request {
+  const {actAs} = require("./helpers/tenancy");
+  actAs(req, "B");
+}
+
+assert {
+  res.status: eq 200
+}
+
+tests {
+  test("should list no envs of tenant A", () => {
+    expect(res.body.data).to.be.an("array").that.is.empty;
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 10000
+}

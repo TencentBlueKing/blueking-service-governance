@@ -30,6 +30,7 @@ import (
 	svccfg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/utils/crypto"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/tenant"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
@@ -49,7 +50,7 @@ var _ = Describe("HelmRepoCredential store", func() {
 	)
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = testutil.NewDefaultTenantContext()
 		credStore = setUpCredStore()
 	})
 
@@ -87,6 +88,7 @@ var _ = Describe("HelmRepoCredential store", func() {
 		workspaceID := prefix + stringx.Random(8)
 		_, err := credStore.Collection().InsertOne(ctx, bson.M{
 			"workspaceID": workspaceID, "credentialID": helmRepoCredentialID, "username": "admin", "password": password,
+			"tenantID": tenant.DefaultTenantID,
 		})
 		Expect(err).NotTo(HaveOccurred())
 		return workspaceID

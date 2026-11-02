@@ -25,6 +25,7 @@ import (
 
 	"github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
@@ -57,9 +58,9 @@ type ModifyResult struct {
 //	res, err := models.Modify(ctx, bson.M{"$pull": bson.M{"components": bson.M{"name": name}}},
 //		ByApp(appID), store.KeepUpdatedAt())
 //
-// 支持的选项：CondOpt、TimestampOpt、ArrayFilterOpt
+// 支持的选项：CondOpt、TimestampOpt、ArrayFilterOpt、TenantOpt
 func (s *GenericStore[T]) Modify(ctx context.Context, update bson.M, opts ...Opt) (ModifyResult, error) {
-	q, doc, err := s.prepareModify("modify", update, opts)
+	q, doc, err := s.prepareModify(ctx, "modify", update, opts)
 	if err != nil {
 		return ModifyResult{}, err
 	}
@@ -78,9 +79,9 @@ func (s *GenericStore[T]) Modify(ctx context.Context, update bson.M, opts ...Opt
 }
 
 // ModifyMany 用 update 中的操作符修改全部匹配的文档，没有匹配时不返回错误。
-// update 的规则同 Modify。支持的选项：CondOpt、TimestampOpt、ArrayFilterOpt
+// update 的规则同 Modify。支持的选项：CondOpt、TimestampOpt、ArrayFilterOpt、TenantOpt
 func (s *GenericStore[T]) ModifyMany(ctx context.Context, update bson.M, opts ...Opt) (ModifyResult, error) {
-	q, doc, err := s.prepareModify("modify many in", update, opts)
+	q, doc, err := s.prepareModify(ctx, "modify many in", update, opts)
 	if err != nil {
 		return ModifyResult{}, err
 	}
@@ -95,8 +96,62 @@ func (s *GenericStore[T]) ModifyMany(ctx context.Context, update bson.M, opts ..
 	return ModifyResult{Matched: res.MatchedCount, Modified: res.ModifiedCount}, nil
 }
 
-func (s *GenericStore[T]) prepareModify(op string, update bson.M, opts []Opt) (*query, bson.D, error) {
-	q, err := s.writeQuery(op, opts, modifyOpts)
+// ModifyOrCreate 用 update 中的操作符原子地修改匹配的一个文档，不存在时先插入再修改，返回修改后的文档（已经过 Decode）。
+// 用于需要原子取回新值的计数类操作，例如按应用递增构建号：
+//
+//	doc, err := counters.ModifyOrCreate(ctx, bson.M{"$inc": bson.M{"seq": 1}}, store.ByID(appID))
+//
+// update 的规则同 Modify。插入的文档只包含过滤条件中以等值方式出现的字段（含 tenantID，等值的识别同 Upsert）、
+// update 写入的字段、_id（过滤条件中没有时按模型类型生成）与时间戳，其余字段读出时为零值，
+// 因此只适合字段全部由操作符维护的模型。
+//
+// 并发插入同一个新文档时只有一个能成功，其余会遇到唯一键冲突，这里重试一次以命中已插入的文档；
+// 仍冲突时（如 _id 已被其它租户的文档占用）返回 Duplicate 错误。
+// 可能插入新文档，因此不接受 TenantAll。支持的选项：CondOpt、TenantOf
+func (s *GenericStore[T]) ModifyOrCreate(ctx context.Context, update bson.M, opts ...Opt) (*T, error) {
+	const op = "modify or create in"
+	q, err := s.writeQuery(ctx, op, opts, modifyOrCreateOpts)
+	if err != nil {
+		return nil, err
+	}
+	doc, err := s.modifyDoc(update, false)
+	if err != nil {
+		return nil, errors.Wrapf(err, "%s %s", op, s.coll.Name())
+	}
+	onInsert := bson.D{}
+	if !equalityKeys(q.conds)[keyID] {
+		if id, ok := s.schema.newID(); ok {
+			onInsert = append(onInsert, bson.E{Key: keyID, Value: id})
+		}
+	}
+	if s.schema.createdAt != nil {
+		onInsert = append(onInsert, bson.E{Key: keyCreatedAt, Value: time.Now()})
+	}
+	if len(onInsert) > 0 {
+		doc = append(doc, bson.E{Key: "$setOnInsert", Value: onInsert})
+	}
+
+	findOpts := options.FindOneAndUpdate().SetUpsert(true).SetReturnDocument(options.After)
+	var obj T
+	for attempt := 0; ; attempt++ {
+		err = s.coll.FindOneAndUpdate(ctx, q.filter(), doc, findOpts).Decode(&obj)
+		if err == nil || !mongo.IsDuplicateKeyError(err) || attempt > 0 {
+			break
+		}
+	}
+	if err != nil {
+		return nil, s.wrapWriteErr(err, op)
+	}
+	if err = s.decode(&obj); err != nil {
+		return nil, err
+	}
+	return &obj, nil
+}
+
+func (s *GenericStore[T]) prepareModify(
+	ctx context.Context, op string, update bson.M, opts []Opt,
+) (*query, bson.D, error) {
+	q, err := s.writeQuery(ctx, op, opts, modifyOpts)
 	if err != nil {
 		return nil, nil, err
 	}

@@ -80,18 +80,19 @@ type AppModelStore = store.GenericStore[AppModel]
 //   - Encode 加密敏感的应用自定义环境变量，Decode 解密并规范化组件属性，
 //     因此所有读取方（部署、序列化等）拿到的都是明文
 //
-// 组件增删会影响 ComponentDef 的引用计数，须通过 AddComponent / RemoveComponent / DeleteAppModel 完成；
+// 组件增删会影响组件实例计数（component.InstanceCount），须通过 AddComponent / RemoveComponent / DeleteAppModel 完成；
 // 环境变量的增删改须通过 AddAppDefinedEnvVar 等函数完成，它们绕过 Encode，自行加密。
 //
 // 索引（由 golang-migrate 维护）：
 // - 唯一：appID
 var AppModelMeta = store.Meta[AppModel]{
-	Collection: CollectionName,
-	NotFound:   ErrAppModelNotFound,
-	Duplicate:  ErrAppModelAlreadyExists,
-	BeforeSave: []func(*AppModel) error{validateAppModel},
-	Encode:     []func(*AppModel) error{encryptAppModelEnvVars},
-	Decode:     []func(*AppModel) error{decodeAppModel},
+	Collection:   CollectionName,
+	TenantScoped: true,
+	NotFound:     ErrAppModelNotFound,
+	Duplicate:    ErrAppModelAlreadyExists,
+	BeforeSave:   []func(*AppModel) error{validateAppModel},
+	Encode:       []func(*AppModel) error{encryptAppModelEnvVars},
+	Decode:       []func(*AppModel) error{decodeAppModel},
 }
 
 // ByApp 按应用 ID 匹配应用模型
@@ -383,7 +384,7 @@ func classifyElemMiss(
 	return conflictErr
 }
 
-// adjustInstanceCounts 按组件类型汇总后调整 ComponentDef.AppCompInstanceCount，sign 为 1 增加、-1 减少。
+// adjustInstanceCounts 按组件类型汇总后调整当前租户的应用组件实例计数，sign 为 1 增加、-1 减少。
 // 引用空间组件的应用组件不是该组件定义的实例，不计入
 func adjustInstanceCounts(ctx context.Context, db *mongo.Database, comps []*component.Component, sign int) error {
 	typeCounts := map[string]int{}
@@ -392,10 +393,10 @@ func adjustInstanceCounts(ctx context.Context, db *mongo.Database, comps []*comp
 			typeCounts[comp.Type]++
 		}
 	}
-	defs := store.Of(db, component.ComponentDefMeta)
+	counts := store.Of(db, component.InstanceCountMeta)
 	for compType, count := range typeCounts {
 		if err := component.UpdateInstanceCount(
-			ctx, defs, compType, component.FieldAppCompInstance, sign*count,
+			ctx, counts, compType, component.FieldAppCompInstance, sign*count,
 		); err != nil {
 			return errors.Wrapf(err, "adjust appCompInstanceCount of %s by %d", compType, sign*count)
 		}

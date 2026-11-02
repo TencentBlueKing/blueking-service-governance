@@ -33,8 +33,10 @@ type PermissionScope struct {
 
 // Role is the user role with permission
 type Role struct {
-	ID   string `bson:"id"`
-	Name string `bson:"name"`
+	ID string `bson:"id"`
+	// TenantID 所属租户，由 store 层自动写入
+	TenantID string `json:"-" bson:"tenantID"`
+	Name     string `bson:"name"`
 	// RoleCode 角色码. 目前的内置取值有: admin(管理员), developer(开发者), sre, operator(运维)
 	RoleCode    string `bson:"roleCode"`
 	Description string `bson:"description"`
@@ -50,6 +52,8 @@ type Role struct {
 
 // WorkspaceGradeManager workspace 分级管理员
 type WorkspaceGradeManager struct {
-	WorkspaceID    string `bson:"workspaceID"`
+	WorkspaceID string `bson:"workspaceID"`
+	// TenantID 所属租户，由 store 层自动写入
+	TenantID       string `json:"-" bson:"tenantID"`
 	GradeManagerID int    `bson:"gradeManagerID"`
 }

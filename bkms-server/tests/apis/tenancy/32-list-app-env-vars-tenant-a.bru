@@ -1,0 +1,32 @@
+docs {
+  测的是：租户 B 的修改、删除请求没有影响租户 A 应用的环境变量，变量仍在且值未变。
+}
+
+meta {
+  name: 32-list-app-env-vars-tenant-a
+  type: http
+  seq: 32
+}
+
+get {
+  url: {{serviceURL}}/apps/{{tenancyAppID}}/env-vars
+  body: none
+  auth: inherit
+}
+
+assert {
+  res.status: eq 200
+}
+
+tests {
+  test("should keep the app env var of tenant A unchanged", () => {
+    const item = res.body.data.find((v) => v.key === bru.getVar("tenancyAppEnvVarKey"));
+    expect(item, "app env var of tenant A").to.exist;
+    expect(item.value).to.equal("tenant-a-value");
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 10000
+}

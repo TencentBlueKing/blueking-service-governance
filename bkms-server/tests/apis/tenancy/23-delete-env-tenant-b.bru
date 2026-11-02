@@ -1,0 +1,30 @@
+docs {
+  测的是：租户 B 不能按 ID 删除租户 A 的环境，返回 404。
+  环境是否仍然存在由 25 号用例验证。
+}
+
+meta {
+  name: 23-delete-env-tenant-b
+  type: http
+  seq: 23
+}
+
+delete {
+  url: {{serviceURL}}/envs/{{tenancyEnvID}}
+  body: none
+  auth: inherit
+}
+
+script:pre-request {
+  const {actAs} = require("./helpers/tenancy");
+  actAs(req, "B");
+}
+
+assert {
+  res.status: eq 404
+}
+
+settings {
+  encodeUrl: true
+  timeout: 10000
+}

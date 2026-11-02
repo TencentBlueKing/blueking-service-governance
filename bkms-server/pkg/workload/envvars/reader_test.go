@@ -55,7 +55,7 @@ var _ = Describe("UnifiedEnvVarsReader", func() {
 	)
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = testutil.NewDefaultTenantContext()
 		diApp = fxtest.New(
 			GinkgoT(),
 			envvars.FxModule,
@@ -360,7 +360,7 @@ var _ = Describe("BuildEnvConflictedInfoByKeys", func() {
 	)
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = testutil.NewDefaultTenantContext()
 		diApp = fxtest.New(
 			GinkgoT(),
 			envvars.FxModule,
@@ -474,7 +474,7 @@ var _ = Describe("BuildAppConflictedInfoByKeys", func() {
 	)
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = testutil.NewDefaultTenantContext()
 		diApp = fxtest.New(
 			GinkgoT(),
 			envvars.FxModule,
@@ -659,7 +659,7 @@ var _ = Describe("UnifiedEnvVarsReader with depInstance (real depenvvars.Reader 
 	)
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = testutil.NewDefaultTenantContext()
 		diApp = fxtest.New(
 			GinkgoT(),
 			envvars.FxModule,

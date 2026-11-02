@@ -78,7 +78,9 @@ func writeScanAppRuntimeModelOutput(w io.Writer, summary appruntime.InventorySum
 
 // ScanAppRuntimeModel reads applications and app models and returns a desensitized report.
 func ScanAppRuntimeModel(ctx context.Context, sampleLimit int) (appruntime.InventorySummary, error) {
+	//tenancy:allow raw-collection 只读扫描命令，统计所有租户的存量数据
 	appColl := database.Client().Database(database.Name()).Collection("applications")
+	//tenancy:allow raw-collection 只读扫描命令，统计所有租户的存量数据
 	modelColl := database.Client().Database(database.Name()).Collection(appmodel.CollectionName)
 
 	appCursor, err := appColl.Find(ctx, bson.M{})

@@ -157,7 +157,7 @@ var _ = Describe("Builder Shared Tests", func() {
 	var builderSvc *workload.BuilderService
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = testutil.NewDefaultTenantContext()
 		stores = &SharedTestStores{}
 		diApp = fxtest.New(
 			GinkgoT(),

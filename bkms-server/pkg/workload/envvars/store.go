@@ -57,11 +57,12 @@ type ScopedEnvVarStore = store.GenericStore[ScopedEnvVar]
 // 索引（由 golang-migrate 维护）：
 // - 唯一：workspaceID + scopeType + scopeValue + key
 var ScopedEnvVarMeta = store.Meta[ScopedEnvVar]{
-	Collection: ScopedEnvVarCollectionName,
-	NotFound:   ErrScopedEnvVarNotFound,
-	Duplicate:  ErrScopedEnvVarKeyConflict,
-	Encode:     []func(*ScopedEnvVar) error{encryptValue},
-	Decode:     []func(*ScopedEnvVar) error{decryptValue},
+	Collection:   ScopedEnvVarCollectionName,
+	TenantScoped: true,
+	NotFound:     ErrScopedEnvVarNotFound,
+	Duplicate:    ErrScopedEnvVarKeyConflict,
+	Encode:       []func(*ScopedEnvVar) error{encryptValue},
+	Decode:       []func(*ScopedEnvVar) error{decryptValue},
 }
 
 // ScopedEnvVarUpdateData defines the updatable fields of a scoped env var.

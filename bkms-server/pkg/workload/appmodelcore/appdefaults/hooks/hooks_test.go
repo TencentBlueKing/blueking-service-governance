@@ -22,7 +22,7 @@ var _ = Describe("Application default lifecycle hooks", func() {
 	var workspace *bkmsworkspace.Workspace
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = testutil.NewDefaultTenantContext()
 		bkmsworkspace.ResetLifecycleHooksForTest()
 
 		db := testutil.NewDB(GinkgoT())

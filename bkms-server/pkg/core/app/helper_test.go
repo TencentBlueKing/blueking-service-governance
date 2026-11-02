@@ -42,7 +42,7 @@ var _ = Describe("ListSortByOpTime", func() {
 	var workspaceID string
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = testutil.NewDefaultTenantContext()
 		workspaceID = "test-ws-" + stringx.Random(6)
 
 		appStore = testutil.NewStore(GinkgoT(), bkmsapp.AppMeta)

@@ -1,0 +1,39 @@
+docs {
+  测的是：租户 B 不能修改租户 A 工作空间下的环境变量，返回 404。
+  修改是否真的没有落库由 28 号用例验证。
+}
+
+meta {
+  name: 26-update-scoped-env-var-tenant-b
+  type: http
+  seq: 26
+}
+
+put {
+  url: {{serviceURL}}/workspaces/{{tenancyWorkspaceID}}/scoped-env-vars/{{tenancyScopedEnvVarID}}
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "key": "TENANCY_SCOPED_{{randomSuffix}}",
+    "value": "tenant-b-value",
+    "description": "modified by tenant B",
+    "isSensitive": false
+  }
+}
+
+script:pre-request {
+  const {actAs} = require("./helpers/tenancy");
+  actAs(req, "B");
+}
+
+assert {
+  res.status: eq 404
+}
+
+settings {
+  encodeUrl: true
+  timeout: 10000
+}

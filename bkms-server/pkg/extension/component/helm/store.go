@@ -36,9 +36,10 @@ type Store = store.GenericStore[HelmAppComponent]
 // - 唯一：appID + envName + name
 // - 查询提速：appID + envName
 var Meta = store.Meta[HelmAppComponent]{
-	Collection: helmAppComponentCollectionName,
-	NotFound:   ErrHelmAppComponentNotFound,
-	BeforeSave: []func(*HelmAppComponent) error{ensureName},
+	Collection:   helmAppComponentCollectionName,
+	TenantScoped: true,
+	NotFound:     ErrHelmAppComponentNotFound,
+	BeforeSave:   []func(*HelmAppComponent) error{ensureName},
 }
 
 func ensureName(comp *HelmAppComponent) error {

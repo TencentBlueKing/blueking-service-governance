@@ -40,8 +40,9 @@ type RecordStore = store.GenericStore[Record]
 // 索引（由 golang-migrate 维护）：
 // - 唯一：appID + buildID
 var RecordMeta = store.Meta[Record]{
-	Collection: "helm_chart_build_records",
-	NotFound:   ErrRecordNotFound,
+	Collection:   "helm_chart_build_records",
+	TenantScoped: true,
+	NotFound:     ErrRecordNotFound,
 }
 
 // RecordCounterCollection Helm Chart 构建序号计数器的集合名，文档的 _id 为应用 ID

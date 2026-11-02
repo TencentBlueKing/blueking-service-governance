@@ -59,7 +59,7 @@ var _ = Describe("Service instance store", func() {
 	}
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = testutil.NewDefaultTenantContext()
 		db = testutil.NewDB(GinkgoT())
 		insts = store.Of(db, ServiceInstanceMeta)
 

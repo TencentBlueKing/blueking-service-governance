@@ -63,11 +63,13 @@ type Batch struct {
 
 // ReleaseStrategy 空间级发布策略
 type ReleaseStrategy struct {
-	ID          bson.ObjectID `bson:"_id,omitempty"`
-	WorkspaceID string        `bson:"workspaceID"`
-	Name        string        `bson:"name"`
-	Description string        `bson:"description"`
-	Batches     []Batch       `bson:"batches"`
+	ID bson.ObjectID `bson:"_id,omitempty"`
+	// TenantID 所属租户，由 store 层自动写入
+	TenantID    string  `json:"-" bson:"tenantID"`
+	WorkspaceID string  `bson:"workspaceID"`
+	Name        string  `bson:"name"`
+	Description string  `bson:"description"`
+	Batches     []Batch `bson:"batches"`
 
 	Creator   string    `bson:"creator"`
 	CreatedAt time.Time `bson:"createdAt"`

@@ -17,15 +17,28 @@
  */
 
 const axios = require('axios');
+const {userInfo} = require('./helpers/tenancy');
 
 /**
  * Authentication headers shared by all API-test helpers. The API-test config
  * allows these headers to directly set the authenticated user.
+ *
+ * Helpers send requests with axios, which skips the collection pre-request
+ * script, so the tenant header set there must be added here as well.
+ *
+ * @returns {Object<string, string>}
  */
-const AUTH_HEADERS = {
-  'X-Bk-Authed-User-Info': '{"userId":"api-test-user"}',
-  'X-Bk-Authed-User-Credential': '{"bkTicket": "xxx"}'
-};
+function authHeaders() {
+  const headers = {
+    'X-Bk-Authed-User-Info': userInfo('api-test-user'),
+    'X-Bk-Authed-User-Credential': '{"bkTicket": "xxx"}'
+  };
+  const tenantID = bru.getVar('apiTestTenantID');
+  if (tenantID) {
+    headers['X-Bk-Tenant-Id'] = tenantID;
+  }
+  return headers;
+}
 
 /**
  * Sleep for the given number of milliseconds.
@@ -80,7 +93,7 @@ async function createAppConfigFile(options = {}) {
     const response = await axios.post(
       `${serviceURL}/apps/${options.appID}/app-config-files`,
       body,
-      {headers: AUTH_HEADERS}
+      {headers: authHeaders()}
     );
 
     const id = response.data?.item?.id;
@@ -129,7 +142,7 @@ async function updateAppConfigFileContent(options = {}) {
         content: options.content,
         versionDescription: options.versionDescription || 'Update content'
       },
-      {headers: AUTH_HEADERS}
+      {headers: authHeaders()}
     );
 
     return {compiledContent: response.data?.compiledContent || ''};
@@ -240,7 +253,7 @@ async function createHelmApp(options = {}) {
 
   try {
     const response = await axios.post(url, body, {
-      headers: AUTH_HEADERS
+      headers: authHeaders()
     });
 
     if (response.status === 200) {
@@ -309,7 +322,7 @@ async function createWorkspace(options = {}) {
 
   try {
     const response = await axios.post(url, body, {
-      headers: AUTH_HEADERS
+      headers: authHeaders()
     });
 
     if (response.status === 200) {
@@ -409,7 +422,7 @@ async function createEnvironment(options = {}) {
 
   try {
     const response = await axios.post(url, body, {
-      headers: AUTH_HEADERS
+      headers: authHeaders()
     });
 
     if (response.status === 200) {
@@ -510,7 +523,7 @@ async function createTrpcApp(options = {}) {
 
   try {
     const response = await axios.post(url, body, {
-      headers: AUTH_HEADERS
+      headers: authHeaders()
     });
 
     if (response.status === 200) {
@@ -610,7 +623,7 @@ async function createTafApp(options = {}) {
 
   try {
     const response = await axios.post(url, body, {
-      headers: AUTH_HEADERS
+      headers: authHeaders()
     });
 
     if (response.status === 200) {
@@ -657,7 +670,7 @@ async function updateDefaultAppSpecResources(options = {}) {
     const response = await axios.put(
       `${serviceURL}/apps/${options.appID}/app-spec/default-resources`,
       {appSpecResources: options.resources},
-      {headers: AUTH_HEADERS}
+      {headers: authHeaders()}
     );
 
     return response.data?.data || response.data;
@@ -724,7 +737,7 @@ async function ensureWorkspaceComponent(options = {}) {
 
   try {
     const response = await axios.post(url, body, {
-      headers: AUTH_HEADERS
+      headers: authHeaders()
     });
 
     if (response.status === 200) {
@@ -856,7 +869,7 @@ async function createAppModelDeploy(options = {}) {
 
   try {
     const response = await axios.post(url, body, {
-      headers: AUTH_HEADERS
+      headers: authHeaders()
     });
 
     if (response.status === 200) {
@@ -933,7 +946,7 @@ async function createBKMSApp(options = {}) {
 
   try {
     const response = await axios.post(`${serviceURL}/workspaces/${options.workspaceID}/bkmsapps`, body, {
-      headers: AUTH_HEADERS
+      headers: authHeaders()
     });
     bru.setVar(appKey, true);
     const created = response.data?.data || {};
@@ -946,7 +959,7 @@ async function createBKMSApp(options = {}) {
 }
 
 module.exports = {
-  AUTH_HEADERS,
+  authHeaders,
   sleep,
   createAppConfigFile,
   updateAppConfigFileContent,

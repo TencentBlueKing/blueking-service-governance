@@ -74,7 +74,7 @@ var _ = Describe("TagDeletionServiceRealDB", func() {
 	)
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = testutil.NewDefaultTenantContext()
 
 		secret, err := crypto.GenerateKey(32)
 		Expect(err).NotTo(HaveOccurred())

@@ -53,10 +53,11 @@ type ConfigStore = store.GenericStore[PolarisConfig]
 // 索引（由 golang-migrate 维护）：
 // - 唯一：appID + name
 var ConfigMeta = store.Meta[PolarisConfig]{
-	Collection: "polaris_configs",
-	NotFound:   ErrConfigNotFound,
-	Duplicate:  ErrConfigNameExists,
-	BeforeSave: []func(*PolarisConfig) error{fillConfigDefaults},
+	Collection:   "polaris_configs",
+	TenantScoped: true,
+	NotFound:     ErrConfigNotFound,
+	Duplicate:    ErrConfigNameExists,
+	BeforeSave:   []func(*PolarisConfig) error{fillConfigDefaults},
 }
 
 // fillConfigDefaults 补齐配置名称与空的服务标签

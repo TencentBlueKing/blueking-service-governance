@@ -46,10 +46,11 @@ type Store = store.GenericStore[AppDashboard]
 // 索引（由 golang-migrate 维护）：
 // - 唯一：appID + uid
 var Meta = store.Meta[AppDashboard]{
-	Collection: "bkmonitor_app_dashboard",
-	NotFound:   ErrNotFound,
-	Duplicate:  ErrDuplicate,
-	BeforeSave: []func(*AppDashboard) error{validateDashboard},
+	Collection:   "bkmonitor_app_dashboard",
+	TenantScoped: true,
+	NotFound:     ErrNotFound,
+	Duplicate:    ErrDuplicate,
+	BeforeSave:   []func(*AppDashboard) error{validateDashboard},
 }
 
 func validateDashboard(d *AppDashboard) error {

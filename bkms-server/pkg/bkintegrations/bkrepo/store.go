@@ -46,10 +46,11 @@ type (
 // - 唯一：id
 // - 唯一：workspaceID
 var ProjectMeta = store.Meta[Project]{
-	Collection: "bkrepo_projects",
-	NotFound:   ErrProjectNotFound,
-	Encode:     []func(*Project) error{encryptProjectPassword},
-	Decode:     []func(*Project) error{decryptProjectPassword},
+	Collection:   "bkrepo_projects",
+	TenantScoped: true,
+	NotFound:     ErrProjectNotFound,
+	Encode:       []func(*Project) error{encryptProjectPassword},
+	Decode:       []func(*Project) error{decryptProjectPassword},
 }
 
 func encryptProjectPassword(p *Project) (err error) {
@@ -67,8 +68,9 @@ func decryptProjectPassword(p *Project) (err error) {
 // 索引（由 golang-migrate 维护）：
 // - 唯一：workspaceID + type
 var RepositoryMeta = store.Meta[Repository]{
-	Collection: "bkrepo_repositories",
-	NotFound:   ErrRepositoryNotFound,
+	Collection:   "bkrepo_repositories",
+	TenantScoped: true,
+	NotFound:     ErrRepositoryNotFound,
 }
 
 // ByWorkspace 按工作空间 ID 匹配，适用于 Project 与 Repository

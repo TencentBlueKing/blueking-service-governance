@@ -29,6 +29,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/redis"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/taskq"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/tenant"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/taskqtask/example"
 )
 
@@ -64,6 +65,8 @@ func NewTaskqExampleCmd() *cobra.Command {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
 			ctx = auth.WithMaintenanceUser(ctx)
+			//tenancy:allow set-tenant,default-tenant 本地调试用的示例命令
+			ctx = tenant.WithTenantID(ctx, tenant.DefaultTenantID)
 
 			err = taskq.Enqueue(ctx, example.ExampleTask.NewTask(example.Args{
 				Msg:           "hello from taskq-example",

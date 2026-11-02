@@ -28,6 +28,8 @@ type EnvBinding struct {
 	// AppID 所属 bkms 应用 ID
 	// bscp app name = bkms appID
 	AppID string `bson:"appID" validate:"required"`
+	// TenantID 所属租户，由 store 层自动写入
+	TenantID string `json:"-" bson:"tenantID"`
 	// EnvName 绑定的 bkms 环境名称（如 dev、prod）
 	EnvName string `bson:"envName" validate:"required"`
 
