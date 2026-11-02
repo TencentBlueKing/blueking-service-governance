@@ -234,12 +234,12 @@ func (h *Handler) ListAppHelmCharts(c *gin.Context) {
 		queryInput.PageSize,
 	)
 
-	envTypeMap, err := envmodel.GetEnvTypeMap(ctx, h.registry.DB, app.WorkspaceID)
+	envMap, err := envmodel.GetAppEnvMap(ctx, h.registry.DB, app.WorkspaceID, app.ID)
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list environments"))
 		return
 	}
-	deployedEnvsMap, err := h.buildHelmChartDeployedEnvsMap(ctx, app.ID, envTypeMap)
+	deployedEnvsMap, err := h.buildHelmChartDeployedEnvsMap(ctx, app.ID, envMap)
 	if err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return
@@ -482,7 +482,7 @@ func (h *Handler) resolveRepoConfig(
 func (h *Handler) buildHelmChartDeployedEnvsMap(
 	ctx context.Context,
 	appID string,
-	envTypeMap map[string]string,
+	envMap map[string]envmodel.Environment,
 ) (map[string][]*serializer.DeployedEnvInfo, error) {
 	pairs, err := helmdeploy.ListChartVersionDeployedEnvs(ctx, h.registry.DB, appID)
 	if err != nil {
@@ -491,14 +491,11 @@ func (h *Handler) buildHelmChartDeployedEnvsMap(
 
 	m := make(map[string][]*serializer.DeployedEnvInfo, len(pairs))
 	for _, pair := range pairs {
-		envType, exists := envTypeMap[pair.EnvName]
+		env, exists := envMap[pair.EnvName]
 		if !exists {
 			continue
 		}
-		m[pair.ChartVersion] = append(
-			m[pair.ChartVersion],
-			&serializer.DeployedEnvInfo{EnvName: pair.EnvName, EnvType: envType},
-		)
+		m[pair.ChartVersion] = append(m[pair.ChartVersion], serializer.NewDeployedEnvInfo(pair.EnvName, env))
 	}
 	return m, nil
 }

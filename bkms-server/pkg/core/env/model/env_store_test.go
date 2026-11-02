@@ -247,6 +247,49 @@ var _ = Describe("Environment store", func() {
 		Expect(empty).To(BeEmpty())
 	})
 
+	It("builds app env map with standard and owned feature envs", func() {
+		ownerApp := newApp("owner", workspaceID1)
+		otherApp := newApp("other", workspaceID1)
+
+		ownedFeatureEnv := dbfactory.FeatEnv(ctx, envSvc, ownerApp, env1)
+		otherFeatureEnv := dbfactory.FeatEnv(ctx, envSvc, otherApp, env1)
+
+		envMap, err := envmodel.GetAppEnvMap(ctx, db, workspaceID1, ownerApp.ID)
+		Expect(err).NotTo(HaveOccurred())
+		// 其他应用的特性环境与其他空间的环境不在结果中
+		Expect(lo.Keys(envMap)).To(ConsistOf(env1.Name, ownedFeatureEnv.Name))
+		Expect(envMap).NotTo(HaveKey(otherFeatureEnv.Name))
+
+		Expect(envMap[env1.Name].GetKind()).To(Equal(envmodel.EnvironmentKindStandard))
+		// 特性环境继承来源环境的类型
+		featureEnv := envMap[ownedFeatureEnv.Name]
+		Expect(featureEnv.GetKind()).To(Equal(envmodel.EnvironmentKindFeature))
+		Expect(featureEnv.Type).To(Equal("development"))
+		Expect(featureEnv.DisplayName).To(Equal(ownedFeatureEnv.DisplayName))
+	})
+
+	It("gets environments by names across apps in a workspace", func() {
+		ownerApp := newApp("owner", workspaceID1)
+		otherApp := newApp("other", workspaceID1)
+
+		ownedFeatureEnv := dbfactory.FeatEnv(ctx, envSvc, ownerApp, env1)
+		otherFeatureEnv := dbfactory.FeatEnv(ctx, envSvc, otherApp, env1)
+
+		envMap, err := envmodel.GetEnvMapByNames(ctx, db, workspaceID1, []string{
+			env1.Name, ownedFeatureEnv.Name, otherFeatureEnv.Name, env1.Name, "", env2.Name, "missing-env",
+		})
+		Expect(err).NotTo(HaveOccurred())
+		// 不存在的名称与其他空间的环境不在结果中
+		Expect(lo.Keys(envMap)).To(ConsistOf(env1.Name, ownedFeatureEnv.Name, otherFeatureEnv.Name))
+		Expect(envMap[env1.Name].GetKind()).To(Equal(envmodel.EnvironmentKindStandard))
+		Expect(envMap[otherFeatureEnv.Name].GetKind()).To(Equal(envmodel.EnvironmentKindFeature))
+		Expect(envMap[otherFeatureEnv.Name].DisplayName).To(Equal(otherFeatureEnv.DisplayName))
+
+		empty, err := envmodel.GetEnvMapByNames(ctx, db, workspaceID1, []string{""})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(empty).To(BeEmpty())
+	})
+
 	It("gets standard or owned feature env by name", func() {
 		ownerApp := newApp("owner", workspaceID1)
 		otherApp := newApp("other", workspaceID1)

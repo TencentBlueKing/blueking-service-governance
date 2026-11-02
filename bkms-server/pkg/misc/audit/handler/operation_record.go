@@ -21,8 +21,10 @@ package handler
 
 import (
 	"github.com/gin-gonic/gin"
+	"github.com/samber/lo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
+	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/misc/audit"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/misc/audit/serializer"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
@@ -92,9 +94,20 @@ func (h *Handler) ListOperationRecords(c *gin.Context) {
 		return
 	}
 
+	envNames := lo.Map(page.Items, func(record audit.OperationRecord, _ int) string { return record.Group.EnvName })
+	envMap, err := envmodel.GetEnvMapByNames(ctx, h.registry.DB, uriInput.WorkspaceID, envNames)
+	if err != nil {
+		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list environments of records"))
+		return
+	}
+
 	results := make([]*serializer.OperationRecordOutputObj, 0, len(page.Items))
 	for _, record := range page.Items {
-		results = append(results, new(serializer.OperationRecordOutputObj).FromModel(record))
+		var env *envmodel.Environment
+		if e, ok := envMap[record.Group.EnvName]; ok {
+			env = &e
+		}
+		results = append(results, new(serializer.OperationRecordOutputObj).FromModel(record, env))
 	}
 
 	ginutils.OK(c, serializer.ListOperationRecordsOutput{

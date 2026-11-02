@@ -125,12 +125,12 @@ func (h *Handler) ListAppImages(c *gin.Context) {
 		return
 	}
 
-	envTypeMap, err := envmodel.GetEnvTypeMap(ctx, h.registry.DB, app.WorkspaceID)
+	envMap, err := envmodel.GetAppEnvMap(ctx, h.registry.DB, app.WorkspaceID, app.ID)
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list environments"))
 		return
 	}
-	productionEnvNames := productionEnvNames(envTypeMap)
+	productionEnvNames := serializer.ProductionEnvNames(envMap)
 
 	deployedEnvsMap, err := h.buildDeployedEnvsMap(ctx, app, uriInput.AppID)
 	if err != nil {
@@ -150,7 +150,7 @@ func (h *Handler) ListAppImages(c *gin.Context) {
 			repository,
 			promotionMap[snap.Tag],
 			deployedEnvsMap[snap.Tag],
-			envTypeMap,
+			envMap,
 			sourceRecords[snap.Tag],
 		))
 	}
@@ -620,8 +620,8 @@ func (h *Handler) buildSourceRecordMap(
 }
 
 // buildDeployedEnvsMap groups deploy records by image tag. Environment
-// existence and type enrichment are applied later when serializer output is
-// assembled from the workspace env map.
+// existence and env info enrichment are applied later when serializer output is
+// assembled from the app env map.
 func (h *Handler) buildDeployedEnvsMap(
 	ctx context.Context,
 	app *bkmsapp.Application,
@@ -645,16 +645,4 @@ func (h *Handler) buildDeployedEnvsMap(
 		result[pair.ImageTag] = append(result[pair.ImageTag], pair)
 	}
 	return result, nil
-}
-
-// productionEnvNames extracts production environment names from the workspace
-// env type map for frontend deploy guidance.
-func productionEnvNames(envTypeMap map[string]string) []string {
-	results := make([]string, 0, len(envTypeMap))
-	for envName, envType := range envTypeMap {
-		if bkmsenv.IsProductionType(bkmsenv.Type(envType)) {
-			results = append(results, envName)
-		}
-	}
-	return results
 }

@@ -29,6 +29,7 @@ import (
 	helmbuild "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/chart"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/chart/semver"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/chart/serializer"
+	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	helmrepo "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/helmcore/source"
 )
 
@@ -243,5 +244,30 @@ var _ = Describe("Helm Chart serializer output", func() {
 				}
 			}
 		}`))
+	})
+})
+
+var _ = Describe("Helm Chart deployed env info", func() {
+	It("fills display name, type and kind of a standard env", func() {
+		env := envmodel.Environment{
+			Name: "stag", DisplayName: "预发布", Type: "staging", Kind: envmodel.EnvironmentKindStandard,
+		}
+		Expect(serializer.NewDeployedEnvInfo("stag", env)).To(Equal(&serializer.DeployedEnvInfo{
+			EnvName: "stag", EnvDisplayName: "预发布", EnvType: "staging", EnvKind: "standard",
+		}))
+	})
+
+	It("fills the inherited type and feature kind of a feature env", func() {
+		env := envmodel.Environment{
+			Name: "feat-demo", DisplayName: "需求联调", Type: "production", Kind: envmodel.EnvironmentKindFeature,
+		}
+		Expect(serializer.NewDeployedEnvInfo("feat-demo", env)).To(Equal(&serializer.DeployedEnvInfo{
+			EnvName: "feat-demo", EnvDisplayName: "需求联调", EnvType: "production", EnvKind: "feature",
+		}))
+	})
+
+	It("treats an env without kind as standard", func() {
+		env := envmodel.Environment{Name: "legacy", DisplayName: "历史环境", Type: "test"}
+		Expect(serializer.NewDeployedEnvInfo("legacy", env).EnvKind).To(Equal("standard"))
 	})
 })

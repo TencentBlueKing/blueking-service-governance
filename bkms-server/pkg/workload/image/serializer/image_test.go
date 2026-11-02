@@ -30,6 +30,8 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkci/pipelineparam"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkci/pipelinevar"
 	imgbuild "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
+	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
+	deploytypes "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/types"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/serializer"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/snapshot"
 )
@@ -164,6 +166,41 @@ var _ = Describe("Image serializers", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(string(body)).To(ContainSubstring(`"sourceMaterial":null`))
 		})
+	})
+
+	It("fills deployed envs with display name, type and kind, skipping unknown envs", func() {
+		envMap := map[string]envmodel.Environment{
+			"dev": {Name: "dev", DisplayName: "开发", Type: "development", Kind: envmodel.EnvironmentKindStandard},
+			"feat-demo": {
+				Name: "feat-demo", DisplayName: "需求联调", Type: "development", Kind: envmodel.EnvironmentKindFeature,
+			},
+		}
+		deployed := []deploytypes.ImageTagEnvPair{
+			{ImageTag: "v1", EnvName: "dev"},
+			{ImageTag: "v1", EnvName: "feat-demo"},
+			// 已删除的环境不在映射中，不返回
+			{ImageTag: "v1", EnvName: "deleted-env"},
+		}
+
+		output := new(serializer.AppImageOutputObj).FromModel(
+			snapshot.Image{Tag: "v1"}, "repo/test", nil, deployed, envMap, nil,
+		)
+		Expect(output.DeployedEnvs).To(Equal([]*serializer.DeployedEnvInfoOutputObj{
+			{EnvName: "dev", EnvDisplayName: "开发", EnvType: "development", EnvKind: "standard"},
+			{EnvName: "feat-demo", EnvDisplayName: "需求联调", EnvType: "development", EnvKind: "feature"},
+		}))
+	})
+
+	It("lists sorted production env names including production feature envs", func() {
+		envMap := map[string]envmodel.Environment{
+			"prod":      {Name: "prod", Type: "production", Kind: envmodel.EnvironmentKindStandard},
+			"feat-prod": {Name: "feat-prod", Type: "production", Kind: envmodel.EnvironmentKindFeature},
+			"dev":       {Name: "dev", Type: "development", Kind: envmodel.EnvironmentKindStandard},
+			"feat-dev":  {Name: "feat-dev", Type: "development", Kind: envmodel.EnvironmentKindFeature},
+			"a-prod":    {Name: "a-prod", Type: "production", Kind: envmodel.EnvironmentKindStandard},
+		}
+		Expect(serializer.ProductionEnvNames(envMap)).To(Equal([]string{"a-prod", "feat-prod", "prod"}))
+		Expect(serializer.ProductionEnvNames(nil)).To(BeEmpty())
 	})
 
 	It("marshals refresh counters as strings", func() {

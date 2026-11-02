@@ -29,6 +29,7 @@ import (
 
 	helmbuild "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/chart"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/chart/semver"
+	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	_ "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/validators" // register global validators
 	helmrepo "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/helmcore/source"
 )
@@ -149,8 +150,22 @@ type GetHelmChartSemverOutput struct {
 type DeployedEnvInfo struct {
 	// envName 环境名称
 	EnvName string `json:"envName"`
-	// envType 环境类型
+	// envDisplayName 环境展示名称
+	EnvDisplayName string `json:"envDisplayName"`
+	// envType 环境类型，特性环境为其继承的类型
 	EnvType string `json:"envType"`
+	// envKind 环境类别（standard / feature）
+	EnvKind string `json:"envKind"`
+}
+
+// NewDeployedEnvInfo 根据部署记录中的环境名与对应环境构造已部署环境信息。
+func NewDeployedEnvInfo(envName string, env envmodel.Environment) *DeployedEnvInfo {
+	return &DeployedEnvInfo{
+		EnvName:        envName,
+		EnvDisplayName: env.DisplayName,
+		EnvType:        env.Type,
+		EnvKind:        string(env.GetKind()),
+	}
 }
 
 // AppHelmChartOutputObj 是 Helm Chart 制品列表中的一条记录。

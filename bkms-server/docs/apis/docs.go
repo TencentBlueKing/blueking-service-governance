@@ -26835,12 +26835,20 @@ const docTemplate = `{
         "serializer.DeployedEnvInfo": {
             "type": "object",
             "properties": {
+                "envDisplayName": {
+                    "description": "envDisplayName 环境展示名称",
+                    "type": "string"
+                },
+                "envKind": {
+                    "description": "envKind 环境类别（standard / feature）",
+                    "type": "string"
+                },
                 "envName": {
                     "description": "envName 环境名称",
                     "type": "string"
                 },
                 "envType": {
-                    "description": "envType 环境类型",
+                    "description": "envType 环境类型，特性环境为其继承的类型",
                     "type": "string"
                 }
             }
@@ -26848,12 +26856,20 @@ const docTemplate = `{
         "serializer.DeployedEnvInfoOutputObj": {
             "type": "object",
             "properties": {
+                "envDisplayName": {
+                    "description": "环境展示名称",
+                    "type": "string"
+                },
+                "envKind": {
+                    "description": "环境类别（standard / feature）",
+                    "type": "string"
+                },
                 "envName": {
                     "description": "环境名称",
                     "type": "string"
                 },
                 "envType": {
-                    "description": "环境类型（development/test/staging/production）",
+                    "description": "环境类型（development/test/staging/production），特性环境为其继承的类型",
                     "type": "string"
                 }
             }
@@ -30569,6 +30585,14 @@ const docTemplate = `{
                 "appID": {
                     "type": "string"
                 },
+                "envDisplayName": {
+                    "description": "环境展示名称，环境已删除或记录未关联环境时为空",
+                    "type": "string"
+                },
+                "envKind": {
+                    "description": "环境类别（standard/feature），环境已删除或记录未关联环境时为空",
+                    "type": "string"
+                },
                 "envName": {
                     "type": "string"
                 },
@@ -30709,7 +30733,7 @@ const docTemplate = `{
                     "example": "0"
                 },
                 "productionEnvNames": {
-                    "description": "当前工作空间中所有生产类型环境的名称列表",
+                    "description": "应用可用的所有生产类型环境的名称列表（含继承生产类型的特性环境）",
                     "type": "array",
                     "items": {
                         "type": "string"

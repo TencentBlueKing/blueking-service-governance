@@ -223,13 +223,35 @@ func FindByClusterNamespace(
 	return env, errors.Wrapf(err, "find environment by cluster %s namespace %s", clusterID, namespace)
 }
 
-// GetEnvTypeMap 查询指定空间下的标准环境列表，返回 envName→envType 映射
-func GetEnvTypeMap(ctx context.Context, db *mongo.Database, workspaceID string) (map[string]string, error) {
-	envs, err := store.Of(db, EnvMeta).List(ctx, StdEnvsIn(workspaceID))
+// GetAppEnvMap 查询应用可用的环境（全部标准环境与该应用的特性环境），返回 envName→Environment 映射。
+// 特性环境的类型继承自其来源环境
+func GetAppEnvMap(ctx context.Context, db *mongo.Database, workspaceID, appID string) (map[string]Environment, error) {
+	envs, err := store.Of(db, EnvMeta).List(ctx, InWorkspace(workspaceID), AvailableToApp(appID))
 	if err != nil {
-		return nil, errors.Wrapf(err, "list standard environments in workspace %s", workspaceID)
+		return nil, errors.Wrapf(err, "list environments of app %s in workspace %s", appID, workspaceID)
 	}
-	return lo.SliceToMap(envs, func(env Environment) (string, string) { return env.Name, env.Type }), nil
+	return lo.KeyBy(envs, func(env Environment) string { return env.Name }), nil
+}
+
+// GetEnvMapByNames 按名称批量查询工作空间内的环境（含所有应用的特性环境），返回 envName→Environment 映射。
+// 不存在的名称不会出现在结果中；names 为空时返回空映射
+func GetEnvMapByNames(
+	ctx context.Context,
+	db *mongo.Database,
+	workspaceID string,
+	names []string,
+) (map[string]Environment, error) {
+	names = lo.Uniq(lo.Compact(names))
+	if len(names) == 0 {
+		return map[string]Environment{}, nil
+	}
+	envs, err := store.Of(db, EnvMeta).List(ctx,
+		InWorkspace(workspaceID), store.Where("name", bson.M{"$in": names}),
+	)
+	if err != nil {
+		return nil, errors.Wrapf(err, "list environments by names %v in workspace %s", names, workspaceID)
+	}
+	return lo.KeyBy(envs, func(env Environment) string { return env.Name }), nil
 }
 
 type envCountByWorkspace struct {
