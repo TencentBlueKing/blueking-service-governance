@@ -112,11 +112,9 @@ var _ = Describe("NewProjectManager", func() {
 	})
 })
 
-var _ = Describe("genDefaultProjectCode", func() {
+var _ = Describe("DefaultProjectCode", func() {
 	It("should return code in format 'bkms-{workspaceID}'", func() {
-		manager := NewProjectManager(testutil.NewDB(GinkgoT()), "test-workspace")
-		code := manager.genDefaultProjectCode("test-workspace")
-		Expect(code).To(Equal("bkms-test-workspace"))
+		Expect(DefaultProjectCode("test-workspace")).To(Equal("bkms-test-workspace"))
 	})
 })
 

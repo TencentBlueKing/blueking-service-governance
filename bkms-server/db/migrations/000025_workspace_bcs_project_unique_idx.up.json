@@ -1,0 +1,17 @@
+[
+  {
+    "createIndexes": "workspaces",
+    "indexes": [
+      {
+        "key": {
+          "bkSystems.bkBcsProjectCode": 1
+        },
+        "name": "bkSystems.bkBcsProjectCode_1",
+        "unique": true,
+        "partialFilterExpression": {
+          "bkSystems.bkBcsProjectCode": { "$gt": "" }
+        }
+      }
+    ]
+  }
+]

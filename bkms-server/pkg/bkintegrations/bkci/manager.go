@@ -63,7 +63,7 @@ func (m *ProjectManager) Initialize(
 ) (*Project, error) {
 	// 如果没有指定 projectCode（使用已有项目），则使用默认规则生成
 	if projectCode == "" {
-		projectCode = m.genDefaultProjectCode(m.workspaceID)
+		projectCode = DefaultProjectCode(m.workspaceID)
 	}
 
 	projStore := store.Of(m.db, ProjectMeta)
@@ -181,8 +181,8 @@ func (m *ProjectManager) createBKCIProject(
 	return project, nil
 }
 
-// genDefaultProjectCode 生成默认的蓝盾项目 Code
-func (m *ProjectManager) genDefaultProjectCode(workspaceID string) string {
+// DefaultProjectCode 生成未指定蓝盾项目时使用的项目 Code。
+func DefaultProjectCode(workspaceID string) string {
 	return "bkms-" + workspaceID
 }
 

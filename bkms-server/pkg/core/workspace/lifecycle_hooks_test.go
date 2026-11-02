@@ -1,4 +1,4 @@
-package workspace
+package workspace_test
 
 import (
 	"context"
@@ -6,6 +6,8 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+
+	. "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 )
 
 var _ = Describe("Workspace lifecycle hooks", func() {
@@ -38,7 +40,7 @@ var _ = Describe("Workspace lifecycle hooks", func() {
 			return nil
 		})).To(BeTrue())
 
-		err := runPreDeleteHooks(context.Background(), "workspace-hooks")
+		err := RunPreDeleteHooks(context.Background(), "workspace-hooks")
 		Expect(err).To(MatchError(ContainSubstring("run workspace pre-delete hook failing")))
 		Expect(errors.Is(err, expected)).To(BeTrue())
 		Expect(calledAfterFailure).To(BeFalse())
