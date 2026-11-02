@@ -26,6 +26,8 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/misc/audit"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/misc/audit/serializer"
 )
 
@@ -99,6 +101,32 @@ var _ = Describe("List operation records query input", func() {
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("startedAt"))
 		Expect(err.Error()).To(ContainSubstring("RFC3339"))
+	})
+})
+
+var _ = Describe("Operation record output", func() {
+	record := audit.OperationRecord{
+		Group: audit.OperationGroup{WorkspaceID: "workspace-1", AppID: "demo-app", EnvName: "feat-demo-abcde"},
+	}
+
+	It("fills env display name and kind when env exists", func() {
+		env := &envmodel.Environment{
+			Name:        "feat-demo-abcde",
+			DisplayName: "需求联调",
+			Kind:        envmodel.EnvironmentKindFeature,
+		}
+
+		output := new(serializer.OperationRecordOutputObj).FromModel(record, env)
+		Expect(output.Group.EnvName).To(Equal("feat-demo-abcde"))
+		Expect(output.Group.EnvDisplayName).To(Equal("需求联调"))
+		Expect(output.Group.EnvKind).To(Equal("feature"))
+	})
+
+	It("leaves env display name and kind empty when env is missing", func() {
+		output := new(serializer.OperationRecordOutputObj).FromModel(record, nil)
+		Expect(output.Group.EnvName).To(Equal("feat-demo-abcde"))
+		Expect(output.Group.EnvDisplayName).To(BeEmpty())
+		Expect(output.Group.EnvKind).To(BeEmpty())
 	})
 })
 

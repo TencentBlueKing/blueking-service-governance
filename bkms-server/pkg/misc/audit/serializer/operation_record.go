@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"time"
 
+	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/misc/audit"
 )
 
@@ -113,6 +114,10 @@ type OperationGroupOutputObj struct {
 	WorkspaceID string `json:"workspaceID"`
 	AppID       string `json:"appID"`
 	EnvName     string `json:"envName"`
+	// 环境展示名称，环境已删除或记录未关联环境时为空
+	EnvDisplayName string `json:"envDisplayName"`
+	// 环境类别（standard/feature），环境已删除或记录未关联环境时为空
+	EnvKind string `json:"envKind"`
 }
 
 // OperationRecordOutputObj is one operation audit record in list results.
@@ -146,7 +151,11 @@ type OperationRecordOutputObj struct {
 }
 
 // FromModel fills output fields from an operation record model.
-func (o *OperationRecordOutputObj) FromModel(record audit.OperationRecord) *OperationRecordOutputObj {
+// env 为记录分组中 envName 对应的环境，可为 nil
+func (o *OperationRecordOutputObj) FromModel(
+	record audit.OperationRecord,
+	env *envmodel.Environment,
+) *OperationRecordOutputObj {
 	*o = OperationRecordOutputObj{
 		Username:                 record.Username,
 		AccessType:               string(record.AccessType),
@@ -168,6 +177,10 @@ func (o *OperationRecordOutputObj) FromModel(record audit.OperationRecord) *Oper
 			EnvName:     record.Group.EnvName,
 		},
 		CreatedAt: record.CreatedAt,
+	}
+	if env != nil {
+		o.Group.EnvDisplayName = env.DisplayName
+		o.Group.EnvKind = string(env.GetKind())
 	}
 	return o
 }

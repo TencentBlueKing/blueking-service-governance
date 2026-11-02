@@ -19,6 +19,7 @@
 package serializer
 
 import (
+	"slices"
 	"strings"
 	"time"
 
@@ -28,6 +29,8 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkci/pipelinevar"
 	imgbuild "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/revision"
+	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
+	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	appmodeldeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/appmodel"
 	helmdeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/helm"
 	deploytypes "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/types"
@@ -119,8 +122,12 @@ type ImageEmptyOutput struct{}
 type DeployedEnvInfoOutputObj struct {
 	// 环境名称
 	EnvName string `json:"envName"`
-	// 环境类型（development/test/staging/production）
+	// 环境展示名称
+	EnvDisplayName string `json:"envDisplayName"`
+	// 环境类型（development/test/staging/production），特性环境为其继承的类型
 	EnvType string `json:"envType"`
+	// 环境类别（standard / feature）
+	EnvKind string `json:"envKind"`
 }
 
 // SnapshotStatusInfoOutputObj is the JSON representation of snapshot status.
@@ -185,7 +192,7 @@ func (o *AppImageOutputObj) FromModel(
 	repository string,
 	promo *promotion.Image,
 	deployed []deploytypes.ImageTagEnvPair,
-	envTypeMap map[string]string,
+	envMap map[string]envmodel.Environment,
 	source *imgbuild.Record,
 ) *AppImageOutputObj {
 	*o = AppImageOutputObj{
@@ -194,7 +201,7 @@ func (o *AppImageOutputObj) FromModel(
 		Digest:         snap.Digest,
 		Size:           snap.Size,
 		BuiltAt:        snap.BuiltAt,
-		DeployedEnvs:   deployedEnvOutputs(deployed, envTypeMap),
+		DeployedEnvs:   deployedEnvOutputs(deployed, envMap),
 		SourceMaterial: NewImageSourceMaterial(source),
 	}
 	if promo != nil {
@@ -254,7 +261,7 @@ type PaginatedAppImagesOutputObjs struct {
 	Results []*AppImageOutputObj `json:"results"`
 	// 快照状态信息
 	SnapshotStatus *SnapshotStatusInfoOutputObj `json:"snapshotStatus"`
-	// 当前工作空间中所有生产类型环境的名称列表
+	// 应用可用的所有生产类型环境的名称列表（含继承生产类型的特性环境）
 	ProductionEnvNames []string `json:"productionEnvNames"`
 }
 
@@ -497,19 +504,34 @@ type ListDeployableImageTagsOutput struct {
 	Data *PaginatedDeployableImageTagOutputObjs `json:"data"`
 }
 
+// ProductionEnvNames returns the sorted names of production type envs in the app env map,
+// including feature envs that inherit the production type.
+func ProductionEnvNames(envMap map[string]envmodel.Environment) []string {
+	results := make([]string, 0, len(envMap))
+	for envName, env := range envMap {
+		if bkmsenv.IsProductionType(bkmsenv.Type(env.Type)) {
+			results = append(results, envName)
+		}
+	}
+	slices.Sort(results)
+	return results
+}
+
 func deployedEnvOutputs(
 	pairs []deploytypes.ImageTagEnvPair,
-	envTypeMap map[string]string,
+	envMap map[string]envmodel.Environment,
 ) []*DeployedEnvInfoOutputObj {
 	results := make([]*DeployedEnvInfoOutputObj, 0, len(pairs))
 	for _, pair := range pairs {
-		envType, exists := envTypeMap[pair.EnvName]
+		env, exists := envMap[pair.EnvName]
 		if !exists {
 			continue
 		}
 		results = append(results, &DeployedEnvInfoOutputObj{
-			EnvName: pair.EnvName,
-			EnvType: envType,
+			EnvName:        pair.EnvName,
+			EnvDisplayName: env.DisplayName,
+			EnvType:        env.Type,
+			EnvKind:        string(env.GetKind()),
 		})
 	}
 	return results
