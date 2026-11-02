@@ -30,7 +30,6 @@ import (
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkiam/role"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/utils/lock"
 	bkmapi "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bkmonitor"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/perm"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/redis"
@@ -192,9 +191,8 @@ var _ = Describe("default alert group resolution", func() {
 		client := bkmapi.NewStub("tester")
 		groupSvc := buildGroupService(client)
 		ws := buildWorkspace()
-		lockKey, err := buildDefaultAlertUserGroupLockKey(tenantCtx, ws.ID)
+		groupLock, err := newDefaultAlertUserGroupLock(tenantCtx, ws.ID)
 		Expect(err).NotTo(HaveOccurred())
-		groupLock := lock.NewRedisLock(lockKey, 1)
 		Expect(groupLock.Acquire(context.Background())).To(BeTrue())
 
 		createDone := make(chan error, 1)
@@ -333,9 +331,8 @@ var _ = Describe("default alert group resolution", func() {
 		client := bkmapi.NewStub("tester")
 		groupSvc := buildGroupService(client)
 		ws := buildWorkspace()
-		lockKey, err := buildDefaultAlertUserGroupLockKey(tenantCtx, ws.ID)
+		groupLock, err := newDefaultAlertUserGroupLock(tenantCtx, ws.ID)
 		Expect(err).NotTo(HaveOccurred())
-		groupLock := lock.NewRedisLock(lockKey, 1)
 		Expect(groupLock.Acquire(context.Background())).To(BeTrue())
 		defer groupLock.Release(context.Background())
 

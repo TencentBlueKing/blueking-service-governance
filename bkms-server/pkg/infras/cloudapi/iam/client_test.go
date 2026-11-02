@@ -20,8 +20,12 @@ package iam
 
 import (
 	"context"
+	"sync"
+	"sync/atomic"
+	"time"
 
 	"github.com/TencentBlueKing/bk-apigateway-sdks/core/define"
+	iamsdk "github.com/TencentBlueKing/iam-go-sdk"
 	"github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -61,12 +65,16 @@ var _ = Describe("BKIAMClient", func() {
 	})
 
 	// expectStandardChain 预设最常见的链式调用：
-	// op.SetContext(ctx).SetHeaders(租户头).SetResult(&resp).Request()，最终 Request 返回 (nil, nil)。
+	// op.SetContext(ctx).SetResult(&resp).Request()，最终 Request 返回 (nil, nil)。
+	// 租户头由构造时的 tenant.OptBkApiTenantHeader 按请求 ctx 设置，这里断言传入的 ctx 带有租户。
 	// fillResp 用于在 SetResult 阶段往 result 写入桩数据。
 	expectStandardChain := func(fillResp func(target any)) {
 		mockOp.EXPECT().FullName().Return("test_operation").AnyTimes()
-		mockOp.EXPECT().SetContext(gomock.Any()).Return(mockOp)
-		mockOp.EXPECT().SetHeaders(map[string]string{tenant.HeaderTenantID: "tenant-a"}).Return(mockOp)
+		mockOp.EXPECT().SetContext(gomock.Any()).DoAndReturn(func(reqCtx context.Context) define.Operation {
+			tenantID, _ := tenant.GetTenantID(reqCtx)
+			Expect(tenantID).To(Equal("tenant-a"))
+			return mockOp
+		})
 		mockOp.EXPECT().SetResult(gomock.Any()).DoAndReturn(func(target any) define.Operation {
 			fillResp(target)
 			return mockOp
@@ -101,6 +109,35 @@ var _ = Describe("BKIAMClient", func() {
 
 			Expect(client.authenticator(ctx)).To(BeIdenticalTo(client.authenticator(ctx)))
 			Expect(client.authenticator(ctx)).NotTo(BeIdenticalTo(client.authenticator(ctxB)))
+		})
+
+		It("constructs the iam sdk instance only once under concurrent first access", func() {
+			client := newClientFromMock().(*BKIAMClient)
+			newAuthenticator := client.newAuthenticator
+			var built atomic.Int32
+			client.newAuthenticator = func(tenantID string) *iamsdk.IAM {
+				built.Add(1)
+				// 放大首批请求同时未命中缓存的窗口
+				time.Sleep(10 * time.Millisecond)
+				return newAuthenticator(tenantID)
+			}
+
+			const goroutines = 20
+			results := make([]*iamsdk.IAM, goroutines)
+			var wg sync.WaitGroup
+			for i := range goroutines {
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					results[i] = client.authenticator(ctx)
+				}()
+			}
+			wg.Wait()
+
+			Expect(built.Load()).To(Equal(int32(1)))
+			for _, authenticator := range results {
+				Expect(authenticator).To(BeIdenticalTo(results[0]))
+			}
 		})
 	})
 

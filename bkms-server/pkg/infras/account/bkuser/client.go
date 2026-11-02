@@ -90,7 +90,9 @@ func (c *Client) GetUser(ctx context.Context, tenantID, bkUsername string) (*Use
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode == http.StatusNotFound {
+	// 只有 bk-user 返回 NOT_FOUND 业务码才表示用户不在该租户；URL 模板错误、入口路由不存在等
+	// 同样返回 404，但没有该业务码，按普通错误返回，避免把配置问题当成无租户访问权限
+	if resp.StatusCode == http.StatusNotFound && result.Error != nil && result.Error.Code == errorCodeNotFound {
 		return nil, errors.Wrapf(ErrUserNotFound, "user %s in tenant %s", bkUsername, tenantID)
 	}
 	if !httpresp.IsSuccess(resp) {

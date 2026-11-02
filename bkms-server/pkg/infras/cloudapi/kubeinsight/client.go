@@ -68,6 +68,7 @@ func New() (Client, error) {
 		Stage:        config.G.BkApiStages.KubeInsight,
 		ClientOptions: []define.BkApiClientOption{
 			bkapi.OptSetRequestHeader("x-bkapi-authorization", string(authorization)),
+			tenant.OptBkApiTenantHeader(),
 			bkapi.OptJsonResultProvider(),
 			bkapi.OptJsonBodyProvider(),
 			bkapi.OptTimeout(60 * time.Second),
@@ -102,7 +103,7 @@ func (c *ApiClient) GetLatestClusterReport(
 	// 先解析为通用响应结构
 	var rawResult GetLatestClusterReportResponse
 	ctx, span := apm.StartClientSpan(ctx, "kubeinsight", "GetLatestClusterReport")
-	resp, err := apiOperation.SetContext(ctx).SetHeaders(tenant.TenantHeader(ctx)).SetResult(&rawResult).Request()
+	resp, err := apiOperation.SetContext(ctx).SetResult(&rawResult).Request()
 	defer apm.EndClientSpan(span, resp, &err)
 	if err != nil {
 		return nil, nil, err

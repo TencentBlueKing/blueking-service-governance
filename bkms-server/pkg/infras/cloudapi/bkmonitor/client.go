@@ -147,6 +147,7 @@ func buildClientConfig(endpoint, operator, authInfo string) bkapi.ClientConfig {
 		ClientOptions: []define.BkApiClientOption{
 			bkapi.OptSetRequestHeader("x-bkapi-authorization", authInfo),
 			bkapi.OptSetRequestHeader("X-Bkapi-User-Name", operator),
+			tenant.OptBkApiTenantHeader(),
 			bkapi.OptJsonResultProvider(),
 			bkapi.OptJsonBodyProvider(),
 			bkapi.OptTimeout(60 * time.Second),
@@ -162,7 +163,7 @@ func (c *ApiClient) handleOperation(
 	defer metrics.ClientRequest(gatewayName, op.FullName(), started, &err)
 
 	ctx, span := apm.StartClientSpan(ctx, gatewayName, op.FullName())
-	resp, err := op.SetContext(ctx).SetHeaders(tenant.TenantHeader(ctx)).SetResult(&result).Request()
+	resp, err := op.SetContext(ctx).SetResult(&result).Request()
 	defer apm.EndClientSpan(span, resp, &err)
 	if err != nil {
 		return nil, errors.Wrap(err, "api request failed")

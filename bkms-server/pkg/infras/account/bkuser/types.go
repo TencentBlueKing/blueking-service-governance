@@ -25,6 +25,8 @@ const (
 	// tenantHeader bk-user 开放接口在该请求头指定的租户内查询用户。
 	// 与 tenant.HeaderTenantID 相同，tenant 包依赖本包，因此不能反向引用。
 	tenantHeader = "X-Bk-Tenant-Id"
+	// errorCodeNotFound bk-user 开放接口（蓝鲸 API v3 规范）资源不存在时返回的 error.code
+	errorCodeNotFound = "NOT_FOUND"
 
 	// UserStatusEnabled means the bk-user account is active for tenant access.
 	UserStatusEnabled = "enabled"

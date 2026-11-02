@@ -117,6 +117,7 @@ func buildClientConfig(authInfo string) bkapi.ClientConfig {
 		BkApiUrlTmpl: config.G.BkPlatUrls.BkApiUrlTmpl,
 		ClientOptions: []define.BkApiClientOption{
 			bkapi.OptSetRequestHeader("x-bkapi-authorization", authInfo),
+			tenant.OptBkApiTenantHeader(),
 			bkapi.OptJsonResultProvider(),
 			bkapi.OptJsonBodyProvider(),
 			bkapi.OptTimeout(60 * time.Second),
@@ -132,7 +133,7 @@ func (c *ApiClient) handleOperation(
 	defer metrics.ClientRequest("bscp", op.FullName(), started, &err)
 
 	ctx, span := apm.StartClientSpan(ctx, "bscp", op.FullName())
-	chain := op.SetContext(ctx).SetHeaders(tenant.TenantHeader(ctx))
+	chain := op.SetContext(ctx)
 	resp, err := chain.SetResult(&result).Request()
 	defer apm.EndClientSpan(span, resp, &err)
 	if err != nil {

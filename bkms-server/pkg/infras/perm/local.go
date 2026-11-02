@@ -247,8 +247,8 @@ func (m *LocalManager) FilterViewableWorkspaces(
 	if err != nil {
 		return nil, errors.Wrap(err, errMsgGetAuthUser)
 	}
-	resp, err := m.svc.WorkspacesMultiActionsAllowed(ctx,
-		user.ID, workspaceIDs, []string{WorkspaceAction.View},
+	resp, err := m.svc.WorkspacesMultiActionsAllowed(
+		ctx, user.ID, workspaceIDs, []string{WorkspaceAction.View},
 	)
 	if err != nil {
 		return nil, errors.Wrap(err, errMsgWorkspaceFilterAct)
@@ -270,8 +270,8 @@ func (m *LocalManager) FilterViewableApps(
 	if err != nil {
 		return nil, errors.Wrap(err, errMsgGetAuthUser)
 	}
-	resp, err := m.svc.AppsMultiActionsAllowed(ctx,
-		user.ID, workspaceID, appIDs, []string{AppAction.View},
+	resp, err := m.svc.AppsMultiActionsAllowed(
+		ctx, user.ID, workspaceID, appIDs, []string{AppAction.View},
 	)
 	if err != nil {
 		return nil, errors.Wrap(err, errMsgAppFilterAct)

@@ -61,6 +61,7 @@ func New(user auth.User) (*ApiClient, error) {
 		Stage: config.G.BkApiStages.BCS,
 		ClientOptions: []define.BkApiClientOption{
 			bkapi.OptSetRequestHeader("x-bkapi-authorization", string(authorization)),
+			tenant.OptBkApiTenantHeader(),
 			bkapi.OptJsonResultProvider(),
 			bkapi.OptJsonBodyProvider(),
 			bkapi.OptTimeout(60 * time.Second),
@@ -166,7 +167,7 @@ func (c *ApiClient) handleOperation(
 	defer metrics.ClientRequest("clusterresources", apiOperation.FullName(), started, &err)
 
 	ctx, span := apm.StartClientSpan(ctx, "clusterresources", opName)
-	resp, err := apiOperation.SetContext(ctx).SetHeaders(tenant.TenantHeader(ctx)).SetResult(&result).Request()
+	resp, err := apiOperation.SetContext(ctx).SetResult(&result).Request()
 	defer apm.EndClientSpan(span, resp, &err)
 	if err != nil {
 		return nil, err

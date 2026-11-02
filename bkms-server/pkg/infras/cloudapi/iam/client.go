@@ -142,7 +142,8 @@ type BKIAMClient struct {
 	// newAuthenticator 构造指定租户的 iam-go-sdk 实例。sdk 只能在构造时
 	// 设置租户，因此按租户各建一个实例并缓存在 authenticators 中。
 	newAuthenticator func(tenantID string) *iamsdk.IAM
-	authenticators   sync.Map // tenantID -> *iamsdk.IAM
+	authenticatorsMu sync.RWMutex
+	authenticators   map[string]*iamsdk.IAM // tenantID -> *iamsdk.IAM
 }
 
 // 编译期接口实现检查
@@ -168,6 +169,7 @@ func NewIAMClient() (IAMClient, error) {
 			Stage:        config.G.BkApiStages.BkIAM,
 			ClientOptions: []define.BkApiClientOption{
 				bkapi.OptSetRequestHeader("x-bkapi-authorization", string(authorization)),
+				tenant.OptBkApiTenantHeader(),
 				bkapi.OptJsonResultProvider(),
 				bkapi.OptJsonBodyProvider(),
 				bkapi.OptTimeout(defaultRequestTimeout),
@@ -189,7 +191,8 @@ func newIAMClient(client define.BkApiClient) (IAMClient, error) {
 	}
 
 	return &BKIAMClient{
-		BkApiClient: client,
+		BkApiClient:    client,
+		authenticators: make(map[string]*iamsdk.IAM),
 		newAuthenticator: func(tenantID string) *iamsdk.IAM {
 			var opts []iamsdk.Option
 			if tenantID != "" {
@@ -220,15 +223,26 @@ func (c *BKIAMClient) BatchResourceMultiActionsAllowed(
 	return c.authenticator(ctx).BatchResourceMultiActionsAllowed(request, resourcesList)
 }
 
-// authenticator 返回 ctx 中租户对应的 iam-go-sdk 实例。ctx 未携带租户时
+// authenticator 返回 ctx 中租户对应的 iam-go-sdk 实例，每个租户只构造一次。ctx 未携带租户时
 // 使用不带租户头的实例，与网关请求的 tenant.TenantHeader 行为一致。
 func (c *BKIAMClient) authenticator(ctx context.Context) *iamsdk.IAM {
 	tenantID, _ := tenant.GetTenantID(ctx)
-	if v, ok := c.authenticators.Load(tenantID); ok {
-		return v.(*iamsdk.IAM)
+
+	c.authenticatorsMu.RLock()
+	authenticator, ok := c.authenticators[tenantID]
+	c.authenticatorsMu.RUnlock()
+	if ok {
+		return authenticator
 	}
-	v, _ := c.authenticators.LoadOrStore(tenantID, c.newAuthenticator(tenantID))
-	return v.(*iamsdk.IAM)
+
+	c.authenticatorsMu.Lock()
+	defer c.authenticatorsMu.Unlock()
+	if authenticator, ok = c.authenticators[tenantID]; ok {
+		return authenticator
+	}
+	authenticator = c.newAuthenticator(tenantID)
+	c.authenticators[tenantID] = authenticator
+	return authenticator
 }
 
 // BuildIAMGatewayURL 将 bkapi 模板（apiURLTmpl，例如 http://{api_name}.apigw.example.com）
@@ -259,7 +273,7 @@ func BuildIAMGatewayURL(apiURLTmpl, stage string) (string, error) {
 // executeOperation 统一发起 IAM 网关请求。业务 span 提供精确的操作名，transport 层自动传播 trace context。
 func (c *BKIAMClient) executeOperation(ctx context.Context, op define.Operation, result any) error {
 	ctx, span := apm.StartClientSpan(ctx, "iam", op.FullName())
-	resp, err := op.SetContext(ctx).SetHeaders(tenant.TenantHeader(ctx)).SetResult(result).Request()
+	resp, err := op.SetContext(ctx).SetResult(result).Request()
 	apm.EndClientSpan(span, resp, &err)
 	return err
 }

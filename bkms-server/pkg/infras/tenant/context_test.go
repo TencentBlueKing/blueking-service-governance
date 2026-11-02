@@ -20,7 +20,10 @@ package tenant_test
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 
+	"github.com/TencentBlueKing/bk-apigateway-sdks/core/bkapi"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
@@ -74,6 +77,47 @@ var _ = Describe("Tenant context helpers", func() {
 
 		It("returns nil when context has no tenant", func() {
 			Expect(tenant.TenantHeader(context.Background())).To(BeNil())
+		})
+	})
+
+	Describe("OptBkApiTenantHeader", func() {
+		var (
+			server    *httptest.Server
+			gotHeader chan string
+		)
+
+		BeforeEach(func() {
+			gotHeader = make(chan string, 1)
+			server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				gotHeader <- r.Header.Get(tenant.HeaderTenantID)
+				_, _ = w.Write([]byte(`{}`))
+			}))
+			DeferCleanup(server.Close)
+		})
+
+		send := func(ctx context.Context, headers map[string]string) string {
+			client, err := bkapi.NewBkApiClient(
+				"test", bkapi.ClientConfig{Endpoint: server.URL}, tenant.OptBkApiTenantHeader(),
+			)
+			Expect(err).NotTo(HaveOccurred())
+			op := client.NewOperation(bkapi.OperationConfig{Name: "ping", Method: http.MethodGet, Path: "/ping"})
+			_, err = op.SetContext(ctx).SetHeaders(headers).Request()
+			Expect(err).NotTo(HaveOccurred())
+			return <-gotHeader
+		}
+
+		It("sets the tenant header from the request context", func() {
+			Expect(send(tenant.WithTenantID(context.Background(), "tenant-a"), nil)).To(Equal("tenant-a"))
+			Expect(send(tenant.WithTenantID(context.Background(), "tenant-b"), nil)).To(Equal("tenant-b"))
+		})
+
+		It("does not set the tenant header when the request context has no tenant", func() {
+			Expect(send(context.Background(), nil)).To(BeEmpty())
+		})
+
+		It("keeps an explicitly set tenant header", func() {
+			ctx := tenant.WithTenantID(context.Background(), "tenant-a")
+			Expect(send(ctx, map[string]string{tenant.HeaderTenantID: "tenant-b"})).To(Equal("tenant-b"))
 		})
 	})
 })

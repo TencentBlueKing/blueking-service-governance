@@ -101,6 +101,32 @@ var _ = Describe("Client with httptest server", func() {
 		Expect(err).To(MatchError(ErrUserNotFound))
 	})
 
+	DescribeTable("does not treat a 404 without the bk-user NOT_FOUND code as ErrUserNotFound",
+		func(header map[string]string, body string) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				for key, value := range header {
+					w.Header().Set(key, value)
+				}
+				w.WriteHeader(http.StatusNotFound)
+				_, _ = w.Write([]byte(body))
+			}))
+			defer server.Close()
+
+			client, err := NewClient(server.URL, "test", "bkms", "secret")
+			Expect(err).NotTo(HaveOccurred())
+
+			_, err = client.GetUser(context.Background(), "tenant-a", "alice")
+			Expect(err).To(HaveOccurred())
+			Expect(err).NotTo(MatchError(ErrUserNotFound))
+		},
+		Entry("gateway resource not found", map[string]string{
+			"X-Bkapi-Error-Code":    "1640401",
+			"X-Bkapi-Error-Message": "API not found",
+		}, `{"code": 1640401, "result": false, "message": "API not found"}`),
+		Entry("other business code", nil, `{"error": {"code": "INVALID_ARGUMENT", "message": "bad request"}}`),
+		Entry("no error body", nil, `{}`),
+	)
+
 	It("returns the upstream error details when bk-user rejects the request", func() {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusForbidden)

@@ -21,7 +21,10 @@ package tenant
 
 import (
 	"context"
+	"net/http"
 
+	"github.com/TencentBlueKing/bk-apigateway-sdks/core/bkapi"
+	"github.com/TencentBlueKing/bk-apigateway-sdks/core/define"
 	"github.com/pkg/errors"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/ctxkey"
@@ -67,4 +70,18 @@ func TenantHeader(ctx context.Context) map[string]string {
 		return nil
 	}
 	return map[string]string{HeaderTenantID: tenantID}
+}
+
+// OptBkApiTenantHeader 返回蓝鲸网关 client 的构造选项：每次请求发出前，按请求 ctx 设置 TenantHeader。
+// 请求 ctx 来自 Operation.SetContext，未调用 SetContext 时取不到租户，不带租户头。
+// 请求已显式设置租户头时保持原值，例如 bk-user 需要在待校验的租户内查询用户。
+func OptBkApiTenantHeader() define.BkApiOption {
+	return bkapi.OptRequestCallback(func(req *http.Request) *http.Request {
+		for key, value := range TenantHeader(req.Context()) {
+			if req.Header.Get(key) == "" {
+				req.Header.Set(key, value)
+			}
+		}
+		return req
+	})
 }
