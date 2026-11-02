@@ -28,6 +28,7 @@ import (
 	"encoding/json"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/TencentBlueKing/bk-apigateway-sdks/core/bkapi"
@@ -37,6 +38,7 @@ import (
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/iam/types"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/tenant"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/apm"
 )
 
@@ -112,11 +114,13 @@ type UserRoleManager interface {
 }
 
 // Authenticator 鉴权接口，基于 iam-go-sdk 完成对资源 / 动作的鉴权判断。
+// 鉴权发往 ctx 中租户对应的权限中心租户。
 type Authenticator interface {
 	// IsAllowed 查询对某个资源是否有某个操作权限。
-	IsAllowed(request iamsdk.Request) (allowed bool, err error)
+	IsAllowed(ctx context.Context, request iamsdk.Request) (allowed bool, err error)
 	// BatchResourceMultiActionsAllowed 对同类多个资源的多个操作进行鉴权。
 	BatchResourceMultiActionsAllowed(
+		ctx context.Context,
 		request iamsdk.MultiActionRequest,
 		resourcesList []iamsdk.Resources,
 	) (results map[string]map[string]bool, err error)
@@ -130,11 +134,15 @@ type IAMClient interface {
 
 // BKIAMClient 蓝鲸 IAM 网关客户端默认实现。
 //
-// 通过 define.BkApiClient 调用网关 HTTP 接口；通过嵌入的 *iamsdk.IAM
-// 提供 IsAllowed / BatchResourceMultiActionsAllowed 等鉴权能力。
+// 通过 define.BkApiClient 调用网关 HTTP 接口；通过 iam-go-sdk 提供
+// IsAllowed / BatchResourceMultiActionsAllowed 等鉴权能力。
 type BKIAMClient struct {
 	define.BkApiClient
-	*iamsdk.IAM
+
+	// newAuthenticator 构造指定租户的 iam-go-sdk 实例。sdk 只能在构造时
+	// 设置租户，因此按租户各建一个实例并缓存在 authenticators 中。
+	newAuthenticator func(tenantID string) *iamsdk.IAM
+	authenticators   sync.Map // tenantID -> *iamsdk.IAM
 }
 
 // 编译期接口实现检查
@@ -182,13 +190,45 @@ func newIAMClient(client define.BkApiClient) (IAMClient, error) {
 
 	return &BKIAMClient{
 		BkApiClient: client,
-		IAM: iamsdk.NewAPIGatewayIAM(
-			config.G.BkIAMSystemIDs.Bkms,
-			config.G.BkApp.Code,
-			config.G.BkApp.Secret,
-			iamGatewayURL,
-		),
+		newAuthenticator: func(tenantID string) *iamsdk.IAM {
+			var opts []iamsdk.Option
+			if tenantID != "" {
+				opts = append(opts, iamsdk.WithBkTenantID(tenantID))
+			}
+			return iamsdk.NewAPIGatewayIAM(
+				config.G.BkIAMSystemIDs.Bkms,
+				config.G.BkApp.Code,
+				config.G.BkApp.Secret,
+				iamGatewayURL,
+				opts...,
+			)
+		},
 	}, nil
+}
+
+// IsAllowed 查询对某个资源是否有某个操作权限。
+func (c *BKIAMClient) IsAllowed(ctx context.Context, request iamsdk.Request) (bool, error) {
+	return c.authenticator(ctx).IsAllowed(request)
+}
+
+// BatchResourceMultiActionsAllowed 对同类多个资源的多个操作进行鉴权。
+func (c *BKIAMClient) BatchResourceMultiActionsAllowed(
+	ctx context.Context,
+	request iamsdk.MultiActionRequest,
+	resourcesList []iamsdk.Resources,
+) (map[string]map[string]bool, error) {
+	return c.authenticator(ctx).BatchResourceMultiActionsAllowed(request, resourcesList)
+}
+
+// authenticator 返回 ctx 中租户对应的 iam-go-sdk 实例。ctx 未携带租户时
+// 使用不带租户头的实例，与网关请求的 tenant.TenantHeader 行为一致。
+func (c *BKIAMClient) authenticator(ctx context.Context) *iamsdk.IAM {
+	tenantID, _ := tenant.GetTenantID(ctx)
+	if v, ok := c.authenticators.Load(tenantID); ok {
+		return v.(*iamsdk.IAM)
+	}
+	v, _ := c.authenticators.LoadOrStore(tenantID, c.newAuthenticator(tenantID))
+	return v.(*iamsdk.IAM)
 }
 
 // BuildIAMGatewayURL 将 bkapi 模板（apiURLTmpl，例如 http://{api_name}.apigw.example.com）
@@ -219,7 +259,7 @@ func BuildIAMGatewayURL(apiURLTmpl, stage string) (string, error) {
 // executeOperation 统一发起 IAM 网关请求。业务 span 提供精确的操作名，transport 层自动传播 trace context。
 func (c *BKIAMClient) executeOperation(ctx context.Context, op define.Operation, result any) error {
 	ctx, span := apm.StartClientSpan(ctx, "iam", op.FullName())
-	resp, err := op.SetContext(ctx).SetResult(result).Request()
+	resp, err := op.SetContext(ctx).SetHeaders(tenant.TenantHeader(ctx)).SetResult(result).Request()
 	apm.EndClientSpan(span, resp, &err)
 	return err
 }

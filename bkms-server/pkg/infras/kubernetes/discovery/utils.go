@@ -49,6 +49,8 @@ func filterResByKind(kind string, allRes []*metav1.APIResourceList) (*schema.Gro
 	return nil, errors.Wrapf(ErrKindNotFound, "%s", kind)
 }
 
+// genCacheKey 生成集群 API 资源发现结果的缓存键。
+// 不加租户前缀：缓存内容是集群自身的 API 资源列表，与租户无关，共用同一集群的租户共享一份缓存。
 func genCacheKey(clusterID, groupVersion string) cache.StringKey {
 	// 不指定 groupVersion 说明是整个集群的 group 资源
 	if groupVersion == "" {
@@ -58,7 +60,7 @@ func genCacheKey(clusterID, groupVersion string) cache.StringKey {
 	return cache.NewStringKey(fmt.Sprintf("%s:%s:serverresources", clusterID, groupVersion))
 }
 
-// 生成缓存重置锁 Redis 键
+// 生成缓存重置锁 Redis 键，与 genCacheKey 一样按集群共享，不加租户前缀
 func genLockKey(clusterID string) cache.StringKey {
 	return cache.NewStringKey(fmt.Sprintf("%s:cache-lock", clusterID))
 }

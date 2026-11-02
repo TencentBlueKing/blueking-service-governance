@@ -28,6 +28,7 @@ import (
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/iam/types"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/tenant"
 )
 
 var _ = Describe("BKIAMClient", func() {
@@ -41,7 +42,7 @@ var _ = Describe("BKIAMClient", func() {
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 		mockOp = NewMockOperation(mockCtrl)
-		ctx = context.Background()
+		ctx = tenant.WithTenantID(context.Background(), "tenant-a")
 
 		// IAM client 内部依赖 config.G 中的 IAMSystemIDs / BkApp / BkPlatUrls
 		// 在测试前设置一份最小可用配置，并在测试结束后还原。
@@ -60,11 +61,12 @@ var _ = Describe("BKIAMClient", func() {
 	})
 
 	// expectStandardChain 预设最常见的链式调用：
-	// op.SetContext(ctx).SetResult(&resp).Request() 三连，最终 Request 返回 (nil, nil)。
+	// op.SetContext(ctx).SetHeaders(租户头).SetResult(&resp).Request()，最终 Request 返回 (nil, nil)。
 	// fillResp 用于在 SetResult 阶段往 result 写入桩数据。
 	expectStandardChain := func(fillResp func(target any)) {
 		mockOp.EXPECT().FullName().Return("test_operation").AnyTimes()
 		mockOp.EXPECT().SetContext(gomock.Any()).Return(mockOp)
+		mockOp.EXPECT().SetHeaders(map[string]string{tenant.HeaderTenantID: "tenant-a"}).Return(mockOp)
 		mockOp.EXPECT().SetResult(gomock.Any()).DoAndReturn(func(target any) define.Operation {
 			fillResp(target)
 			return mockOp
@@ -89,6 +91,16 @@ var _ = Describe("BKIAMClient", func() {
 			gatewayURL, err := BuildIAMGatewayURL("http://{api_name}.apigw.example.com", "")
 			Expect(err).To(BeNil())
 			Expect(gatewayURL).To(Equal("http://bk-iam.apigw.example.com/prod"))
+		})
+	})
+
+	Describe("authenticator", func() {
+		It("keeps one iam sdk instance per tenant", func() {
+			client := newClientFromMock().(*BKIAMClient)
+			ctxB := tenant.WithTenantID(context.Background(), "tenant-b")
+
+			Expect(client.authenticator(ctx)).To(BeIdenticalTo(client.authenticator(ctx)))
+			Expect(client.authenticator(ctx)).NotTo(BeIdenticalTo(client.authenticator(ctxB)))
 		})
 	})
 

@@ -35,6 +35,7 @@ import (
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/utils/httpresp"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/tenant"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/apm"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/metrics"
 )
@@ -302,7 +303,7 @@ func (c *ApiClient) handleOperation(
 	defer metrics.ClientRequest("bcs", apiOperation.FullName(), started, &err)
 
 	ctx, span := apm.StartClientSpan(ctx, "bcs", apiOperation.FullName())
-	resp, err := apiOperation.SetContext(ctx).SetResult(&result).Request()
+	resp, err := apiOperation.SetContext(ctx).SetHeaders(tenant.TenantHeader(ctx)).SetResult(&result).Request()
 	defer apm.EndClientSpan(span, resp, &err)
 	if err != nil {
 		return nil, err

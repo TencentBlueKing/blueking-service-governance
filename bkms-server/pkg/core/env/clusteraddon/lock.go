@@ -25,7 +25,9 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/utils/lock"
 )
 
-// NewInstallLock 新建集群插件安装锁实例
+// NewInstallLock 新建集群插件安装锁实例。
+// key 不加租户前缀：锁保护的是集群命名空间内的插件（物理资源），同一集群可能被多个租户共用，
+// 不同租户对同一插件的安装也必须互斥。
 func NewInstallLock(clusterID, namespace, componentName string) *lock.RedisLock {
 	key := fmt.Sprintf("lock:cluster-addon:%s:%s:%s", clusterID, namespace, componentName)
 	// 锁超时时间与轮询状态超时时间保持一致

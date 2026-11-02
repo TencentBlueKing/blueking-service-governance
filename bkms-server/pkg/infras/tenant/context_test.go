@@ -41,4 +41,39 @@ var _ = Describe("Tenant context helpers", func() {
 		Expect(ok).To(BeFalse())
 		Expect(tenantID).To(BeEmpty())
 	})
+
+	Describe("ScopedKey", func() {
+		It("prefixes the key with the tenant in context", func() {
+			ctx := tenant.WithTenantID(context.Background(), "tenant-a")
+
+			key, err := tenant.ScopedKey(ctx, "lock:helm-deploy:app:env:")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(key).To(Equal("tenant:tenant-a:lock:helm-deploy:app:env:"))
+		})
+
+		It("gives different keys for the same resource in different tenants", func() {
+			keyA, err := tenant.ScopedKey(tenant.WithTenantID(context.Background(), "tenant-a"), "lock:x")
+			Expect(err).NotTo(HaveOccurred())
+			keyB, err := tenant.ScopedKey(tenant.WithTenantID(context.Background(), "tenant-b"), "lock:x")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(keyA).NotTo(Equal(keyB))
+		})
+
+		It("returns ErrTenantIDRequired when context has no tenant", func() {
+			_, err := tenant.ScopedKey(context.Background(), "lock:x")
+			Expect(err).To(MatchError(tenant.ErrTenantIDRequired))
+		})
+	})
+
+	Describe("TenantHeader", func() {
+		It("returns the tenant header from context", func() {
+			ctx := tenant.WithTenantID(context.Background(), "tenant-a")
+
+			Expect(tenant.TenantHeader(ctx)).To(Equal(map[string]string{"X-Bk-Tenant-Id": "tenant-a"}))
+		})
+
+		It("returns nil when context has no tenant", func() {
+			Expect(tenant.TenantHeader(context.Background())).To(BeNil())
+		})
+	})
 })

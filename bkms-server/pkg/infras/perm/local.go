@@ -48,20 +48,20 @@ type iamServicer interface {
 	ListRoleMembers(ctx context.Context, roleID string) ([]string, error)
 	DeleteAllRolesByWorkspaceID(ctx context.Context, workspaceID string) error
 
-	WorkspaceCreateIsAllowed(username string) (bool, error)
-	WorkspaceActionIsAllowed(username, workspaceID, actionID string) (bool, error)
+	WorkspaceCreateIsAllowed(ctx context.Context, username string) (bool, error)
+	WorkspaceActionIsAllowed(ctx context.Context, username, workspaceID, actionID string) (bool, error)
 	WorkspacesMultiActionsAllowed(
-		username string, workspaceIDs, actionIDs []string,
+		ctx context.Context, username string, workspaceIDs, actionIDs []string,
 	) (map[string]map[string]bool, error)
 
-	AppCreateIsAllowed(username, workspaceID string) (bool, error)
-	AppActionIsAllowed(username, workspaceID, appID, actionID string) (bool, error)
+	AppCreateIsAllowed(ctx context.Context, username, workspaceID string) (bool, error)
+	AppActionIsAllowed(ctx context.Context, username, workspaceID, appID, actionID string) (bool, error)
 	AppsMultiActionsAllowed(
-		username, workspaceID string, appIDs, actionIDs []string,
+		ctx context.Context, username, workspaceID string, appIDs, actionIDs []string,
 	) (map[string]map[string]bool, error)
 
-	EnvCreateIsAllowed(username, workspaceID string) (bool, error)
-	EnvActionIsAllowed(username, workspaceID, envID, actionID string) (bool, error)
+	EnvCreateIsAllowed(ctx context.Context, username, workspaceID string) (bool, error)
+	EnvActionIsAllowed(ctx context.Context, username, workspaceID, envID, actionID string) (bool, error)
 }
 
 // 编译期检查：iam.IAMService 满足 iamServicer 接口。
@@ -70,8 +70,8 @@ var _ iamServicer = (*bkiam.IAMService)(nil)
 // LocalManager Manager 的进程内本地实现。
 //
 // 通过转发到 iam.IAMService 的方式提供权限检查与角色管理能力。所有方法
-// 内部从 ctx 通过 auth.GetUser 取出当前用户后，再调用 IAMService（其
-// *IsAllowed / *ActionIsAllowed 方法接收 username 而非 ctx）。
+// 内部从 ctx 通过 auth.GetUser 取出当前用户后，再连同 ctx 调用 IAMService
+// （ctx 中的租户决定鉴权请求发往权限中心的哪个租户）。
 type LocalManager struct {
 	svc iamServicer
 }
@@ -99,7 +99,7 @@ func (m *LocalManager) HasCreateAppPerm(ctx context.Context, workspaceID string)
 	if err != nil {
 		return errors.Wrap(err, errMsgGetAuthUser)
 	}
-	allowed, err := m.svc.AppCreateIsAllowed(user.ID, workspaceID)
+	allowed, err := m.svc.AppCreateIsAllowed(ctx, user.ID, workspaceID)
 	if err != nil {
 		return errors.Wrapf(err, errMsgCallIAMServiceFmt, "AppCreateIsAllowed")
 	}
@@ -130,7 +130,7 @@ func (m *LocalManager) hasAppActionPerm(ctx context.Context, workspaceID, appID,
 	if err != nil {
 		return errors.Wrap(err, errMsgGetAuthUser)
 	}
-	allowed, err := m.svc.AppActionIsAllowed(user.ID, workspaceID, appID, action)
+	allowed, err := m.svc.AppActionIsAllowed(ctx, user.ID, workspaceID, appID, action)
 	if err != nil {
 		return errors.Wrapf(err, errMsgCallIAMServiceFmt, "AppActionIsAllowed")
 	}
@@ -146,7 +146,7 @@ func (m *LocalManager) HasCreateWorkspacePerm(ctx context.Context) error {
 	if err != nil {
 		return errors.Wrap(err, errMsgGetAuthUser)
 	}
-	allowed, err := m.svc.WorkspaceCreateIsAllowed(user.ID)
+	allowed, err := m.svc.WorkspaceCreateIsAllowed(ctx, user.ID)
 	if err != nil {
 		return errors.Wrapf(err, errMsgCallIAMServiceFmt, "WorkspaceCreateIsAllowed")
 	}
@@ -177,7 +177,7 @@ func (m *LocalManager) hasWorkspaceActionPerm(ctx context.Context, workspaceID, 
 	if err != nil {
 		return errors.Wrap(err, errMsgGetAuthUser)
 	}
-	allowed, err := m.svc.WorkspaceActionIsAllowed(user.ID, workspaceID, action)
+	allowed, err := m.svc.WorkspaceActionIsAllowed(ctx, user.ID, workspaceID, action)
 	if err != nil {
 		return errors.Wrapf(err, errMsgCallIAMServiceFmt, "WorkspaceActionIsAllowed")
 	}
@@ -193,7 +193,7 @@ func (m *LocalManager) HasCreateEnvPerm(ctx context.Context, workspaceID string)
 	if err != nil {
 		return errors.Wrap(err, errMsgGetAuthUser)
 	}
-	allowed, err := m.svc.EnvCreateIsAllowed(user.ID, workspaceID)
+	allowed, err := m.svc.EnvCreateIsAllowed(ctx, user.ID, workspaceID)
 	if err != nil {
 		return errors.Wrapf(err, errMsgCallIAMServiceFmt, "EnvCreateIsAllowed")
 	}
@@ -229,7 +229,7 @@ func (m *LocalManager) hasEnvActionPerm(ctx context.Context, workspaceID, envNam
 	if err != nil {
 		return errors.Wrap(err, errMsgGetAuthUser)
 	}
-	allowed, err := m.svc.EnvActionIsAllowed(user.ID, workspaceID, envName, action)
+	allowed, err := m.svc.EnvActionIsAllowed(ctx, user.ID, workspaceID, envName, action)
 	if err != nil {
 		return errors.Wrapf(err, errMsgCallIAMServiceFmt, "EnvActionIsAllowed")
 	}
@@ -247,7 +247,7 @@ func (m *LocalManager) FilterViewableWorkspaces(
 	if err != nil {
 		return nil, errors.Wrap(err, errMsgGetAuthUser)
 	}
-	resp, err := m.svc.WorkspacesMultiActionsAllowed(
+	resp, err := m.svc.WorkspacesMultiActionsAllowed(ctx,
 		user.ID, workspaceIDs, []string{WorkspaceAction.View},
 	)
 	if err != nil {
@@ -270,7 +270,7 @@ func (m *LocalManager) FilterViewableApps(
 	if err != nil {
 		return nil, errors.Wrap(err, errMsgGetAuthUser)
 	}
-	resp, err := m.svc.AppsMultiActionsAllowed(
+	resp, err := m.svc.AppsMultiActionsAllowed(ctx,
 		user.ID, workspaceID, appIDs, []string{AppAction.View},
 	)
 	if err != nil {

@@ -34,6 +34,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	bkmapi "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bkmonitor"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/perm"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/tenant"
 )
 
 const (
@@ -59,10 +60,10 @@ func buildDefaultAlertUserGroupName(workspaceID string) string {
 	return fmt.Sprintf("【BKMS】%s 默认告警组", workspaceID)
 }
 
-// buildDefaultAlertUserGroupLockKey 返回 workspace 维度的默认告警组分布式锁 key。
+// buildDefaultAlertUserGroupLockKey 返回 workspace 维度的默认告警组分布式锁 key，带 ctx 租户前缀。
 // 同一工作空间下默认告警组的“查名 -> 创建”需要串行化，不同工作空间之间则允许并行。
-func buildDefaultAlertUserGroupLockKey(workspaceID string) string {
-	return fmt.Sprintf("lock:bkmonitor-default-alert-group:%s", workspaceID)
+func buildDefaultAlertUserGroupLockKey(ctx context.Context, workspaceID string) (string, error) {
+	return tenant.ScopedKey(ctx, fmt.Sprintf("lock:bkmonitor-default-alert-group:%s", workspaceID))
 }
 
 // ResolveDefaultAlertNoticeGroupIDs 解析工作空间默认告警通知用户组 ID。
@@ -90,10 +91,11 @@ func ResolveDefaultAlertNoticeGroupIDs(
 
 	// 2. 仅在“确认默认组不存在”时才竞争 workspace 维度分布式锁。
 	//    锁只保护默认组存在性收敛（查组/建组），不覆盖后续默认策略初始化，避免临界区过大。
-	groupLock := distlock.NewRedisLock(
-		buildDefaultAlertUserGroupLockKey(ws.ID),
-		defaultAlertUserGroupLockTimeoutSeconds,
-	)
+	lockKey, err := buildDefaultAlertUserGroupLockKey(ctx, ws.ID)
+	if err != nil {
+		return nil, errors.Wrapf(err, "build default alert user group lock key of workspace %s", ws.ID)
+	}
+	groupLock := distlock.NewRedisLock(lockKey, defaultAlertUserGroupLockTimeoutSeconds)
 	waitCtx, cancel := context.WithTimeout(ctx, defaultAlertUserGroupLockWaitTimeout)
 	defer cancel()
 	for {

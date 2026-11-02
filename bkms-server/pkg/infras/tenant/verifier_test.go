@@ -24,23 +24,25 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	pkgerrors "github.com/pkg/errors"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/bkuser"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/tenant"
 )
 
 type fakeUserClient struct {
-	getUserFunc func(ctx context.Context, bkUsername string) (*bkuser.User, error)
+	getUserFunc func(ctx context.Context, tenantID, bkUsername string) (*bkuser.User, error)
 }
 
-func (f fakeUserClient) GetUser(ctx context.Context, bkUsername string) (*bkuser.User, error) {
-	return f.getUserFunc(ctx, bkUsername)
+func (f fakeUserClient) GetUser(ctx context.Context, tenantID, bkUsername string) (*bkuser.User, error) {
+	return f.getUserFunc(ctx, tenantID, bkUsername)
 }
 
 var _ = Describe("Tenant verifier", func() {
 	It("passes when the user belongs to the requested tenant and is enabled", func() {
 		verifier := tenant.NewBKUserVerifier(fakeUserClient{
-			getUserFunc: func(ctx context.Context, bkUsername string) (*bkuser.User, error) {
+			getUserFunc: func(ctx context.Context, tenantID, bkUsername string) (*bkuser.User, error) {
+				Expect(tenantID).To(Equal("tenant-a"))
 				Expect(bkUsername).To(Equal("alice"))
 				return &bkuser.User{
 					TenantID:   "tenant-a",
@@ -56,7 +58,7 @@ var _ = Describe("Tenant verifier", func() {
 
 	It("returns tenant access denied when the tenant id does not match", func() {
 		verifier := tenant.NewBKUserVerifier(fakeUserClient{
-			getUserFunc: func(ctx context.Context, bkUsername string) (*bkuser.User, error) {
+			getUserFunc: func(ctx context.Context, tenantID, bkUsername string) (*bkuser.User, error) {
 				return &bkuser.User{
 					TenantID:   "tenant-b",
 					BkUsername: "alice",
@@ -69,9 +71,20 @@ var _ = Describe("Tenant verifier", func() {
 		Expect(err).To(MatchError(tenant.ErrTenantAccessDenied))
 	})
 
+	It("returns tenant access denied when the user is not found in the requested tenant", func() {
+		verifier := tenant.NewBKUserVerifier(fakeUserClient{
+			getUserFunc: func(ctx context.Context, tenantID, bkUsername string) (*bkuser.User, error) {
+				return nil, pkgerrors.Wrap(bkuser.ErrUserNotFound, "user alice in tenant tenant-a")
+			},
+		})
+
+		err := verifier.Verify(context.Background(), "alice", "tenant-a")
+		Expect(err).To(MatchError(tenant.ErrTenantAccessDenied))
+	})
+
 	It("returns tenant user disabled when the bk-user status is not enabled", func() {
 		verifier := tenant.NewBKUserVerifier(fakeUserClient{
-			getUserFunc: func(ctx context.Context, bkUsername string) (*bkuser.User, error) {
+			getUserFunc: func(ctx context.Context, tenantID, bkUsername string) (*bkuser.User, error) {
 				return &bkuser.User{
 					TenantID:   "tenant-a",
 					BkUsername: "alice",
@@ -86,7 +99,7 @@ var _ = Describe("Tenant verifier", func() {
 
 	It("returns wrapped client errors", func() {
 		verifier := tenant.NewBKUserVerifier(fakeUserClient{
-			getUserFunc: func(ctx context.Context, bkUsername string) (*bkuser.User, error) {
+			getUserFunc: func(ctx context.Context, tenantID, bkUsername string) (*bkuser.User, error) {
 				return nil, errors.New("network timeout")
 			},
 		})

@@ -31,6 +31,7 @@ import (
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/tenant"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/apm"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/metrics"
 )
@@ -101,7 +102,7 @@ func (c *ApiClient) GetLatestClusterReport(
 	// 先解析为通用响应结构
 	var rawResult GetLatestClusterReportResponse
 	ctx, span := apm.StartClientSpan(ctx, "kubeinsight", "GetLatestClusterReport")
-	resp, err := apiOperation.SetContext(ctx).SetResult(&rawResult).Request()
+	resp, err := apiOperation.SetContext(ctx).SetHeaders(tenant.TenantHeader(ctx)).SetResult(&rawResult).Request()
 	defer apm.EndClientSpan(span, resp, &err)
 	if err != nil {
 		return nil, nil, err

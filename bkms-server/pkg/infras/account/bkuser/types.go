@@ -18,12 +18,20 @@
 
 package bkuser
 
+import "github.com/pkg/errors"
+
 const (
 	bkUserGatewayName = "bk-user"
+	// tenantHeader bk-user 开放接口在该请求头指定的租户内查询用户。
+	// 与 tenant.HeaderTenantID 相同，tenant 包依赖本包，因此不能反向引用。
+	tenantHeader = "X-Bk-Tenant-Id"
 
 	// UserStatusEnabled means the bk-user account is active for tenant access.
 	UserStatusEnabled = "enabled"
 )
+
+// ErrUserNotFound 用户在请求的租户内不存在
+var ErrUserNotFound = errors.New("bk-user user not found")
 
 // User is the subset of bk-user user fields currently consumed by BKMS.
 type User struct {

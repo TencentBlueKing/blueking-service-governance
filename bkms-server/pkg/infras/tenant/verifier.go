@@ -42,7 +42,10 @@ type Verifier interface {
 
 // Verify confirms the user belongs to the requested tenant and is enabled.
 func (v *bkUserVerifier) Verify(ctx context.Context, bkUsername, tenantID string) error {
-	user, err := v.userClient.GetUser(ctx, bkUsername)
+	user, err := v.userClient.GetUser(ctx, tenantID, bkUsername)
+	if errors.Is(err, bkuser.ErrUserNotFound) {
+		return ErrTenantAccessDenied
+	}
 	if err != nil {
 		return errors.Wrapf(err, "get bk-user user %s", bkUsername)
 	}

@@ -320,3 +320,27 @@ DetailSyncTask = taskq.NewTaskType[ImageDetailSyncArgs](name, handle, opts...).G
 - webserver 启动不自动跑迁移。**回填迁移必须先于新代码上线**，否则存量文档按租户过滤会全部查不到。
 - **全部实例升级完成后再执行一次回填**：迁移执行完到旧 Pod 全部退出之间，旧版本写入的文档不带 `tenantID`，
   对新代码不可见。回填是幂等的，重跑只会补上这部分文档。
+
+## 8. DB 之外的租户传递
+
+### 8.1 调用蓝鲸平台接口
+
+- `pkg/infras/cloudapi` 下各网关 client 在统一请求入口调用 `tenant.TenantHeader(ctx)`，
+  把 ctx 中的租户写入 `X-Bk-Tenant-Id`。ctx 没有租户时不带这个头，**不回退为 `default`**，
+  多租户模式下由下游拒绝，避免请求被静默当成 `default` 租户处理。
+- IAM 鉴权走 iam-go-sdk，它只能在构造时设置租户，因此 `BKIAMClient` 按租户懒加载并缓存 sdk 实例，
+  `IsAllowed` / `BatchResourceMultiActionsAllowed` 及上层 `bkiam.IAMService`、`perm.LocalManager`
+  的鉴权方法都接收 ctx。
+- bk-user 查询发生在租户校验中间件写入 ctx 之前，由 `GetUser` 显式传入待校验的租户；
+  用户不在该租户（404）映射为 `ErrTenantAccessDenied`。
+- 不在此范围：用户认证后端（bk_login / bk_token / bk_ticket / usertoken）运行在租户解析之前；
+  tof、txcmdb、polaris 不是蓝鲸多租户系统；镜像仓库与 k8s API 不是蓝鲸网关接口。
+
+### 8.2 Redis 锁与缓存
+
+- 资源属于某个租户（应用部署、工作空间默认告警组等）时，key 用 `tenant.ScopedKey(ctx, key)` 加
+  `tenant:<tenantID>:` 前缀；加锁与释放必须使用同一租户的 ctx，否则释放的不是同一个 key。
+- 资源是多个租户共享的物理资源（集群组件安装锁、k8s discovery 缓存等）时**不加前缀**：
+  同一集群 / 命名空间必须跨租户互斥，加前缀反而会让两个租户同时操作同一资源。
+- 每个 key 的定义处用注释说明它属于哪一类。
+- key 格式变化后，升级时旧格式的锁不会被新代码识别，只能等待超时释放。

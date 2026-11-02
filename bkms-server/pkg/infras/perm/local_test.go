@@ -123,13 +123,13 @@ func (f *fakeIAMServicer) DeleteAllRolesByWorkspaceID(_ context.Context, workspa
 	return f.returnedErr
 }
 
-func (f *fakeIAMServicer) WorkspaceCreateIsAllowed(username string) (bool, error) {
+func (f *fakeIAMServicer) WorkspaceCreateIsAllowed(_ context.Context, username string) (bool, error) {
 	f.gotUsername = username
 	return f.allowed, f.returnedErr
 }
 
 func (f *fakeIAMServicer) WorkspaceActionIsAllowed(
-	username, workspaceID, actionID string,
+	_ context.Context, username, workspaceID, actionID string,
 ) (bool, error) {
 	f.gotUsername = username
 	f.gotWorkspaceID = workspaceID
@@ -138,7 +138,7 @@ func (f *fakeIAMServicer) WorkspaceActionIsAllowed(
 }
 
 func (f *fakeIAMServicer) WorkspacesMultiActionsAllowed(
-	username string, workspaceIDs, actionIDs []string,
+	_ context.Context, username string, workspaceIDs, actionIDs []string,
 ) (map[string]map[string]bool, error) {
 	f.gotUsername = username
 	f.gotIDsForMulti = workspaceIDs
@@ -146,14 +146,14 @@ func (f *fakeIAMServicer) WorkspacesMultiActionsAllowed(
 	return f.multiActionsResponse, f.returnedErr
 }
 
-func (f *fakeIAMServicer) AppCreateIsAllowed(username, workspaceID string) (bool, error) {
+func (f *fakeIAMServicer) AppCreateIsAllowed(_ context.Context, username, workspaceID string) (bool, error) {
 	f.gotUsername = username
 	f.gotWorkspaceID = workspaceID
 	return f.allowed, f.returnedErr
 }
 
 func (f *fakeIAMServicer) AppActionIsAllowed(
-	username, workspaceID, appID, actionID string,
+	_ context.Context, username, workspaceID, appID, actionID string,
 ) (bool, error) {
 	f.gotUsername = username
 	f.gotWorkspaceID = workspaceID
@@ -163,7 +163,7 @@ func (f *fakeIAMServicer) AppActionIsAllowed(
 }
 
 func (f *fakeIAMServicer) AppsMultiActionsAllowed(
-	username, workspaceID string, appIDs, actionIDs []string,
+	_ context.Context, username, workspaceID string, appIDs, actionIDs []string,
 ) (map[string]map[string]bool, error) {
 	f.gotUsername = username
 	f.gotWorkspaceID = workspaceID
@@ -172,14 +172,14 @@ func (f *fakeIAMServicer) AppsMultiActionsAllowed(
 	return f.multiActionsResponse, f.returnedErr
 }
 
-func (f *fakeIAMServicer) EnvCreateIsAllowed(username, workspaceID string) (bool, error) {
+func (f *fakeIAMServicer) EnvCreateIsAllowed(_ context.Context, username, workspaceID string) (bool, error) {
 	f.gotUsername = username
 	f.gotWorkspaceID = workspaceID
 	return f.allowed, f.returnedErr
 }
 
 func (f *fakeIAMServicer) EnvActionIsAllowed(
-	username, workspaceID, envID, actionID string,
+	_ context.Context, username, workspaceID, envID, actionID string,
 ) (bool, error) {
 	f.gotUsername = username
 	f.gotWorkspaceID = workspaceID

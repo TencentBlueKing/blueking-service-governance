@@ -300,7 +300,12 @@ func (p *Poller) releaseLockIfLatest(ctx context.Context, args Args) {
 
 // releaseDeployLock 释放同应用+环境+泳道的部署锁
 func releaseDeployLock(ctx context.Context, args Args) {
-	helmdeploy.NewDeployLock(args.AppID, args.EnvName, args.TrafficLaneName).Release(ctx)
+	deployLock, err := helmdeploy.NewDeployLock(ctx, args.AppID, args.EnvName, args.TrafficLaneName)
+	if err != nil {
+		log.Errorf(ctx, "release helm deploy lock for %s: %v", args, err)
+		return
+	}
+	deployLock.Release(ctx)
 }
 
 // fetchReleaseStatus 初始化 Helm action 并查询一次 Release 状态

@@ -29,6 +29,7 @@ import (
 	"github.com/samber/lo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkiam/role"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/utils/lock"
 	bkmapi "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bkmonitor"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/perm"
@@ -46,8 +47,12 @@ var _ = Describe("default alert group resolution", func() {
 		return &perm.StubAllowAnyManager{}
 	}
 
+	// 默认告警组锁的 key 带租户前缀，解析默认告警组需要带租户的 ctx
+	var tenantCtx context.Context
+
 	BeforeEach(func() {
 		redis.InitClientForTest()
+		tenantCtx = testutil.NewDefaultTenantContext()
 	})
 
 	It("reuses existing default alert user group without overwriting members", func() {
@@ -76,7 +81,7 @@ var _ = Describe("default alert group resolution", func() {
 			).Build()
 
 			ids, err := ResolveDefaultAlertNoticeGroupIDs(
-				context.Background(),
+				tenantCtx,
 				buildWorkspace(),
 				groupSvc,
 				permMgr,
@@ -103,7 +108,7 @@ var _ = Describe("default alert group resolution", func() {
 		ws := buildWorkspace()
 
 		ids, err := ResolveDefaultAlertNoticeGroupIDs(
-			context.Background(),
+			tenantCtx,
 			ws,
 			groupSvc,
 			buildPermMgr(),
@@ -187,14 +192,15 @@ var _ = Describe("default alert group resolution", func() {
 		client := bkmapi.NewStub("tester")
 		groupSvc := buildGroupService(client)
 		ws := buildWorkspace()
-		lockKey := buildDefaultAlertUserGroupLockKey(ws.ID)
+		lockKey, err := buildDefaultAlertUserGroupLockKey(tenantCtx, ws.ID)
+		Expect(err).NotTo(HaveOccurred())
 		groupLock := lock.NewRedisLock(lockKey, 1)
 		Expect(groupLock.Acquire(context.Background())).To(BeTrue())
 
 		createDone := make(chan error, 1)
 		go func() {
 			time.Sleep(50 * time.Millisecond)
-			_, err := client.SaveUserGroup(context.Background(), &bkmapi.SaveUserGroupReq{
+			_, saveErr := client.SaveUserGroup(context.Background(), &bkmapi.SaveUserGroupReq{
 				ID:           lo.ToPtr(int64(4001)),
 				BkBizID:      testUserGroupBkBizID,
 				Name:         buildDefaultAlertUserGroupName(ws.ID),
@@ -204,10 +210,10 @@ var _ = Describe("default alert group resolution", func() {
 				Operator:     "tester",
 			})
 			groupLock.Release(context.Background())
-			createDone <- err
+			createDone <- saveErr
 		}()
 
-		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		ctx, cancel := context.WithTimeout(tenantCtx, time.Second)
 		defer cancel()
 		ids, err := ResolveDefaultAlertNoticeGroupIDs(
 			ctx,
@@ -247,7 +253,7 @@ var _ = Describe("default alert group resolution", func() {
 			).Build()
 
 			ids, err := ResolveDefaultAlertNoticeGroupIDs(
-				context.Background(),
+				tenantCtx,
 				buildWorkspace(),
 				groupSvc,
 				permMgr,
@@ -327,7 +333,8 @@ var _ = Describe("default alert group resolution", func() {
 		client := bkmapi.NewStub("tester")
 		groupSvc := buildGroupService(client)
 		ws := buildWorkspace()
-		lockKey := buildDefaultAlertUserGroupLockKey(ws.ID)
+		lockKey, err := buildDefaultAlertUserGroupLockKey(tenantCtx, ws.ID)
+		Expect(err).NotTo(HaveOccurred())
 		groupLock := lock.NewRedisLock(lockKey, 1)
 		Expect(groupLock.Acquire(context.Background())).To(BeTrue())
 		defer groupLock.Release(context.Background())
@@ -341,7 +348,7 @@ var _ = Describe("default alert group resolution", func() {
 		done := make(chan error, 1)
 		go func() {
 			_, err := ResolveDefaultAlertNoticeGroupIDs(
-				context.Background(),
+				tenantCtx,
 				ws,
 				groupSvc,
 				buildPermMgr(),

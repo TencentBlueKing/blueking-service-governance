@@ -158,12 +158,12 @@ func (f *fakeIAMClient) ListUserGroupMembers(
 	return f.listMembers, nil
 }
 
-func (f *fakeIAMClient) IsAllowed(_ iamsdk.Request) (bool, error) {
+func (f *fakeIAMClient) IsAllowed(_ context.Context, _ iamsdk.Request) (bool, error) {
 	return f.isAllowedReturn, nil
 }
 
 func (f *fakeIAMClient) BatchResourceMultiActionsAllowed(
-	_ iamsdk.MultiActionRequest, resourcesList []iamsdk.Resources,
+	_ context.Context, _ iamsdk.MultiActionRequest, resourcesList []iamsdk.Resources,
 ) (map[string]map[string]bool, error) {
 	if f.multiActionsResponse != nil {
 		return f.multiActionsResponse, nil
@@ -339,12 +339,12 @@ var _ = Describe("IAMService", func() {
 
 	Context("permission checks", func() {
 		It("delegates WorkspaceCreateIsAllowed to the IAM client", func() {
-			allowed, err := svc.WorkspaceCreateIsAllowed("alice")
+			allowed, err := svc.WorkspaceCreateIsAllowed(ctx, "alice")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(allowed).To(BeTrue())
 
 			client.isAllowedReturn = false
-			allowed, err = svc.WorkspaceCreateIsAllowed("alice")
+			allowed, err = svc.WorkspaceCreateIsAllowed(ctx, "alice")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(allowed).To(BeFalse())
 		})
@@ -355,7 +355,7 @@ var _ = Describe("IAMService", func() {
 				"app-2": {"view_app": false},
 			}
 			res, err := svc.AppsMultiActionsAllowed(
-				"alice", workspaceID, []string{"app-1", "app-2"}, []string{"view_app"},
+				ctx, "alice", workspaceID, []string{"app-1", "app-2"}, []string{"view_app"},
 			)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(res["app-1"]["view_app"]).To(BeTrue())
