@@ -1,0 +1,38 @@
+docs {
+  测的是：租户 B 不能修改租户 A 应用的环境变量，返回 404。
+  修改是否真的没有落库由 32 号用例验证。
+}
+
+meta {
+  name: 30-update-app-env-var-tenant-b
+  type: http
+  seq: 30
+}
+
+put {
+  url: {{serviceURL}}/apps/{{tenancyAppID}}/env-vars/{{tenancyAppEnvVarKey}}
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "updatedKey": "{{tenancyAppEnvVarKey}}",
+    "value": "tenant-b-value",
+    "description": "modified by tenant B"
+  }
+}
+
+script:pre-request {
+  const {actAs} = require("./helpers/tenancy");
+  actAs(req, "B");
+}
+
+assert {
+  res.status: eq 404
+}
+
+settings {
+  encodeUrl: true
+  timeout: 10000
+}

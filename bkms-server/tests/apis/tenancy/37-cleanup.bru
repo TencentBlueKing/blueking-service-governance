@@ -1,0 +1,31 @@
+docs {
+  清理：在请求前的脚本中删除 01 号用例为两个租户建的数据（见 helpers/tenancy.js 的 cleanupTenancyData），
+  每一步都会尝试，失败汇总后让本用例报错。
+  请求本身确认租户 A 的工作空间已被删除。
+}
+
+meta {
+  name: 37-cleanup
+  type: http
+  seq: 37
+}
+
+get {
+  url: {{serviceURL}}/workspaces/{{tenancyWorkspaceID}}
+  body: none
+  auth: inherit
+}
+
+script:pre-request {
+  const {cleanupTenancyData} = require("./helpers/tenancy");
+  await cleanupTenancyData();
+}
+
+assert {
+  res.status: eq 404
+}
+
+settings {
+  encodeUrl: true
+  timeout: 10000
+}

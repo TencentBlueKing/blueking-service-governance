@@ -19,14 +19,14 @@ script:post-response {
   // Hit latest-status as a follow-up so the assertions below can compare it
   // against the list response captured by Bruno.
   const axios = require("axios");
-  const {AUTH_HEADERS} = require("./common");
+  const {authHeaders} = require("./common");
 
   const serviceURL = bru.getEnvVar("serviceURL");
   const appID = bru.getVar("trpcLifecycleAppID");
   const envName = bru.getVar("trpcLifecycleEnvName");
   const resp = await axios.get(
     `${serviceURL}/apps/${appID}/envs/${envName}/trpc-deploys/latest-status`,
-    {headers: AUTH_HEADERS, params: {trafficLaneName: ""}}
+    {headers: authHeaders(), params: {trafficLaneName: ""}}
   );
   bru.setVar("trpcLifecycleLatestStatusJSON", JSON.stringify(resp.data?.data || null));
 }

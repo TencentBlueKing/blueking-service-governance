@@ -1,0 +1,31 @@
+docs {
+  准备数据：在请求前的脚本中为两个租户建好后续用例要访问的数据（见 helpers/tenancy.js 的 setupTenancyData），
+  任何一步失败都会让本用例报错，错误信息带上失败的请求与响应。
+  请求本身确认租户 A 能访问刚建好的工作空间。
+}
+
+meta {
+  name: 01-setup
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{serviceURL}}/workspaces/{{tenancyWorkspaceID}}
+  body: none
+  auth: inherit
+}
+
+script:pre-request {
+  const {setupTenancyData} = require("./helpers/tenancy");
+  await setupTenancyData();
+}
+
+assert {
+  res.status: eq 200
+}
+
+settings {
+  encodeUrl: true
+  timeout: 10000
+}

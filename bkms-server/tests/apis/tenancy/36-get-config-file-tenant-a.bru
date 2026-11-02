@@ -1,0 +1,30 @@
+docs {
+  测的是：租户 B 的修改、删除请求没有影响租户 A 的配置文件，文件仍在且内容未变。
+}
+
+meta {
+  name: 36-get-config-file-tenant-a
+  type: http
+  seq: 36
+}
+
+get {
+  url: {{serviceURL}}/apps/{{tenancyHelmAppIDA}}/app-config-files/{{tenancyConfigFileID}}/details
+  body: none
+  auth: inherit
+}
+
+assert {
+  res.status: eq 200
+}
+
+tests {
+  test("should keep the config file of tenant A unchanged", () => {
+    expect(res.body.content).to.equal("owner: tenant-a");
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 10000
+}

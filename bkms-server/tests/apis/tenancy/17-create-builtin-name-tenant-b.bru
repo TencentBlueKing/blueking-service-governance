@@ -1,12 +1,13 @@
 docs {
-  测的是：组件定义的 name + version 唯一约束是按租户划分的，
-  租户 B 可以创建与租户 A 同名的组件定义，不会因为租户 A 已有同名记录而返回 409。
+  测的是：普通租户不能创建与内置组件定义同名同版本的组件定义（409）。
+  内置定义在平台租户下，租户内唯一索引拦不住，必须由接口显式检查共享的内置定义，
+  否则租户内会出现一份同名定义"遮蔽"内置定义。
 }
 
 meta {
-  name: 15-create-same-comp-def-tenant-b
+  name: 17-create-builtin-name-tenant-b
   type: http
-  seq: 15
+  seq: 17
 }
 
 post {
@@ -17,9 +18,9 @@ post {
 
 body:json {
   {
-    "compDefName": "{{tenancyCompDefName}}",
-    "displayName": "Tenancy Component B",
-    "description": "created by tenant B",
+    "compDefName": "VolumeConfigMap",
+    "displayName": "Shadow Builtin",
+    "description": "should be rejected",
     "properties": [
       {
         "name": "serviceName",
@@ -45,7 +46,7 @@ script:pre-request {
 }
 
 assert {
-  res.status: eq 200
+  res.status: eq 409
 }
 
 settings {

@@ -3,9 +3,9 @@ docs {
 }
 
 meta {
-  name: 03-reject-missing-tenant-header
+  name: 02-reject-missing-tenant-header
   type: http
-  seq: 3
+  seq: 2
 }
 
 get {
@@ -15,7 +15,8 @@ get {
 }
 
 script:pre-request {
-  req.deleteHeader("X-Bk-Tenant-Id");
+  // Bruno 3 的 req 没有 deleteHeader；服务端按 Header.Get 读取，空值与未传等价
+  req.setHeader("X-Bk-Tenant-Id", "");
 }
 
 assert {

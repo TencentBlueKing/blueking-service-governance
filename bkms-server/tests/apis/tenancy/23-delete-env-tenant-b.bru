@@ -1,15 +1,16 @@
 docs {
-  测的是：租户 B 按 ID 直接访问租户 A 的应用得到 404。
+  测的是：租户 B 不能按 ID 删除租户 A 的环境，返回 404。
+  环境是否仍然存在由 25 号用例验证。
 }
 
 meta {
-  name: 08-get-app-tenant-b
+  name: 23-delete-env-tenant-b
   type: http
-  seq: 8
+  seq: 23
 }
 
-get {
-  url: {{serviceURL}}/apps/{{tenancyAppID}}
+delete {
+  url: {{serviceURL}}/envs/{{tenancyEnvID}}
   body: none
   auth: inherit
 }

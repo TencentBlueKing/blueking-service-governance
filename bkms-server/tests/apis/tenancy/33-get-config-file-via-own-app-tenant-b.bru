@@ -1,0 +1,38 @@
+docs {
+  测的是：租户 B 用自己的应用、带上租户 A 的配置文件 ID，读不到 A 的配置内容。
+  该接口校验 URL 中的应用后只按文件 ID 查询，不核对文件是否属于该应用，
+  因此拦住跨租户访问的只有配置文件存储的租户过滤。
+  目前查不到文件时返回 500 而不是 404，这里只要求失败且不泄露内容。
+}
+
+meta {
+  name: 33-get-config-file-via-own-app-tenant-b
+  type: http
+  seq: 33
+}
+
+get {
+  url: {{serviceURL}}/apps/{{tenancyHelmAppIDB}}/app-config-files/{{tenancyConfigFileID}}/details
+  body: none
+  auth: inherit
+}
+
+script:pre-request {
+  const {actAs} = require("./helpers/tenancy");
+  actAs(req, "B");
+}
+
+assert {
+  res.status: gte 400
+}
+
+tests {
+  test("should not return the content of tenant A", () => {
+    expect(JSON.stringify(res.body)).to.not.include("owner: tenant-a");
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 10000
+}

@@ -1,0 +1,30 @@
+docs {
+  测的是：租户 B 用自己的应用、带上租户 A 的配置文件 ID，删不掉 A 的配置文件。
+  文件是否仍然存在由 36 号用例验证。
+}
+
+meta {
+  name: 35-delete-config-file-via-own-app-tenant-b
+  type: http
+  seq: 35
+}
+
+delete {
+  url: {{serviceURL}}/apps/{{tenancyHelmAppIDB}}/app-config-files/{{tenancyConfigFileID}}
+  body: none
+  auth: inherit
+}
+
+script:pre-request {
+  const {actAs} = require("./helpers/tenancy");
+  actAs(req, "B");
+}
+
+assert {
+  res.status: gte 400
+}
+
+settings {
+  encodeUrl: true
+  timeout: 10000
+}

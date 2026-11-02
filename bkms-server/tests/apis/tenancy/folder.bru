@@ -9,7 +9,9 @@ docs {
   运行：RUN_MULTI_TENANT_API_TESTS=1 bru run tenancy -r --env e2e --sandbox=developer
   
   可选环境变量 tenancyTenantA / tenancyTenantB 覆盖两个租户的 ID，默认 tenant-a / tenant-b。
-  用例按 seq 顺序执行：租户 A 先建数据，租户 B 尝试读写，最后由租户 A 清理。
+  用例按 seq 顺序执行：01 号在脚本中为两个租户建好数据，随后租户 B 尝试读写，再由租户 A 确认数据未变，
+  最后由 37 号在脚本中清理。只跑单个用例时需带上 01 号和 37 号。
+  覆盖工作空间、应用、组件定义、环境、工作空间级与应用级环境变量、应用配置文件。
 }
 
 meta {
@@ -22,7 +24,8 @@ auth {
 }
 
 script:pre-request {
-  if (!bru.getProcessEnv("RUN_MULTI_TENANT_API_TESTS")) {
+  const {actAs, tenancyEnabled} = require("./helpers/tenancy");
+  if (!tenancyEnabled()) {
     console.log("tenancy skipped: RUN_MULTI_TENANT_API_TESTS not set");
     bru.runner.skipRequest();
     return;
@@ -36,6 +39,5 @@ script:pre-request {
   bru.setVar("tenancyUserB", "tenancy-user-b");
 
   // 默认以租户 A 的用户发起请求；需要租户 B 的用例在请求脚本中调用 actAs(req, "B")
-  const {actAs} = require("./helpers/tenancy");
   actAs(req, "A");
 }

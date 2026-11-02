@@ -1,11 +1,12 @@
 docs {
-  准备数据：租户 A 在自己的工作空间下创建应用。
+  测的是：租户 B 不能在租户 A 的工作空间下创建应用（跨租户引用）。
+  租户 B 中不存在这个工作空间，应当在任何写入之前返回 404。
 }
 
 meta {
-  name: 02-create-app-tenant-a
+  name: 08-create-app-in-foreign-workspace
   type: http
-  seq: 2
+  seq: 8
 }
 
 post {
@@ -16,8 +17,8 @@ post {
 
 body:json {
   {
-    "name": "tenancy-app-{{randomSuffix}}",
-    "id": "tenancy-app-{{randomSuffix}}",
+    "name": "tenancy-cross-{{randomSuffix}}",
+    "id": "tenancy-cross-{{randomSuffix}}",
     "type": "trpc",
     "appModelSpec": {
       "trpcSpec": {
@@ -38,12 +39,13 @@ body:json {
   }
 }
 
-assert {
-  res.status: eq 200
+script:pre-request {
+  const {actAs} = require("./helpers/tenancy");
+  actAs(req, "B");
 }
 
-script:post-response {
-  bru.setVar("tenancyAppID", res.body.data.id);
+assert {
+  res.status: eq 404
 }
 
 settings {

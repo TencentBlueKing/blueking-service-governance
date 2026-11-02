@@ -1,0 +1,37 @@
+docs {
+  测的是：租户 B 用自己的应用、带上租户 A 的配置文件 ID，改不了 A 的配置内容。
+  与 33 号用例同理，只靠配置文件存储的租户过滤拦截；内容是否真的未变由 36 号用例验证。
+}
+
+meta {
+  name: 34-update-config-file-via-own-app-tenant-b
+  type: http
+  seq: 34
+}
+
+put {
+  url: {{serviceURL}}/apps/{{tenancyHelmAppIDB}}/app-config-files/{{tenancyConfigFileID}}/content
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "content": "owner: tenant-b",
+    "versionDescription": "租户 B 写入"
+  }
+}
+
+script:pre-request {
+  const {actAs} = require("./helpers/tenancy");
+  actAs(req, "B");
+}
+
+assert {
+  res.status: gte 400
+}
+
+settings {
+  encodeUrl: true
+  timeout: 10000
+}

@@ -1,0 +1,32 @@
+docs {
+  测的是：租户 B 的修改、删除请求没有影响租户 A 的工作空间级环境变量，变量仍在且值未变。
+}
+
+meta {
+  name: 28-list-scoped-env-vars-tenant-a
+  type: http
+  seq: 28
+}
+
+get {
+  url: {{serviceURL}}/workspaces/{{tenancyWorkspaceID}}/scoped-env-vars/public-vars
+  body: none
+  auth: inherit
+}
+
+assert {
+  res.status: eq 200
+}
+
+tests {
+  test("should keep the scoped env var of tenant A unchanged", () => {
+    const item = res.body.data.find((v) => v.id === bru.getVar("tenancyScopedEnvVarID"));
+    expect(item, "scoped env var of tenant A").to.exist;
+    expect(item.value).to.equal("tenant-a-value");
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 10000
+}

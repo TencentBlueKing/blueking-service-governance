@@ -1,0 +1,30 @@
+docs {
+  测的是：租户 B 读不到租户 A 应用的环境变量，返回 404。
+  应用下的子资源由各 handler 各自校验应用，没有统一的中间件，需要逐类覆盖。
+}
+
+meta {
+  name: 29-list-app-env-vars-tenant-b
+  type: http
+  seq: 29
+}
+
+get {
+  url: {{serviceURL}}/apps/{{tenancyAppID}}/env-vars
+  body: none
+  auth: inherit
+}
+
+script:pre-request {
+  const {actAs} = require("./helpers/tenancy");
+  actAs(req, "B");
+}
+
+assert {
+  res.status: eq 404
+}
+
+settings {
+  encodeUrl: true
+  timeout: 10000
+}

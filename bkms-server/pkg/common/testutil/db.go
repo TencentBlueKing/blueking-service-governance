@@ -69,6 +69,9 @@ func SetUpGlobalDatabase() error {
 	// TODO: Update tests to not depend on this setting if possible
 	cfg.Development.UseKubeConfigCluster = true
 
+	// 在任意一份测试配置上只翻转多租户开关，免得每份配置再维护一份多租户副本。
+	// cfg 即 config.G，被测代码随之以多租户模式运行；覆盖发生在 config.Load 之后，
+	// 跳过了 validateTenantDependencies（如 bkPlatUrls.bkApiUrlTmpl），单测不调用 bk-user，不需要这些配置
 	if os.Getenv(EnvMultiTenantMode) == "true" {
 		cfg.Tenant.EnableMultiTenantMode = true
 		cfg.FeatureIntegrations.EnableBkUserTenantVerify = true

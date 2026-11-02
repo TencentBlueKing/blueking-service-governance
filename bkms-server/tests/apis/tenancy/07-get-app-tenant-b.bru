@@ -1,15 +1,15 @@
 docs {
-  测的是：租户 B 删除不了租户 A 的工作空间，返回 404；工作空间仍存在由 12 号用例验证。
+  测的是：租户 B 按 ID 直接访问租户 A 的应用得到 404。
 }
 
 meta {
-  name: 11-delete-workspace-tenant-b
+  name: 07-get-app-tenant-b
   type: http
-  seq: 11
+  seq: 7
 }
 
-delete {
-  url: {{serviceURL}}/workspaces/{{tenancyWorkspaceID}}
+get {
+  url: {{serviceURL}}/apps/{{tenancyAppID}}
   body: none
   auth: inherit
 }
