@@ -22,7 +22,12 @@ import (
 	"context"
 
 	"github.com/pkg/errors"
+	"github.com/samber/lo"
 	"go.mongodb.org/mongo-driver/v2/mongo"
+
+	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime/runtimemod/mods"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 // EditableContentField shows which field of the app config file can be edited by the user,
@@ -136,7 +141,7 @@ func (e *LocalAppConfigFileEditor) GetCompiledContent(ctx context.Context) (stri
 			return "", errors.Wrap(err, "get base content info")
 		}
 
-		result, err := mergeContent(info.Content, e.acf.OverlayContent, e.acf.GetConfigFormat())
+		result, err := mergeAppContent(ctx, e.db, e.acf, info.Content, e.acf.OverlayContent)
 		if err != nil {
 			return "", errors.Wrap(err, "merge content")
 		}
@@ -199,7 +204,7 @@ func (e *BSCPAppConfigFileEditor) GetCompiledContent(ctx context.Context) (strin
 			return "", errors.Wrap(err, "fetch content from BSCP")
 		}
 
-		result, err := mergeContent(content, e.acf.OverlayContent, e.acf.GetConfigFormat())
+		result, err := mergeAppContent(ctx, e.db, e.acf, content, e.acf.OverlayContent)
 		if err != nil {
 			return "", errors.Wrap(err, "merge content")
 		}
@@ -222,7 +227,7 @@ func (e *BSCPAppConfigFileEditor) GetCompiledContent(ctx context.Context) (strin
 			return "", errors.Wrap(err, "fetch content from BSCP")
 		}
 
-		result, err := mergeContent(info.Content, &overlayContent, e.acf.GetConfigFormat())
+		result, err := mergeAppContent(ctx, e.db, e.acf, info.Content, &overlayContent)
 		if err != nil {
 			return "", errors.Wrap(err, "merge content")
 		}
@@ -234,3 +239,39 @@ func (e *BSCPAppConfigFileEditor) GetCompiledContent(ctx context.Context) (strin
 }
 
 var _ AppConfigFileEditor = (*BSCPAppConfigFileEditor)(nil)
+
+// mergeAppContent merges overlay into base with the merge strategy of the app which acf belongs to.
+func mergeAppContent(
+	ctx context.Context,
+	db *mongo.Database,
+	acf *AppConfigFile,
+	base string,
+	overlay *string,
+) (string, error) {
+	if lo.FromPtr(overlay) == "" {
+		return base, nil
+	}
+	strategy, err := resolveMergeStrategy(ctx, db, acf.AppID)
+	if err != nil {
+		return "", err
+	}
+	return mergeContent(base, overlay, acf.GetConfigFormat(), strategy)
+}
+
+// resolveMergeStrategy returns the YAML merge strategy for the config files of the app, which is
+// given by the ConfigMerge runtime mod. Apps without the mod (helm, agones, invalid stack) and
+// missing apps use the vanilla strategic merge.
+func resolveMergeStrategy(ctx context.Context, db *mongo.Database, appID string) (MergeStrategy, error) {
+	app, err := store.Of(db, bkmsapp.AppMeta).Get(ctx, bkmsapp.ByID(appID))
+	if errors.Is(err, store.ErrNotFound) {
+		return MergeStrategyStrategicMerge, nil
+	}
+	if err != nil {
+		return "", errors.Wrap(err, "get app for merge strategy")
+	}
+	configMerge := mods.Of(app).ConfigMerge
+	if !configMerge.Supported {
+		return MergeStrategyStrategicMerge, nil
+	}
+	return MergeStrategy(configMerge.Props.Strategy), nil
+}

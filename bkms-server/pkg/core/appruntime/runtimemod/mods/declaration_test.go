@@ -44,7 +44,7 @@ var _ = Describe("Declarations", func() {
 			ids = append(ids, idField.Interface().(runtimemod.ModID))
 		}
 
-		Expect(ids).To(HaveLen(8))
+		Expect(ids).To(HaveLen(9))
 		Expect(lo.Uniq(ids)).To(HaveLen(len(ids)))
 		Expect(lo.Keys(set.Public().Mods)).To(ConsistOf(ids))
 	})

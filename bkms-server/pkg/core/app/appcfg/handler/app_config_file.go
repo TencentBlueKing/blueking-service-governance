@@ -615,7 +615,8 @@ func (h *Handler) PreviewOverlayMerge(c *gin.Context) {
 	}
 
 	virtualConfig := &appcfg.AppConfigFile{
-		Type: appcfg.AppConfigFileTypeOverlay,
+		AppID: baseFile.AppID,
+		Type:  appcfg.AppConfigFileTypeOverlay,
 		VersionedContent: appcfg.VersionedContent{
 			ContentSourceType:   appcfg.ContentSourceTypeLocal,
 			BaseAppConfigFileID: &baseID,

@@ -23,6 +23,7 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
+	"sigs.k8s.io/kustomize/api/filters/patchstrategicmerge"
 	"sigs.k8s.io/kustomize/kyaml/kio"
 	"sigs.k8s.io/kustomize/kyaml/openapi"
 	"sigs.k8s.io/kustomize/kyaml/yaml"
@@ -30,20 +31,36 @@ import (
 	"sigs.k8s.io/kustomize/kyaml/yaml/walk"
 )
 
+// MergeStrategy is the strategy for merging YAML config contents.
+type MergeStrategy string
+
+const (
+	// MergeStrategyStrategicMerge is the vanilla kubernetes strategic merge patch: a null field in
+	// overlay deletes the field, and an empty base document results in an empty content.
+	MergeStrategyStrategicMerge MergeStrategy = "strategicMerge"
+	// MergeStrategyNullPreserving is the strategic merge patch which preserves null fields on both
+	// sides: a null field in base stays null, and a null field in overlay sets the field to null
+	// instead of deleting it. Use the `$patch: delete` directive to delete a map field. An empty
+	// base document (empty, blank, comment-only, `---` or `null`) is treated as an empty map.
+	MergeStrategyNullPreserving MergeStrategy = "nullPreserving"
+)
+
 // mergeContent merges two config contents based on the specified format.
 // This is a convenience function that selects the appropriate merge function.
-func mergeContent(base string, overlay *string, format FileFormat) (string, error) {
+// The strategy only applies to the YAML format.
+func mergeContent(base string, overlay *string, format FileFormat, strategy MergeStrategy) (string, error) {
 	switch format {
 	case FileFormatTAF:
 		return mergeTAFContent(base, overlay)
 	default:
 		// Default to YAML format
-		return mergeYAMLContent(base, overlay)
+		return mergeYAMLContent(base, overlay, strategy)
 	}
 }
 
 // mergeYAMLContent merges two YAML contents, with overlay taking precedence over base.
-// This function shares the implementation with kustomize's strategic merge patch.
+// This function shares the implementation with kustomize's strategic merge patch, see
+// MergeStrategy for how each strategy handles null fields and empty base documents.
 //
 // The function supports two overlay formats:
 //  1. Version 2 format (when overlayVersion: "2" is present):
@@ -58,12 +75,7 @@ func mergeContent(base string, overlay *string, format FileFormat) (string, erro
 //     replicas: 5
 //     image: myapp:v2.0
 //     ```
-//
-// Unlike the vanilla strategic merge patch, null fields are preserved on both sides: a null
-// field in base stays null, and a null field in overlay sets the field to null instead of
-// deleting it. Use the `$patch: delete` directive to delete a map field. An empty base
-// document (empty, blank, comment-only, `---` or `null`) is treated as an empty map.
-func mergeYAMLContent(base string, overlay *string) (string, error) {
+func mergeYAMLContent(base string, overlay *string, strategy MergeStrategy) (string, error) {
 	if lo.FromPtr(overlay) == "" {
 		return base, nil
 	}
@@ -107,7 +119,12 @@ func mergeYAMLContent(base string, overlay *string) (string, error) {
 			return "", errors.Wrap(err, "parsing the overlay YAML")
 		}
 
-		currentResult, err = applyYAMLPatch(currentResult, overlayNode)
+		switch strategy {
+		case MergeStrategyNullPreserving:
+			currentResult, err = applyNullPreservingPatch(currentResult, overlayNode)
+		default:
+			currentResult, err = applyStrategicMergePatch(currentResult, overlayNode)
+		}
 		if err != nil {
 			return "", errors.Wrap(err, "merging the YAML contents")
 		}
@@ -115,8 +132,22 @@ func mergeYAMLContent(base string, overlay *string) (string, error) {
 	return currentResult, nil
 }
 
-// applyYAMLPatch applies a strategic merge patch to every document in base.
-func applyYAMLPatch(base string, patch *yaml.RNode) (string, error) {
+// applyStrategicMergePatch applies a vanilla strategic merge patch to every document in base.
+func applyStrategicMergePatch(base string, patch *yaml.RNode) (string, error) {
+	var buf bytes.Buffer
+	err := kio.Pipeline{
+		Inputs:  []kio.Reader{&kio.ByteReader{Reader: bytes.NewBufferString(base)}},
+		Filters: []kio.Filter{patchstrategicmerge.Filter{Patch: patch}},
+		Outputs: []kio.Writer{kio.ByteWriter{Writer: &buf}},
+	}.Execute()
+	if err != nil {
+		return "", err
+	}
+	return buf.String(), nil
+}
+
+// applyNullPreservingPatch applies a null preserving strategic merge patch to every document in base.
+func applyNullPreservingPatch(base string, patch *yaml.RNode) (string, error) {
 	docs, err := (&kio.ByteReader{
 		Reader:                bytes.NewBufferString(base),
 		OmitReaderAnnotations: true,
