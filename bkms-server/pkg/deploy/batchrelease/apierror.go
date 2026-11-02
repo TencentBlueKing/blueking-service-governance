@@ -30,7 +30,8 @@ import (
 //
 //   - 批次目标值不合法 → INVALID_ARGUMENT
 //   - 策略不存在、Rollout CR 不存在、集群未安装 Rollout → NOT_FOUND
-//   - 策略名称已存在、分批发布进行中、主工作负载不支持、当前状态不满足、没有进行中的分批发布 → INVALID_REQUEST
+//   - 策略名称已存在、修改或删除平台内置策略、分批发布进行中、主工作负载不支持、当前状态不满足、
+//     没有进行中的分批发布 → INVALID_REQUEST
 //   - 其他错误（含 Rollout CR 读写失败）→ INTERNAL_SERVER_ERROR
 func APIError(err error, msg string) error {
 	code := bkerrs.ErrCodeInternalServerError
@@ -42,6 +43,7 @@ func APIError(err error, msg string) error {
 		errors.Is(err, ErrRolloutNotInstalled):
 		code = bkerrs.ErrCodeNotFound
 	case errors.Is(err, releasestrategy.ErrStrategyNameConflict),
+		errors.Is(err, releasestrategy.ErrBuiltinStrategyReadOnly),
 		errors.Is(err, ErrBatchReleaseInProgress),
 		errors.Is(err, ErrWorkloadNotSupported),
 		errors.Is(err, ErrActionNotAllowed),
