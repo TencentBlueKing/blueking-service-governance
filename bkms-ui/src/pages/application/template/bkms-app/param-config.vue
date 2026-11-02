@@ -313,7 +313,7 @@
       <ToggleCard
         v-if="formData.framework === 'blank'"
         class="mt-[16px] bg-[#fff] rounded-[2px] shadow-[0_2px_4px_0_#1919290d]"
-        :name="$t('启用配置')"
+        :name="$t('启动配置')"
         type="normal"
       >
         <div class="config-fields">
@@ -321,12 +321,14 @@
             <RepeatableInput
               v-model="formData.appModelSpec.command"
               :add-text="$t('添加启动命令')"
+              trim-on-input
             />
           </Form.FormItem>
           <Form.FormItem :label="$t('命令参数')">
             <RepeatableInput
               v-model="formData.appModelSpec.args"
               :add-text="$t('添加命令参数')"
+              trim-on-input
             />
           </Form.FormItem>
         </div>

@@ -20,12 +20,15 @@ import { defineComponent, h, ref } from 'vue';
 
 import userEvent from '@testing-library/user-event';
 import { render, screen, waitFor } from '@testing-library/vue';
+import { flushPromises } from '@vue/test-utils';
 import { createPinia } from 'pinia';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import CreateApp from '~/pages/application/create.vue';
 import BKMSAppWizard from '~/pages/application/template/bkms-app/index.vue';
 import { buildBKMSAppPayload, createBKMSAppForm } from '~/pages/application/template/bkms-app/use-create-app';
 import TemplateSelect from '~/pages/application/template/index.vue';
+import { useAppDetail } from '~/stores/app-detail';
+import { useAppStore } from '~/stores/apps';
 
 import { i18nGlobalMocks, i18nPlugin } from '../helpers/mock-i18n';
 
@@ -136,14 +139,35 @@ const WizardHarness = defineComponent({
       });
   },
 });
-function renderPage(component: Parameters<typeof render>[0]) {
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason: Error) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
+
+async function openCreateStep(framework: string) {
+  routeState.query = { framework, language: framework === 'taf' ? 'cpp' : 'go' };
+  const page = renderPage(WizardHarness);
+  await screen.findByTestId('parameters');
+  if (framework !== 'blank') {
+    await userEvent.click(screen.getByRole('button', { name: '下一步' }));
+    await screen.findByTestId('framework-config');
+  }
+  return page;
+}
+
+function renderPage(component: Parameters<typeof render>[0], pinia = createPinia()) {
   const routerView = defineComponent({
     setup(_, { slots }) {
       return () => slots.default?.({ Component: defineComponent({ render: () => null }) });
     },
   });
   return render(component, {
-    global: { plugins: [createPinia(), i18nPlugin], mocks: i18nGlobalMocks, components: { RouterView: routerView } },
+    global: { plugins: [pinia, i18nPlugin], mocks: i18nGlobalMocks, components: { RouterView: routerView } },
   });
 }
 beforeEach(() => {
@@ -187,6 +211,17 @@ describe('创建应用模板', () => {
       query: { framework: 'blank', language: 'python' },
     });
     expect(screen.getByRole('button', { name: /tRPC/ })).toHaveAttribute('aria-pressed', 'false');
+  });
+  it('切换框架语言后立即记住选择，重新进入模板页仍选中该语言', async () => {
+    const pinia = createPinia();
+    const appStore = useAppStore(pinia);
+    const page = renderPage(TemplateSelect, pinia);
+    await userEvent.click(await screen.findByRole('radio', { name: 'C++' }));
+    expect(appStore.lastAppTemplateID).toBe('trpc:cpp');
+
+    page.unmount();
+    renderPage(TemplateSelect, pinia);
+    expect(await screen.findByRole('radio', { name: 'C++' })).toBeChecked();
   });
   it('目录失败可重试，Helm创建仍可继续', async () => {
     mocks.definitions.mockRejectedValueOnce(new Error('offline'));
@@ -271,6 +306,80 @@ describe('统一平台托管创建向导', () => {
       shCommand: 'exec /server',
       envVars: [],
     });
+  });
+});
+
+describe('创建异步操作隔离', () => {
+  it.each(['blank', 'trpc', 'taf'])('%s 校验期间连续点击只校验和创建一次', async framework => {
+    await openCreateStep(framework);
+    const validation = deferred<boolean>();
+    const validate = framework === 'blank' ? mocks.paramValidate : mocks.appValidate;
+    validate.mockReturnValue(validation.promise);
+
+    await userEvent.dblClick(screen.getByRole('button', { name: '创建' }));
+    expect(validate).toHaveBeenCalledTimes(1);
+    expect(mocks.create).not.toHaveBeenCalled();
+    validation.resolve(true);
+
+    expect(await screen.findByText(/应用创建成功/)).toBeVisible();
+    expect(mocks.create).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['false', 'throw'])('校验 %s 后释放提交锁，允许修正后再次创建', async failure => {
+    await openCreateStep('blank');
+    const validation = deferred<boolean>();
+    mocks.paramValidate.mockReturnValueOnce(validation.promise);
+    await userEvent.click(screen.getByRole('button', { name: '创建' }));
+    if (failure === 'throw') validation.reject(new Error('validation unavailable'));
+    else validation.resolve(false);
+    await flushPromises();
+
+    await waitFor(() => expect(screen.getByRole('button', { name: '创建' })).toBeEnabled());
+    expect(mocks.create).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole('button', { name: '创建' }));
+
+    expect(await screen.findByText(/应用创建成功/)).toBeVisible();
+    expect(mocks.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('离开创建页后，迟到的创建成功响应不能覆盖新应用上下文', async () => {
+    routeState.query = { framework: 'blank', language: 'python' };
+    const pinia = createPinia();
+    const appDetail = useAppDetail(pinia);
+    const creation = deferred<{ id: string; name: string; type: string }>();
+    mocks.create.mockReturnValueOnce(creation.promise);
+    const { unmount } = renderPage(WizardHarness, pinia);
+    await screen.findByTestId('parameters');
+    await userEvent.click(screen.getByRole('button', { name: '创建' }));
+    await waitFor(() => expect(mocks.create).toHaveBeenCalledTimes(1));
+
+    unmount();
+    appDetail.updateAppID('app-b');
+    appDetail.updateAppName('application-b');
+    appDetail.updateAppType('taf');
+    const runtime = { framework: 'taf', mods: { adminCommand: { supported: true } } };
+    appDetail.runtime = runtime;
+    creation.resolve({ id: 'created-a', name: 'application-a', type: 'bkmsApp' });
+    await flushPromises();
+
+    expect(appDetail.appID).toBe('app-b');
+    expect(appDetail.app).toBe('application-b');
+    expect(appDetail.appType).toBe('taf');
+    expect(appDetail.runtime).toEqual(runtime);
+  });
+
+  it.each(['blank', 'trpc', 'taf'])('%s 校验期间离开页面，校验完成后不发送创建请求', async framework => {
+    const { unmount } = await openCreateStep(framework);
+    const validation = deferred<boolean>();
+    const validate = framework === 'blank' ? mocks.paramValidate : mocks.appValidate;
+    validate.mockReturnValueOnce(validation.promise);
+    await userEvent.click(screen.getByRole('button', { name: '创建' }));
+    expect(validate).toHaveBeenCalledTimes(1);
+
+    unmount();
+    validation.resolve(true);
+    await flushPromises();
+    expect(mocks.create).not.toHaveBeenCalled();
   });
 });
 

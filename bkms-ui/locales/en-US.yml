@@ -2249,6 +2249,7 @@ HostPort 目前仅对绑定联邦集群的环境生效: HostPort currently only 
 留空则沿用该空间已有外部仓库的密码: Leave blank to keep the password of this workspace's existing external registry
 
 "平台托管应用": "Platform-managed application"
+"当前应用不支持平台通用构建": "This application does not support platform builds"
 "应用能力加载失败，部分功能暂不可用": "Failed to load application capabilities. Some features are temporarily unavailable."
 "应用尚未接入可观测": "Observability has not been configured for this application"
 "暂无配置文件，可点击新建": "No configuration files. Click Create to add one."
@@ -2258,7 +2259,6 @@ HostPort 目前仅对绑定联邦集群的环境生效: HostPort currently only 
 "开发框架": "Development framework"
 "按语言": "By language"
 "请选择开发语言": "Select a development language"
-"启用配置": "Startup configuration"
 "更换": "Change"
 "添加启动命令": "Add startup command"
 "添加命令参数": "Add command argument"

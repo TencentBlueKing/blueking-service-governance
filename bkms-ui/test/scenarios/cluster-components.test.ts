@@ -80,11 +80,11 @@ const oneAddon = [
   },
 ];
 
-function renderPage(addons: unknown[] = []) {
+function renderPage(addons: unknown[] = [], autoExpandAppType?: string) {
   mocks.listClusterAddons.mockResolvedValue({ addons });
   mocks.listPortPools.mockResolvedValue({ portPools: [] });
   return render(ClusterComponents, {
-    props: { envId: 'env-1', hasClusterConfig: true },
+    props: { envId: 'env-1', hasClusterConfig: true, autoExpandAppType },
     global: { plugins: [i18nPlugin] },
   });
 }
@@ -94,6 +94,25 @@ afterEach(() => {
 });
 
 describe('集群组件列表（S17）', () => {
+  it('平台托管组件统一展示在 bkmsApp 分组，保留 Helm 和 Agones 分组', async () => {
+    renderPage([
+      { ...oneAddon[0], requiredForAppTypes: ['trpc', 'taf', 'bkmsApp'], optionalForAppTypes: ['helm', 'agones'] },
+    ]);
+    expect(await screen.findByText('平台托管应用')).toBeVisible();
+    expect(screen.queryByText('tRPC 应用')).not.toBeInTheDocument();
+    expect(screen.queryByText('TAF 应用')).not.toBeInTheDocument();
+    expect(screen.getByText('Helm 应用')).toBeVisible();
+    expect(screen.getByText('Agones 应用')).toBeVisible();
+    await userEvent.click(screen.getByText('平台托管应用'));
+    expect(await screen.findByText('监控插件')).toBeVisible();
+  });
+
+  it.each(['trpc', 'taf', 'bkmsApp'])('从 %s 应用跳转时自动展开统一分组', async appType => {
+    renderPage([{ ...oneAddon[0], requiredForAppTypes: ['trpc', 'taf', 'bkmsApp'] }], appType);
+    expect(await screen.findByText('平台托管应用')).toBeVisible();
+    expect(await screen.findByText('监控插件')).toBeVisible();
+  });
+
   it('当集群无组件时，应显示「暂无组件」空态', async () => {
     renderPage([]);
     expect(await screen.findByText('暂无组件')).toBeTruthy();

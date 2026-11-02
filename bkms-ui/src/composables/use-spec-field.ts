@@ -36,6 +36,7 @@ export default function useSpecField() {
     const appID = appDetailStore.appID;
     const appType = appDetailStore.appType;
     if (appType === APP_TYPES.BKMS_APP) {
+      // 新接口整体替换启动字段，command、args、shCommand 的空值也需完整提交。
       return AppService.updateAppStartupConfig({ appID, ...startup });
     }
     const currentSpec = cloneDeep(appDetailStore.appDetail?.appModelSpec) as AppModelSpecInput | undefined;

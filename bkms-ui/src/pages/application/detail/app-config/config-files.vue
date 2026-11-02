@@ -34,7 +34,6 @@
           :active-id="activeDefID"
           :create-disabled="envListLoadFailed"
           :files="fileListItems"
-          :framework-file-supported="frameworkFileSupported"
           :loading="isLoading || listLoading || appDetailStore.loading"
           @create="handleOpenCreateFile"
           @delete="handleDeleteFile"
@@ -598,7 +597,7 @@
   import { hasErrorCode, showApiErrorMessage } from '~/common/util';
   import MsEditor from '~/components/monaco-editor/ms-editor.vue';
   import Layout from '~/components/skeleton/skeleton-layout';
-  import { getFrameworkFileFormat, isRuntimeModSupported } from '~/composables/use-app-runtime';
+  import { getFrameworkFileFormat } from '~/composables/use-app-runtime';
   import useLeaveConfirm from '~/composables/use-leave-confirm';
   import ClearFileContentDialog from '~/pages/application/detail/app-config/components/clear-file-content-dialog.vue';
   import ConfigFileList from '~/pages/application/detail/app-config/components/config-file-list.vue';
@@ -640,7 +639,6 @@
   const { confirmBox } = useLeaveConfirm();
   const mountPreviewVisible = inject(MOUNT_PREVIEW_VISIBLE_KEY, ref(false));
   const appID = computed(() => appDetailStore.appID);
-  const frameworkFileSupported = computed(() => isRuntimeModSupported(appDetailStore.runtime, 'frameworkFile'));
   const {
     activeDef,
     activeDefID,
@@ -659,7 +657,7 @@
     resetEnv,
     saveContent,
     updateDef,
-  } = useConfigFileDefs(appID, frameworkFileSupported);
+  } = useConfigFileDefs(appID);
 
   const envList = ref<EnvOutput[]>([]); // 环境列表
   const envListLoading = ref(false);
@@ -1531,17 +1529,6 @@
 
   // appID 变化时重新初始化页面
   watch(() => appDetailStore.appID, initPage, { immediate: true });
-  watch(
-    [frameworkFileSupported, activeDefID],
-    async ([supported, activeID], [previouslySupported, previousActiveID]) => {
-      // 能力变化只影响被过滤的框架文件；仍选中普通文件时保留未保存的编辑。
-      if (supported === previouslySupported || activeID === previousActiveID) return;
-      discardCurrentEdits();
-      currentEnv.value = { ...defaultEnv.value };
-      showVariables.value = false;
-      if (!isLoading.value && activeID) await loadCurrentDetail('');
-    },
-  );
 </script>
 
 <style lang="postcss" scoped>

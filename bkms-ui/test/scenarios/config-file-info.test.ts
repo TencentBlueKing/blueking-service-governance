@@ -21,6 +21,7 @@ import { ref } from 'vue';
 import { flushPromises, shallowMount } from '@vue/test-utils';
 import { Radio } from 'bkui-vue';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import ConfigFileListItem from '~/pages/application/detail/app-config/components/config-file-list-item.vue';
 import ConfigFiles from '~/pages/application/detail/app-config/config-files.vue';
 
 import { i18nGlobalMocks } from '../helpers/mock-i18n';
@@ -177,6 +178,7 @@ async function openEditor() {
         Input: false,
         Button: false,
         MsEditor: false,
+        ConfigFileList: false,
         SaveVersionConfirmDialog: false,
         EnvContentStrategyConfirmDialog: false,
         CreateConfigFileSideslider: false,
@@ -198,6 +200,33 @@ async function save() {
 }
 
 describe('配置文件信息编辑', () => {
+  it.each<[string, null | PublicView]>([
+    ['未加载', null],
+    ['不支持', { framework: 'taf', mods: { frameworkFile: { supported: false, reasonCode: 'invalid_stack' } } }],
+  ])('框架文件能力%s时，仍展示并优先选择接口返回的框架文件', async (_, runtime) => {
+    runtimeState.value = runtime;
+    const plainFile = { ...savedFile, id: 'plain-id', configKind: 'plain' };
+    mocks.list.mockResolvedValue({ items: [plainFile, savedFile] });
+    const view = await openEditor();
+
+    const list = view.getComponent({ name: 'ConfigFileList' });
+    expect(list.props('files').map((file: { id: string }) => file.id)).toEqual(['plain-id', 'def-id']);
+    expect(list.findAllComponents(ConfigFileListItem).map(item => item.props('file').id)).toEqual([
+      'def-id',
+      'plain-id',
+    ]);
+    expect(list.props('activeId')).toBe('def-id');
+    expect(mocks.detail).toHaveBeenCalledExactlyOnceWith(
+      { appID: 'app-id', id: 'def-id', envName: '' },
+      { needRes: true },
+    );
+
+    runtimeState.value = { framework: 'taf', mods: { frameworkFile: { supported: true, props: { format: 'taf' } } } };
+    await flushPromises();
+    expect(list.props('activeId')).toBe('def-id');
+    expect(mocks.detail).toHaveBeenCalledTimes(1);
+  });
+
   it('能力重试成功时，仍选中的普通文件保留内容编辑草稿', async () => {
     runtimeState.value = null;
     savedFile = {
@@ -207,9 +236,6 @@ describe('配置文件信息编辑', () => {
       content: 'original content',
       editableContentField: 'content',
     };
-    mocks.list.mockImplementation(async () => ({
-      items: [{ ...savedFile, id: 'framework-id', configKind: 'framework' }, savedFile],
-    }));
     const view = await openEditor();
     await view
       .findAll('button')
@@ -257,23 +283,25 @@ describe('配置文件信息编辑', () => {
     );
   });
 
-  it('能力过滤确实移除当前框架文件时，切换到普通文件并加载其内容', async () => {
+  it('框架文件能力变为不支持时，不切换文件或丢弃编辑草稿', async () => {
     const plainFile = { ...savedFile, id: 'plain-id', configKind: 'plain', content: 'plain content' };
     mocks.list.mockImplementation(async () => ({ items: [savedFile, plainFile] }));
     mocks.detail.mockImplementation(async ({ id }: { id: string }) => ({
       item: id === 'plain-id' ? plainFile : savedFile,
     }));
     const view = await openEditor();
+    await view.findAll('input')[0].setValue('unsaved.conf');
+    await view.findAll('input')[1].setValue('/unsaved');
     runtimeState.value = {
       framework: 'taf',
       mods: { frameworkFile: { supported: false, reasonCode: 'invalid_stack' } },
     };
     await flushPromises();
 
-    expect(view.getComponent({ name: 'ConfigFileList' }).props('activeId')).toBe('plain-id');
-    expect(mocks.editorValue).toBe('plain content');
-    expect(mocks.detail).toHaveBeenLastCalledWith({ appID: 'app-id', id: 'plain-id', envName: '' }, { needRes: true });
-    expect(view.findAll('input')).toHaveLength(0);
+    expect(view.getComponent({ name: 'ConfigFileList' }).props('activeId')).toBe('def-id');
+    expect(mocks.detail).toHaveBeenCalledTimes(1);
+    expect(view.findAll('input')[0].element.value).toBe('unsaved.conf');
+    expect(view.findAll('input')[1].element.value).toBe('/unsaved');
   });
 
   it.each([

@@ -137,6 +137,7 @@ export async function downloadInstanceLog(params: {
 
 /**
  * 根据应用类型获取对应的部署 API
+ * 实例管理命令由管理命令侧栏按当前 framework 选择接口，并单独校验 adminCommand 能力。
  * @param appType - 应用详情中的真实类型
  * @returns 部署相关的 API 方法集合
  *
@@ -153,6 +154,7 @@ export function useDeployAPIs(appType: DeployableAppType): DeployAPIs {
     };
   }
 
+  // 统一部署接口兼容存量 trpc/taf 与新 bkmsApp（含 blank），无需按框架分流。
   return {
     preCheckDeploy: DeployService.preCheckBKMSAppDeploy,
     listDeployRecords: DeployService.listBKMSAppDeployRecords,

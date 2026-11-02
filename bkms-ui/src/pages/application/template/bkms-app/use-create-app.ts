@@ -34,6 +34,7 @@ import type {
   RepoBuildConfigInput,
 } from '~/@types/v1/app';
 
+// 首版创建入口仅开放这三种语言，详情仍兼容已有的 blank + C++ 应用。
 export const BLANK_LANGUAGES = ['go', 'python', 'nodejs'] as const;
 
 export interface BKMSAppForm {
@@ -54,7 +55,7 @@ export interface BKMSAppForm {
   };
 }
 
-/** Serialize only the active build and framework fields; form-only state stays out of the API. */
+/** 仅提交当前构建方式和技术栈使用的字段，清除表单中的残留配置。 */
 export function buildBKMSAppPayload(form: BKMSAppForm, runtime: PublicView): CreateBKMSAppRequest {
   const buildConfig = cloneDeep(form.buildConfig) as BuildConfigInput;
   if (buildConfig.sourceType === 'pipeline') {
@@ -71,10 +72,11 @@ export function buildBKMSAppPayload(form: BKMSAppForm, runtime: PublicView): Cre
   }
   const appModelSpec = cloneDeep(form.appModelSpec);
   if (form.framework === 'blank') {
+    // blank 创建时只填写命令和参数，脚本、环境变量在详情页配置。
     appModelSpec.shCommand = '';
     appModelSpec.envVars = [];
-    appModelSpec.command = appModelSpec.command?.filter(value => value.trim());
-    appModelSpec.args = appModelSpec.args?.filter(value => value.trim());
+    appModelSpec.command = appModelSpec.command?.map(value => value.trim()).filter(Boolean);
+    appModelSpec.args = appModelSpec.args?.map(value => value.trim()).filter(Boolean);
   }
   return {
     workspaceID: form.workspaceID,
@@ -84,6 +86,7 @@ export function buildBKMSAppPayload(form: BKMSAppForm, runtime: PublicView): Cre
     language: form.language,
     buildConfig,
     appModelSpec,
+    // blank 不接受框架文件字段，必须省略，不能传空对象。
     ...(isRuntimeModSupported(runtime, 'frameworkFile')
       ? { frameworkConfigFile: cloneDeep(form.frameworkConfigFile) }
       : {}),

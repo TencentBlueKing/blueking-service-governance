@@ -62,6 +62,7 @@
             v-model="selected.language"
             class="framework-language-radio"
             type="capsule"
+            @change="remember"
           >
             <Radio.Button
               v-for="language in frameworkLanguages"

@@ -16,7 +16,7 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
-import { computed, ref, toValue, watch } from 'vue';
+import { computed, ref, toValue } from 'vue';
 import type { InjectionKey, MaybeRefOrGetter, Ref } from 'vue';
 
 import { AppConfigFileDefsService } from '~/api/modules/v1';
@@ -92,16 +92,11 @@ export const MOUNT_PREVIEW_VISIBLE_KEY: InjectionKey<Ref<boolean>> = Symbol('mou
  * 管理应用下配置文件定义的列表 / 详情 / 环境实例状态，并提供增删改查方法。
  * @param appID 应用 ID，支持 ref / getter
  */
-export function useConfigFileDefs(
-  appID: MaybeRefOrGetter<string>,
-  frameworkFileSupported: MaybeRefOrGetter<boolean> = true,
-) {
+export function useConfigFileDefs(appID: MaybeRefOrGetter<string>) {
   /** 当前选中的定义 ID */
   const activeDefID = ref('');
-  const allDefs = ref<ConfigFileDefView[]>([]);
-  const defs = computed(() =>
-    allDefs.value.filter(item => item.configKind !== 'framework' || toValue(frameworkFileSupported)),
-  );
+  // 文件列表以接口定义为准，避免能力加载中隐藏已有框架文件。
+  const defs = ref<ConfigFileDefView[]>([]);
   const detail = ref<ConfigFileDefView | null>(null);
   const envInstances = ref<EnvInstanceObj[]>([]);
   const listLoading = ref(false);
@@ -111,16 +106,6 @@ export function useConfigFileDefs(
   const envInstancesGuard = createLatestRequestGuard();
 
   const activeDef = computed(() => defs.value.find(item => item.id === activeDefID.value) || null);
-  watch(
-    defs,
-    files => {
-      if (files.some(item => item.id === activeDefID.value)) return;
-      activeDefID.value = files.find(item => item.configKind === 'framework')?.id || files[0]?.id || '';
-      detail.value = null;
-      envInstances.value = [];
-    },
-    { flush: 'sync' },
-  );
   /** 已存在独立实例的环境名列表 */
   const modifiedEnvNames = computed(() => envInstances.value.map(item => item.envName || '').filter(Boolean));
 
@@ -136,7 +121,7 @@ export function useConfigFileDefs(
     try {
       const result = await AppConfigFileDefsService.listDefaultFilesWithDef({ appID: id }, { needRes: true });
       if (!defsGuard.isLatest(requestID) || id !== toValue(appID)) return;
-      allDefs.value = (result.items || []).map(normalizeDef).filter(item => item.id);
+      defs.value = (result.items || []).map(normalizeDef).filter(item => item.id);
       const preferred = defs.value.find(item => item.id === preferredID);
       const fallback = defs.value.find(item => item.configKind === 'framework') || defs.value[0];
       const nextActiveDefID = preferred?.id || fallback?.id || '';
@@ -273,7 +258,7 @@ export function useConfigFileDefs(
     detailGuard.invalidate();
     envInstancesGuard.invalidate();
     activeDefID.value = '';
-    allDefs.value = [];
+    defs.value = [];
     detail.value = null;
     envInstances.value = [];
     listLoading.value = false;

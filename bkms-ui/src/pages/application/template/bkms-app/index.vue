@@ -155,7 +155,7 @@
   </ScrollLayout>
 </template>
 <script setup lang="ts">
-  import { computed, onMounted, ref, watch } from 'vue';
+  import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import type { Component } from 'vue';
 
   import { Alert, Button, Loading } from 'bkui-vue';
@@ -198,8 +198,14 @@
   const submitting = ref(false);
   const createdType = ref<IAppType>(APP_TYPES.BKMS_APP);
   const result = ref<IResultData>({ status: 'CREATING', name: '', msg: '' });
+  const workspaceID = computed(() => String(route.params.space || ''));
   const framework = computed(() => (typeof route.query.framework === 'string' ? route.query.framework : ''));
   const language = computed(() => (typeof route.query.language === 'string' ? route.query.language : ''));
+  // 离开页面后，迟到的校验和创建响应不再推进步骤或写入全局应用上下文。
+  let disposed = false;
+  onBeforeUnmount(() => {
+    disposed = true;
+  });
   const runtime = computed(() => findRuntime(definitions.value, framework.value, language.value));
   const hasFrameworkFile = computed(() => isRuntimeModSupported(runtime.value, 'frameworkFile'));
   const editorLang = computed(() =>
@@ -223,6 +229,7 @@
   const selectedDescription = computed(
     () => descriptions[framework.value === 'blank' ? language.value : framework.value] || '',
   );
+  // 适配已有 TAF 编辑器的数据结构，提交时仍转换为新创建接口的字段。
   const tafValue = computed(() => ({
     command: form.value?.appModelSpec.command || [],
     args: form.value?.appModelSpec.args || [],
@@ -246,7 +253,7 @@
       return;
     }
     if (form.value?.framework === framework.value && form.value.language === language.value) return;
-    form.value = createBKMSAppForm(String(route.params.space || ''), framework.value, language.value);
+    form.value = createBKMSAppForm(workspaceID.value, framework.value, language.value);
     if (framework.value === 'trpc') form.value.frameworkConfigFile.content = trpcTemplate;
     emit('update-text', { type: framework.value === 'blank' ? 'blank' : 'bkmsApp' });
     emit('update-step', 2);
@@ -294,7 +301,10 @@
     }
   }
   async function collectParameters() {
-    if (!paramRef.value || !(await paramRef.value.validate())) {
+    if (!paramRef.value) return false;
+    const valid = await paramRef.value.validate().catch(() => false);
+    if (disposed || !paramRef.value) return false;
+    if (!valid) {
       focusOnErrorField();
       return false;
     }
@@ -303,34 +313,11 @@
   }
   async function createApp() {
     if (submitting.value || !form.value || !runtime.value) return;
-    if (props.step === 2) {
-      if (!(await collectParameters())) return;
-    } else {
-      const valid = form.value.framework === 'trpc' ? await trpcRef.value?.validate() : await tafRef.value?.validate();
-      if (!valid) return;
-      collectAppConfig();
-    }
-    if (!form.value) return;
-    const params = buildBKMSAppPayload(form.value, runtime.value);
+    // 校验阶段即加锁，避免异步校验期间重复点击发出多次创建请求
     submitting.value = true;
-    result.value = { status: 'CREATING', name: params.name, msg: '' };
-    emit('update-step', 4);
     try {
-      const app = await AppService.createBKMSApp(params, { interceptorErr: false });
-      appDetailStore.reset();
-      appDetailStore.updateAppID(app.id || params.id);
-      appDetailStore.updateAppName(app.name || params.name);
-      createdType.value = (app.type || APP_TYPES.BKMS_APP) as IAppType;
-      appDetailStore.updateAppType(createdType.value);
-      result.value = { status: 'SUCCESS', name: app.name || params.name, msg: '' };
-      forceCleanDirtyTag();
-    } catch (error) {
-      const failure = error as { error?: { message?: string }; message?: string; msg?: string };
-      result.value = {
-        status: 'FAILED',
-        name: params.name,
-        msg: failure.msg || failure.message || failure.error?.message || '',
-      };
+      if (!(await validateCurrentStep()) || !form.value || !runtime.value) return;
+      await submit(buildBKMSAppPayload(form.value, runtime.value));
     } finally {
       submitting.value = false;
     }
@@ -348,11 +335,42 @@
   }
   function recreate() {
     if (result.value.status === 'SUCCESS') {
-      form.value = createBKMSAppForm(String(route.params.space || ''), framework.value, language.value);
+      form.value = createBKMSAppForm(workspaceID.value, framework.value, language.value);
       if (framework.value === 'trpc') form.value.frameworkConfigFile.content = trpcTemplate;
       forceCleanDirtyTag();
     }
     emit('update-step', 2);
+  }
+  async function submit(params: ReturnType<typeof buildBKMSAppPayload>) {
+    result.value = { status: 'CREATING', name: params.name, msg: '' };
+    emit('update-step', 4);
+    try {
+      const app = await AppService.createBKMSApp(params, { interceptorErr: false });
+      if (disposed) return;
+      appDetailStore.reset();
+      appDetailStore.updateAppID(app.id || params.id);
+      appDetailStore.updateAppName(app.name || params.name);
+      createdType.value = (app.type || APP_TYPES.BKMS_APP) as IAppType;
+      appDetailStore.updateAppType(createdType.value);
+      result.value = { status: 'SUCCESS', name: app.name || params.name, msg: '' };
+      forceCleanDirtyTag();
+    } catch (error) {
+      if (disposed) return;
+      const failure = error as { error?: { message?: string }; message?: string; msg?: string };
+      result.value = {
+        status: 'FAILED',
+        name: params.name,
+        msg: failure.msg || failure.message || failure.error?.message || '',
+      };
+    }
+  }
+  async function validateCurrentStep() {
+    if (props.step === 2) return collectParameters();
+    const appConfig = form.value?.framework === 'trpc' ? trpcRef.value : tafRef.value;
+    const valid = await appConfig?.validate().catch(() => false);
+    if (disposed || !valid) return false;
+    collectAppConfig();
+    return true;
   }
   onMounted(() => {
     emit('update-step', 2);

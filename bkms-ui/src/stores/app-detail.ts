@@ -93,6 +93,7 @@ export const useAppDetail = defineStore('appDetail', () => {
         const result = await AppService.getAppRuntimeMods({ appID: appId }, { interceptorErr: false });
         if (!isCurrent()) return null;
         if (!result) throw new Error('Missing application runtime');
+        // 存量 trpc/taf 的 runtime.type 也会返回 bkmsApp；真实 appType 仅由应用详情维护。
         runtime.value = result;
         return result;
       } catch {

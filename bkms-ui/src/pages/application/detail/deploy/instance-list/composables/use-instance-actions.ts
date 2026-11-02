@@ -22,6 +22,7 @@ import { InfoBox, Message } from 'bkui-vue';
 import { useI18n } from 'vue-i18n';
 import { type AppInstanceOutputObj } from '~/@types/v1/instance';
 import { InstanceService } from '~/api/modules/v1';
+import { isRuntimeModSupported } from '~/composables/use-app-runtime';
 import { useTabManager } from '~/composables/use-tab-manager';
 import { useAppDetail } from '~/stores/app-detail';
 
@@ -50,6 +51,7 @@ export function useInstanceActions(
   options: UseInstanceActionsOptions,
   actionsHostRef: Ref<InstanceType<typeof InstanceActionsHost> | null>,
 ) {
+  const appDetailStore = useAppDetail();
   const { login } = useLoginInstance();
   const { showDeleteDialog } = useDeleteInstances(options);
 
@@ -99,8 +101,14 @@ export function useInstanceActions(
   }
 
   function openAdminCommand() {
-    const instanceIds = options.getSelectedInstances().map(item => item.id) as string[];
-    actionsHostRef.value?.openCommand(instanceIds, options.commandEnvDisplayName?.());
+    if (!isRuntimeModSupported(appDetailStore.runtime, 'adminCommand')) return;
+    const envName = options.getEnvName();
+    const instanceIds = options
+      .getSelectedInstances()
+      .map(item => item.id)
+      .filter((id): id is string => !!id);
+    if (!envName || !instanceIds.length) return;
+    actionsHostRef.value?.openCommand({ envName, instanceIds, envDisplayName: options.commandEnvDisplayName?.() });
   }
 
   function openMonitor(initialInstances?: string[], envName?: string, envNames?: string[]) {

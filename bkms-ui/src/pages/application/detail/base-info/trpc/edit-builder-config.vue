@@ -431,35 +431,23 @@
     ],
   });
 
-  // ========== 构建方式选项 ==========
-  const buildTypeOptions = computed<CardRadioOption[]>(() =>
-    [
-      {
-        value: 'platform',
-        label: t('平台通用构建'),
-        description: t('无需编写和维护 Dockerfile，平台按标准框架自动完成构建。可按需在「高级命令」补充构建步骤。'),
-      },
-      {
-        value: 'repositoryDockerfile',
-        label: t('使用仓库 Dockerfile'),
-        description: t(
-          '完全使用代码仓库中你自己维护的 Dockerfile 构建，平台不介入生成，构建过程以仓库内的 Dockerfile 为准。',
-        ),
-      },
-    ].filter(option => option.value !== 'platform' || platformBuildSupported.value),
-  );
-
-  watch(
-    [platformBuildSupported, () => isShow.value, () => builderData.value.repoBuildConfig?.imageBuildMode],
-    ([supported, visible, mode]) => {
-      const repo = builderData.value.repoBuildConfig;
-      // 加载失败不重写已有配置；确认为不支持后才切换构建方式。
-      if (visible && appDetailStore.runtime && !supported && mode === 'platform' && repo) {
-        repo.imageBuildMode = 'repositoryDockerfile';
-        repo.platformBuildConfig = undefined;
-      }
+  // 能力不支持时禁用选项并保留已有配置，避免打开侧栏就改写表单。
+  const buildTypeOptions = computed<CardRadioOption[]>(() => [
+    {
+      value: 'platform',
+      label: t('平台通用构建'),
+      description: t('无需编写和维护 Dockerfile，平台按标准框架自动完成构建。可按需在「高级命令」补充构建步骤。'),
+      disabled: !platformBuildSupported.value,
+      disabledTip: t('当前应用不支持平台通用构建'),
     },
-  );
+    {
+      value: 'repositoryDockerfile',
+      label: t('使用仓库 Dockerfile'),
+      description: t(
+        '完全使用代码仓库中你自己维护的 Dockerfile 构建，平台不介入生成，构建过程以仓库内的 Dockerfile 为准。',
+      ),
+    },
+  ]);
 
   // ========== 构建方式互斥 ==========
   // 切到 platform → 清空 dockerfile（镜像列表由 ImageModeSelect 组件挂载后自行拉取）
