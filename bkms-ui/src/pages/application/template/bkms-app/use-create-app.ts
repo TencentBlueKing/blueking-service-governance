@@ -72,11 +72,15 @@ export function buildBKMSAppPayload(form: BKMSAppForm, runtime: PublicView): Cre
   }
   const appModelSpec = cloneDeep(form.appModelSpec);
   if (form.framework === 'blank') {
-    // blank 创建时只填写命令和参数，脚本、环境变量在详情页配置。
-    appModelSpec.shCommand = '';
+    // 两种启动模式互斥；脚本保留原文，环境变量仍在创建后配置。
     appModelSpec.envVars = [];
-    appModelSpec.command = appModelSpec.command?.map(value => value.trim()).filter(Boolean);
-    appModelSpec.args = appModelSpec.args?.map(value => value.trim()).filter(Boolean);
+    if (appModelSpec.shCommand) {
+      appModelSpec.command = [];
+      appModelSpec.args = [];
+    } else {
+      appModelSpec.command = appModelSpec.command?.map(value => value.trim()).filter(Boolean);
+      appModelSpec.args = appModelSpec.args?.map(value => value.trim()).filter(Boolean);
+    }
   }
   return {
     workspaceID: form.workspaceID,

@@ -85,7 +85,6 @@ describe('创建启动配置提交', () => {
     const form = createBKMSAppForm('ws-1', 'blank', language);
     form.appModelSpec.command = [' \tpython3 \n', '', ' \t ', ' -u '];
     form.appModelSpec.args = [' /app/my script.py ', '', '\t', ' --message=hello world '];
-    form.appModelSpec.shCommand = 'stale script';
     form.appModelSpec.envVars = [{ key: 'STALE', value: 'value' }];
     const original = structuredClone(form);
 
@@ -95,6 +94,24 @@ describe('创建启动配置提交', () => {
       command: ['python3', '-u'],
       args: ['/app/my script.py', '--message=hello world'],
       shCommand: '',
+      envVars: [],
+    });
+    expect(form).toEqual(original);
+  });
+
+  it.each(['go', 'python', 'nodejs'])('blank + %s 原样提交 shell 脚本，清空互斥字段且不修改表单', language => {
+    const form = createBKMSAppForm('ws-1', 'blank', language);
+    const script = '  cd /app && printf "%s\\n" "$PORT" | cat\nexec ./server --port="$PORT"\n';
+    form.appModelSpec.command = ['/old/server'];
+    form.appModelSpec.args = ['--old'];
+    form.appModelSpec.shCommand = script;
+    form.appModelSpec.envVars = [{ key: 'STALE', value: 'value' }];
+    const original = structuredClone(form);
+
+    expect(buildBKMSAppPayload(form, { framework: 'blank', language }).appModelSpec).toEqual({
+      command: [],
+      args: [],
+      shCommand: script,
       envVars: [],
     });
     expect(form).toEqual(original);

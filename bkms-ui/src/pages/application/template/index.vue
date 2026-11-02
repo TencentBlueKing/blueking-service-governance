@@ -18,11 +18,8 @@
 
 <template>
   <div class="template-page">
-    <ToggleCard
-      class="template-panel"
-      :name="$t('应用模板')"
-      type="normal"
-    >
+    <div class="template-panel">
+      <div class="template-header">{{ $t('请选择一个应用模板') }}</div>
       <div class="template-content">
         <div class="section-heading">
           <h3>{{ $t('开发框架') }}</h3>
@@ -133,7 +130,7 @@
           >
         </div>
       </div>
-    </ToggleCard>
+    </div>
   </div>
 </template>
 <script setup lang="ts">
@@ -271,13 +268,18 @@
     remember();
   });
 </script>
-<style scoped>
+
+<style lang="postcss" scoped>
   .template-page {
     @apply mx-auto flex min-h-full w-full max-w-[1400px] justify-center bg-[#F5F7FA] p-[20px];
   }
 
   .template-panel {
-    @apply w-full max-w-[1400px] self-start rounded-[2px] bg-white shadow-[0_2px_4px_0_#1919290d];
+    @apply w-full max-w-[1400px] self-start overflow-hidden rounded-[2px] bg-white shadow-[0_2px_4px_0_#1919290d];
+  }
+
+  .template-header {
+    @apply select-none pt-[32px] text-center text-[24px] leading-[32px] text-[#313238];
   }
 
   .template-content {

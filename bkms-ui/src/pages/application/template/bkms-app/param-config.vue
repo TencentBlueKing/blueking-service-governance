@@ -318,17 +318,10 @@
       >
         <div class="config-fields">
           <Form.FormItem :label="$t('启动命令')">
-            <RepeatableInput
-              v-model="formData.appModelSpec.command"
-              :add-text="$t('添加启动命令')"
-              trim-on-input
-            />
-          </Form.FormItem>
-          <Form.FormItem :label="$t('命令参数')">
-            <RepeatableInput
-              v-model="formData.appModelSpec.args"
-              :add-text="$t('添加命令参数')"
-              trim-on-input
+            <StartupCommandInput
+              ref="startupCommandRef"
+              exec-background
+              :value="formData.appModelSpec"
             />
           </Form.FormItem>
         </div>
@@ -348,7 +341,7 @@
   import { DOC_LINKS } from '~/common/const';
   import { BKMS_REGEX } from '~/common/const';
   import CardRadio, { type CardRadioOption } from '~/components/card-radio.vue';
-  import RepeatableInput from '~/components/repeatable-input.vue';
+  import StartupCommandInput from '~/components/startup-command-input.vue';
   import BuildOutputHint from '~/pages/application/components/build-output-hint.vue';
   import GoBuildArgs from '~/pages/application/components/go-build-args.vue';
   import ImageModeSelect from '~/pages/application/components/image-mode-select.vue';
@@ -381,17 +374,19 @@
     () => `${t('每行一个，可填写文件路径或目录，相对构建目录，例如：')}\ndata/privatekey.pem\ncerts/`,
   );
   const formRef = ref<InstanceType<typeof Form> | null>(null);
+  const startupCommandRef = ref<InstanceType<typeof StartupCommandInput> | null>(null);
   async function validate() {
     try {
       // 校验基本表单
       const formValid = await formRef.value?.validate();
+      const startupValid = formData.value.framework !== 'blank' || (await startupCommandRef.value?.validate());
       // 流水线类型，还需要校验 PipelineConfig 组件
       if (builderType.value === 'pipeline' && pipelineConfigRef.value) {
         const pipelineValid = await pipelineConfigRef.value.validate();
         const configValid = await pipelineConfigRef.value.configValidate();
-        return formValid && pipelineValid && configValid.valid;
+        return formValid && startupValid && pipelineValid && configValid.valid;
       }
-      return formValid;
+      return formValid && startupValid;
     } catch {
       return false;
     }
@@ -533,6 +528,9 @@
   function getValue() {
     sanitizeCommands();
     const data = cloneDeep(formData.value);
+    if (data.framework === 'blank') {
+      Object.assign(data.appModelSpec, startupCommandRef.value?.getValue());
+    }
     // platform 模式下强制清空 dockerfile
     if (data.buildConfig.repoBuildConfig.imageBuildMode === 'platform') {
       data.buildConfig.repoBuildConfig.dockerfile = '';

@@ -25,6 +25,8 @@ import { createPinia, setActivePinia } from 'pinia';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import StartupCommandInput from '~/components/startup-command-input.vue';
 import ProgramConfig from '~/pages/application/detail/app-config/components/program-config.vue';
+import ParamConfig from '~/pages/application/template/bkms-app/param-config.vue';
+import { createBKMSAppForm } from '~/pages/application/template/bkms-app/use-create-app';
 import TafAppConfig from '~/pages/application/template/taf/app-config.vue';
 import TrpcAppConfig from '~/pages/application/template/trpc/app-config.vue';
 import { useAppDetail } from '~/stores/app-detail';
@@ -159,7 +161,74 @@ const createPageStubs = {
   }),
 };
 
+function mountBlankParameters(form = createBKMSAppForm('ws-1', 'blank', 'python')) {
+  form.name = 'demo';
+  form.id = 'demo-1';
+  form.buildConfig.repoBuildConfig.repoURL = 'https://example.com/demo.git';
+  return mount(ParamConfig, {
+    attachTo: document.body,
+    props: { form, platformBuildSupported: false },
+    global: {
+      plugins: [createPinia()],
+      mocks: i18nGlobalMocks,
+      stubs: {
+        ...createPageStubs,
+        GitSelector: { inheritAttrs: false, template: '<div />' },
+        CardRadio: true,
+        GoBuildArgs: true,
+      },
+      directives: { 'bk-xss-html': {}, bkloading: {} },
+    },
+  });
+}
+
 describe('创建应用的启动配置', () => {
+  it('blank 默认 exec，切换 shell 后仅收集当前模式并在重挂载时回显', async () => {
+    const form = createBKMSAppForm('ws-1', 'blank', 'python');
+    form.appModelSpec.command = ['/server'];
+    form.appModelSpec.args = ['--port=8080'];
+    let wrapper = mountBlankParameters(form);
+    await flushPromises();
+    const command = () => wrapper.getComponent(StartupCommandInput);
+    expect(command().find('textarea').exists()).toBe(false);
+    expect(await wrapper.vm.validate()).toBe(true);
+    await userEvent.click(within(command().element).getByText('shell', { exact: true }));
+    await command().get('textarea').setValue(SCRIPT);
+    expect(await wrapper.vm.validate()).toBe(true);
+    const saved = wrapper.vm.getValue();
+    expect(saved.appModelSpec).toEqual({ command: [], args: [], shCommand: SCRIPT, envVars: [] });
+    expect(form.appModelSpec).toEqual({ ...EXEC_SPEC, envVars: [] });
+    expect(wrapper.text()).not.toContain('环境变量');
+
+    await userEvent.click(within(command().element).getByText('exec', { exact: true }));
+    expect(wrapper.vm.getValue().appModelSpec).toEqual({ ...EXEC_SPEC, envVars: [] });
+    await userEvent.click(within(command().element).getByText('shell', { exact: true }));
+    expect(command().get<HTMLTextAreaElement>('textarea').element.value).toBe(SCRIPT);
+    wrapper.unmount();
+    wrapper = mountBlankParameters(saved);
+    await flushPromises();
+    expect(command().get<HTMLTextAreaElement>('textarea').element.value).toBe(SCRIPT);
+    expect(await wrapper.vm.validate()).toBe(true);
+    expect(wrapper.vm.getValue().appModelSpec).toEqual(saved.appModelSpec);
+    await userEvent.click(within(command().element).getByText('exec', { exact: true }));
+    expect(await wrapper.vm.validate()).toBe(true);
+    expect(wrapper.vm.getValue().appModelSpec).toEqual({ command: [], args: [], shCommand: '', envVars: [] });
+  });
+
+  it.each(['', ' \n\t'])('blank shell 脚本为 %j 时参数页校验失败，切回空 exec 后可提交', async script => {
+    const wrapper = mountBlankParameters();
+    await flushPromises();
+    const command = wrapper.getComponent(StartupCommandInput);
+    expect(await wrapper.vm.validate()).toBe(true);
+    await userEvent.click(within(command.element).getByText('shell', { exact: true }));
+    await command.get('textarea').setValue(script);
+    expect(await wrapper.vm.validate()).toBe(false);
+    expect(command.text()).toContain('必填项');
+    await userEvent.click(within(command.element).getByText('exec', { exact: true }));
+    expect(await wrapper.vm.validate()).toBe(true);
+    expect(wrapper.vm.getValue().appModelSpec).toEqual({ command: [], args: [], shCommand: '', envVars: [] });
+  });
+
   it('tRPC 创建表单默认使用 shell，校验并将原始脚本交给创建流程', async () => {
     const wrapper = mount(TrpcAppConfig, {
       attachTo: document.body,

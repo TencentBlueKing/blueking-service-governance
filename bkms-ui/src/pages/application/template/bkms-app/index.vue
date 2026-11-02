@@ -55,7 +55,14 @@
           :name="$t('应用模板')"
           type="normal"
         >
-          <div class="px-[24px] pb-[20px]">
+          <!-- 与下方 ParamConfig 的表单项对齐：左侧让出 label 宽度（label-width 135），右侧与输入框右边缘齐平 -->
+          <div
+            class="pb-[20px]"
+            style="
+              padding-left: calc(clamp(24px, calc((100vw - 910px) / 2), 245px) + 135px);
+              padding-right: clamp(24px, calc((100vw - 910px) / 2), 245px);
+            "
+          >
             <div class="flex items-center rounded-[2px] bg-[#F5F7FA] px-[16px] py-[12px]">
               <span class="template-summary-icon">
                 <component
@@ -378,7 +385,7 @@
   });
 </script>
 
-<style scoped>
+<style lang="postcss" scoped>
   .template-summary-icon {
     @apply inline-flex size-[40px] shrink-0 items-center justify-center overflow-hidden leading-none;
   }
