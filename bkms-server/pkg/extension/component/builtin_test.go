@@ -27,6 +27,7 @@ import (
 	"github.com/TencentBlueKing/gopkg/stringx"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"go.mongodb.org/mongo-driver/v2/bson"
 	"gopkg.in/yaml.v3"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
@@ -213,6 +214,27 @@ var _ = Describe("Builtin ComponentDefs Tests", func() {
 			Entry("the platform tenant", func() string { return platform }),
 			Entry("another tenant", func() string { return "tenant-" + stringx.Random(6) }),
 		)
+
+		// 测的是：缺 isBuiltin 字段的历史定义（如未标记的旧内置定义）也算自建定义，加载时明确报冲突，
+		// 而不是漏检后撞唯一索引
+		It("should treat a definition without the isBuiltin field as custom", func() {
+			legacy := &component.ComponentDef{
+				Name:      name,
+				Version:   component.DefaultComponentDefVersion,
+				Patchers:  []string{"foo: legacy\n"},
+				ScopeType: component.ScopeTypeGlobal,
+			}
+			Expect(compDefStore.Create(ctx, legacy, store.TenantOf(platform))).To(Succeed())
+			// store 写入的文档总带着 isBuiltin，只能直接改集合造出历史文档
+			Expect(compDefStore.Collection().UpdateOne(ctx,
+				bson.M{"tenantID": platform, "name": name, "version": component.DefaultComponentDefVersion},
+				bson.M{"$unset": bson.M{"isBuiltin": ""}},
+			)).Error().NotTo(HaveOccurred())
+
+			writeDef("builtin")
+			err := component.LoadBuiltinFromFolder(ctx, compDefStore, path)
+			Expect(err).To(MatchError(ContainSubstring(platform + "/" + legacy.Key())))
+		})
 	})
 
 	Context("LoadBuiltinFromFolder invalid input", func() {

@@ -60,7 +60,7 @@ type batchReleaseFixture struct {
 // 部署记录使用 2 批的策略，主工作负载为 GameDeployment demo
 func newBatchReleaseFixture() *batchReleaseFixture {
 	f := &batchReleaseFixture{
-		ctx:   auth.WithUser(context.Background(), auth.User{ID: "tester"}),
+		ctx:   auth.WithUser(testutil.NewDefaultTenantContext(), auth.User{ID: "tester"}),
 		db:    testutil.NewDB(GinkgoT()),
 		fake:  newFakeCluster(),
 		appID: "batch-release-op-" + stringx.Random(6),
@@ -71,7 +71,7 @@ func newBatchReleaseFixture() *batchReleaseFixture {
 	DeferCleanup(func() {
 		mocker.UnPatch()
 		server.Close()
-		_, _ = store.Of(f.db, RecordMeta).DeleteMany(context.Background(), store.Where("appID", f.appID))
+		_, _ = store.Of(f.db, RecordMeta).DeleteMany(testutil.NewDefaultTenantContext(), store.Where("appID", f.appID))
 	})
 
 	f.record = &Record{

@@ -288,8 +288,9 @@ DetailSyncTask = taskq.NewTaskType[ImageDetailSyncArgs](name, handle, opts...).G
 字段 `appCompInstanceCount`、`workspaceCompInstanceCount`。
 
 - `workspace/comp_store.go`、`appmodel/store.go` 的 `adjustInstanceCounts` 调用 `component.UpdateInstanceCount`：
-  先 `Modify` `$inc`；记录不存在时 `Create`，并发下撞唯一键则再 `Modify` 一次；记录不存在时的减少直接忽略。
-  项目没有使用 Mongo 事务，撞唯一键不会中止外层操作，因此不需要给 store 增加 upsert `$inc`。
+  增减都用 `ModifyOrCreate` `$inc`，记录不存在时以增量为初值创建，并发插入撞唯一键时由 store 重试。
+  减少不因记录不存在而忽略：实例写入与计数更新不在同一事务，首个实例刚写入就被删除时，扣减可能先于增加到达，
+  忽略它会让计数永久偏大、删除保护误判。迁移已把定义上的非零计数搬入计数表，记录缺失不代表有未搬迁的历史计数。
 - 列表接口按本页定义批量查询计数后拼装，返回结构不变。
 - 删除保护只看本租户计数；删除定义时一并删除其计数记录。
 - 计数与实例写入不在同一事务，会有偏差（现状如此）。

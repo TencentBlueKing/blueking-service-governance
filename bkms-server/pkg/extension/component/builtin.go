@@ -110,7 +110,8 @@ func LoadBuiltinFromFolder(ctx context.Context, defs *ComponentDefStore, folderP
 }
 
 // checkCustomDefConflicts 检查各租户是否已有与待加载内置定义同名的自建定义。
-// 内置定义对所有租户可见，与自建定义同名会让按名称解析定义产生歧义
+// 内置定义对所有租户可见，与自建定义同名会让按名称解析定义产生歧义。
+// 缺 isBuiltin 字段的历史文档也算自建定义，未标记的内置定义因此在这里明确报冲突，而不是之后撞唯一索引
 func checkCustomDefConflicts(ctx context.Context, defs *ComponentDefStore, builtins []*ComponentDef) error {
 	if len(builtins) == 0 {
 		return nil
@@ -118,7 +119,7 @@ func checkCustomDefConflicts(ctx context.Context, defs *ComponentDefStore, built
 	keys := lo.SliceToMap(builtins, func(c *ComponentDef) (string, struct{}) { return c.Key(), struct{}{} })
 	names := lo.Uniq(lo.Map(builtins, func(c *ComponentDef, _ int) string { return c.Name }))
 	customs, err := defs.List(ctx, store.TenantAll(),
-		store.Where("isBuiltin", false), store.Where("name", bson.M{"$in": names}),
+		store.Where("isBuiltin", bson.M{"$ne": true}), store.Where("name", bson.M{"$in": names}),
 		store.SelectFields("tenantID", "name", "version"),
 	)
 	if err != nil {

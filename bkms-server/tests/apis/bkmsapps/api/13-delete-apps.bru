@@ -16,9 +16,9 @@ assert {
 
 script:post-response {
   const axios = require("axios");
-  const {AUTH_HEADERS} = require("./common");
+  const {authHeaders} = require("./common");
   const resp = await axios.delete(`${bru.getEnvVar("serviceURL")}/apps/${bru.getVar("bkmsAppTafID")}`,
-    {headers: AUTH_HEADERS, validateStatus: () => true});
+    {headers: authHeaders(), validateStatus: () => true});
   bru.setVar("bkmsAppTafDeleteStatus", resp.status);
 }
 

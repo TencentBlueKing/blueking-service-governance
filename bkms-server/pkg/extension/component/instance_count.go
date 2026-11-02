@@ -63,19 +63,22 @@ func ByDef(name, version string) store.Opt {
 	return store.Filter(bson.M{"defName": name, "version": version})
 }
 
-// instanceCountField 返回计数类型对应的 bson 字段名，以及 count 上对应字段的指针
-func instanceCountField(count *InstanceCount, instanceType InstanceType) (string, *int32, error) {
+// instanceCountField 返回计数类型对应的 bson 字段名
+func instanceCountField(instanceType InstanceType) (string, error) {
 	switch instanceType {
 	case FieldAppCompInstance:
-		return "appCompInstanceCount", &count.AppCompInstanceCount, nil
+		return "appCompInstanceCount", nil
 	case FieldWorkspaceCompInstance:
-		return "workspaceCompInstanceCount", &count.WorkspaceCompInstanceCount, nil
+		return "workspaceCompInstanceCount", nil
 	default:
-		return "", nil, errors.Errorf("invalid instance type: %s", instanceType)
+		return "", errors.Errorf("invalid instance type: %s", instanceType)
 	}
 }
 
-// UpdateInstanceCount 原子调整当前租户下组件定义的实例计数，计数记录在首次增加时创建。
+// UpdateInstanceCount 原子调整当前租户下组件定义的实例计数，记录不存在时以 delta 为初值创建。
+//
+// 增减都走同一个原子累加：实例写入与计数更新不在同一事务，首个实例刚写入就被删除时，
+// 扣减可能先于增加到达，丢弃这次扣减会让计数永久偏大，删除保护随之误判
 //
 // - name: 组件定义名称（使用默认版本 DefaultComponentDefVersion）
 // - instanceType: 计数字段，FieldAppCompInstance 或 FieldWorkspaceCompInstance
@@ -83,36 +86,15 @@ func instanceCountField(count *InstanceCount, instanceType InstanceType) (string
 func UpdateInstanceCount(
 	ctx context.Context, counts *InstanceCountStore, name string, instanceType InstanceType, delta int,
 ) error {
-	count := &InstanceCount{DefName: name, Version: DefaultComponentDefVersion}
-	field, value, err := instanceCountField(count, instanceType)
+	field, err := instanceCountField(instanceType)
 	if err != nil {
 		return err
 	}
 	if delta == 0 {
 		return nil
 	}
-	wrap := func(err error) error {
-		return errors.Wrapf(err, "adjust instance count of component def(%s) field(%s) by %d", name, field, delta)
-	}
-	incr := func() error {
-		_, incrErr := counts.Modify(ctx, bson.M{"$inc": bson.M{field: delta}}, ByDef(name, DefaultComponentDefVersion))
-		return incrErr
-	}
-
-	if err = incr(); !errors.Is(err, store.ErrNotFound) {
-		return wrap(err)
-	}
-	// 记录不存在时的减少只可能来自计数表建立之前的数据，没有可减的值，忽略
-	if delta < 0 {
-		return nil
-	}
-	*value = int32(delta) //nolint:gosec // G115: counts fit in int32
-	err = counts.Create(ctx, count)
-	// 并发下记录可能已被其他请求创建，此时改为递增
-	if errors.Is(err, store.ErrDuplicate) {
-		err = incr()
-	}
-	return wrap(err)
+	_, err = counts.ModifyOrCreate(ctx, bson.M{"$inc": bson.M{field: delta}}, ByDef(name, DefaultComponentDefVersion))
+	return errors.Wrapf(err, "adjust instance count of component def(%s) field(%s) by %d", name, field, delta)
 }
 
 // ListInstanceCounts 返回当前租户下指定组件定义的实例计数，key 为 ComponentDef.Key()，没有记录的定义不在结果中

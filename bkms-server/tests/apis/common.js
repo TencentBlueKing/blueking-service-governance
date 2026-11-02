@@ -946,7 +946,7 @@ async function createBKMSApp(options = {}) {
 
   try {
     const response = await axios.post(`${serviceURL}/workspaces/${options.workspaceID}/bkmsapps`, body, {
-      headers: AUTH_HEADERS
+      headers: authHeaders()
     });
     bru.setVar(appKey, true);
     const created = response.data?.data || {};

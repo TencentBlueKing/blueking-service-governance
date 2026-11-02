@@ -24,9 +24,9 @@ assert {
 
 script:post-response {
   const axios = require("axios");
-  const {AUTH_HEADERS} = require("./common");
+  const {authHeaders} = require("./common");
   const resp = await axios.get(`${bru.getEnvVar("serviceURL")}/apps/${bru.getVar("bkmsAppBlankID")}`,
-    {headers: AUTH_HEADERS});
+    {headers: authHeaders()});
   bru.setVar("bkmsAppBlankSpecJSON", JSON.stringify(resp.data.data.appModelSpec));
 }
 

@@ -61,7 +61,7 @@ var _ = Describe("ComponentRefResolver", func() {
 	}
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = testutil.NewDefaultTenantContext()
 		db = testutil.NewDB(GinkgoT())
 		appStore = store.Of(db, bkmsapp.AppMeta)
 		workspaceID = "ws-ref-" + stringx.Random(6)

@@ -20,6 +20,7 @@ package component_test
 
 import (
 	"context"
+	"sync"
 
 	"github.com/TencentBlueKing/gopkg/stringx"
 	. "github.com/onsi/ginkgo/v2"
@@ -356,10 +357,29 @@ var _ = Describe("InstanceCount", func() {
 		Expect(got.WorkspaceCompInstanceCount).To(Equal(int32(2)))
 	})
 
-	// 测的是：没有记录时的减少直接忽略，不会创建一条负数计数
-	It("should ignore a decrement without a record", func() {
+	// 测的是：首个实例刚写入就被删除时，扣减可能先于增加到达，扣减不能丢，两者抵消后计数为 0
+	It("should net to zero when the decrement arrives before the first increment", func() {
 		update(ctx, component.FieldAppCompInstance, -1)
-		Expect(counts.Exists(ctx, component.ByDef(name, component.DefaultComponentDefVersion))).To(BeFalse())
+		update(ctx, component.FieldAppCompInstance, 1)
+		Expect(countOf(ctx).AppCompInstanceCount).To(Equal(int32(0)))
+	})
+
+	// 测的是：并发地首次增加同一个计数，记录只创建一条，每次增加都被计入
+	It("should count every concurrent first increment", func() {
+		const n = 10
+		var wg sync.WaitGroup
+		errs := make(chan error, n)
+		for range n {
+			wg.Go(func() {
+				errs <- component.UpdateInstanceCount(ctx, counts, name, component.FieldAppCompInstance, 1)
+			})
+		}
+		wg.Wait()
+		close(errs)
+		for err := range errs {
+			Expect(err).NotTo(HaveOccurred())
+		}
+		Expect(countOf(ctx).AppCompInstanceCount).To(Equal(int32(n)))
 	})
 
 	// 测的是：同一个定义在两个租户下的计数互不影响，各自只看到自己的值
