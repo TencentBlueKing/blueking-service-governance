@@ -66,8 +66,6 @@ func buildAppID(name, suffix string) (string, error) {
 }
 
 // buildCreateAppRequest 构建后端 API 创建应用请求体。
-// Helm / Agones 走 createAppRequest，平台托管应用（trpc / taf / blank）走 createBKMSAppRequest，两者只会有一个非空。
-// 调用前需先执行 spec.Validate()。
 func buildCreateAppRequest(appID string, spec *AppCreateSpec) (*createAppRequest, *createBKMSAppRequest, error) {
 	if spec.Type == constant.AppTypeHelm || spec.Type == constant.AppTypeAgones {
 		if spec.HelmSpec != nil {

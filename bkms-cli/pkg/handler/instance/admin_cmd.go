@@ -36,7 +36,6 @@ func ListTrpcAdminCmds(ctx context.Context, appID, envName string, instanceIDs [
 }
 
 // ExecAdminCmd 执行管理命令：校验类型必填参数 → 按 framework 路由到 Trpc/Taf API。
-// trpc、taf 与 bkmsApp 应用都按 framework 判断；blank 框架没有管理命令。
 func ExecAdminCmd(
 	ctx context.Context,
 	workspaceID, appID, envName string,
