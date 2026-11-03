@@ -149,6 +149,25 @@ type DeployOverviewAutoscaling = Pick<
 };
 
 /**
+ * 轮询会整体重建行对象，需沿用上一轮已查到的灰度进度，避免状态列在进度补查返回前闪烁回「部署中」。
+ * 仅当前仍为「部署中」的行可以沿用：环境一旦进入 deployed / failed / rolled-back，
+ * 上一轮的进度必须丢弃，否则状态列会一直停留在「灰度发布中 · 第 N/M 批」，
+ * 只能刷新页面才能恢复（enrichCanaryProgress 也只补查 deploying 行，不会覆盖旧值）。
+ */
+export function carryOverCanaryProgress(
+  previousRows: DeployOverviewRow[],
+  nextRows: DeployOverviewRow[],
+): DeployOverviewRow[] {
+  const previousCanary = new Map(previousRows.map(row => [row.name, row.canaryProgress]));
+  nextRows.forEach(row => {
+    if (row.deployStatus !== APP_DEPLOY_STATUS.DEPLOYING) return;
+    const previous = previousCanary.get(row.name);
+    if (previous) row.canaryProgress = previous;
+  });
+  return nextRows;
+}
+
+/**
  * 将分批发布进度接口响应收敛为行级进度摘要；非「部署中」的进行中分批发布返回 null。
  * 进度接口对最新部署记录返回终态（deployed / rolled-back 等）时，说明分批发布已结束，
  * 即使总览行的 deploying 来自更新的构建记录，也不能再按灰度发布中展示。
@@ -511,13 +530,8 @@ export function useDeployOverview(envList: Ref<EnvOutput[]>) {
         { interceptorErr: false },
       );
       if (token !== loadToken) return;
-      // 轮询会整体重建行对象；沿用上一轮的灰度进度，避免状态列在进度返回前闪烁回「部署中」。
-      const previousCanary = new Map(rows.value.map(row => [row.name, row.canaryProgress]));
-      rows.value = (list || []).map(buildRow);
-      rows.value.forEach(row => {
-        const previous = previousCanary.get(row.name);
-        if (previous) row.canaryProgress = previous;
-      });
+      const previousRows = rows.value;
+      rows.value = carryOverCanaryProgress(previousRows, (list || []).map(buildRow));
       isError.value = false;
       // 分批发布进行中时部署状态保持 deploying，进度需按环境补充查询（仅应用模型应用）。
       if (isAppModelAppType(appDetailStore.appType)) {

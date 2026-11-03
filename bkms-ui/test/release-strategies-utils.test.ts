@@ -259,6 +259,33 @@ describe('发布策略纯函数：表单整体校验', () => {
     });
     expect(mixedUnits.valid).toBe(true);
   });
+
+  it('混合单位时同单位批次不相邻也应比较，避免漏判非递增配置', () => {
+    // [5 个, 50%, 3 个]：相邻两对单位均不同，但第 3 批的 3 个小于第 1 批的 5 个，必须报错
+    const result = validateStrategyForm({
+      ...validForm,
+      batches: [
+        batch({ key: 'a', targetUnit: 'count', targetValue: 5 }),
+        batch({ key: 'b', targetUnit: 'percent', targetValue: 50 }),
+        batch({ key: 'c', targetUnit: 'count', targetValue: 3 }),
+      ],
+    });
+    expect(result.valid).toBe(false);
+    expect(result.batchErrors.c).toBe('累计更新数需大于上一批');
+    // 详情指向「上一个同单位批次」（第 1 批）的累计值
+    expect(result.batchErrorDetails.c).toEqual({ key: '累计更新数需大于上一批（{0}）', params: ['5 个'] });
+
+    // 同单位递增（3 个 > 5 个不成立时才报错；6 个 > 5 个应通过）
+    const increasing = validateStrategyForm({
+      ...validForm,
+      batches: [
+        batch({ key: 'a', targetUnit: 'count', targetValue: 5 }),
+        batch({ key: 'b', targetUnit: 'percent', targetValue: 50 }),
+        batch({ key: 'c', targetUnit: 'count', targetValue: 6 }),
+      ],
+    });
+    expect(increasing.valid).toBe(true);
+  });
 });
 
 describe('发布策略纯函数：批次卡片文案', () => {

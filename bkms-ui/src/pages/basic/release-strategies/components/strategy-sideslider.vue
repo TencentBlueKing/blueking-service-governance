@@ -199,6 +199,7 @@
     DESCRIPTION_MAX_LENGTH,
     generateCloneName,
     NAME_MAX_LENGTH,
+    STRATEGY_NAME_CONFLICT_PATTERN,
     toBatchForms,
     toBatchInputs,
     translate,
@@ -371,6 +372,8 @@
     batchesEmptyError.value = '';
     batchErrors.value = {};
     batchErrorDetails.value = {};
+    // 后端名称错误只针对本次提交的策略，回填另一条策略时必须清掉，否则合法名称也会被旧错误挡住
+    apiNameError.value = '';
     basicCollapsed.value = false;
     batchCollapsed.value = false;
     previewVisible.value = false;
@@ -423,6 +426,9 @@
   function handleClosed() {
     batchErrors.value = {};
     batchErrorDetails.value = {};
+    // 抽屉跨策略复用，关闭时清掉后端名称错误，避免残留到下一次打开
+    apiNameError.value = '';
+    batchesEmptyError.value = '';
   }
 
   /** 名称失焦：先清掉后端返回的重名文案，再交给 Form 重新校验，避免旧错误一直挂着 */
@@ -475,7 +481,9 @@
       console.error(error);
       const apiError = error as { error?: { message?: string } };
       const message = apiError?.error?.message || t('请求异常');
-      if (/名称|name/i.test(message)) {
+      // 仅精确匹配名称冲突（后端文案为 "release strategy name already exists" 等已存在表述），
+      // 不能宽松匹配 name，否则 envName invalid 等其他含 name 的报错会被误挂到「策略名称」项下
+      if (STRATEGY_NAME_CONFLICT_PATTERN.test(message)) {
         // 后端重名文案内联展示在名称项下，与前端校验一致
         apiNameError.value = message;
         await nextTick();

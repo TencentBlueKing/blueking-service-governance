@@ -308,9 +308,9 @@
 </template>
 
 <script lang="ts" setup>
-  import { computed, onMounted, reactive, ref } from 'vue';
+  import { computed, onMounted, reactive, ref, watch } from 'vue';
 
-  import { Button, Form, Input, Select, Tag } from 'bkui-vue';
+  import { Button, Form, Input, Message, Select, Tag } from 'bkui-vue';
   import { Plus } from 'bkui-vue/lib/icon';
   import { useI18n } from 'vue-i18n';
   import { useRouter } from 'vue-router';
@@ -473,6 +473,8 @@
   const canaryDisabledReason = computed(() => {
     if (!isAppModelAppType(appDetailStore.appType)) return t('仅应用模型应用支持分批发布');
     if (props.isFederationEnv) return t('联邦集群环境暂不支持分批发布');
+    // 主工作负载资格检查完成前不允许选择分批发布，避免「先选后禁」留下已选策略透传给后端。
+    if (workloadKindLoading.value) return t('正在检查分批发布资格，请稍候');
     // 主工作负载明确为 Deployment 时禁用；无部署记录（未知）时不因该条件禁用，由后端兜底校验。
     if (mainWorkloadKind.value === 'Deployment') return t('仅主工作负载为 GameDeployment 的应用支持分批发布');
     if (imageSource.value === 'code') return t('构建部署暂不支持分批发布');
@@ -489,10 +491,13 @@
    * 无部署记录时为空字符串，表示未知（不因此禁用分批发布，由后端兜底校验）。
    */
   const mainWorkloadKind = ref('');
+  /** 主工作负载资格检查是否进行中：检查完成前禁用分批发布，避免选择后再被回退。 */
+  const workloadKindLoading = ref(false);
 
   /** 拉取最近一条部署记录以获取主工作负载类型；仅应用模型应用且已选环境时执行。 */
   async function fetchMainWorkloadKind() {
     if (!isAppModelAppType(appDetailStore.appType) || !envName.value) return;
+    workloadKindLoading.value = true;
     const deployAPIs = useDeployAPIs(appDetailStore.appType as DeployableAppType);
     const res = await deployAPIs
       .listDeployRecords({
@@ -503,7 +508,16 @@
       })
       .catch(() => ({ count: 0, results: [] as AppModelDeployRecordOutputObj[] }));
     mainWorkloadKind.value = res?.results?.[0]?.workloadKind ?? '';
+    workloadKindLoading.value = false;
   }
+
+  // 资格异步返回导致已选分批模式失效时，重置为一次更新全部并提示，避免带着后端必拒的参数提交。
+  watch(canaryDisabledReason, reason => {
+    if (!reason || formModel.releaseMode !== 'canary') return;
+    formModel.releaseMode = 'all';
+    formModel.releaseStrategyID = '';
+    Message({ theme: 'warning', message: t('当前环境不支持分批发布，已重置为一次更新全部实例') });
+  });
 
   /** 拉取工作空间发布策略；侧栏按环境名重建，随挂载加载一次即可。 */
   async function fetchReleaseStrategies() {
@@ -570,20 +584,25 @@
     ];
   });
 
-  /** 策略说明文案：先 1 个实例，确认后累计到 25%、50%，最后自动全量 */
+  /**
+   * 策略说明文案：先 1 个实例，确认后累计到 25%、50%，最后自动全量。
+   * 末批非全量时后端仍会补齐剩余实例（UpdatingPrimary 阶段），因此收尾固定为「最后自动全量」，
+   * 与策略预览、发布预览中的「系统补齐全量批」保持一致。
+   */
   const strategyHintText = computed(() => {
     const hint = buildStrategyHint(selectedStrategy.value?.batches);
     if (!hint) return '';
     const parts: string[] = [];
-    // 单批次全量策略只提示「最后自动全量」，避免「先更新到 100%」的重复表述
-    const isSingleFull = hint.firstIsPercent && hint.lastIsFull && hint.middleTargets.length === 0;
+    // 仅「真的只有一个批次且为全量」才只提示「最后自动全量」，避免「先更新到 100%」的重复表述；
+    // 两批策略（如 25% → 100%）不能用中间批次数判断，否则首批灰度阶段会被漏掉。
+    const isSingleFull = hint.batchCount === 1 && hint.lastIsFull;
     if (!isSingleFull) {
       parts.push(hint.firstIsPercent ? t('先更新到 {0}', [hint.firstTarget]) : t('先 {0} 个实例', [hint.firstTarget]));
     }
     if (hint.middleTargets.length > 0) {
       parts.push(t('确认后累计到 {0}', [hint.middleTargets.join('、')]));
     }
-    parts.push(hint.lastIsFull ? t('最后自动全量') : t('最后累计到 {0}', [hint.lastTarget]));
+    parts.push(t('最后自动全量'));
     return parts.join('，');
   });
 
@@ -624,6 +643,12 @@
   // 执行部署：根据镜像来源调用直接部署或构建+部署接口
   async function deploy(targetEnv: EnvOutput) {
     if (!targetEnv.name || !checkDeployEnv(targetEnv)) return false;
+    // 提交前按最新资格兜底校验：分批发布已失效（如主工作负载异步判定为 Deployment）时拦截，
+    // 不把后端必拒的 releaseStrategyID 透传出去。
+    if (formModel.releaseMode === 'canary' && canaryDisabledReason.value) {
+      Message({ theme: 'error', message: canaryDisabledReason.value });
+      return false;
+    }
     const deployAPIs = useDeployAPIs(appDetailStore.appType as DeployableAppType);
     const params: DeployParams = {
       appID: appDetailStore.appID,
