@@ -54,12 +54,12 @@ type bkmsAppModelSpec struct {
 }
 
 // buildAppID 根据应用名称与 API 返回的后缀拼接应用 ID
-// 如果拼接后超过最大长度限制则返回错误，提示用户缩短名称或直接指定 id
+// 应用 ID 不支持指定，拼接后超过最大长度限制时返回错误，只能缩短应用名称
 func buildAppID(name, suffix string) (string, error) {
 	id := name + suffix
 	if len(id) > maxIDLength {
 		return "", errors.Errorf(
-			"generated app ID '%s' exceeds %d characters, please use a shorter name or specify 'id' field directly",
+			"generated app ID '%s' exceeds %d characters, please use a shorter 'name'",
 			id, maxIDLength)
 	}
 	return id, nil

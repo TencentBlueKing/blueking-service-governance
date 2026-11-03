@@ -211,8 +211,7 @@ type DevModePublishRecordsResp struct {
 
 // AppFull 应用完整定义
 type AppFull struct {
-	// ID 应用 ID。YAML 输出不包含它：应用 ID 由服务端生成，无法通过 'app create -f' 复用
-	ID              string        `json:"id" yaml:"-"`
+	ID              string        `json:"id" yaml:"id"`
 	Name            string        `json:"name" yaml:"name"`
 	DisplayName     string        `json:"displayName" yaml:"displayName"`
 	Type            string        `json:"type" yaml:"type"`
