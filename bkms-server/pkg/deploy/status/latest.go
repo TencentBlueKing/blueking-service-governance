@@ -27,6 +27,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/autodeploy"
 	buildimage "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/appmodel"
 )
 
@@ -102,9 +103,9 @@ func (s *DeployStatusService) GetLatestDeploy(
 	envName, laneName string,
 ) (*LatestDeploy, error) {
 	switch {
-	case app.IsAppModelType(application.Type):
+	case appruntime.IsAppModelType(application.Type):
 		return s.getLatestAppModelDeploy(ctx, application.ID, envName, laneName)
-	case app.IsHelmBasedType(application.Type):
+	case appruntime.IsHelmBasedType(application.Type):
 		return s.getLatestHelmDeploy(ctx, application.ID, envName, laneName)
 	default:
 		return nil, ErrUnsupportedAppType

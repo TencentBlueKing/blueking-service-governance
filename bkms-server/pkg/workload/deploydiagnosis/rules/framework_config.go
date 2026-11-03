@@ -24,7 +24,6 @@ import (
 	"strings"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/utils/file"
-	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 )
 
 var (
@@ -47,9 +46,9 @@ type FrameworkConfigRule struct{}
 // ID 返回 IDFrameworkConfigNotFound
 func (FrameworkConfigRule) ID() string { return IDFrameworkConfigNotFound }
 
-// Diagnose 只对 tRPC / TAF 应用生效；处理步骤按日志里读取路径的形态区分
+// Diagnose 只对带框架配置文件的应用生效；处理步骤按日志里读取路径的形态区分
 func (r FrameworkConfigRule) Diagnose(snap *Snapshot, inst *Instance) *Group {
-	if !bkmsapp.IsAppModelType(snap.AppType) {
+	if !snap.FrameworkConfig.Supported {
 		return nil
 	}
 	evidence, logPath := r.findEvidence(inst.LogLines, snap.FrameworkConfig.FileName)

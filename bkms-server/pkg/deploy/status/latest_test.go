@@ -53,7 +53,7 @@ var _ = Describe("DeployStatusService.GetLatestDeploy", func() {
 	)
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = testutil.NewDefaultTenantContext()
 		var envSvc *bkmsenv.EnvService
 		diApp = fxtest.New(GinkgoT(), appcfg.FxModule, bkmsenv.FxModule, fx.Populate(&envSvc))
 		diApp.RequireStart()

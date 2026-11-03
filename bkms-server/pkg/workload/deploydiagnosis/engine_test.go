@@ -23,7 +23,6 @@ import (
 	. "github.com/onsi/gomega"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/autodeploy"
-	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	deploystatus "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/status"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/deploydiagnosis/rules"
@@ -45,9 +44,10 @@ func makeCrashingInstance(id string, logLines ...string) *rules.Instance {
 }
 
 var trpcFrameworkConfig = rules.FrameworkConfig{
-	FileName: "trpc_go.yaml",
-	FilePath: "/app/conf",
-	Command:  "/app/server",
+	Supported: true,
+	FileName:  "trpc_go.yaml",
+	FilePath:  "/app/conf",
+	Command:   "/app/server",
 }
 
 func findConfigRow(rows []rules.ConfigRow, label string) *rules.ConfigRow {
@@ -61,7 +61,7 @@ func findConfigRow(rows []rules.ConfigRow, label string) *rules.ConfigRow {
 
 var _ = Describe("diagnose", func() {
 	It("returns no_deploy when the env has never been deployed", func() {
-		out := new(Diagnoser).diagnose(&rules.Snapshot{AppType: bkmsapp.AppTypeTRPC})
+		out := new(Diagnoser).diagnose(&rules.Snapshot{})
 
 		assertTopLevelFields(out)
 		Expect(out.EmptyReason).To(Equal(EmptyReasonNoDeploy))
@@ -70,7 +70,6 @@ var _ = Describe("diagnose", func() {
 
 	It("returns deploying without running rules while a deploy is in progress", func() {
 		out := new(Diagnoser).diagnose(&rules.Snapshot{
-			AppType:         bkmsapp.AppTypeTRPC,
 			Deploy:          makeDeploy(deploystatus.DeployPhaseInProgress),
 			InstancesListed: true,
 			Instances:       []*rules.Instance{{ID: "pod-a", Status: "Pending", IsHealthy: false}},
@@ -92,7 +91,7 @@ var _ = Describe("diagnose", func() {
 			&rules.Snapshot{Deploy: makeDeploy(deploystatus.DeployPhaseSucceeded), InstancesListed: true},
 			EmptyReasonNoInstance),
 		Entry("deploy exists but pods cannot be listed",
-			&rules.Snapshot{AppType: bkmsapp.AppTypeHelm, Deploy: makeDeploy(deploystatus.DeployPhaseSucceeded)},
+			&rules.Snapshot{Deploy: makeDeploy(deploystatus.DeployPhaseSucceeded)},
 			EmptyReasonInstancesUnavailable),
 		Entry("every instance is ready",
 			&rules.Snapshot{
@@ -157,7 +156,6 @@ var _ = Describe("diagnose", func() {
 	It("matches framework-config-not-found and marks a mismatched log path as danger", func() {
 		logLine := "open /data/trpc_go.yaml: no such file or directory"
 		out := new(Diagnoser).diagnose(&rules.Snapshot{
-			AppType:         bkmsapp.AppTypeTRPC,
 			Deploy:          makeDeploy(deploystatus.DeployPhaseSucceeded),
 			FrameworkConfig: trpcFrameworkConfig,
 			Instances: []*rules.Instance{{
@@ -192,7 +190,6 @@ var _ = Describe("diagnose", func() {
 	DescribeTable("picks framework config solutions by the shape of the log path",
 		func(logLine string, wantDanger bool, wantFirstSolution string) {
 			out := new(Diagnoser).diagnose(&rules.Snapshot{
-				AppType:         bkmsapp.AppTypeTRPC,
 				Deploy:          makeDeploy(deploystatus.DeployPhaseSucceeded),
 				FrameworkConfig: trpcFrameworkConfig,
 				Instances:       []*rules.Instance{makeCrashingInstance("pod-a", logLine)},
@@ -216,7 +213,6 @@ var _ = Describe("diagnose", func() {
 	DescribeTable("does not treat a non-config missing file as framework-config-not-found",
 		func(logLine string) {
 			out := new(Diagnoser).diagnose(&rules.Snapshot{
-				AppType:         bkmsapp.AppTypeTRPC,
 				Deploy:          makeDeploy(deploystatus.DeployPhaseSucceeded),
 				FrameworkConfig: trpcFrameworkConfig,
 				Instances:       []*rules.Instance{makeCrashingInstance("pod-c", logLine)},
@@ -232,10 +228,10 @@ var _ = Describe("diagnose", func() {
 		Entry("other config file", "open /data/settings.yaml: no such file or directory"),
 	)
 
-	It("does not emit framework-config-not-found for Helm apps", func() {
+	It("does not emit framework-config-not-found for apps without a framework config file", func() {
+		// Helm 类应用、blank 框架的 FrameworkConfig 为零值
 		out := new(Diagnoser).diagnose(&rules.Snapshot{
-			AppType: bkmsapp.AppTypeHelm,
-			Deploy:  makeDeploy(deploystatus.DeployPhaseSucceeded),
+			Deploy: makeDeploy(deploystatus.DeployPhaseSucceeded),
 			Instances: []*rules.Instance{
 				makeCrashingInstance("pod-h", "open /data/trpc_go.yaml: no such file or directory"),
 			},
@@ -251,7 +247,6 @@ var _ = Describe("diagnose", func() {
 
 	It("groups by rule in rule-set order and sorts instances by restart count", func() {
 		out := new(Diagnoser).diagnose(&rules.Snapshot{
-			AppType:         bkmsapp.AppTypeTRPC,
 			Deploy:          makeDeploy(deploystatus.DeployPhaseFailed),
 			FrameworkConfig: trpcFrameworkConfig,
 			Instances: []*rules.Instance{
@@ -279,7 +274,6 @@ var _ = Describe("diagnose", func() {
 
 	It("keeps pod events on the instance and workload events on the group", func() {
 		out := new(Diagnoser).diagnose(&rules.Snapshot{
-			AppType:         bkmsapp.AppTypeTRPC,
 			Deploy:          makeDeploy(deploystatus.DeployPhaseSucceeded),
 			InstancesListed: true,
 			Events: []rules.Event{
@@ -323,32 +317,13 @@ var _ = Describe("diagnose", func() {
 	})
 })
 
-var _ = DescribeTable("buildFrameworkConfig",
-	func(appType string, workload appmodel.Workload, want rules.FrameworkConfig) {
-		Expect(buildFrameworkConfig(appType, &appmodel.AppModel{Workload: workload})).To(Equal(want))
+var _ = DescribeTable("buildStartCommand",
+	func(workload appmodel.Workload, want string) {
+		Expect(buildStartCommand(workload)).To(Equal(want))
 	},
-	Entry(
-		"tRPC reads trpc config and joins command with args",
-		bkmsapp.AppTypeTRPC,
-		appmodel.Workload{
-			Command:    []string{"/app/server"},
-			Args:       []string{"-conf", "/app/conf/trpc_go.yaml"},
-			TrpcConfig: appmodel.TrpcConfig{FileName: "trpc_go.yaml", FilePath: "/app/conf"},
-		},
-		rules.FrameworkConfig{
-			FileName: "trpc_go.yaml",
-			FilePath: "/app/conf",
-			Command:  "/app/server -conf /app/conf/trpc_go.yaml",
-		},
-	),
-	Entry("TAF reads taf config",
-		bkmsapp.AppTypeTAF,
-		appmodel.Workload{TafConfig: appmodel.TafConfig{FileName: "app.conf", FilePath: "/usr/local/app"}},
-		rules.FrameworkConfig{FileName: "app.conf", FilePath: "/usr/local/app"},
-	),
-	Entry("other app types only carry the command",
-		bkmsapp.AppTypeHelm,
-		appmodel.Workload{Command: []string{"run"}, TrpcConfig: appmodel.TrpcConfig{FileName: "ignored.yaml"}},
-		rules.FrameworkConfig{Command: "run"},
-	),
+	Entry("joins command with args",
+		appmodel.Workload{Command: []string{"/app/server"}, Args: []string{"-conf", "/app/conf/trpc_go.yaml"}},
+		"/app/server -conf /app/conf/trpc_go.yaml"),
+	Entry("command only", appmodel.Workload{Command: []string{"run"}}, "run"),
+	Entry("nothing configured", appmodel.Workload{}, ""),
 )

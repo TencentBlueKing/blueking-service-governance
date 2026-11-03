@@ -112,7 +112,7 @@ var _ = Describe("Diagnoser.Diagnose", func() {
 	)
 
 	BeforeEach(func() {
-		ctx = context.Background()
+		ctx = testutil.NewDefaultTenantContext()
 		oldConfig = config.G
 		config.G = &config.Config{
 			BCS: config.BCSConfig{
@@ -186,6 +186,11 @@ var _ = Describe("Diagnoser.Diagnose", func() {
 			Expect(out.Groups[0].RuleID).To(Equal(rules.IDFrameworkConfigNotFound))
 			Expect(out.Groups[0].Instances[0].Evidence).To(ContainElement(logLine))
 			Expect(out.Groups[0].Instances[0].LogSource).To(Equal(rules.LogSourcePrevious))
+
+			// 文件名和挂载目录取自 framework def
+			configs := out.Groups[0].Instances[0].RelatedConfigs
+			Expect(findConfigRow(configs, "框架配置文件").Value).To(Equal("trpc_go.yaml"))
+			Expect(findConfigRow(configs, "配置文件路径").Value).To(Equal("/app/conf"))
 		})
 	})
 

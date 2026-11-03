@@ -32,6 +32,8 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime/runtimemod/mods"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	deploystatus "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/status"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/clusterresources"
@@ -63,7 +65,6 @@ func (d *Diagnoser) collectSnapshot(
 	trafficLaneName string,
 ) (*rules.Snapshot, error) {
 	snap := &rules.Snapshot{
-		AppType:         app.Type,
 		Instances:       []*rules.Instance{},
 		Events:          []rules.Event{},
 		PartialReasons:  []string{},
@@ -141,35 +142,38 @@ func buildDeploy(latest *deploystatus.LatestDeploy) *rules.Deploy {
 	return deploy
 }
 
-// loadFrameworkConfig 读取 tRPC / TAF 的框架配置文件名、目录和启动命令，读失败则留空、不中断诊断
+// loadFrameworkConfig 读取框架配置文件的名称、挂载目录和启动命令，任一项读失败只留空、不中断诊断
+// 读取的模型：AppConfigFileDef（文件名、挂载目录）、AppModel（启动命令）
 //
 // FIXME: 读的是应用当前配置而非该次部署的资源快照，配置已改但未重新部署时，路径比对可能对不上正在跑的实例
 func (d *Diagnoser) loadFrameworkConfig(ctx context.Context, app *bkmsapp.Application) rules.FrameworkConfig {
-	if !bkmsapp.IsAppModelType(app.Type) {
+	// 与框架配置文件接口同一判定：Helm 类应用和 blank 框架都没有框架配置文件
+	if !mods.Of(app).FrameworkFile.Supported {
 		return rules.FrameworkConfig{}
 	}
+	fc := rules.FrameworkConfig{Supported: true}
+
+	// 文件名和挂载目录以 framework def 为准，AppModel 上的旧字段不再随配置修改同步
+	def, err := appcfg.GetFrameworkDef(ctx, store.Of(d.registry.DB, appcfg.AppConfigFileDefMeta), app.ID)
+	if err != nil {
+		logging.Warnf(ctx, "load framework config def for diagnosis app %s: %v", app.ID, err)
+	} else if def != nil {
+		fc.FileName = def.Name
+		fc.FilePath = def.MountDir
+	}
+
 	am, err := store.Of(d.registry.DB, appmodel.AppModelMeta).Get(ctx, appmodel.ByApp(app.ID))
 	if err != nil {
 		logging.Warnf(ctx, "load app model for diagnosis app %s: %v", app.ID, err)
-		return rules.FrameworkConfig{}
+		return fc
 	}
-	return buildFrameworkConfig(app.Type, am)
+	fc.Command = buildStartCommand(am.Workload)
+	return fc
 }
 
-// buildFrameworkConfig 按应用类型取对应框架的配置字段，其他类型只带启动命令
-func buildFrameworkConfig(appType string, am *appmodel.AppModel) rules.FrameworkConfig {
-	fc := rules.FrameworkConfig{
-		Command: strings.TrimSpace(strings.Join(append(am.Workload.Command, am.Workload.Args...), " ")),
-	}
-	switch appType {
-	case bkmsapp.AppTypeTRPC:
-		fc.FileName = am.Workload.TrpcConfig.FileName
-		fc.FilePath = am.Workload.TrpcConfig.FilePath
-	case bkmsapp.AppTypeTAF:
-		fc.FileName = am.Workload.TafConfig.FileName
-		fc.FilePath = am.Workload.TafConfig.FilePath
-	}
-	return fc
+// buildStartCommand 把启动命令和参数拼成一行展示
+func buildStartCommand(w appmodel.Workload) string {
+	return strings.TrimSpace(strings.Join(append(append([]string{}, w.Command...), w.Args...), " "))
 }
 
 // buildInstances 用实例列表同一套口径投影 Pod，任一 Pod 解析失败则整单失败

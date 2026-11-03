@@ -37,8 +37,6 @@ const (
 
 // Snapshot 一次诊断用的原始数据，规则只读这份快照
 type Snapshot struct {
-	// AppType 应用类型，只有 tRPC / TAF 才匹配框架配置规则
-	AppType string
 	// Deploy 最新一次部署；从未部署过时为 nil
 	Deploy *Deploy
 	// Instances 当前环境的全部实例，含健康实例和没拉到日志的实例
@@ -49,7 +47,7 @@ type Snapshot struct {
 	Events []Event
 	// PartialReasons 采集未取全的数据源，规则不读，原样带到诊断结论
 	PartialReasons []string
-	// FrameworkConfig 应用模型里的框架配置，用来和日志中的读取路径比对
+	// FrameworkConfig 应用的框架配置文件，用来和日志中的读取路径比对
 	FrameworkConfig FrameworkConfig
 }
 
@@ -105,6 +103,8 @@ type Event struct {
 
 // FrameworkConfig 框架配置文件的名称、挂载目录和启动命令，只给框架配置规则做路径比对
 type FrameworkConfig struct {
+	// Supported 应用的框架是否带框架配置文件（tRPC / TAF）；为 false 时不匹配框架配置规则
+	Supported bool
 	// FileName 框架配置文件名，如 trpc_go.yaml
 	FileName string
 	// FilePath 配置文件在容器内的目录
