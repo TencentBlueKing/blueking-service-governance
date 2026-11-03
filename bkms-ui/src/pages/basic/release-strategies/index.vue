@@ -107,10 +107,11 @@
           <template #default="{ row }">
             <Popover
               placement="bottom-start"
+              :popover-delay="[300, 100]"
               theme="light !px-[16px]"
               trigger="hover"
             >
-              <div class="flex items-center gap-[8px]">
+              <div class="flex items-center gap-[8px] w-fit">
                 <span class="text-[#4D4F56]">{{ t('{0} 批', [batchCount(row)]) }}</span>
                 <div class="flex items-center gap-[2px] w-[100px]">
                   <span
