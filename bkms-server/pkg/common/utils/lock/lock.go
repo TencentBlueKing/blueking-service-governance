@@ -29,6 +29,9 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/redis"
 )
 
+// rollbackTimeout MultiRedisLock 加锁失败时释放已获取 key 的超时时间
+const rollbackTimeout = 3 * time.Second
+
 // Locker 分布式锁，RedisLock 与 MultiRedisLock 均实现该接口
 type Locker interface {
 	Acquire(ctx context.Context) bool
@@ -65,7 +68,9 @@ func (l *RedisLock) Acquire(ctx context.Context) bool {
 // Release 释放锁
 func (l *RedisLock) Release(ctx context.Context) {
 	// 删除键以释放锁
-	redis.Client().Del(ctx, l.key)
+	if err := redis.Client().Del(ctx, l.key).Err(); err != nil {
+		log.Errorf(ctx, "error occurred when release lock %s: %v", l.key, err)
+	}
 }
 
 // MultiRedisLock 由多个 key 组成的锁：按顺序逐个获取，全部成功才算加锁成功。
@@ -89,12 +94,20 @@ func (l *MultiRedisLock) Acquire(ctx context.Context) bool {
 		if lk.Acquire(ctx) {
 			continue
 		}
-		for j := i - 1; j >= 0; j-- {
-			l.locks[j].Release(ctx)
-		}
+		l.rollback(ctx, l.locks[:i])
 		return false
 	}
 	return true
+}
+
+// rollback 逆序释放本次已获取的 key。获取失败可能正是因为 ctx 已取消，
+// 沿用该 ctx 会导致删除不执行、key 残留到锁超时，因此改用不随 ctx 取消、单独限时的 ctx
+func (l *MultiRedisLock) rollback(ctx context.Context, acquired []*RedisLock) {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), rollbackTimeout)
+	defer cancel()
+	for i := len(acquired) - 1; i >= 0; i-- {
+		acquired[i].Release(ctx)
+	}
 }
 
 // Release 按加锁的逆序释放全部 key

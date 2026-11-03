@@ -24,6 +24,7 @@ import (
 	"github.com/TencentBlueKing/gopkg/stringx"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	goredis "github.com/redis/go-redis/v9"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/utils/lock"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/redis"
@@ -110,7 +111,43 @@ var _ = Describe("MultiRedisLock", func() {
 		Expect(lock.NewMultiRedisLock(10, keyA, keyB).Acquire(ctx)).To(BeFalse())
 		Expect(exists(keyA)).To(BeFalse())
 	})
+
+	It("should roll back acquired keys when ctx is canceled before a later key is acquired", func() {
+		acquireCtx, cancel := context.WithCancel(ctx)
+		defer cancel()
+		// keyA 加锁成功后立即取消 ctx，使 keyB 的加锁与回滚都拿到已取消的 ctx
+		redis.Client().AddHook(cancelAfterSetHook{key: keyA, cancel: cancel})
+
+		Expect(lock.NewMultiRedisLock(10, keyA, keyB).Acquire(acquireCtx)).To(BeFalse())
+		Expect(acquireCtx.Err()).To(MatchError(context.Canceled))
+		Expect(exists(keyA)).To(BeFalse())
+		Expect(exists(keyB)).To(BeFalse())
+	})
 })
+
+// cancelAfterSetHook 在对 key 执行的 SET 完成后调用 cancel
+type cancelAfterSetHook struct {
+	key    string
+	cancel context.CancelFunc
+}
+
+func (h cancelAfterSetHook) DialHook(next goredis.DialHook) goredis.DialHook {
+	return next
+}
+
+func (h cancelAfterSetHook) ProcessHook(next goredis.ProcessHook) goredis.ProcessHook {
+	return func(ctx context.Context, cmd goredis.Cmder) error {
+		err := next(ctx, cmd)
+		if args := cmd.Args(); cmd.Name() == "set" && len(args) > 1 && args[1] == h.key {
+			h.cancel()
+		}
+		return err
+	}
+}
+
+func (h cancelAfterSetHook) ProcessPipelineHook(next goredis.ProcessPipelineHook) goredis.ProcessPipelineHook {
+	return next
+}
 
 var _ = Describe("NewTenantRedisLock", func() {
 	var (

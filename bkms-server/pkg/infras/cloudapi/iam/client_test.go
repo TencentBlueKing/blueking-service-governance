@@ -20,6 +20,9 @@ package iam
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -138,6 +141,66 @@ var _ = Describe("BKIAMClient", func() {
 			for _, authenticator := range results {
 				Expect(authenticator).To(BeIdenticalTo(results[0]))
 			}
+		})
+
+		Context("when requesting the iam backend", func() {
+			var (
+				client     IAMClient
+				gotHeaders chan string
+				subject    = iamsdk.NewSubject("user", "alice")
+				resource   = iamsdk.NewResourceNode("bkms", "app", "app-1", nil)
+			)
+
+			BeforeEach(func() {
+				gotHeaders = make(chan string, 10)
+				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					gotHeaders <- r.Header.Get(tenant.HeaderTenantID)
+					// policy/query 返回表达式，policy/query_by_actions 返回策略列表
+					data := `{"op":"any","field":"app.id","value":[]}`
+					if strings.Contains(r.URL.Path, "query_by_actions") {
+						data = `[]`
+					}
+					_, _ = w.Write([]byte(`{"code":0,"message":"ok","data":` + data + `}`))
+				}))
+				DeferCleanup(server.Close)
+
+				config.G.BkPlatUrls.BkApiUrlTmpl = server.URL
+				client = newClientFromMock()
+			})
+
+			isAllowed := func(reqCtx context.Context) string {
+				request := iamsdk.NewRequest(
+					"bkms", subject, iamsdk.NewAction("app_view"), []iamsdk.ResourceNode{resource},
+				)
+				_, err := client.IsAllowed(reqCtx, request)
+				Expect(err).NotTo(HaveOccurred())
+				return <-gotHeaders
+			}
+
+			batchAllowed := func(reqCtx context.Context) string {
+				request := iamsdk.NewMultiActionRequest(
+					"bkms", subject, []iamsdk.Action{iamsdk.NewAction("app_view")}, nil,
+				)
+				_, err := client.BatchResourceMultiActionsAllowed(
+					reqCtx, request, []iamsdk.Resources{{resource}},
+				)
+				Expect(err).NotTo(HaveOccurred())
+				return <-gotHeaders
+			}
+
+			It("sends the tenant header of ctx", func() {
+				ctxB := tenant.WithTenantID(context.Background(), "tenant-b")
+
+				Expect(isAllowed(ctx)).To(Equal("tenant-a"))
+				Expect(isAllowed(ctxB)).To(Equal("tenant-b"))
+				Expect(batchAllowed(ctx)).To(Equal("tenant-a"))
+				Expect(batchAllowed(ctxB)).To(Equal("tenant-b"))
+			})
+
+			It("does not send the tenant header when ctx has no tenant", func() {
+				Expect(isAllowed(context.Background())).To(BeEmpty())
+				Expect(batchAllowed(context.Background())).To(BeEmpty())
+			})
 		})
 	})
 
