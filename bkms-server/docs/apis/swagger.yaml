@@ -18124,7 +18124,6 @@ paths:
       - images
   /apps/{appID}/images/{tag}/promote:
     patch:
-      description: 镜像标签必须存在于应用镜像快照中，否则返回 404；新推送的镜像需先刷新镜像快照
       operationId: PromoteAppImage
       parameters:
       - description: 应用 ID

@@ -12127,7 +12127,6 @@ const docTemplate = `{
                         "BkUserCredential": []
                     }
                 ],
-                "description": "镜像标签必须存在于应用镜像快照中，否则返回 404；新推送的镜像需先刷新镜像快照",
                 "produces": [
                     "application/json"
                 ],
