@@ -660,6 +660,41 @@ func (c *SvcBasedClient) ListAppImages(ctx context.Context, appID, keyword strin
 	return respData.Data.Results, nil
 }
 
+// RefreshAppImages 手动刷新应用镜像快照（从镜像仓库同步最新 tag 列表）
+func (c *SvcBasedClient) RefreshAppImages(ctx context.Context, appID string) (*RefreshAppImagesResult, error) {
+	path := fmt.Sprintf("/bkms/v1/bkms-server/apps/%s/images/refresh", url.PathEscape(appID))
+
+	var respData RefreshAppImagesResp
+	resp, err := c.cli.R().SetContext(ctx).SetResult(&respData).Post(path)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode() != http.StatusOK {
+		return nil, formatAPIError(resp, "refresh app images")
+	}
+
+	return &respData.Data, nil
+}
+
+// PromoteAppImage 晋级应用镜像 tag（晋级后才允许部署到生产环境）
+func (c *SvcBasedClient) PromoteAppImage(ctx context.Context, appID, tag string) error {
+	path := fmt.Sprintf(
+		"/bkms/v1/bkms-server/apps/%s/images/%s/promote",
+		url.PathEscape(appID),
+		url.PathEscape(tag),
+	)
+
+	resp, err := c.cli.R().SetContext(ctx).Patch(path)
+	if err != nil {
+		return err
+	}
+	if resp.StatusCode() != http.StatusOK {
+		return formatAPIError(resp, "promote app image %s", tag)
+	}
+
+	return nil
+}
+
 // ListAppConfigFiles 获取应用配置文件列表
 func (c *SvcBasedClient) ListAppConfigFiles(ctx context.Context, appID, envName string) ([]AppConfigFile, error) {
 	path := fmt.Sprintf("/bkms/v1/bkms-server/apps/%s/app-config-files", url.PathEscape(appID))

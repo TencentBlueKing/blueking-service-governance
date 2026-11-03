@@ -5448,6 +5448,137 @@ func (_c *MockClient_PreviewPublicEnvVars_Call) RunAndReturn(run func(ctx contex
 	return _c
 }
 
+// PromoteAppImage provides a mock function for the type MockClient
+func (_mock *MockClient) PromoteAppImage(ctx context.Context, appID string, tag string) error {
+	ret := _mock.Called(ctx, appID, tag)
+
+	if len(ret) == 0 {
+		panic("no return value specified for PromoteAppImage")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) error); ok {
+		r0 = returnFunc(ctx, appID, tag)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockClient_PromoteAppImage_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'PromoteAppImage'
+type MockClient_PromoteAppImage_Call struct {
+	*mock.Call
+}
+
+// PromoteAppImage is a helper method to define mock.On call
+//   - ctx context.Context
+//   - appID string
+//   - tag string
+func (_e *MockClient_Expecter) PromoteAppImage(ctx any, appID any, tag any) *MockClient_PromoteAppImage_Call {
+	return &MockClient_PromoteAppImage_Call{Call: _e.mock.On("PromoteAppImage", ctx, appID, tag)}
+}
+
+func (_c *MockClient_PromoteAppImage_Call) Run(run func(ctx context.Context, appID string, tag string)) *MockClient_PromoteAppImage_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 string
+		if args[2] != nil {
+			arg2 = args[2].(string)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockClient_PromoteAppImage_Call) Return(err error) *MockClient_PromoteAppImage_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockClient_PromoteAppImage_Call) RunAndReturn(run func(ctx context.Context, appID string, tag string) error) *MockClient_PromoteAppImage_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// RefreshAppImages provides a mock function for the type MockClient
+func (_mock *MockClient) RefreshAppImages(ctx context.Context, appID string) (*client.RefreshAppImagesResult, error) {
+	ret := _mock.Called(ctx, appID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for RefreshAppImages")
+	}
+
+	var r0 *client.RefreshAppImagesResult
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) (*client.RefreshAppImagesResult, error)); ok {
+		return returnFunc(ctx, appID)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) *client.RefreshAppImagesResult); ok {
+		r0 = returnFunc(ctx, appID)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*client.RefreshAppImagesResult)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string) error); ok {
+		r1 = returnFunc(ctx, appID)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockClient_RefreshAppImages_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'RefreshAppImages'
+type MockClient_RefreshAppImages_Call struct {
+	*mock.Call
+}
+
+// RefreshAppImages is a helper method to define mock.On call
+//   - ctx context.Context
+//   - appID string
+func (_e *MockClient_Expecter) RefreshAppImages(ctx any, appID any) *MockClient_RefreshAppImages_Call {
+	return &MockClient_RefreshAppImages_Call{Call: _e.mock.On("RefreshAppImages", ctx, appID)}
+}
+
+func (_c *MockClient_RefreshAppImages_Call) Run(run func(ctx context.Context, appID string)) *MockClient_RefreshAppImages_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockClient_RefreshAppImages_Call) Return(refreshAppImagesResult *client.RefreshAppImagesResult, err error) *MockClient_RefreshAppImages_Call {
+	_c.Call.Return(refreshAppImagesResult, err)
+	return _c
+}
+
+func (_c *MockClient_RefreshAppImages_Call) RunAndReturn(run func(ctx context.Context, appID string) (*client.RefreshAppImagesResult, error)) *MockClient_RefreshAppImages_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // ReportDevModePublish provides a mock function for the type MockClient
 func (_mock *MockClient) ReportDevModePublish(ctx context.Context, appID string, envName string, opts client.DevModePublishReportOptions) error {
 	ret := _mock.Called(ctx, appID, envName, opts)

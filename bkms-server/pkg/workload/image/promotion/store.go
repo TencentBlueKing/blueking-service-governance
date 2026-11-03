@@ -26,7 +26,11 @@ import (
 	"github.com/samber/lo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/snapshot"
 )
+
+// ErrImageTagNotFound 待晋级的镜像标签不在当前仓库的镜像快照中
+var ErrImageTagNotFound = errors.New("image tag not found")
 
 // Store 镜像晋级记录存储
 type Store = store.GenericStore[Image]
@@ -56,8 +60,18 @@ func ByTag(appID, repoKey, tag string) store.Opt {
 }
 
 // Promote 晋级镜像标签：以 appID + repoKey + tag 为条件幂等 upsert，
-// 重复晋级时会更新 promotedBy / promotedAt 为最后一次操作的信息
-func Promote(ctx context.Context, promotions *Store, appID, repoKey, tag, operator string) error {
+// 重复晋级时会更新 promotedBy / promotedAt 为最后一次操作的信息。
+func Promote(
+	ctx context.Context, promotions *Store, snapshots *snapshot.ImageStore, appID, repoKey, tag, operator string,
+) error {
+	exists, err := snapshots.Exists(ctx, snapshot.ByRepoTag(repoKey, tag))
+	if err != nil {
+		return errors.Wrapf(err, "check snapshot exists for repo %s, tag %s", repoKey, tag)
+	}
+	if !exists {
+		return errors.Wrapf(ErrImageTagNotFound, "repo %s, tag %s", repoKey, tag)
+	}
+
 	img := &Image{AppID: appID, RepoKey: repoKey, Tag: tag, PromotedAt: time.Now(), PromotedBy: operator}
 	if _, err := promotions.Upsert(ctx, img, ByTag(appID, repoKey, tag)); err != nil {
 		return errors.Wrapf(err, "upsert promotion for app %s, repo %s, tag %s", appID, repoKey, tag)

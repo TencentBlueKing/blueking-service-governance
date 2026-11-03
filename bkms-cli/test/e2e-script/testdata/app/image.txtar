@@ -6,3 +6,28 @@ stdout .
 # list 缺 --app
 ! exec $BKMS_CLI_BIN app image list
 stderr 'required flag\(s\) "app" not set'
+
+# refresh：同步镜像仓库 tag，已有刷新进行中时也视为成功
+exec $BKMS_CLI_BIN app image refresh --app $BKMS_APP_ID
+stdout 'Refreshed images|already being refreshed'
+
+# refresh 缺 --app
+! exec $BKMS_CLI_BIN app image refresh
+stderr 'required flag\(s\) "app" not set'
+
+# promote 不存在的 tag：服务端校验 tag 必须存在于镜像快照中
+! exec $BKMS_CLI_BIN app image promote --app $BKMS_APP_ID --tag bkms-e2e-tag-not-exists
+stdout '✗ bkms-e2e-tag-not-exists'
+! stdout '✓'
+
+# promote 缺 --app
+! exec $BKMS_CLI_BIN app image promote --tag v1.0.0
+stderr 'required flag\(s\) "app" not set'
+
+# promote 缺 --tag
+! exec $BKMS_CLI_BIN app image promote --app $BKMS_APP_ID
+stderr 'required flag\(s\) "tag" not set'
+
+# promote 的 --tag 只有空白
+! exec $BKMS_CLI_BIN app image promote --app $BKMS_APP_ID --tag ' , '
+stderr '--tag must contain at least one non-empty image tag'

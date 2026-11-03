@@ -55,7 +55,7 @@ bkms-cli/
 │   ├── env/                 # env list
 │   └── app/                 # app 相关
 │       ├── list.go          # app list
-│       ├── image/           # app image list
+│       ├── image/           # app image list / refresh / promote
 │       ├── deploy/          # app deploy list / create / update
 │       ├── instance/        # app instance list
 │       └── publish/         # app publish（BCS 发布）

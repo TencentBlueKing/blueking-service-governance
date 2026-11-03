@@ -261,8 +261,22 @@ func (h *Handler) PromoteAppImage(c *gin.Context) {
 	}
 
 	if err = promotion.Promote(
-		ctx, h.promotions(), app.ID, info.RepoKey, uriInput.Tag, auth.MustGetUser(ctx).ID,
+		ctx,
+		h.promotions(),
+		store.Of(h.registry.DB, snapshot.ImageMeta),
+		app.ID,
+		info.RepoKey,
+		uriInput.Tag,
+		auth.MustGetUser(ctx).ID,
 	); err != nil {
+		if errors.Is(err, promotion.ErrImageTagNotFound) {
+			bkerrs.AbortWithErr(c, bkerrs.Wrapf(
+				err, bkerrs.ErrCodeNotFound,
+				"image tag %q not found in app %s images, please refresh images first if it was just pushed",
+				uriInput.Tag, app.ID,
+			))
+			return
+		}
 		bkerrs.AbortWithErr(
 			c,
 			bkerrs.Wrapf(err, bkerrs.ErrCodeInternalServerError, "promote image %s:%s", app.ID, uriInput.Tag),

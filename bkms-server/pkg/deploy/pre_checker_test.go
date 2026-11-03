@@ -20,6 +20,7 @@ package deploy
 
 import (
 	"context"
+	"time"
 
 	"github.com/TencentBlueKing/gopkg/stringx"
 	"github.com/bytedance/mockey"
@@ -226,7 +227,10 @@ var _ = Describe("PreDeployChecker", func() {
 					&snapshot.RepoKeyInfo{RepoKey: "repo-key-abc"}, nil,
 				).Build()
 				promotions := testutil.NewStore(GinkgoT(), promotion.Meta)
-				Expect(promotion.Promote(ctx, promotions, appID, "repo-key-abc", "v1.0.0", "admin")).To(Succeed())
+				// 直接写入晋级记录：本用例只关心预检对晋级记录的判断，不依赖镜像快照
+				Expect(promotions.Create(ctx, &promotion.Image{
+					AppID: appID, RepoKey: "repo-key-abc", Tag: "v1.0.0", PromotedAt: time.Now(), PromotedBy: "admin",
+				})).To(Succeed())
 				DeferCleanup(func() {
 					_, err := promotions.DeleteMany(ctx, promotion.ByApp(appID))
 					Expect(err).NotTo(HaveOccurred())

@@ -185,7 +185,10 @@ var _ = Describe("TagDeletionServiceRealDB", func() {
 		})
 		Expect(err).NotTo(HaveOccurred())
 
-		Expect(promotion.Promote(ctx, promotionStore, fixture.app.ID, fixture.repoKey, fixture.inUseTag, "admin")).
+		Expect(promotion.Promote(
+			ctx, promotionStore, store.Of(db, snapshot.ImageMeta),
+			fixture.app.ID, fixture.repoKey, fixture.inUseTag, "admin",
+		)).
 			To(Succeed())
 
 		var deletedRepoName string
@@ -225,7 +228,10 @@ var _ = Describe("TagDeletionServiceRealDB", func() {
 		fixture := newTagDeletionFixture(ctx, workspaceStore, appStore, envSvc, cfgStore, db)
 		defer fixture.cleanup(ctx, workspaceStore, appStore, envSvc, cfgStore, promotionStore)
 
-		Expect(promotion.Promote(ctx, promotionStore, fixture.app.ID, fixture.repoKey, fixture.inUseTag, "admin")).
+		Expect(promotion.Promote(
+			ctx, promotionStore, store.Of(db, snapshot.ImageMeta),
+			fixture.app.ID, fixture.repoKey, fixture.inUseTag, "admin",
+		)).
 			To(Succeed())
 
 		mockey.Mock(registry.New).Return(&registry.Client{}).Build()
