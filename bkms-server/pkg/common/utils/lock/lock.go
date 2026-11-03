@@ -29,6 +29,15 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/redis"
 )
 
+// rollbackTimeout MultiRedisLock 加锁失败时释放已获取 key 的超时时间
+const rollbackTimeout = 3 * time.Second
+
+// Locker 分布式锁，RedisLock 与 MultiRedisLock 均实现该接口
+type Locker interface {
+	Acquire(ctx context.Context) bool
+	Release(ctx context.Context)
+}
+
 // RedisLock redis 锁，用于控制并发操作
 // 目前基于最简单需求实现，仅支持加锁，释放锁的基础功能
 // 暂不支持续期，检查所属，阻塞等待等高级功能，后续有需要再扩展
@@ -59,5 +68,51 @@ func (l *RedisLock) Acquire(ctx context.Context) bool {
 // Release 释放锁
 func (l *RedisLock) Release(ctx context.Context) {
 	// 删除键以释放锁
-	redis.Client().Del(ctx, l.key)
+	if err := redis.Client().Del(ctx, l.key).Err(); err != nil {
+		log.Errorf(ctx, "error occurred when release lock %s: %v", l.key, err)
+	}
+}
+
+// MultiRedisLock 由多个 key 组成的锁：按顺序逐个获取，全部成功才算加锁成功。
+// 每个 key 单独 SET NX，不使用 Lua 脚本，因此 Redis 集群模式下 key 分属不同 slot 也可用。
+type MultiRedisLock struct {
+	locks []*RedisLock
+}
+
+// NewMultiRedisLock 创建 MultiRedisLock 实例，keys 的顺序即加锁顺序，所有并发方须使用相同顺序
+func NewMultiRedisLock(timeout int, keys ...string) *MultiRedisLock {
+	locks := make([]*RedisLock, 0, len(keys))
+	for _, key := range keys {
+		locks = append(locks, NewRedisLock(key, timeout))
+	}
+	return &MultiRedisLock{locks: locks}
+}
+
+// Acquire 按顺序获取全部 key，任一失败时释放本次已获取的 key 并返回 false
+func (l *MultiRedisLock) Acquire(ctx context.Context) bool {
+	for i, lk := range l.locks {
+		if lk.Acquire(ctx) {
+			continue
+		}
+		l.rollback(ctx, l.locks[:i])
+		return false
+	}
+	return true
+}
+
+// rollback 逆序释放本次已获取的 key。获取失败可能正是因为 ctx 已取消，
+// 沿用该 ctx 会导致删除不执行、key 残留到锁超时，因此改用不随 ctx 取消、单独限时的 ctx
+func (l *MultiRedisLock) rollback(ctx context.Context, acquired []*RedisLock) {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), rollbackTimeout)
+	defer cancel()
+	for i := len(acquired) - 1; i >= 0; i-- {
+		acquired[i].Release(ctx)
+	}
+}
+
+// Release 按加锁的逆序释放全部 key
+func (l *MultiRedisLock) Release(ctx context.Context) {
+	for i := len(l.locks) - 1; i >= 0; i-- {
+		l.locks[i].Release(ctx)
+	}
 }

@@ -42,7 +42,8 @@ const (
 
 // UserClient is the minimal client contract required by tenant verification.
 type UserClient interface {
-	GetUser(ctx context.Context, bkUsername string) (*User, error)
+	// GetUser 在 tenantID 租户内查询用户，用户不在该租户时返回 ErrUserNotFound。
+	GetUser(ctx context.Context, tenantID, bkUsername string) (*User, error)
 }
 
 // Client requests bk-user APIs using application authorization through bk-apigateway SDK.
@@ -68,8 +69,8 @@ func NewClient(apiURLTmpl, stage, bkAppCode, bkAppSecret string) (*Client, error
 	return &Client{BkApiClient: apiClient}, nil
 }
 
-// GetUser 按 bk_username 获取租户用户信息。
-func (c *Client) GetUser(ctx context.Context, bkUsername string) (*User, error) {
+// GetUser 在 tenantID 租户内按 bk_username 获取用户信息，用户不在该租户时返回 ErrUserNotFound。
+func (c *Client) GetUser(ctx context.Context, tenantID, bkUsername string) (*User, error) {
 	op := c.NewOperation(
 		bkapi.OperationConfig{
 			Name:   "retrieve_user",
@@ -80,12 +81,20 @@ func (c *Client) GetUser(ctx context.Context, bkUsername string) (*User, error) 
 	)
 
 	var result getUserResponse
-	resp, err := op.SetContext(ctx).SetResult(&result).Request()
+	resp, err := op.SetContext(ctx).
+		SetHeaders(map[string]string{tenantHeader: tenantID}).
+		SetResult(&result).
+		Request()
 	if err != nil {
 		return nil, errors.Wrapf(err, "get bk-user user %s", bkUsername)
 	}
 	defer resp.Body.Close()
 
+	// 只有 bk-user 返回 NOT_FOUND 业务码才表示用户不在该租户；URL 模板错误、入口路由不存在等
+	// 同样返回 404，但没有该业务码，按普通错误返回，避免把配置问题当成无租户访问权限
+	if resp.StatusCode == http.StatusNotFound && result.Error != nil && result.Error.Code == errorCodeNotFound {
+		return nil, errors.Wrapf(ErrUserNotFound, "user %s in tenant %s", bkUsername, tenantID)
+	}
 	if !httpresp.IsSuccess(resp) {
 		if result.Error != nil {
 			return nil, errors.Errorf("%s: %s", result.Error.Code, result.Error.Message)

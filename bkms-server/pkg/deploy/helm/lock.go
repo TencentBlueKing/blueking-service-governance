@@ -20,16 +20,27 @@
 package helm
 
 import (
+	"context"
 	"fmt"
+
+	"github.com/pkg/errors"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/utils/lock"
 )
 
-// NewDeployLock 新建部署锁实例
-func NewDeployLock(appID, envName, trafficLaneName string) *lock.RedisLock {
-	key := fmt.Sprintf("lock:helm-deploy:%s:%s:%s", appID, envName, trafficLaneName)
+// NewDeployLock 新建部署锁实例，key 带 ctx 租户前缀（应用归属租户）。
+// 加锁（部署请求）与释放（部署状态轮询任务）须使用同一租户的 ctx，否则释放不到锁。
+//
+// TODO(tenant-lock-compat): 升级过渡期 lock.NewTenantRedisLock 会同时持有不带租户前缀的旧 key，
+// 详见其注释，后续版本移除兼容逻辑后这里无需改动。
+func NewDeployLock(ctx context.Context, appID, envName, trafficLaneName string) (lock.Locker, error) {
 	// 锁超时时间与轮询状态超时时间保持一致
 	timeout := config.G.TaskPoller.DeployStatus.Timeout
-	return lock.NewRedisLock(key, timeout)
+	key := fmt.Sprintf("lock:helm-deploy:%s:%s:%s", appID, envName, trafficLaneName)
+	deployLock, err := lock.NewTenantRedisLock(ctx, key, timeout)
+	if err != nil {
+		return nil, errors.Wrapf(err, "build deploy lock of app %s", appID)
+	}
+	return deployLock, nil
 }

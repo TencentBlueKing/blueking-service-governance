@@ -33,6 +33,7 @@ import (
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/utils/httpresp"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/tenant"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/apm"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/metrics"
 )
@@ -89,6 +90,7 @@ func New(user auth.User) (Client, error) {
 		Stage:        config.G.BkApiStages.BkHCM,
 		ClientOptions: []define.BkApiClientOption{
 			bkapi.OptSetRequestHeader("x-bkapi-authorization", string(authorization)),
+			tenant.OptBkApiTenantHeader(),
 			bkapi.OptJsonResultProvider(),
 			bkapi.OptJsonBodyProvider(),
 			bkapi.OptTimeout(60 * time.Second),

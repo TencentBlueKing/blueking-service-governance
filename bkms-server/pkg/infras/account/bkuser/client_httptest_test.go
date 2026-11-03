@@ -29,10 +29,11 @@ import (
 )
 
 var _ = Describe("Client with httptest server", func() {
-	It("gets a user using app authorization header", func() {
+	It("gets a user in the given tenant using app authorization header", func() {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			Expect(r.Method).To(Equal(http.MethodGet))
 			Expect(r.URL.Path).To(Equal("/api/bk-user/test/api/v3/open/tenant/users/alice/"))
+			Expect(r.Header.Get("X-Bk-Tenant-Id")).To(Equal("default"))
 			var authHeader map[string]string
 			Expect(json.Unmarshal([]byte(r.Header.Get("X-Bkapi-Authorization")), &authHeader)).To(Succeed())
 			Expect(authHeader).To(Equal(map[string]string{"bk_app_code": "bkms", "bk_app_secret": "secret"}))
@@ -53,7 +54,7 @@ var _ = Describe("Client with httptest server", func() {
 		client, err := NewClient(server.URL, "test", "bkms", "secret")
 		Expect(err).NotTo(HaveOccurred())
 
-		user, err := client.GetUser(context.Background(), "alice")
+		user, err := client.GetUser(context.Background(), "default", "alice")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(user).To(Equal(&User{
 			TenantID:    "default",
@@ -81,10 +82,50 @@ var _ = Describe("Client with httptest server", func() {
 		client, err := NewClient(server.URL, "test", "bkms", "secret")
 		Expect(err).NotTo(HaveOccurred())
 
-		_, err = client.GetUser(context.Background(), "alice")
+		_, err = client.GetUser(context.Background(), "default", "alice")
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("tenant_id"))
 	})
+
+	It("returns ErrUserNotFound when the user is not in the given tenant", func() {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte(`{"error": {"code": "NOT_FOUND", "message": "user not found"}}`))
+		}))
+		defer server.Close()
+
+		client, err := NewClient(server.URL, "test", "bkms", "secret")
+		Expect(err).NotTo(HaveOccurred())
+
+		_, err = client.GetUser(context.Background(), "tenant-a", "alice")
+		Expect(err).To(MatchError(ErrUserNotFound))
+	})
+
+	DescribeTable("does not treat a 404 without the bk-user NOT_FOUND code as ErrUserNotFound",
+		func(header map[string]string, body string) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				for key, value := range header {
+					w.Header().Set(key, value)
+				}
+				w.WriteHeader(http.StatusNotFound)
+				_, _ = w.Write([]byte(body))
+			}))
+			defer server.Close()
+
+			client, err := NewClient(server.URL, "test", "bkms", "secret")
+			Expect(err).NotTo(HaveOccurred())
+
+			_, err = client.GetUser(context.Background(), "tenant-a", "alice")
+			Expect(err).To(HaveOccurred())
+			Expect(err).NotTo(MatchError(ErrUserNotFound))
+		},
+		Entry("gateway resource not found", map[string]string{
+			"X-Bkapi-Error-Code":    "1640401",
+			"X-Bkapi-Error-Message": "API not found",
+		}, `{"code": 1640401, "result": false, "message": "API not found"}`),
+		Entry("other business code", nil, `{"error": {"code": "INVALID_ARGUMENT", "message": "bad request"}}`),
+		Entry("no error body", nil, `{}`),
+	)
 
 	It("returns the upstream error details when bk-user rejects the request", func() {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -101,7 +142,7 @@ var _ = Describe("Client with httptest server", func() {
 		client, err := NewClient(server.URL, "test", "bkms", "secret")
 		Expect(err).NotTo(HaveOccurred())
 
-		_, err = client.GetUser(context.Background(), "alice")
+		_, err = client.GetUser(context.Background(), "default", "alice")
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("NO_PERMISSION"))
 		Expect(err.Error()).To(ContainSubstring("forbidden"))

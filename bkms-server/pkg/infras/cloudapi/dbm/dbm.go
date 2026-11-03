@@ -36,6 +36,7 @@ import (
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/utils/httpresp"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/tenant"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/apm"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/metrics"
 )
@@ -74,6 +75,7 @@ func New() (Client, error) {
 		BkApiUrlTmpl: config.G.BkPlatUrls.BkApiUrlTmpl,
 		Stage:        config.G.BkApiStages.BkDBM,
 		ClientOptions: []define.BkApiClientOption{
+			tenant.OptBkApiTenantHeader(),
 			bkapi.OptJsonResultProvider(),
 			bkapi.OptJsonBodyProvider(),
 			bkapi.OptTimeout(defaultHTTPTimeout),

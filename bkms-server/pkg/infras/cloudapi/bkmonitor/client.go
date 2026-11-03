@@ -34,6 +34,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/utils/httpresp"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/tenant"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/apm"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/metrics"
 )
@@ -146,6 +147,7 @@ func buildClientConfig(endpoint, operator, authInfo string) bkapi.ClientConfig {
 		ClientOptions: []define.BkApiClientOption{
 			bkapi.OptSetRequestHeader("x-bkapi-authorization", authInfo),
 			bkapi.OptSetRequestHeader("X-Bkapi-User-Name", operator),
+			tenant.OptBkApiTenantHeader(),
 			bkapi.OptJsonResultProvider(),
 			bkapi.OptJsonBodyProvider(),
 			bkapi.OptTimeout(60 * time.Second),

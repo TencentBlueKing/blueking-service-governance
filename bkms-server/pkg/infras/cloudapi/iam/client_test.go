@@ -20,14 +20,22 @@ package iam
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"time"
 
 	"github.com/TencentBlueKing/bk-apigateway-sdks/core/define"
+	iamsdk "github.com/TencentBlueKing/iam-go-sdk"
 	"github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/iam/types"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/tenant"
 )
 
 var _ = Describe("BKIAMClient", func() {
@@ -41,7 +49,7 @@ var _ = Describe("BKIAMClient", func() {
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 		mockOp = NewMockOperation(mockCtrl)
-		ctx = context.Background()
+		ctx = tenant.WithTenantID(context.Background(), "tenant-a")
 
 		// IAM client 内部依赖 config.G 中的 IAMSystemIDs / BkApp / BkPlatUrls
 		// 在测试前设置一份最小可用配置，并在测试结束后还原。
@@ -60,11 +68,16 @@ var _ = Describe("BKIAMClient", func() {
 	})
 
 	// expectStandardChain 预设最常见的链式调用：
-	// op.SetContext(ctx).SetResult(&resp).Request() 三连，最终 Request 返回 (nil, nil)。
+	// op.SetContext(ctx).SetResult(&resp).Request()，最终 Request 返回 (nil, nil)。
+	// 租户头由构造时的 tenant.OptBkApiTenantHeader 按请求 ctx 设置，这里断言传入的 ctx 带有租户。
 	// fillResp 用于在 SetResult 阶段往 result 写入桩数据。
 	expectStandardChain := func(fillResp func(target any)) {
 		mockOp.EXPECT().FullName().Return("test_operation").AnyTimes()
-		mockOp.EXPECT().SetContext(gomock.Any()).Return(mockOp)
+		mockOp.EXPECT().SetContext(gomock.Any()).DoAndReturn(func(reqCtx context.Context) define.Operation {
+			tenantID, _ := tenant.GetTenantID(reqCtx)
+			Expect(tenantID).To(Equal("tenant-a"))
+			return mockOp
+		})
 		mockOp.EXPECT().SetResult(gomock.Any()).DoAndReturn(func(target any) define.Operation {
 			fillResp(target)
 			return mockOp
@@ -89,6 +102,105 @@ var _ = Describe("BKIAMClient", func() {
 			gatewayURL, err := BuildIAMGatewayURL("http://{api_name}.apigw.example.com", "")
 			Expect(err).To(BeNil())
 			Expect(gatewayURL).To(Equal("http://bk-iam.apigw.example.com/prod"))
+		})
+	})
+
+	Describe("authenticator", func() {
+		It("keeps one iam sdk instance per tenant", func() {
+			client := newClientFromMock().(*BKIAMClient)
+			ctxB := tenant.WithTenantID(context.Background(), "tenant-b")
+
+			Expect(client.authenticator(ctx)).To(BeIdenticalTo(client.authenticator(ctx)))
+			Expect(client.authenticator(ctx)).NotTo(BeIdenticalTo(client.authenticator(ctxB)))
+		})
+
+		It("constructs the iam sdk instance only once under concurrent first access", func() {
+			client := newClientFromMock().(*BKIAMClient)
+			newAuthenticator := client.newAuthenticator
+			var built atomic.Int32
+			client.newAuthenticator = func(tenantID string) *iamsdk.IAM {
+				built.Add(1)
+				// 放大首批请求同时未命中缓存的窗口
+				time.Sleep(10 * time.Millisecond)
+				return newAuthenticator(tenantID)
+			}
+
+			const goroutines = 20
+			results := make([]*iamsdk.IAM, goroutines)
+			var wg sync.WaitGroup
+			for i := range goroutines {
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					results[i] = client.authenticator(ctx)
+				}()
+			}
+			wg.Wait()
+
+			Expect(built.Load()).To(Equal(int32(1)))
+			for _, authenticator := range results {
+				Expect(authenticator).To(BeIdenticalTo(results[0]))
+			}
+		})
+
+		Context("when requesting the iam backend", func() {
+			var (
+				client     IAMClient
+				gotHeaders chan string
+				subject    = iamsdk.NewSubject("user", "alice")
+				resource   = iamsdk.NewResourceNode("bkms", "app", "app-1", nil)
+			)
+
+			BeforeEach(func() {
+				gotHeaders = make(chan string, 10)
+				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					gotHeaders <- r.Header.Get(tenant.HeaderTenantID)
+					// policy/query 返回表达式，policy/query_by_actions 返回策略列表
+					data := `{"op":"any","field":"app.id","value":[]}`
+					if strings.Contains(r.URL.Path, "query_by_actions") {
+						data = `[]`
+					}
+					_, _ = w.Write([]byte(`{"code":0,"message":"ok","data":` + data + `}`))
+				}))
+				DeferCleanup(server.Close)
+
+				config.G.BkPlatUrls.BkApiUrlTmpl = server.URL
+				client = newClientFromMock()
+			})
+
+			isAllowed := func(reqCtx context.Context) string {
+				request := iamsdk.NewRequest(
+					"bkms", subject, iamsdk.NewAction("app_view"), []iamsdk.ResourceNode{resource},
+				)
+				_, err := client.IsAllowed(reqCtx, request)
+				Expect(err).NotTo(HaveOccurred())
+				return <-gotHeaders
+			}
+
+			batchAllowed := func(reqCtx context.Context) string {
+				request := iamsdk.NewMultiActionRequest(
+					"bkms", subject, []iamsdk.Action{iamsdk.NewAction("app_view")}, nil,
+				)
+				_, err := client.BatchResourceMultiActionsAllowed(
+					reqCtx, request, []iamsdk.Resources{{resource}},
+				)
+				Expect(err).NotTo(HaveOccurred())
+				return <-gotHeaders
+			}
+
+			It("sends the tenant header of ctx", func() {
+				ctxB := tenant.WithTenantID(context.Background(), "tenant-b")
+
+				Expect(isAllowed(ctx)).To(Equal("tenant-a"))
+				Expect(isAllowed(ctxB)).To(Equal("tenant-b"))
+				Expect(batchAllowed(ctx)).To(Equal("tenant-a"))
+				Expect(batchAllowed(ctxB)).To(Equal("tenant-b"))
+			})
+
+			It("does not send the tenant header when ctx has no tenant", func() {
+				Expect(isAllowed(context.Background())).To(BeEmpty())
+				Expect(batchAllowed(context.Background())).To(BeEmpty())
+			})
 		})
 	})
 

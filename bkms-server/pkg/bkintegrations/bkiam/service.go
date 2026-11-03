@@ -370,8 +370,9 @@ func (s *IAMService) DeleteAllRolesByWorkspaceID(ctx context.Context, workspaceI
 
 // WorkspaceCreateIsAllowed checks whether the user is allowed to create a
 // workspace.
-func (s *IAMService) WorkspaceCreateIsAllowed(username string) (bool, error) {
+func (s *IAMService) WorkspaceCreateIsAllowed(ctx context.Context, username string) (bool, error) {
 	return s.iamClient.IsAllowed(
+		ctx,
 		iamsdk.NewRequest(
 			config.G.BkIAMSystemIDs.Bkms,
 			iamsdk.NewSubject(subjectTypeUser, username),
@@ -384,9 +385,10 @@ func (s *IAMService) WorkspaceCreateIsAllowed(username string) (bool, error) {
 // WorkspaceActionIsAllowed checks whether the user is allowed to perform
 // a single action on a single workspace.
 func (s *IAMService) WorkspaceActionIsAllowed(
-	username, workspaceID, actionID string,
+	ctx context.Context, username, workspaceID, actionID string,
 ) (bool, error) {
 	return s.iamClient.IsAllowed(
+		ctx,
 		iamsdk.NewRequest(
 			config.G.BkIAMSystemIDs.Bkms,
 			iamsdk.NewSubject(subjectTypeUser, username),
@@ -401,7 +403,7 @@ func (s *IAMService) WorkspaceActionIsAllowed(
 // WorkspacesMultiActionsAllowed checks multiple actions against multiple
 // workspaces in a single batched request.
 func (s *IAMService) WorkspacesMultiActionsAllowed(
-	username string, workspaceIDs, actionIDs []string,
+	ctx context.Context, username string, workspaceIDs, actionIDs []string,
 ) (map[string]map[string]bool, error) {
 	acts := make([]iamsdk.Action, 0, len(actionIDs))
 	for _, actionID := range actionIDs {
@@ -422,13 +424,14 @@ func (s *IAMService) WorkspacesMultiActionsAllowed(
 			},
 		)
 	}
-	return s.iamClient.BatchResourceMultiActionsAllowed(request, resources)
+	return s.iamClient.BatchResourceMultiActionsAllowed(ctx, request, resources)
 }
 
 // AppCreateIsAllowed checks whether the user is allowed to create an app
 // under the given workspace.
-func (s *IAMService) AppCreateIsAllowed(username, workspaceID string) (bool, error) {
+func (s *IAMService) AppCreateIsAllowed(ctx context.Context, username, workspaceID string) (bool, error) {
 	return s.iamClient.IsAllowed(
+		ctx,
 		iamsdk.NewRequest(
 			config.G.BkIAMSystemIDs.Bkms,
 			iamsdk.NewSubject(subjectTypeUser, username),
@@ -443,9 +446,10 @@ func (s *IAMService) AppCreateIsAllowed(username, workspaceID string) (bool, err
 // AppActionIsAllowed checks whether the user is allowed to perform a
 // non-create action on a single app under the given workspace.
 func (s *IAMService) AppActionIsAllowed(
-	username, workspaceID, appID, actionID string,
+	ctx context.Context, username, workspaceID, appID, actionID string,
 ) (bool, error) {
 	return s.iamClient.IsAllowed(
+		ctx,
 		iamsdk.NewRequest(
 			config.G.BkIAMSystemIDs.Bkms,
 			iamsdk.NewSubject(subjectTypeUser, username),
@@ -463,7 +467,7 @@ func (s *IAMService) AppActionIsAllowed(
 // AppsMultiActionsAllowed checks multiple actions against multiple apps
 // under the given workspace, in a single batched request.
 func (s *IAMService) AppsMultiActionsAllowed(
-	username, workspaceID string, appIDs, actionIDs []string,
+	ctx context.Context, username, workspaceID string, appIDs, actionIDs []string,
 ) (map[string]map[string]bool, error) {
 	acts := make([]iamsdk.Action, 0, len(actionIDs))
 	for _, actionID := range actionIDs {
@@ -487,13 +491,14 @@ func (s *IAMService) AppsMultiActionsAllowed(
 			},
 		)
 	}
-	return s.iamClient.BatchResourceMultiActionsAllowed(request, resources)
+	return s.iamClient.BatchResourceMultiActionsAllowed(ctx, request, resources)
 }
 
 // EnvCreateIsAllowed checks whether the user is allowed to create an env
 // under the given workspace.
-func (s *IAMService) EnvCreateIsAllowed(username, workspaceID string) (bool, error) {
+func (s *IAMService) EnvCreateIsAllowed(ctx context.Context, username, workspaceID string) (bool, error) {
 	return s.iamClient.IsAllowed(
+		ctx,
 		iamsdk.NewRequest(
 			config.G.BkIAMSystemIDs.Bkms,
 			iamsdk.NewSubject(subjectTypeUser, username),
@@ -508,9 +513,10 @@ func (s *IAMService) EnvCreateIsAllowed(username, workspaceID string) (bool, err
 // EnvActionIsAllowed checks whether the user is allowed to perform a
 // non-create action on a single env under the given workspace.
 func (s *IAMService) EnvActionIsAllowed(
-	username, workspaceID, envID, actionID string,
+	ctx context.Context, username, workspaceID, envID, actionID string,
 ) (bool, error) {
 	return s.iamClient.IsAllowed(
+		ctx,
 		iamsdk.NewRequest(
 			config.G.BkIAMSystemIDs.Bkms,
 			iamsdk.NewSubject(subjectTypeUser, username),
@@ -528,7 +534,7 @@ func (s *IAMService) EnvActionIsAllowed(
 // EnvsMultiActionsAllowed checks multiple actions against multiple envs
 // under the given workspace, in a single batched request.
 func (s *IAMService) EnvsMultiActionsAllowed(
-	username, workspaceID string, envIDs, actionIDs []string,
+	ctx context.Context, username, workspaceID string, envIDs, actionIDs []string,
 ) (map[string]map[string]bool, error) {
 	acts := make([]iamsdk.Action, 0, len(actionIDs))
 	for _, actionID := range actionIDs {
@@ -552,7 +558,7 @@ func (s *IAMService) EnvsMultiActionsAllowed(
 			},
 		)
 	}
-	return s.iamClient.BatchResourceMultiActionsAllowed(request, resources)
+	return s.iamClient.BatchResourceMultiActionsAllowed(ctx, request, resources)
 }
 
 // createRole creates a single role under the given grade manager: it

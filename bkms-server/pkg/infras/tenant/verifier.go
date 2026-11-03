@@ -23,6 +23,7 @@ import (
 
 	"github.com/pkg/errors"
 
+	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/bkuser"
 )
 
@@ -42,7 +43,12 @@ type Verifier interface {
 
 // Verify confirms the user belongs to the requested tenant and is enabled.
 func (v *bkUserVerifier) Verify(ctx context.Context, bkUsername, tenantID string) error {
-	user, err := v.userClient.GetUser(ctx, bkUsername)
+	user, err := v.userClient.GetUser(ctx, tenantID, bkUsername)
+	if errors.Is(err, bkuser.ErrUserNotFound) {
+		// 错误信息会直接返回给前端，只返回 ErrTenantAccessDenied，原始错误记录到日志便于排障
+		log.Infof(ctx, "deny tenant access: %v", err)
+		return ErrTenantAccessDenied
+	}
 	if err != nil {
 		return errors.Wrapf(err, "get bk-user user %s", bkUsername)
 	}

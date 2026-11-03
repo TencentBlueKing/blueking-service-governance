@@ -211,7 +211,11 @@ func (h *Handler) CreateHelmDeploy(c *gin.Context) {
 	}
 
 	// 进行锁检查防止并发部署，如果出错则需要及时释放
-	deployLock := helmdeploy.NewDeployLock(app.ID, env.Name, input.TrafficLaneName)
+	deployLock, err := helmdeploy.NewDeployLock(ctx, app.ID, env.Name, input.TrafficLaneName)
+	if err != nil {
+		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "new deploy lock"))
+		return
+	}
 	if ok := deployLock.Acquire(ctx); !ok {
 		bkerrs.AbortWithErr(c, bkerrs.New(bkerrs.ErrCodeAborted, "concurrency deploy conflict occurred"))
 		return
@@ -344,7 +348,11 @@ func (h *Handler) RollbackHelmDeploy(c *gin.Context) {
 	}
 
 	// 进行锁检查防止并发部署，如果出错则需要及时释放
-	deployLock := helmdeploy.NewDeployLock(app.ID, uriInput.EnvName, input.TrafficLaneName)
+	deployLock, err := helmdeploy.NewDeployLock(ctx, app.ID, uriInput.EnvName, input.TrafficLaneName)
+	if err != nil {
+		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "new deploy lock"))
+		return
+	}
 	if ok := deployLock.Acquire(ctx); !ok {
 		bkerrs.AbortWithErr(c, bkerrs.New(bkerrs.ErrCodeAborted, "concurrency deploy conflict occurred"))
 		return
