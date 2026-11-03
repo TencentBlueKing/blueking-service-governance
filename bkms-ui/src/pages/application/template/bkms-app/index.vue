@@ -229,9 +229,9 @@
   const descriptions: Record<string, string> = {
     trpc: '适用于使用 tRPC 协议的服务',
     taf: '采用 TAF 框架实现的服务端应用',
-    go: '高并发 Web / 微服务，如 Gin、Echo',
-    python: '数据服务、脚本任务与 AI 应用常见选择',
-    nodejs: '实时接口、前端聚合层与前后端一体服务',
+    go: '适合 Gin、Echo 等 Web 服务',
+    python: '适合数据服务与 AI 应用',
+    nodejs: '适合接口与前后端一体服务',
   };
   const selectedDescription = computed(
     () => descriptions[framework.value === 'blank' ? language.value : framework.value] || '',

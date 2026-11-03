@@ -22,19 +22,25 @@
       <div class="template-header">{{ $t('请选择一个应用模板') }}</div>
       <div class="template-content">
         <div class="section-heading">
-          <h3>{{ $t('开发框架') }}</h3>
-          <span>{{ $t('适合已确定使用 tRPC、TAF 等框架的应用；tRPC 选定后再选开发语言') }}</span>
+          <h3>{{ $t('框架应用') }}</h3>
         </div>
         <div class="grid grid-cols-4 gap-[16px]">
-          <button
+          <div
             v-for="item in frameworks"
             :key="item.id"
-            :aria-pressed="selected.framework === item.id"
-            :class="['template-card', { selected: selected.framework === item.id }]"
-            :disabled="item.managed && !isFrameworkAvailable(item.id)"
-            type="button"
-            @click="selectFramework(item.id)"
+            :class="[
+              'template-card',
+              { selected: selected.framework === item.id, disabled: item.managed && !isFrameworkAvailable(item.id) },
+            ]"
           >
+            <button
+              :aria-label="item.name"
+              :aria-pressed="selected.framework === item.id"
+              class="template-card-select"
+              :disabled="item.managed && !isFrameworkAvailable(item.id)"
+              type="button"
+              @click="selectFramework(item.id)"
+            ></button>
             <span
               aria-hidden="true"
               class="template-icon"
@@ -47,32 +53,41 @@
             <div class="template-description">
               <div class="template-name">{{ item.name }}</div>
               <div class="template-hint">{{ $t(item.description) }}</div>
+              <div
+                v-if="getFrameworkLanguages(item.id).length"
+                class="framework-languages"
+              >
+                <span>{{ $t('语言') }}</span>
+                <div
+                  v-if="getFrameworkLanguages(item.id).length > 1"
+                  class="framework-language-options"
+                >
+                  <button
+                    v-for="language in getFrameworkLanguages(item.id)"
+                    :key="language"
+                    :aria-pressed="selected.framework === item.id && selected.language === language"
+                    :class="[
+                      'framework-language-option',
+                      { selected: selected.framework === item.id && selected.language === language },
+                    ]"
+                    type="button"
+                    @click="selectFramework(item.id, language)"
+                  >
+                    {{ languageLabel(language) }}
+                  </button>
+                </div>
+                <span
+                  v-else
+                  class="text-[#313238]"
+                  >{{ languageLabel(getFrameworkLanguages(item.id)[0]) }}</span
+                >
+              </div>
             </div>
-          </button>
+          </div>
         </div>
-        <div
-          v-if="frameworkLanguages.length"
-          class="framework-languages"
-        >
-          <span>{{ $t('请选择开发语言') }}</span>
-          <Radio.Group
-            v-model="selected.language"
-            class="framework-language-radio"
-            type="capsule"
-            @change="remember"
-          >
-            <Radio.Button
-              v-for="language in frameworkLanguages"
-              :key="language"
-              :label="language"
-            >
-              {{ languageLabel(language) }}
-            </Radio.Button>
-          </Radio.Group>
-        </div>
-        <div class="section-heading mt-[24px]">
-          <h3>{{ $t('按语言') }}</h3>
-          <span>{{ $t('按开发语言创建通用服务，目前支持 Go、Python、Node.js') }}</span>
+        <div class="section-heading mt-[28px]">
+          <h3>{{ $t('通用应用') }}</h3>
+          <span>{{ $t('不限框架，平台提供构建、部署、配置等通用能力') }}</span>
         </div>
         <div class="grid grid-cols-4 gap-[16px]">
           <button
@@ -136,7 +151,7 @@
 <script setup lang="ts">
   import { computed, onMounted, ref } from 'vue';
 
-  import { Alert, Button, Radio } from 'bkui-vue';
+  import { Alert, Button } from 'bkui-vue';
   import { useRouter } from 'vue-router';
   import GoLogo from '~/assets/lang-icons/go.svg';
   import NodejsLogo from '~/assets/lang-icons/nodejs.svg';
@@ -188,9 +203,9 @@
     },
   ];
   const languages = [
-    { id: 'go', name: 'Go', logo: GoLogo, description: '高并发 Web / 微服务，如 Gin、Echo' },
-    { id: 'python', name: 'Python', logo: PythonLogo, description: '数据服务、脚本任务与 AI 应用常见选择' },
-    { id: 'nodejs', name: 'Node.js', logo: NodejsLogo, description: '实时接口、前端聚合层与前后端一体服务' },
+    { id: 'go', name: 'Go', logo: GoLogo, description: '适合 Gin、Echo 等 Web 服务' },
+    { id: 'python', name: 'Python', logo: PythonLogo, description: '适合数据服务与 AI 应用' },
+    { id: 'nodejs', name: 'Node.js', logo: NodejsLogo, description: '适合接口与前后端一体服务' },
   ];
   const legacySelections: Record<string, string> = {
     createTrpcTemplateApp: 'trpc:go',
@@ -202,15 +217,14 @@
   const [framework, initialLanguage] = remembered.split(':');
   const selected = ref({ framework, language: initialLanguage || '' });
   const languageOrder: Record<string, number> = { go: 0, cpp: 1 };
-  const frameworkLanguages = computed(() => {
-    if (selected.value.framework === 'blank') return [];
+  function getFrameworkLanguages(framework: string) {
     return (
       definitions.value?.frameworks
-        ?.find(item => item.name === selected.value.framework)
-        ?.supportedLanguages?.filter(language => findRuntime(definitions.value, selected.value.framework, language))
+        ?.find(item => item.name === framework)
+        ?.supportedLanguages?.filter(language => findRuntime(definitions.value, framework, language))
         .sort((left, right) => (languageOrder[left] ?? 2) - (languageOrder[right] ?? 2)) || []
     );
-  });
+  }
   const isHelmLike = computed(() => ['helm', 'agones'].includes(selected.value.framework));
   const canContinue = computed(
     () => isHelmLike.value || !!findRuntime(definitions.value, selected.value.framework, selected.value.language),
@@ -220,11 +234,7 @@
     router.push({ name: 'app' });
   }
   function isFrameworkAvailable(framework: string) {
-    return definitions.value?.frameworks?.some(
-      item =>
-        item.name === framework &&
-        item.supportedLanguages?.some(language => findRuntime(definitions.value, framework, language)),
-    );
+    return getFrameworkLanguages(framework).length > 0;
   }
   function languageLabel(language: string) {
     return (
@@ -252,9 +262,10 @@
       type: isHelmLike.value ? selected.value.framework : selected.value.framework === 'blank' ? 'blank' : 'bkmsApp',
     });
   }
-  function selectFramework(framework: string) {
-    const supported = definitions.value?.frameworks?.find(item => item.name === framework)?.supportedLanguages || [];
-    selected.value = { framework, language: supported.includes('go') ? 'go' : supported[0] || '' };
+  function selectFramework(framework: string, language?: string) {
+    if (!language && selected.value.framework === framework) return;
+    const supported = getFrameworkLanguages(framework);
+    selected.value = { framework, language: language || supported[0] || '' };
     remember();
   }
   function selectLanguage(language: string) {
@@ -283,15 +294,15 @@
   }
 
   .template-content {
-    @apply mx-[16px] mb-[16px] px-[24px] pb-[20px] pt-[16px];
+    @apply px-[40px] pb-[20px] pt-[24px];
   }
 
   .section-heading {
-    @apply mb-[16px] flex flex-wrap items-baseline gap-x-[12px] gap-y-[4px];
+    @apply mb-[12px] flex flex-wrap items-center gap-x-[12px] gap-y-[4px];
   }
 
   .section-heading h3 {
-    @apply m-0 text-[16px] font-bold leading-[24px] text-[#313238];
+    @apply m-0 text-[14px] font-bold leading-[22px] text-[#313238];
   }
 
   .section-heading > span {
@@ -299,7 +310,21 @@
   }
 
   .template-card {
-    @apply flex min-h-[92px] items-center gap-[12px] rounded-[2px] border border-[#DCDEE5] bg-white p-[16px] text-[#313238];
+    @apply relative flex min-h-[92px] items-center gap-[12px] rounded-[2px] border border-[#DCDEE5] bg-white p-[16px] text-[#313238];
+  }
+
+  .template-card-select {
+    @apply absolute inset-0 cursor-pointer rounded-[2px] border-0 bg-transparent;
+  }
+
+  .template-card-select:focus-visible {
+    outline: 2px solid #3a84ff;
+    outline-offset: 2px;
+  }
+
+  .template-card-select ~ .template-icon,
+  .template-card-select ~ .template-description {
+    pointer-events: none;
   }
 
   .template-icon {
@@ -319,11 +344,35 @@
   }
 
   .framework-languages {
-    @apply mt-[12px] flex items-center gap-[16px] rounded-[2px] bg-[#F5F7FA] px-[16px] py-[12px] text-[14px] leading-[22px] text-[#63656E];
+    @apply mt-[8px] flex items-center gap-[8px] text-[12px] leading-[22px] text-[#63656E];
   }
 
-  :deep(.framework-language-radio.bk-radio-capsule .bk-radio-button-label) {
-    font-size: 14px;
+  .framework-language-options {
+    @apply relative inline-flex pointer-events-auto;
+  }
+
+  .framework-language-option {
+    @apply relative h-[24px] min-w-[40px] cursor-pointer whitespace-nowrap border border-[#C4C6CC] bg-white px-[10px] text-[12px] text-[#63656E];
+  }
+
+  .framework-language-option + .framework-language-option {
+    margin-left: -1px;
+  }
+
+  .framework-language-option:first-child {
+    @apply rounded-l-[2px];
+  }
+
+  .framework-language-option:last-child {
+    @apply rounded-r-[2px];
+  }
+
+  .framework-language-option:hover {
+    @apply text-[#3A84FF];
+  }
+
+  .framework-language-option.selected {
+    @apply z-[1] border-[#3A84FF] bg-[#E1ECFF] text-[#3A84FF];
   }
 
   .template-card:hover,
@@ -331,7 +380,12 @@
     @apply border-[#3A84FF] bg-[#F0F5FF];
   }
 
-  .template-card:disabled {
+  .template-card:disabled,
+  .template-card.disabled {
     @apply cursor-not-allowed opacity-50;
+  }
+
+  .template-card-select:disabled {
+    cursor: not-allowed;
   }
 </style>

@@ -19,7 +19,7 @@
 import { defineComponent, h, ref } from 'vue';
 
 import userEvent from '@testing-library/user-event';
-import { render, screen, waitFor } from '@testing-library/vue';
+import { render, screen, waitFor, within } from '@testing-library/vue';
 import { flushPromises } from '@vue/test-utils';
 import { createPinia } from 'pinia';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -199,10 +199,10 @@ describe('创建应用模板', () => {
     if (framework === 'blank') expect(screen.queryByText('创建应用')).not.toBeInTheDocument();
     else expect(screen.getByText('创建应用')).toBeVisible();
   });
-  it('同时展示开发框架和语言，选择语言后传递blank组合', async () => {
+  it('展示框架和通用应用，选择通用应用后传递blank组合', async () => {
     renderPage(TemplateSelect);
-    expect(screen.getByText('开发框架')).toBeVisible();
-    expect(screen.getByText('按语言')).toBeVisible();
+    expect(screen.getByText('框架应用')).toBeVisible();
+    expect(screen.getByText('通用应用')).toBeVisible();
     await waitFor(() => expect(screen.getByRole('button', { name: /Python/ })).toBeEnabled());
     await userEvent.click(screen.getByRole('button', { name: /Python/ }));
     await userEvent.click(screen.getByRole('button', { name: '下一步' }));
@@ -216,12 +216,41 @@ describe('创建应用模板', () => {
     const pinia = createPinia();
     const appStore = useAppStore(pinia);
     const page = renderPage(TemplateSelect, pinia);
-    await userEvent.click(await screen.findByRole('radio', { name: 'C++' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'C++' }));
     expect(appStore.lastAppTemplateID).toBe('trpc:cpp');
 
     page.unmount();
     renderPage(TemplateSelect, pinia);
-    expect(await screen.findByRole('radio', { name: 'C++' })).toBeChecked();
+    expect(await screen.findByRole('button', { name: 'C++' })).toHaveAttribute('aria-pressed', 'true');
+  });
+  it('从通用应用点击框架卡片中的语言时选中对应框架，单语言框架只显示语言文本', async () => {
+    const pinia = createPinia();
+    const appStore = useAppStore(pinia);
+    renderPage(TemplateSelect, pinia);
+    const pythonCard = screen.getByRole('button', { name: /Python/ });
+    await waitFor(() => expect(pythonCard).toBeEnabled());
+    await userEvent.click(pythonCard);
+
+    await userEvent.click(screen.getByRole('button', { name: 'C++' }));
+    expect(appStore.lastAppTemplateID).toBe('trpc:cpp');
+    expect(screen.getByRole('button', { name: /tRPC/ })).toHaveAttribute('aria-pressed', 'true');
+    expect(pythonCard).toHaveAttribute('aria-pressed', 'false');
+    await userEvent.click(screen.getByRole('button', { name: '下一步' }));
+    expect(mocks.push).toHaveBeenCalledWith({
+      name: 'createBKMSAppTemplateApp',
+      query: { framework: 'trpc', language: 'cpp' },
+    });
+
+    const tafCard = screen.getByRole('button', { name: /TAF/ });
+    const tafContent = tafCard.closest<HTMLElement>('.template-card');
+    if (!tafContent) throw new Error('TAF template card missing');
+    const taf = within(tafContent);
+    expect(taf.getByText('C++', { exact: true })).toBeVisible();
+    expect(taf.queryByRole('button', { name: 'C++' })).not.toBeInTheDocument();
+    await userEvent.click(tafCard);
+    expect(appStore.lastAppTemplateID).toBe('taf:cpp');
+    expect(tafCard).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: /tRPC/ })).toHaveAttribute('aria-pressed', 'false');
   });
   it('目录失败可重试，Helm创建仍可继续', async () => {
     mocks.definitions.mockRejectedValueOnce(new Error('offline'));
