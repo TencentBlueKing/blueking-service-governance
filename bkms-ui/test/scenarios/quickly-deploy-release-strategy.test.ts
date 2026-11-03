@@ -18,7 +18,7 @@
 /**
  * 场景级测试：部署表单发布策略选择（ROUTES 未收录，本头即场景说明）
  *
- * 覆盖十三条用户可感知路径 → V = 13：
+ * 覆盖十六条用户可感知路径 → V = 16：
  *   1. 默认「一次更新全部」提交：部署参数不带 releaseStrategyID
  *   2. 切「按策略分批更新」：展开策略下拉，下拉底部有「新建策略」、右侧有「查看」
  *   3. 分批发布未选策略提交：表单校验拦截，不发起部署
@@ -32,6 +32,9 @@
  *   11. 主工作负载为 GameDeployment：分批发布可用
  *   12. 点下拉内「新建策略」：叠加新建策略抽屉；保存后抽屉关闭、自动选中新策略并刷新发布预览
  *   13. 点「查看」：跳转空间设置「发布策略」页
+ *   14. 策略末批未到全量：提示收尾为「最后自动全量」，预览追加系统补齐的全量批
+ *   15. 两批策略（25% → 100%）：提示保留首批灰度阶段，不误判为单批全量
+ *   16. 主工作负载资格检查完成前：分批发布禁用；返回 Deployment 后仍禁用
  *
  * stub/mock：
  *   - bkui-vue 真实渲染（Form/Button/Select/Input/Tag）；嵌套的新建策略抽屉同样真实渲染
@@ -88,6 +91,29 @@ const strategyList = [
       { target: '25%', pauseMode: 'duration', pauseSeconds: 600 },
       { target: '50%', pauseMode: 'permanent' },
       { target: '100%', pauseMode: 'none' },
+    ],
+  },
+  {
+    id: 'strategy-two-batch',
+    name: '两批放量',
+    description: '25% 后全量',
+    isBuiltin: false,
+    workspaceID: 'ws-1',
+    batches: [
+      { target: '25%', pauseMode: 'none' },
+      { target: '100%', pauseMode: 'none' },
+    ],
+  },
+  {
+    id: 'strategy-partial',
+    name: '末批部分放量',
+    description: '末批未到全量，由系统补齐',
+    isBuiltin: false,
+    workspaceID: 'ws-1',
+    batches: [
+      { target: '1', pauseMode: 'none' },
+      { target: '25%', pauseMode: 'none' },
+      { target: '50%', pauseMode: 'none' },
     ],
   },
   {
@@ -251,6 +277,13 @@ async function chooseStrategy(namePattern: RegExp) {
   await userEvent.click(await screen.findByText(namePattern));
 }
 
+/** 等主工作负载资格检查完成（默认无部署记录，不因负载禁用）后切到分批发布 */
+async function enableCanaryMode() {
+  const button = screen.getByRole('button', { name: '按策略分批更新' });
+  await waitFor(() => expect(button).not.toBeDisabled());
+  await userEvent.click(button);
+}
+
 /** 填写实例数与镜像 Tag，保证除发布策略外的必填项通过校验 */
 async function fillBaseForm() {
   // 直接更新输入值，避免逐字输入造成「120」或 clear 触发校验提示
@@ -314,7 +347,7 @@ describe('部署表单：发布策略选择', () => {
 
   it('当用户切换到「按策略分批更新」时，应展开策略下拉并展示「新建策略」与「查看」入口', async () => {
     await renderForm();
-    await userEvent.click(screen.getByRole('button', { name: '按策略分批更新' }));
+    await enableCanaryMode();
 
     expect(await screen.findByPlaceholderText('请选择发布策略')).toBeInTheDocument();
     expect(screen.getByText('查看')).toBeInTheDocument();
@@ -336,7 +369,7 @@ describe('部署表单：发布策略选择', () => {
   it('当用户分批发布未选策略就提交时，应被表单校验拦截且不发起部署', async () => {
     await renderForm();
     await fillBaseForm();
-    await userEvent.click(screen.getByRole('button', { name: '按策略分批更新' }));
+    await enableCanaryMode();
     await submitForm();
 
     // bkui 校验错误态为可见信号（错误文案经 tooltip 渲染，jsdom 不可断言）
@@ -348,7 +381,7 @@ describe('部署表单：发布策略选择', () => {
   it('当用户选中策略时，应展示发布预览（策略说明 + 摘要四项 + 批次时间线 + 进度方块 + 暂停标签）', async () => {
     await renderForm();
     await fillBaseForm();
-    await userEvent.click(screen.getByRole('button', { name: '按策略分批更新' }));
+    await enableCanaryMode();
     await chooseStrategy(/生产谨慎发布/);
 
     expect(await screen.findByText('发布预览')).toBeInTheDocument();
@@ -391,10 +424,28 @@ describe('部署表单：发布策略选择', () => {
     expect(screen.getByText('永久暂停 · 手动继续')).toBeInTheDocument();
   });
 
+  it('当策略末批未到全量时，提示与预览应体现系统补齐的全量批', async () => {
+    await renderForm();
+    await fillBaseForm();
+    await enableCanaryMode();
+    await chooseStrategy(/末批部分放量/);
+
+    // 提示收尾统一为「最后自动全量」：末批 50% 归入累计段，不再出现「最后累计到 50%」
+    expect(await screen.findByText('先 1 个实例，确认后累计到 25%、50%，最后自动全量')).toBeInTheDocument();
+    // 配置的 3 批之后追加第 4 批系统补齐的全量批（与策略预览弹窗一致）
+    expect(screen.getByText('第 3 批 · 累计 10 个（50%）')).toBeInTheDocument();
+    expect(screen.getByText('第 4 批 · 累计 20 个（100%）')).toBeInTheDocument();
+    expect(screen.getAllByTestId('batch-squares')).toHaveLength(4);
+    // 摘要批次数仍按用户配置的 3 批统计，与策略预览摘要口径一致
+    const summaryCard = screen.getByTestId('release-summary');
+    expect(within(summaryCard).getByText('批次数')).toBeInTheDocument();
+    expect(within(summaryCard).getByText('3')).toBeInTheDocument();
+  });
+
   it('当用户分批发布并已选策略提交时，部署参数应携带发布策略 ID', async () => {
     await renderForm();
     await fillBaseForm();
-    await userEvent.click(screen.getByRole('button', { name: '按策略分批更新' }));
+    await enableCanaryMode();
     await chooseStrategy(/生产谨慎发布/);
     await submitForm();
 
@@ -413,7 +464,7 @@ describe('部署表单：发布策略选择', () => {
   it('当用户切回「一次更新全部」时，应收起预览并清空已选策略，提交不带发布策略', async () => {
     await renderForm();
     await fillBaseForm();
-    await userEvent.click(screen.getByRole('button', { name: '按策略分批更新' }));
+    await enableCanaryMode();
     await chooseStrategy(/生产谨慎发布/);
     await screen.findByText('发布预览');
 
@@ -438,7 +489,7 @@ describe('部署表单：发布策略选择', () => {
   it('当用户切换到从源码构建时，应禁用分批发布，且已选的 canary 自动回落为一次更新全部', async () => {
     await renderForm();
     await fillBaseForm();
-    await userEvent.click(screen.getByRole('button', { name: '按策略分批更新' }));
+    await enableCanaryMode();
     await chooseStrategy(/生产谨慎发布/);
     await screen.findByText('发布预览');
 
@@ -467,6 +518,29 @@ describe('部署表单：发布策略选择', () => {
 
     await waitFor(() => expect(harness.listDeployRecords).toHaveBeenCalled());
     expect(screen.getByRole('button', { name: '按策略分批更新' })).toBeDisabled();
+    // 分批发布已失效时提交不应透传 releaseStrategyID（当前为一次更新全部，正常部署）
+    await submitForm();
+    await waitFor(() => expect(harness.createDeployDirectly).toHaveBeenCalledTimes(1));
+    expect(harness.createDeployDirectly.mock.calls[0][0]).not.toHaveProperty('releaseStrategyID');
+  });
+
+  it('当主工作负载资格检查完成前，应先禁用分批发布；返回 Deployment 后保持禁用', async () => {
+    let resolveRecords!: (value: { count: number; results: unknown[] }) => void;
+    harness.listDeployRecords.mockReturnValue(
+      new Promise(resolve => {
+        resolveRecords = resolve;
+      }),
+    );
+    await renderForm();
+    await fillBaseForm();
+
+    // 资格未知时不允许先选分批再被回退：检查完成前直接禁用
+    expect(screen.getByRole('button', { name: '按策略分批更新' })).toBeDisabled();
+    expect(screen.queryByText('发布预览')).not.toBeInTheDocument();
+
+    resolveRecords({ count: 1, results: [{ workloadKind: 'Deployment' }] });
+    await waitFor(() => expect(harness.listDeployRecords).toHaveBeenCalled());
+    expect(screen.getByRole('button', { name: '按策略分批更新' })).toBeDisabled();
   });
 
   it('当主工作负载为 GameDeployment 时，应允许「按策略分批更新」', async () => {
@@ -475,10 +549,24 @@ describe('部署表单：发布策略选择', () => {
     await fillBaseForm();
 
     await waitFor(() => expect(harness.listDeployRecords).toHaveBeenCalled());
-    expect(screen.getByRole('button', { name: '按策略分批更新' })).not.toBeDisabled();
     // 可正常展开策略下拉
-    await userEvent.click(screen.getByRole('button', { name: '按策略分批更新' }));
+    await enableCanaryMode();
     expect(await screen.findByPlaceholderText('请选择发布策略')).toBeInTheDocument();
+  });
+
+  it('当策略为两批（25% → 100%）时，提示与预览应保留首批灰度阶段，不误判为单批全量', async () => {
+    await renderForm();
+    await fillBaseForm();
+    await enableCanaryMode();
+    await chooseStrategy(/两批放量/);
+
+    // 首批 25% 不能被「单批全量」误判吞掉
+    expect(await screen.findByText('先更新到 25%，最后自动全量')).toBeInTheDocument();
+    expect(screen.queryByText('最后自动全量，先更新到 25%')).not.toBeInTheDocument();
+    // 两批均有批次行：25% → 100%（末批已全量，无需系统补齐第 3 批）
+    expect(screen.getByText('第 1 批 · 累计 5 个（25%）')).toBeInTheDocument();
+    expect(screen.getByText('第 2 批 · 累计 20 个（100%）')).toBeInTheDocument();
+    expect(screen.getAllByTestId('batch-squares')).toHaveLength(2);
   });
 });
 
@@ -495,7 +583,7 @@ describe('部署表单：抽屉内新建发布策略', () => {
 
   it('当用户点「新建策略」时，应在部署表单之上叠加新建策略抽屉', async () => {
     await renderForm();
-    await userEvent.click(screen.getByRole('button', { name: '按策略分批更新' }));
+    await enableCanaryMode();
 
     const header = await openCreateStrategyDrawer();
 
@@ -510,7 +598,7 @@ describe('部署表单：抽屉内新建发布策略', () => {
     harness.createReleaseStrategy.mockResolvedValue(createdStrategy);
     await renderForm();
     await fillBaseForm();
-    await userEvent.click(screen.getByRole('button', { name: '按策略分批更新' }));
+    await enableCanaryMode();
     await openCreateStrategyDrawer();
 
     // 保存后列表刷新带回新策略（第一次挂载时的列表不含它）
@@ -547,7 +635,7 @@ describe('部署表单：抽屉内新建发布策略', () => {
 
   it('当用户点「查看」时，应跳转空间设置下的发布策略页', async () => {
     await renderForm();
-    await userEvent.click(screen.getByRole('button', { name: '按策略分批更新' }));
+    await enableCanaryMode();
 
     await userEvent.click(screen.getByText('查看'));
 

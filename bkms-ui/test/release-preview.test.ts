@@ -19,9 +19,14 @@ import { describe, expect, it } from 'vitest';
 import {
   buildBatchSquares,
   buildReleasePreview,
+  buildSquaresByRatio,
   buildStrategyHint,
   formatOptionTarget,
+  isFullTarget,
+  normalizeTargetText,
+  parseBatchTarget,
   resolveBatchUpdatedCount,
+  shouldAppendAutoFullBatch,
 } from '~/pages/application/detail/deploy/release-preview';
 
 import type { BatchOutputObj } from '~/@types/v1/release-strategies';
@@ -129,6 +134,51 @@ describe('buildReleasePreview', () => {
     expect(rows[1]).toMatchObject({ prevCount: 1, targetText: '25%', isPercent: true, isFull: false });
     expect(rows[2]).toMatchObject({ prevCount: 5, targetText: '50%', isPercent: true, isFull: false });
     expect(rows[3]).toMatchObject({ prevCount: 10, targetText: '100%', isPercent: true, isFull: true });
+    // 末批已是全量，无需系统补齐
+    expect(rows.every(row => !row.isAutoFull)).toBeTruthy();
+  });
+});
+
+describe('末批全量补齐语义（策略预览 / 部署预览共用）', () => {
+  it('isFullTarget：100% 及以上与空值视为全量，其余视为部分', () => {
+    expect(isFullTarget('100%')).toBe(true);
+    expect(isFullTarget('120%')).toBe(true);
+    expect(isFullTarget(undefined)).toBe(true);
+    expect(isFullTarget('')).toBe(true);
+    expect(isFullTarget('50%')).toBe(false);
+    // 正整数 target 表示实例个数，永远不是全量
+    expect(isFullTarget('3')).toBe(false);
+  });
+
+  it('shouldAppendAutoFullBatch：仅当末批非全量时补齐', () => {
+    expect(shouldAppendAutoFullBatch(['1', '50%'])).toBe(true);
+    expect(shouldAppendAutoFullBatch(['1', '100%'])).toBe(false);
+    expect(shouldAppendAutoFullBatch([])).toBe(false);
+  });
+
+  it('末批非全量时追加「系统补齐的全量批」，与策略预览一致', () => {
+    const { rows, summary } = buildReleasePreview(
+      [
+        { target: '1', pauseMode: 'none' },
+        { target: '50%', pauseMode: 'permanent' },
+      ],
+      20,
+    );
+    expect(rows.map(row => row.batchIndex)).toEqual([1, 2, 3]);
+    // 补齐批：接在末批之后、累计到实例总数、带全量标记、无暂停
+    expect(rows[2]).toMatchObject({
+      isAutoFull: true,
+      isFull: true,
+      isPercent: true,
+      prevCount: 10,
+      targetText: '100%',
+      updatedCount: 20,
+    });
+    expect(rows[2].pause).toBeUndefined();
+    // 用户配置的批次不被标记为补齐
+    expect(rows.filter(row => row.isAutoFull)).toHaveLength(1);
+    // 摘要批次数按用户配置的策略批次统计，与策略预览摘要口径一致
+    expect(summary.batchCount).toBe(2);
   });
 });
 
@@ -172,10 +222,41 @@ describe('buildStrategyHint', () => {
       { target: '100%', pauseMode: 'none' },
     ]);
     expect(hint).toEqual({
+      batchCount: 4,
       firstTarget: '1',
       firstIsPercent: false,
       middleTargets: ['25%', '50%'],
-      lastTarget: '100%',
+      lastIsFull: true,
+    });
+  });
+
+  it('末批非全量时归入累计段，收尾由系统补齐的全量批承担', () => {
+    // 「先 1 个实例，确认后累计到 25%、50%，最后自动全量」
+    expect(
+      buildStrategyHint([
+        { target: '1', pauseMode: 'none' },
+        { target: '25%', pauseMode: 'none' },
+        { target: '50%', pauseMode: 'none' },
+      ]),
+    ).toEqual({
+      batchCount: 3,
+      firstTarget: '1',
+      firstIsPercent: false,
+      middleTargets: ['25%', '50%'],
+      lastIsFull: false,
+    });
+  });
+
+  it('两批策略（25% → 100%）不应被误判为单批全量：batchCount 保留批次数供组件区分', () => {
+    const hint = buildStrategyHint([
+      { target: '25%', pauseMode: 'none' },
+      { target: '100%', pauseMode: 'none' },
+    ]);
+    expect(hint).toEqual({
+      batchCount: 2,
+      firstTarget: '25%',
+      firstIsPercent: true,
+      middleTargets: [],
       lastIsFull: true,
     });
   });
@@ -184,10 +265,10 @@ describe('buildStrategyHint', () => {
     expect(buildStrategyHint([])).toBeNull();
     expect(buildStrategyHint(undefined)).toBeNull();
     expect(buildStrategyHint([{ pauseMode: 'none' }])).toEqual({
+      batchCount: 1,
       firstTarget: '100%',
       firstIsPercent: true,
       middleTargets: [],
-      lastTarget: '100%',
       lastIsFull: true,
     });
   });
@@ -209,5 +290,43 @@ describe('formatOptionTarget', () => {
   it('缺失或非法 target 按全量兜底', () => {
     expect(formatOptionTarget('', texts)).toBe('全量');
     expect(formatOptionTarget(undefined, texts)).toBe('全量');
+  });
+});
+
+describe('parseBatchTarget（策略预览 / 部署预览共用的 target 解析）', () => {
+  it('百分比解析为数值与单位，≥100 判为全量', () => {
+    expect(parseBatchTarget('25%')).toEqual({ isFull: false, text: '25%', unit: 'percent', value: 25 });
+    expect(parseBatchTarget(' 100% ')).toEqual({ isFull: true, text: '100%', unit: 'percent', value: 100 });
+    expect(parseBatchTarget('120%').isFull).toBe(true);
+  });
+
+  it('正整数解析为个数，永远不是全量', () => {
+    expect(parseBatchTarget('1')).toEqual({ isFull: false, text: '1', unit: 'count', value: 1 });
+    expect(parseBatchTarget('100').isFull).toBe(false);
+  });
+
+  it('空串保留为空文本（表单回填需区分待填写），由 isFullTarget / normalizeTargetText 决定展示语义', () => {
+    expect(parseBatchTarget('')).toEqual({ isFull: false, text: '', unit: 'count', value: undefined });
+    expect(parseBatchTarget(undefined).text).toBe('');
+    expect(normalizeTargetText('')).toBe('100%');
+    expect(isFullTarget('')).toBe(true);
+  });
+
+  it('非法数值收敛为 undefined，不误判全量', () => {
+    expect(parseBatchTarget('abc').value).toBeUndefined();
+    expect(parseBatchTarget('abc').isFull).toBe(false);
+    expect(parseBatchTarget('abc%').value).toBeUndefined();
+    expect(parseBatchTarget('0%').value).toBe(0);
+  });
+});
+
+describe('buildSquaresByRatio（策略预览固定格数着色）', () => {
+  it('按格中心落点着色，与原 buildPreviewSquares 行为一致', () => {
+    // prev 0.25 / accumulated 0.7：5 格此前批次、9 格本批新增、6 格未更新
+    const squares = buildSquaresByRatio({ accumulatedRatio: 0.7, prevRatio: 0.25 });
+    expect(squares).toHaveLength(20);
+    expect(squares.filter(state => state === 'prev')).toHaveLength(5);
+    expect(squares.filter(state => state === 'new')).toHaveLength(9);
+    expect(squares.filter(state => state === 'pending')).toHaveLength(6);
   });
 });
