@@ -19,6 +19,8 @@
 package bkmonitor_test
 
 import (
+	"strings"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
@@ -143,6 +145,68 @@ var _ = Describe("PromQLBuilder", func() {
 			result := builder.Build()
 			promql := result[bkmonitor.MetricCPUUsage]
 			Expect(promql).To(ContainSubstring(`pod_name=~"^(pod-a|pod-b|pod-c)$"`))
+		})
+	})
+
+	Describe("Build with aggregation method", func() {
+		It("should default to sum when method is empty", func() {
+			for key, promql := range builder.Build() {
+				Expect(promql).To(HavePrefix("sum by(pod)("), key)
+			}
+		})
+
+		DescribeTable("should apply the method to every metric",
+			func(method bkmonitor.AggMethod) {
+				builder.Method = method
+				for key, promql := range builder.Build() {
+					Expect(promql).To(HavePrefix(string(method)+" by(pod)("), key)
+					// 模板中不能残留未替换的占位或默认的 sum
+					Expect(promql).NotTo(ContainSubstring("%!"), key)
+					Expect(promql).NotTo(ContainSubstring("%["), key)
+					if method != bkmonitor.AggMethodSum {
+						Expect(promql).NotTo(ContainSubstring("sum by(pod)"), key)
+					}
+				}
+			},
+			Entry("sum", bkmonitor.AggMethodSum),
+			Entry("max", bkmonitor.AggMethodMax),
+			Entry("min", bkmonitor.AggMethodMin),
+			Entry("count", bkmonitor.AggMethodCount),
+			Entry("avg", bkmonitor.AggMethodAvg),
+		)
+
+		It("should use the same method on both numerator and denominator of ratio metrics", func() {
+			builder.Method = bkmonitor.AggMethodMax
+			result := builder.Build()
+			for _, key := range []string{
+				bkmonitor.MetricCPURequestUsage,
+				bkmonitor.MetricCPULimitUsage,
+				bkmonitor.MetricMemoryRequestUsage,
+				bkmonitor.MetricMemoryLimitUsage,
+			} {
+				numerator, denominator, found := strings.Cut(result[key], " / ")
+				Expect(found).To(BeTrue(), key)
+				Expect(numerator).To(HavePrefix("max by(pod)("), key)
+				Expect(denominator).To(HavePrefix("max by(pod)("), key)
+				// 分母同样带上集群、命名空间与 Pod 过滤
+				Expect(denominator).To(ContainSubstring(`bcs_cluster_id="BCS-K8S-xxxxx"`), key)
+				Expect(denominator).To(ContainSubstring(`namespace=~"^(test)$"`), key)
+				Expect(denominator).To(ContainSubstring(`pod_name=~"^(test-pod-x32rf|test-pod-rwztv)$"`), key)
+			}
+		})
+
+		It("should take the method from MetricsQuery", func() {
+			b := bkmonitor.NewPromQLBuilder(&bkmonitor.MetricsQuery{
+				ClusterID:  "BCS-K8S-xxxxx",
+				Namespace:  "test",
+				Instances:  []string{"pod-a"},
+				MetricKeys: []string{bkmonitor.MetricMemoryUsage},
+				Method:     bkmonitor.AggMethodAvg,
+			})
+			Expect(b.Build()[bkmonitor.MetricMemoryUsage]).To(Equal(
+				`avg by(pod)(container_memory_working_set_bytes{bcs_cluster_id="BCS-K8S-xxxxx",` +
+					`namespace=~"^(test)$",pod_name=~"^(pod-a)$",container_name!="POD"})`,
+			))
 		})
 	})
 })

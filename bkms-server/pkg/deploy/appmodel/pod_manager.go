@@ -28,6 +28,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
 	"github.com/spf13/cast"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -163,6 +164,29 @@ func (m *podManager) ListPods(
 		return nil, errors.Wrapf(err, "list pods in namespace %s by label selector [%s]", namespace, labelSelector)
 	}
 	return pods.Items, nil
+}
+
+// ListLatestPodNames 取应用在指定环境、泳道下的最新部署记录，按记录的集群、命名空间与 LabelSelector 枚举 Pod 名称。
+// 部署记录不存在时返回 ErrDeployRecordNotFound；没有匹配的 Pod 时返回空列表。
+func ListLatestPodNames(
+	ctx context.Context, db *mongo.Database, appID, envName, trafficLaneName string,
+) (*Record, []string, error) {
+	record, err := GetLatest(ctx, db, appID, envName, trafficLaneName)
+	if err != nil {
+		// GetLatest 已带上 app / env 信息，这里不再重复包装
+		return nil, nil, err
+	}
+
+	pods, err := (&podManager{}).ListPods(ctx, record.ClusterID, record.Namespace, record.LabelSelector)
+	if err != nil {
+		return nil, nil, errors.Wrapf(err, "list pods of deploy record %s", record.ID.Hex())
+	}
+
+	podNames := lo.FilterMap(pods, func(po unstructured.Unstructured, _ int) (string, bool) {
+		name := getPodName(po)
+		return name, name != ""
+	})
+	return record, podNames, nil
 }
 
 // coversAllRunningPods 判断指定的 Pod 名称是否包含工作负载全部运行态的 Pod（终止态的 Pod 不参与判断）
