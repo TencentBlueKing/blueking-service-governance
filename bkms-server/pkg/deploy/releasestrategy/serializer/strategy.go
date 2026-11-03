@@ -48,8 +48,8 @@ type BatchInput struct {
 	Target string `json:"target" binding:"required,batch_target"`
 	// 本批完成后的暂停方式：none 不暂停 / duration 定时暂停 / permanent 永久暂停（需人工继续）
 	PauseMode string `json:"pauseMode" binding:"required,oneof=none duration permanent"`
-	// 定时暂停时长（秒），仅 pauseMode 为 duration 时必填且只能在此时填写，范围 60 ~ 86400
-	PauseSeconds int `json:"pauseSeconds" binding:"required_if=PauseMode duration,excluded_unless=PauseMode duration,omitempty,min=60,max=86400"`
+	// 定时暂停时长（秒），仅 pauseMode 为 duration 时必填且只能在此时填写，须大于 0
+	PauseSeconds int `json:"pauseSeconds" binding:"required_if=PauseMode duration,excluded_unless=PauseMode duration,omitempty,gt=0"`
 }
 
 // ReleaseStrategyInput is the JSON body shared by creating and updating a release strategy.

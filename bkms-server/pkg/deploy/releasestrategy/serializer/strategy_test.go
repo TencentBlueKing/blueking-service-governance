@@ -84,12 +84,10 @@ var _ = Describe("ReleaseStrategyInput", func() {
 		Entry("target rejected by batch_target",
 			inputWithBatch(serializer.BatchInput{Target: "101%", PauseMode: "none"}), "Target"),
 
-		// pauseSeconds 仅在 duration 时必填且只能在此时填写
-		Entry("duration pause at lower bound", pauseInput("duration", 60), ""),
-		Entry("duration pause at upper bound", pauseInput("duration", 86400), ""),
+		// pauseSeconds 仅在 duration 时必填且只能在此时填写，须大于 0
+		Entry("duration pause of one second", pauseInput("duration", 1), ""),
 		Entry("duration pause without seconds", pauseInput("duration", 0), "PauseSeconds"),
-		Entry("duration pause too short", pauseInput("duration", 59), "PauseSeconds"),
-		Entry("duration pause too long", pauseInput("duration", 86401), "PauseSeconds"),
+		Entry("negative duration pause", pauseInput("duration", -1), "PauseSeconds"),
 		Entry("seconds given for permanent pause", pauseInput("permanent", 120), "PauseSeconds"),
 		Entry("seconds given for no pause", pauseInput("none", 120), "PauseSeconds"),
 	)

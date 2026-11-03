@@ -57,7 +57,7 @@
 | `batches` | 至少 1 个批次，不设上限 |
 | `batches[].target` | 本批**累计更新到**的实例数：正整数（如 `"1"`）或百分比（`1%` ~ `100%`），每批可独立选择单位 |
 | `batches[].pauseMode` | 本批完成后的暂停方式：`none` 不暂停 / `duration` 定时暂停 / `permanent` 永久暂停（需人工继续） |
-| `batches[].pauseSeconds` | 仅 `duration` 时有效，60 ~ 86400 秒 |
+| `batches[].pauseSeconds` | 仅 `duration` 时有效，须大于 0 |
 
 字段取值范围由接口层校验；`ParseBatchTarget` 负责目标值格式校验，生成 Rollout 时复用。
 

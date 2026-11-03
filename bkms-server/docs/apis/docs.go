@@ -24190,10 +24190,8 @@ const docTemplate = `{
                     ]
                 },
                 "pauseSeconds": {
-                    "description": "定时暂停时长（秒），仅 pauseMode 为 duration 时必填且只能在此时填写，范围 60 ~ 86400",
-                    "type": "integer",
-                    "maximum": 86400,
-                    "minimum": 60
+                    "description": "定时暂停时长（秒），仅 pauseMode 为 duration 时必填且只能在此时填写，须大于 0",
+                    "type": "integer"
                 },
                 "target": {
                     "description": "本批\"累计更新到\"的实例数：正整数（如 \"1\"）或百分比（如 \"25%\"），百分比范围 1% ~ 100%",
