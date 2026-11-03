@@ -158,7 +158,11 @@ func (h *APIHandler) GetCurrentUser(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"login_url": result.LoginURL, "code": "1000"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"user_id": result.RequestUser.GetID()})
+	// tenant_id 为空表示认证上游未返回租户（如单租户环境的 bk-login）
+	c.JSON(http.StatusOK, gin.H{
+		"user_id":   result.RequestUser.GetID(),
+		"tenant_id": result.RequestUser.GetTenantID(),
+	})
 }
 
 func parseNeedNewToken(raw string) bool {

@@ -109,6 +109,47 @@ var _ = Describe("Tenant middleware", func() {
 		Expect(recorder.Code).To(Equal(http.StatusBadRequest))
 	})
 
+	It("uses the tenant from auth when the header is absent", func() {
+		recorder := httptest.NewRecorder()
+		router := gin.New()
+		router.Use(tenant.Required(true, fakeVerifier{
+			verifyFunc: func(ctx context.Context, bkUsername, tenantID string) error {
+				Fail("verifier should not be called when auth already has tenant id")
+				return nil
+			},
+		}))
+		router.GET("/", func(c *gin.Context) {
+			tenantID, ok := tenant.GetTenantID(c.Request.Context())
+			Expect(ok).To(BeTrue())
+			Expect(tenantID).To(Equal("tenant-a"))
+			c.Status(http.StatusNoContent)
+		})
+
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req = req.WithContext(auth.WithUser(req.Context(), auth.User{ID: "alice", TenantID: "tenant-a"}))
+		router.ServeHTTP(recorder, req)
+
+		Expect(recorder.Code).To(Equal(http.StatusNoContent))
+	})
+
+	It("ignores the auth tenant when multi-tenant mode is disabled", func() {
+		recorder := httptest.NewRecorder()
+		router := gin.New()
+		router.Use(tenant.Required(false, fakeVerifier{}))
+		router.GET("/", func(c *gin.Context) {
+			tenantID, ok := tenant.GetTenantID(c.Request.Context())
+			Expect(ok).To(BeTrue())
+			Expect(tenantID).To(Equal(tenant.DefaultTenantID))
+			c.Status(http.StatusNoContent)
+		})
+
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req = req.WithContext(auth.WithUser(req.Context(), auth.User{ID: "alice", TenantID: "tenant-a"}))
+		router.ServeHTTP(recorder, req)
+
+		Expect(recorder.Code).To(Equal(http.StatusNoContent))
+	})
+
 	It("verifies authenticated user against the requested tenant when enabled", func() {
 		recorder := httptest.NewRecorder()
 		router := gin.New()

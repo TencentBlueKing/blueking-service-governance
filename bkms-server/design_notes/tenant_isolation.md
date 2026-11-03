@@ -177,7 +177,7 @@ store 在 Encode 钩子执行后，按已填好租户的原对象把租户写回
 
 | 入口 | 处理 |
 |---|---|
-| HTTP 业务 API | `/bkms/v1/bkms-server` 路由组挂 `tenant.Required`，写入 ctx |
+| HTTP 业务 API | `/bkms/v1/bkms-server` 路由组挂 `tenant.Required`，写入 ctx。多租户模式下租户取 `X-Bk-Tenant-Id`，未传时用登录态租户（bk-login userinfo 返回，前端因此不传该头）；传了则须与登录态一致，登录态无租户（access token）时必须传并经 bk-user 校验 |
 | 平台管理 API | 同上，另由 `RequirePlatformRole` 打显式范围标记，见 5.2 |
 | 异步任务 | envelope 增加 `_tenantID`：投递时 ctx 无租户直接失败，消费时写回 ctx，详见 4.1；只访问全局集合的任务声明 `Global()`，见 4.2 |
 | `cmd/migration/*` 与命令行 | ctx 无租户，访问租户集合时显式传 `TenantAll()`；后续调用业务函数或投递任务前用 `store.ScopeToTenant` 设置资源所属租户，见 5.1 |
