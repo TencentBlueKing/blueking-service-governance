@@ -132,7 +132,7 @@
   import { AngleDownFill, Plus } from 'bkui-vue/lib/icon';
   import { onBeforeRouteUpdate, useRoute, useRouter } from 'vue-router';
   import { AppService } from '~/api/modules/v1/app';
-  import { isAppModelAppType, isHelmLikeAppType } from '~/composables/app-type';
+  import { isAppModelAppType } from '~/composables/app-type';
   import { getMenuList } from '~/composables/use-router-menu';
   import { useAppDetail } from '~/stores/app-detail';
   import { useSpaceStore } from '~/stores/space';
@@ -175,12 +175,6 @@
   const currentApplicationName = ref(getRouteParam(route.params.name));
   const applicationList = ref<AppInfoOutputObj[]>([]);
   const applicationListLoading = ref(false);
-  // 'overview' | 'build' | 'repo' | 'deploy' | 'info' | 'orchestrate' | 'history' | 'module'
-  // trpc没有的子菜单
-  const TrpcSpecNotHas = ['orchestrate'];
-  // helm没有的子菜单
-  const HelmSpecNotHas = ['module', 'observation', 'polaris', 'appConfig'];
-
   const activeKey = ref<string>(getRouteParam(router.currentRoute.value.params.menuName, 'info'));
   const isSpacePopoverShow = ref(false);
   // 应用列表与应用详情加载完成前，不挂载子页面，避免子页面读取到空 appID/appDetail
@@ -293,44 +287,45 @@
   let appSwitchGeneration = 0;
 
   watch(
-    [activeKey, type, currentApplicationName],
-    ([key, type, name], [oldKey]) => {
+    [activeKey, type, currentApplicationName, () => appDetailStore.runtime, currentApplication],
+    ([key, type, name], [oldKey, oldType, oldName]) => {
       if (name) {
         appDetailStore.updateAppName(name);
         appDetailStore.updateAppType(type);
       }
-      // 如果是trpc或者helm，且key在notHas中，跳转到基本信息
-      if (isAppModelAppType(type) && TrpcSpecNotHas.includes(key as string)) {
-        activeKey.value = 'info';
-      } else if (isHelmLikeAppType(type) && HelmSpecNotHas.includes(key as string)) {
-        activeKey.value = 'info';
-      } else if (key && type && name) {
-        const current = router.currentRoute.value;
-        // URL 已是目标（如浏览器后退触发的反向同步）时跳过 push，避免污染历史栈
-        const alreadyOnTarget =
-          current.name === 'detail' &&
-          getRouteParam(current.params.name) === name &&
-          getRouteParam(current.params.type) === type &&
-          getRouteParam(current.params.menuName) === key;
-        if (alreadyOnTarget) {
-          return;
-        }
-        // 同菜单切换应用沿用 query；特性环境子页面的切换由路由守卫统一处理。
-        const isMenuSwitch = oldKey && oldKey !== key;
-        // 快照当前 query 供新页 hook（useUrlQuerySync）接管。
-        const snapshotQuery = router.currentRoute.value.query;
-        pendingRouteSync = router
-          .push({
-            name: 'detail',
-            params: {
-              type,
-              name,
-              menuName: key as string,
-            },
-            query: isMenuSwitch ? undefined : snapshotQuery,
-          })
-          .catch(() => undefined);
-      }
+      if (!key || !type || !name) return;
+      const current = router.currentRoute.value;
+      const isSwitchingApp = getRouteParam(current.params.name) !== name;
+      // 观测入口依赖异步能力，目标应用的能力未确认前保留当前菜单。
+      const waitingForObservationRuntime =
+        key === 'observation' &&
+        isAppModelAppType(type) &&
+        (appDetailStore.appID !== currentApplication.value?.id || !appDetailStore.runtime);
+      const hasMenu = menuList.value.some(item =>
+        'children' in item ? item.children.some(child => child.key === key) : item.key === key,
+      );
+      const shouldFallback = !!currentApplication.value && !waitingForObservationRuntime && !hasMenu;
+      const menuName = shouldFallback ? 'info' : key;
+
+      // 仅能力变化时不重复导航，也不取消尚未完成的应用切换。
+      if (key === oldKey && type === oldType && name === oldName && (isSwitchingApp || !shouldFallback)) return;
+      const alreadyOnTarget =
+        current.name === 'detail' &&
+        !isSwitchingApp &&
+        getRouteParam(current.params.type) === type &&
+        getRouteParam(current.params.menuName) === menuName;
+      if (alreadyOnTarget) return;
+
+      const isMenuSwitch = oldKey && oldKey !== key;
+      const target = {
+        name: 'detail',
+        params: { type, name, menuName },
+        query: shouldFallback ? {} : isMenuSwitch ? undefined : current.query,
+      };
+      // 切应用直接进入目标有效菜单；纠正当前应用的无效链接时替换历史项。
+      pendingRouteSync = (shouldFallback && !isSwitchingApp ? router.replace(target) : router.push(target)).catch(
+        () => undefined,
+      );
     },
     {
       immediate: true,

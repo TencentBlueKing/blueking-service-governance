@@ -25,8 +25,8 @@
  *   ② 目标已是干净 instance 列表（仅 activeTab 一个参数）→ 放行（防 replace 重定向死循环）
  *   ③ 非特性环境视图（view !== 'feature-envs'）下切换应用 → 放行（等价类）
  *   ④ 同应用内的路由更新（name 相同）→ 放行（等价类）
- * stub/mock：bkmsserver 最小集 + v1 Proxy 兜底 + vue-router 捕获守卫回调（守卫逻辑直接调用验证，
- *            真实导航链路归 E2E——指南非目标「整页 E2E」）+ vue-i18n useI18n 直译
+ * stub/mock：bkmsserver 最小集 + v1 Proxy 兜底 + vue-router 捕获守卫回调；历史栈回归使用
+ *            真实 Vue Router / memory history，其余子页面仍隔离 + vue-i18n useI18n 直译
  * 变异验证：3 处全部命中（恒真→③④红 / 死循环判定删除→②红 / query 串改→①红），已精确还原
  * backlog：无
  */
@@ -35,19 +35,28 @@ import { ref } from 'vue';
 import { flushPromises, mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { useRouter } from 'vue-router';
+import { appNavigationConfig } from '~/config/navigation/app';
 import AppDetailShell from '~/pages/application/detail.vue';
 import { useAppDetail } from '~/stores/app-detail';
 
 import type { VueWrapper } from '@vue/test-utils';
-import type { RouteLocationNormalizedGeneric } from 'vue-router';
+import type { NavigationGuard, RouteLocationNormalizedGeneric, Router } from 'vue-router';
+import type * as VueRouter from 'vue-router';
+import type { NavigationItem } from '~/config/navigation/types';
 
 const mocks = vi.hoisted(() => ({
   /** 捕获 detail.vue 注册的 onBeforeRouteUpdate 守卫回调（每次 mount 清空，取最新注册） */
-  routeUpdateGuards: [] as Array<(to: RouteLocationNormalizedGeneric, from: RouteLocationNormalizedGeneric) => unknown>,
+  routeUpdateGuards: [] as Array<
+    (to: RouteLocationNormalizedGeneric, from: RouteLocationNormalizedGeneric) => ReturnType<NavigationGuard>
+  >,
   space: '',
   apps: vi.fn(),
   detail: vi.fn(),
   runtime: vi.fn(),
+  push: vi.fn(),
+  replace: vi.fn(),
+  realRouter: null as null | Router,
 }));
 
 /** 挂载壳层并捕获守卫回调；调用方负责 unmount（§3.8 VTU 须自行清理） */
@@ -65,7 +74,11 @@ function mountShell(): {
       // RouterView 由 vue-router mock 提供，但模板按全局组件解析——注册以消除 resolve 告警
       components: { RouterView: { template: '<div />' } },
       stubs: {
-        CustomNavigation: { template: '<div><slot /><slot name="side-header" /></div>' },
+        CustomNavigation: {
+          name: 'CustomNavigation',
+          props: ['list', 'activeKey'],
+          template: '<div><slot /><slot name="side-header" /></div>',
+        },
         Alert: { template: '<div role="alert"><slot name="title" /><slot /></div>' },
         Button: { template: '<button><slot /></button>' },
       },
@@ -94,25 +107,41 @@ vi.mock('~/stores/space', () => ({ useSpaceStore: () => ({ currentSpace: mocks.s
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.realRouter = null;
   mocks.space = '';
   mocks.apps.mockResolvedValue([]);
   mocks.detail.mockResolvedValue(undefined);
   mocks.runtime.mockResolvedValue(undefined);
+  useRouter().currentRoute.value = loc({ name: '' });
 });
 
 // vue-router：捕获守卫回调（非 no-op——本场景的验证对象就是回调逻辑本身）
-vi.mock('vue-router', () => {
-  const currentRoute = ref({ params: {}, query: {}, name: '' });
+vi.mock('vue-router', async importOriginal => {
+  const actual = await importOriginal<typeof VueRouter>();
+  const currentRoute = ref({ params: {}, query: {}, name: '', meta: {} });
+  const navigate = async (target: { params?: object; query?: object }) => {
+    currentRoute.value = {
+      ...currentRoute.value,
+      ...target,
+      params: { ...currentRoute.value.params, ...target.params },
+      query: target.query || {},
+    };
+  };
+  mocks.push.mockImplementation(navigate);
+  mocks.replace.mockImplementation(navigate);
   return {
+    ...actual,
     RouterView: { template: '<div />' },
     RouterLink: { template: '<a><slot /></a>' },
-    useRoute: () => ({ params: {}, query: {}, currentRoute }),
-    useRouter: () => ({
-      push: vi.fn().mockResolvedValue(undefined),
-      replace: vi.fn().mockResolvedValue(undefined),
-      currentRoute,
-    }),
+    useRoute: () => (mocks.realRouter ? actual.useRoute() : currentRoute.value),
+    useRouter: () =>
+      mocks.realRouter || {
+        push: mocks.push,
+        replace: mocks.replace,
+        currentRoute,
+      },
     onBeforeRouteUpdate: (cb: (typeof mocks.routeUpdateGuards)[number]) => {
+      if (mocks.realRouter) return actual.onBeforeRouteUpdate(cb);
       mocks.routeUpdateGuards.push(cb);
     },
     onBeforeRouteLeave: vi.fn(),
@@ -143,6 +172,80 @@ function loc(overrides: {
     redirectedFrom: undefined,
     href: '',
   } as unknown as RouteLocationNormalizedGeneric;
+}
+
+function menuKeys(wrapper: VueWrapper): string[] {
+  const list = wrapper.findComponent({ name: 'CustomNavigation' }).props('list') as NavigationItem[];
+  return list.flatMap(item => ('children' in item ? item.children.map(child => child.key) : [item.key]));
+}
+
+/** 挂载真实壳层和路由，仅隔离子页面；保留异步导航与前进/后退的历史语义。 */
+async function mountShellWithHistory(
+  name: string,
+  { menuName = 'observation', type = 'bkmsApp' }: { menuName?: string; type?: string } = {},
+) {
+  const {
+    createRouter,
+    createMemoryHistory,
+    RouterView: routerView,
+  } = await vi.importActual<typeof VueRouter>('vue-router');
+  const router = createRouter({
+    history: createMemoryHistory(),
+    routes: [
+      { path: '/:space/app', name: 'app', component: { template: '<div />' } },
+      {
+        path: '/:space/app/:name',
+        component: AppDetailShell,
+        children: [
+          { path: ':type/:menuName', name: 'detail', component: { template: '<div data-test="application-page" />' } },
+        ],
+      },
+    ],
+  });
+  mocks.realRouter = router;
+  await router.push('/ws-1/app');
+  await router.push({
+    name: 'detail',
+    params: { space: 'ws-1', name, type, menuName },
+    query: { stale: 'observation-query' },
+  });
+  const pinia = createPinia();
+  setActivePinia(pinia);
+  const wrapper = mount(routerView, {
+    global: {
+      plugins: [pinia, router],
+      stubs: {
+        CustomNavigation: {
+          name: 'CustomNavigation',
+          props: ['list', 'activeKey'],
+          template: '<div><slot /><slot name="side-header" /></div>',
+        },
+        Select: {
+          name: 'Select',
+          props: ['modelValue'],
+          emits: ['update:modelValue'],
+          template: '<div><slot name="trigger" /></div>',
+        },
+        Alert: { template: '<div role="alert"><slot name="title" /><slot /></div>' },
+        Button: { template: '<button><slot /></button>' },
+        Loading: true,
+        TypeIcon: true,
+        AngleDownFill: true,
+        Plus: true,
+      },
+      mocks: { $t: (text: string) => text },
+      directives: { bkloading: {} },
+    },
+  });
+  await flushPromises();
+  return { router, wrapper };
+}
+
+function openObservation(name = 'a') {
+  useRouter().currentRoute.value = loc({
+    params: { name, type: 'bkmsApp', menuName: 'observation' },
+    query: { stale: 'observation-query' },
+  });
 }
 
 describe('应用详情壳层：特性环境应用切换守卫', () => {
@@ -216,11 +319,153 @@ describe('应用详情壳层：特性环境应用切换守卫', () => {
   });
 });
 
-describe('应用详情壳层：能力局部加载', () => {
-  it('能力尚在加载时，详情完成即可挂载通用子页面', async () => {
+describe('应用详情壳层：观测能力回退历史栈', () => {
+  beforeEach(() => {
     mocks.space = 'ws-1';
-    mocks.apps.mockResolvedValue([{ id: 'a', name: 'a', type: 'bkmsApp', framework: 'blank', language: 'go' }]);
-    mocks.detail.mockResolvedValue({ id: 'a', name: 'a', type: 'bkmsApp', framework: 'blank', language: 'go' });
+    const apps = [
+      { id: 'a', name: 'a', type: 'bkmsApp' },
+      { id: 'b', name: 'b', type: 'bkmsApp' },
+    ];
+    mocks.apps.mockResolvedValue(apps);
+    mocks.detail.mockImplementation(async ({ appID }: { appID: string }) => apps.find(app => app.id === appID));
+  });
+
+  it.each([true, false])(
+    '从支持应用切到不支持应用后，一次后退回原观测页，前进回基本信息（能力延迟：%s）',
+    async delayed => {
+      let completeB!: (value: object) => void;
+      mocks.runtime.mockImplementation(({ appID }: { appID: string }) =>
+        appID === 'a'
+          ? Promise.resolve({ mods: { apmServiceName: { supported: true } } })
+          : delayed
+            ? new Promise(resolve => (completeB = resolve))
+            : Promise.resolve({ mods: { apmServiceName: { supported: false } } }),
+      );
+      const { router, wrapper } = await mountShellWithHistory('a');
+      try {
+        expect(menuKeys(wrapper)).toContain('observation');
+        wrapper.findComponent({ name: 'Select' }).vm.$emit('update:modelValue', 'b');
+        await flushPromises();
+        if (delayed) {
+          expect(router.currentRoute.value.params).toMatchObject({ name: 'b', menuName: 'observation' });
+          completeB({ mods: { apmServiceName: { supported: false } } });
+          await flushPromises();
+        }
+        expect(router.currentRoute.value.params).toMatchObject({ name: 'b', menuName: 'info' });
+        expect(router.currentRoute.value.query).toEqual({});
+        expect(menuKeys(wrapper)).not.toContain('observation');
+
+        router.back();
+        await flushPromises();
+        expect(router.currentRoute.value.params).toMatchObject({ name: 'a', menuName: 'observation' });
+        expect(menuKeys(wrapper)).toContain('observation');
+
+        router.forward();
+        await flushPromises();
+        if (delayed) {
+          completeB({ mods: { apmServiceName: { supported: false } } });
+          await flushPromises();
+        }
+        expect(router.currentRoute.value.params).toMatchObject({ name: 'b', menuName: 'info' });
+        expect(menuKeys(wrapper)).not.toContain('observation');
+      } finally {
+        wrapper.unmount();
+      }
+    },
+  );
+
+  it('直达不支持应用的旧链接时等待能力，并用基本信息替换该历史项', async () => {
+    let complete!: (value: object) => void;
+    mocks.runtime.mockReturnValue(new Promise(resolve => (complete = resolve)));
+    const { router, wrapper } = await mountShellWithHistory('b');
+    try {
+      expect(useAppDetail().runtimeLoading).toBe(true);
+      expect(router.currentRoute.value.params).toMatchObject({ name: 'b', menuName: 'observation' });
+      expect(menuKeys(wrapper)).not.toContain('observation');
+      complete({ mods: { apmServiceName: { supported: false } } });
+      await flushPromises();
+      expect(router.currentRoute.value.params).toMatchObject({ name: 'b', menuName: 'info' });
+      expect(router.currentRoute.value.query).toEqual({});
+
+      router.back();
+      await flushPromises();
+      expect(router.currentRoute.value.name).toBe('app');
+
+      router.forward();
+      await flushPromises();
+      expect(router.currentRoute.value.params).toMatchObject({ name: 'b', menuName: 'info' });
+    } finally {
+      wrapper.unmount();
+    }
+  });
+});
+
+describe('应用详情壳层：跨类型应用切换菜单', () => {
+  it.each([
+    { fromType: 'trpc', menuName: 'dashboard', toType: 'helm', expected: 'info' },
+    { fromType: 'taf', menuName: 'alert', toType: 'agones', expected: 'info' },
+    { fromType: 'helm', menuName: 'orchestrate', toType: 'trpc', expected: 'info' },
+    { fromType: 'agones', menuName: 'orchestrate', toType: 'bkmsApp', expected: 'info' },
+    { fromType: 'trpc', menuName: 'build', toType: 'helm', expected: 'build' },
+    { fromType: 'helm', menuName: 'network', toType: 'taf', expected: 'network' },
+  ])(
+    '$fromType 的 $menuName 切换 $toType 后选中 $expected，后退恢复来源页',
+    async ({ fromType, menuName, toType, expected }) => {
+      mocks.space = 'ws-1';
+      const apps = [
+        { id: 'a', name: 'a', type: fromType },
+        { id: 'b', name: 'b', type: toType },
+      ];
+      mocks.apps.mockResolvedValue(apps);
+      mocks.detail.mockImplementation(async ({ appID }: { appID: string }) => apps.find(app => app.id === appID));
+      mocks.runtime.mockResolvedValue({ mods: { apmServiceName: { supported: true } } });
+      const { router, wrapper } = await mountShellWithHistory('a', { menuName, type: fromType });
+      try {
+        wrapper.findComponent({ name: 'Select' }).vm.$emit('update:modelValue', 'b');
+        await flushPromises();
+        expect(router.currentRoute.value.params).toMatchObject({ name: 'b', type: toType, menuName: expected });
+        expect(menuKeys(wrapper)).toContain(expected);
+        expect(wrapper.findComponent({ name: 'CustomNavigation' }).props('activeKey')).toBe(expected);
+
+        router.back();
+        await flushPromises();
+        expect(router.currentRoute.value.params).toMatchObject({ name: 'a', type: fromType, menuName });
+        expect(wrapper.findComponent({ name: 'CustomNavigation' }).props('activeKey')).toBe(menuName);
+      } finally {
+        wrapper.unmount();
+      }
+    },
+  );
+
+  it('直达 Helm 无效菜单时，在列表返回后选中基本信息，后退离开详情', async () => {
+    mocks.space = 'ws-1';
+    let completeList!: (value: object[]) => void;
+    mocks.apps.mockReturnValue(new Promise(resolve => (completeList = resolve)));
+    const app = { id: 'a', name: 'a', type: 'helm' };
+    mocks.detail.mockResolvedValue(app);
+    const { router, wrapper } = await mountShellWithHistory('a', { type: 'helm', menuName: 'dashboard' });
+    try {
+      expect(router.currentRoute.value.params.menuName).toBe('dashboard');
+      completeList([app]);
+      await flushPromises();
+      expect(router.currentRoute.value.params).toMatchObject({ name: 'a', type: 'helm', menuName: 'info' });
+      expect(wrapper.findComponent({ name: 'CustomNavigation' }).props('activeKey')).toBe('info');
+
+      router.back();
+      await flushPromises();
+      expect(router.currentRoute.value.name).toBe('app');
+    } finally {
+      wrapper.unmount();
+    }
+  });
+});
+
+describe('应用详情壳层：能力局部加载', () => {
+  it('加载中隐藏观测入口，确认支持后恢复并保留观测链接', async () => {
+    mocks.space = 'ws-1';
+    openObservation();
+    mocks.apps.mockResolvedValue([{ id: 'a', name: 'a', type: 'bkmsApp', framework: 'trpc', language: 'go' }]);
+    mocks.detail.mockResolvedValue({ id: 'a', name: 'a', type: 'bkmsApp', framework: 'trpc', language: 'go' });
     let complete!: (value: object) => void;
     mocks.runtime.mockReturnValue(
       new Promise(resolve => {
@@ -234,8 +479,13 @@ describe('应用详情壳层：能力局部加载', () => {
       expect(mocks.runtime).toHaveBeenCalledWith({ appID: 'a' }, { interceptorErr: false });
       expect(useAppDetail().runtimeLoading).toBe(true);
       expect(wrapper.findComponent({ name: 'RouterView' }).exists()).toBe(true);
-      complete({ type: 'bkmsApp', framework: 'blank', mods: {} });
+      expect(menuKeys(wrapper)).not.toContain('observation');
+      expect(menuKeys(wrapper)).toEqual(expect.arrayContaining(['dashboard', 'alert']));
+      expect(useRouter().currentRoute.value.params.menuName).toBe('observation');
+      complete({ type: 'bkmsApp', framework: 'trpc', mods: { apmServiceName: { supported: true } } });
       await flushPromises();
+      expect(menuKeys(wrapper)).toContain('observation');
+      expect(useRouter().currentRoute.value.params.menuName).toBe('observation');
     } finally {
       wrapper.unmount();
     }
@@ -248,18 +498,104 @@ describe('应用详情壳层：能力局部加载', () => {
     mocks.runtime.mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce({
       type: 'bkmsApp',
       framework: 'trpc',
-      mods: { devMode: { supported: true } },
+      mods: { devMode: { supported: true }, apmServiceName: { supported: true } },
     });
     const { wrapper } = mountShell();
     try {
       await flushPromises();
       expect(wrapper.findComponent({ name: 'RouterView' }).exists()).toBe(true);
       expect(wrapper.get('[role="alert"]').text()).toContain('应用能力加载失败，部分功能暂不可用');
+      expect(menuKeys(wrapper)).not.toContain('observation');
       await wrapper.get('[role="alert"] button').trigger('click');
       await flushPromises();
       expect(wrapper.find('[role="alert"]').exists()).toBe(false);
       expect(useAppDetail().runtime?.mods?.devMode?.supported).toBe(true);
       expect(useAppDetail().appType).toBe('trpc');
+      expect(menuKeys(wrapper)).toContain('observation');
+    } finally {
+      wrapper.unmount();
+    }
+  });
+
+  it('直接进入观测数据时等待能力结果，不支持后回退基本信息', async () => {
+    mocks.space = 'ws-1';
+    openObservation();
+    mocks.apps.mockResolvedValue([{ id: 'a', name: 'a', type: 'bkmsApp' }]);
+    mocks.detail.mockResolvedValue({ id: 'a', name: 'a', type: 'bkmsApp' });
+    let complete!: (value: object) => void;
+    mocks.runtime.mockReturnValue(new Promise(resolve => (complete = resolve)));
+    const { wrapper } = mountShell();
+    try {
+      await flushPromises();
+      expect(useRouter().currentRoute.value.params.menuName).toBe('observation');
+      complete({ mods: { apmServiceName: { supported: false } } });
+      await flushPromises();
+      expect(menuKeys(wrapper)).not.toContain('observation');
+      expect(menuKeys(wrapper)).toEqual(expect.arrayContaining(['dashboard', 'alert']));
+      expect(useRouter().currentRoute.value.params.menuName).toBe('info');
+      expect(useRouter().currentRoute.value.query).toEqual({});
+    } finally {
+      wrapper.unmount();
+    }
+  });
+
+  it('切换支持与不支持的应用时更新菜单，且不修改共享导航定义', async () => {
+    mocks.space = 'ws-1';
+    useRouter().currentRoute.value = loc({ params: { name: 'a', type: 'bkmsApp', menuName: 'info' } });
+    const apps = [
+      { id: 'a', name: 'a', type: 'bkmsApp' },
+      { id: 'b', name: 'b', type: 'bkmsApp' },
+    ];
+    mocks.apps.mockResolvedValue(apps);
+    mocks.detail.mockImplementation(async ({ appID }: { appID: string }) => apps.find(app => app.id === appID));
+    mocks.runtime.mockImplementation(async ({ appID }: { appID: string }) => ({
+      mods: { apmServiceName: { supported: appID === 'a' } },
+    }));
+    const { wrapper } = mountShell();
+    try {
+      await flushPromises();
+      expect(menuKeys(wrapper)).toContain('observation');
+      useRouter().currentRoute.value = loc({ params: { name: 'b', type: 'bkmsApp', menuName: 'info' } });
+      await flushPromises();
+      expect(useAppDetail().appID).toBe('b');
+      expect(menuKeys(wrapper)).not.toContain('observation');
+      expect(appNavigationConfig.bkmsApp.flatMap(item => ('children' in item ? item.children : [item]))).toEqual(
+        expect.arrayContaining([expect.objectContaining({ key: 'observation' })]),
+      );
+      useRouter().currentRoute.value = loc({ params: { name: 'a', type: 'bkmsApp', menuName: 'info' } });
+      await flushPromises();
+      expect(menuKeys(wrapper)).toContain('observation');
+    } finally {
+      wrapper.unmount();
+    }
+  });
+
+  it('旧应用迟到的不支持响应不能将新应用从观测数据重定向', async () => {
+    mocks.space = 'ws-1';
+    openObservation();
+    const apps = [
+      { id: 'a', name: 'a', type: 'bkmsApp' },
+      { id: 'b', name: 'b', type: 'bkmsApp' },
+    ];
+    mocks.apps.mockResolvedValue(apps);
+    mocks.detail.mockImplementation(async ({ appID }: { appID: string }) => apps.find(app => app.id === appID));
+    let completeOld!: (value: object) => void;
+    mocks.runtime.mockImplementation(({ appID }: { appID: string }) =>
+      appID === 'a'
+        ? new Promise(resolve => (completeOld = resolve))
+        : Promise.resolve({ mods: { apmServiceName: { supported: true } } }),
+    );
+    const { wrapper } = mountShell();
+    try {
+      await flushPromises();
+      openObservation('b');
+      await flushPromises();
+      expect(useAppDetail().appID).toBe('b');
+      expect(menuKeys(wrapper)).toContain('observation');
+      completeOld({ mods: { apmServiceName: { supported: false } } });
+      await flushPromises();
+      expect(menuKeys(wrapper)).toContain('observation');
+      expect(useRouter().currentRoute.value.params).toMatchObject({ name: 'b', menuName: 'observation' });
     } finally {
       wrapper.unmount();
     }

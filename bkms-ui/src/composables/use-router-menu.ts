@@ -16,11 +16,14 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
+import { isAppModelAppType } from '~/composables/app-type';
+import { isRuntimeModSupported } from '~/composables/use-app-runtime';
 import { appNavigationConfig } from '~/config/navigation/app';
 import { BASIC_NAVIGATION } from '~/config/navigation/basic';
 import { ENV_NAVIGATION } from '~/config/navigation/env';
 import { PLATFORM_NAVIGATION } from '~/config/navigation/platform';
 import { PLUGIN_NAVIGATION } from '~/config/navigation/plugin';
+import { useAppDetail } from '~/stores/app-detail';
 import { useSpaceStore } from '~/stores/space';
 
 import type { AppNavigationType } from '~/config/navigation/app';
@@ -50,7 +53,13 @@ export function getMenuList(type: AppNavigationType): NavigationItem[] {
   const spaceStore = useSpaceStore();
 
   if (!spaceStore.currentSpace || !type) return [];
-  return appNavigationConfig[type] || [];
+  const list = appNavigationConfig[type] || [];
+  if (!isAppModelAppType(type) || isRuntimeModSupported(useAppDetail().runtime, 'apmServiceName')) return list;
+
+  // 导航与页面解析共用过滤结果，能力未确认时不挂载观测页面。
+  return list.map(item =>
+    'children' in item ? { ...item, children: item.children.filter(child => child.key !== 'observation') } : item,
+  );
 }
 
 // 获取平台管理导航菜单
