@@ -18,35 +18,13 @@
 
 package rules
 
-import "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/deploydiagnosis/serializer"
+// UnknownRule 实例规则的兜底，恒命中，保证每个异常实例都有归属分组
+type UnknownRule struct{}
 
-type unknownRule struct{}
+// ID 返回 IDUnknown
+func (UnknownRule) ID() string { return IDUnknown }
 
-func (unknownRule) ID() string { return IDUnknown }
-
-func (unknownRule) Match(*Snapshot, *Instance) (Hit, bool) {
-	return nil, true
-}
-
-func (r unknownRule) Render(snap *Snapshot, inst *Instance, _ Hit) *serializer.DiagnosisGroupObj {
-	return buildGroup(r.spec(), snap, inst, nil, nil)
-}
-
-func (unknownRule) spec() spec {
-	return spec{
-		id:          IDUnknown,
-		name:        "未识别的异常状态",
-		category:    "启动失败",
-		confidence:  "low",
-		cause:       "实例处于异常状态，但尚未匹配到更具体的规则",
-		causeDetail: "尚未匹配到更具体的规则。请结合下方日志、事件和部署配置继续排查。",
-		solutions: []string{
-			"查看下方日志与事件，确认容器退出原因",
-			"检查部署配置后重新部署",
-		},
-		actions: []serializer.DiagnosisActionObj{
-			{ID: serializer.ActionDeployConfig, Label: "前往部署配置"},
-			{ID: serializer.ActionRedeploy, Label: "重新部署"},
-		},
-	}
+// Diagnose 恒命中，只带上实例自身的日志与事件，不给证据行
+func (UnknownRule) Diagnose(snap *Snapshot, inst *Instance) *Group {
+	return newInstanceGroup(unknownSpec, snap, inst, nil, nil)
 }

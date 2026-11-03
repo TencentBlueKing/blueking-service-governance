@@ -22,29 +22,26 @@ import (
 	"context"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/TencentBlueKing/gopkg/mapx"
 	"github.com/pkg/errors"
-	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/labels"
+	"github.com/samber/lo"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
-	appmodeldeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/appmodel"
-	helmdeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/helm"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
+	deploystatus "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/status"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/clusterresources"
-	k8sclient "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/client"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/cluster"
 	k8skind "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/kind"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/instancelog"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/workload/defaults"
-	diag "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/deploydiagnosis/rules"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/deploydiagnosis/serializer"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/deploydiagnosis/rules"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/instance/podquery"
 	instanceserializer "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/instance/serializer"
 )
 
@@ -53,211 +50,154 @@ const (
 	maxLogInstances = 5
 	// logTailLines 每个实例最多取的日志行数，从末尾截取
 	logTailLines = int64(200)
-	// maxEvents 本次部署开始后最多拉取的事件条数
+	// maxEvents 每类事件（Pod / 工作负载）最多拉取的条数
 	maxEvents = 200
 )
 
-// latestDeploy 当前环境最新一次部署，以及列出实例、拉日志和事件所需的集群位置
-type latestDeploy struct {
-	deployID      string
-	status        string
-	message       string
-	clusterID     string
-	namespace     string
-	labelSelector map[string]string
-	// resourceKeys 本次部署创建的工作负载，用来关联环境事件
-	resourceKeys []appmodeldeploy.ResourceKey
-	// startedAtUnix 部署开始时间，事件只取这之后的
-	startedAtUnix int64
-	// canListPods 有命名空间和标签选择器才能列 Pod；Helm 记录没有选择器，为 false
-	canListPods bool
-}
-
 // collectSnapshot 拉取最新部署、实例、日志、事件和框架配置，组成规则用的快照
+// 只有列实例失败会中断；日志和事件失败只记入 PartialReasons
 func (d *Diagnoser) collectSnapshot(
 	ctx context.Context,
 	app *bkmsapp.Application,
 	env *envmodel.Environment,
 	trafficLaneName string,
-) (*diag.Snapshot, error) {
-	latest, err := d.resolveLatestDeploy(ctx, app, env.Name, trafficLaneName)
-	if err != nil {
-		return nil, errors.Wrapf(err, "resolve latest deploy for app %s env %s", app.ID, env.Name)
+) (*rules.Snapshot, error) {
+	snap := &rules.Snapshot{
+		AppType:         app.Type,
+		Instances:       []*rules.Instance{},
+		Events:          []rules.Event{},
+		PartialReasons:  []string{},
+		FrameworkConfig: d.loadFrameworkConfig(ctx, app),
 	}
 
-	snap := &diag.Snapshot{
-		AppType:   app.Type,
-		Deploy:    buildDeployOutput(latest),
-		Instances: []*diag.Instance{},
-		Events:    []diag.Event{},
-		Framework: d.loadFrameworkConfig(ctx, app),
+	latest, err := d.statusSvc.GetLatestDeploy(ctx, app, env.Name, trafficLaneName)
+	if err != nil {
+		// 没有部署记录、或应用类型没有部署记录（如未知类型）时，交给引擎给出 no_deploy
+		if errors.Is(err, deploystatus.ErrDeployRecordNotFound) || errors.Is(err, deploystatus.ErrUnsupportedAppType) {
+			return snap, nil
+		}
+		return nil, errors.Wrap(err, "get latest deploy")
 	}
-	if latest == nil || !latest.canListPods {
+	snap.Deploy = buildDeploy(latest)
+
+	// 进行中不会跑规则，省掉列实例、拉日志和事件
+	if latest.Phase == deploystatus.DeployPhaseInProgress {
+		return snap, nil
+	}
+	// 没有部署记录（构建阶段就失败）或缺少标签选择器（Helm）时列不出该次部署的 Pod
+	target := latest.Target
+	if target == nil || target.Namespace == "" || len(target.LabelSelector) == 0 {
 		return snap, nil
 	}
 
-	instances, err := d.listInstances(ctx, latest)
+	pods, err := podquery.NewPodLister(podquery.Location{
+		ClusterID:     target.ClusterID,
+		Namespace:     target.Namespace,
+		LabelSelector: target.LabelSelector,
+	}).List(ctx)
 	if err != nil {
 		return nil, bkerrs.Wrapf(
-			err, bkerrs.ErrCodeInternalServerError, "list instances for app %s env %s", app.ID, env.Name,
+			err,
+			bkerrs.ErrCodeInternalServerError,
+			"list instances of deploy %s",
+			target.DeployID,
+		)
+	}
+	instances, err := buildInstances(pods.Items, target.DeployID)
+	if err != nil {
+		return nil, bkerrs.Wrapf(
+			err,
+			bkerrs.ErrCodeInternalServerError,
+			"parse instances of deploy %s",
+			target.DeployID,
 		)
 	}
 	snap.Instances = instances
 	snap.InstancesListed = true
-	// 日志或事件失败仍给结论，未取全的数据源写入 PartialReasons
-	reasons := make([]string, 0, 2)
-	if d.fillInstanceLogs(ctx, latest, snap.Instances) {
-		reasons = append(reasons, serializer.PartialReasonLogs)
+
+	if d.fillInstanceLogs(ctx, target, snap.AbnormalInstances()) {
+		snap.PartialReasons = append(snap.PartialReasons, PartialReasonLogs)
 	}
-	events, eventsPartial := d.listRelatedEvents(ctx, env, latest, snap.Instances)
+	events, eventsPartial := d.listRelatedEvents(ctx, env, target, pods.Items)
 	snap.Events = events
 	if eventsPartial {
-		reasons = append(reasons, serializer.PartialReasonEvents)
+		snap.PartialReasons = append(snap.PartialReasons, PartialReasonEvents)
 	}
-	snap.PartialReasons = reasons
 	return snap, nil
 }
 
-func buildDeployOutput(latest *latestDeploy) serializer.DeployOutputObj {
-	if latest == nil {
-		return serializer.DeployOutputObj{}
+// buildDeploy 把最新部署转成快照里的摘要，DeployID 取实例所属的部署记录而不是最新那条记录
+func buildDeploy(latest *deploystatus.LatestDeploy) *rules.Deploy {
+	deploy := &rules.Deploy{
+		BuildID: latest.BuildID,
+		Stage:   latest.Stage,
+		Status:  latest.Status,
+		Phase:   latest.Phase,
+		Message: latest.Message,
 	}
-	return serializer.DeployOutputObj{
-		DeployID: latest.deployID,
-		Status:   latest.status,
-		Message:  latest.message,
+	if latest.Target != nil {
+		deploy.DeployID = latest.Target.DeployID
 	}
+	return deploy
 }
 
-// resolveLatestDeploy 按应用类型取该环境最新一次部署，没有记录时返回 nil
-func (d *Diagnoser) resolveLatestDeploy(
-	ctx context.Context,
-	app *bkmsapp.Application,
-	envName, trafficLaneName string,
-) (*latestDeploy, error) {
-	if bkmsapp.IsAppModelType(app.Type) {
-		return d.resolveAppModelDeploy(ctx, app.ID, envName, trafficLaneName)
-	}
-	if bkmsapp.IsHelmBasedType(app.Type) {
-		return d.resolveHelmDeploy(ctx, app.ID, envName, trafficLaneName)
-	}
-	return nil, nil
-}
-
-// resolveAppModelDeploy 读取应用模型的最新部署，并带上列 Pod 用的命名空间和标签
-func (d *Diagnoser) resolveAppModelDeploy(
-	ctx context.Context,
-	appID, envName, trafficLaneName string,
-) (*latestDeploy, error) {
-	record, err := appmodeldeploy.GetLatest(ctx, d.registry.DB, appID, envName, trafficLaneName)
-	if err != nil {
-		if errors.Is(err, appmodeldeploy.ErrDeployRecordNotFound) {
-			return nil, nil
-		}
-		return nil, errors.Wrap(err, "get latest app model deploy record")
-	}
-	startedAt := int64(0)
-	if !record.StartedAt.IsZero() {
-		startedAt = record.StartedAt.Unix()
-	}
-	return &latestDeploy{
-		deployID:      record.ID.Hex(),
-		status:        string(record.Status),
-		message:       record.Message,
-		clusterID:     record.ClusterID,
-		namespace:     record.Namespace,
-		labelSelector: record.LabelSelector,
-		resourceKeys:  record.ResourceKeys,
-		startedAtUnix: startedAt,
-		canListPods:   len(record.LabelSelector) > 0 && record.Namespace != "",
-	}, nil
-}
-
-// resolveHelmDeploy 读取 Helm 最新部署；记录没有标签选择器，因此不能列 Pod
-func (d *Diagnoser) resolveHelmDeploy(
-	ctx context.Context,
-	appID, envName, trafficLaneName string,
-) (*latestDeploy, error) {
-	record, err := helmdeploy.GetLatest(ctx, d.registry.DB, appID, envName, trafficLaneName)
-	if err != nil {
-		if errors.Is(err, helmdeploy.ErrLatestDeployRecordNotFound) {
-			return nil, nil
-		}
-		return nil, errors.Wrap(err, "get latest helm deploy record")
-	}
-	// Helm 记录没有 LabelSelector，本波次只带部署状态，实例列表留给后续规则全集
-	return &latestDeploy{
-		deployID:  record.ID.Hex(),
-		status:    string(record.Status),
-		message:   record.Message,
-		clusterID: record.ClusterID,
-		namespace: record.Namespace,
-	}, nil
-}
-
-// loadFrameworkConfig 读取 tRPC / TAF 的配置文件名、路径和启动命令，读失败则留空
-func (d *Diagnoser) loadFrameworkConfig(ctx context.Context, app *bkmsapp.Application) diag.Framework {
+// loadFrameworkConfig 读取 tRPC / TAF 的框架配置文件名、目录和启动命令，读失败则留空、不中断诊断
+//
+// FIXME: 读的是应用当前配置而非该次部署的资源快照，配置已改但未重新部署时，路径比对可能对不上正在跑的实例
+func (d *Diagnoser) loadFrameworkConfig(ctx context.Context, app *bkmsapp.Application) rules.FrameworkConfig {
 	if !bkmsapp.IsAppModelType(app.Type) {
-		return diag.Framework{}
+		return rules.FrameworkConfig{}
 	}
-	// 读的是应用当前配置，不是该次部署的资源快照。配置已改但未重新部署时，路径比对可能对不上正在跑的实例
 	am, err := store.Of(d.registry.DB, appmodel.AppModelMeta).Get(ctx, appmodel.ByApp(app.ID))
 	if err != nil {
 		logging.Warnf(ctx, "load app model for diagnosis app %s: %v", app.ID, err)
-		return diag.Framework{}
+		return rules.FrameworkConfig{}
 	}
-	return frameworkFromAppModel(app.Type, am)
+	return buildFrameworkConfig(app.Type, am)
 }
 
-func frameworkFromAppModel(appType string, am *appmodel.AppModel) diag.Framework {
-	fw := diag.Framework{
+// buildFrameworkConfig 按应用类型取对应框架的配置字段，其他类型只带启动命令
+func buildFrameworkConfig(appType string, am *appmodel.AppModel) rules.FrameworkConfig {
+	fc := rules.FrameworkConfig{
 		Command: strings.TrimSpace(strings.Join(append(am.Workload.Command, am.Workload.Args...), " ")),
 	}
 	switch appType {
 	case bkmsapp.AppTypeTRPC:
-		fw.FileName = am.Workload.TrpcConfig.FileName
-		fw.FilePath = am.Workload.TrpcConfig.FilePath
+		fc.FileName = am.Workload.TrpcConfig.FileName
+		fc.FilePath = am.Workload.TrpcConfig.FilePath
 	case bkmsapp.AppTypeTAF:
-		fw.FileName = am.Workload.TafConfig.FileName
-		fw.FilePath = am.Workload.TafConfig.FilePath
+		fc.FileName = am.Workload.TafConfig.FileName
+		fc.FilePath = am.Workload.TafConfig.FilePath
 	}
-	return fw
+	return fc
 }
 
-// listInstances 按部署记录的命名空间和标签列出 Pod，列失败则整单失败
-func (d *Diagnoser) listInstances(ctx context.Context, latest *latestDeploy) ([]*diag.Instance, error) {
-	client := k8sclient.NewPodClient(cluster.NewConfig(latest.clusterID))
-	selector := labels.SelectorFromSet(latest.labelSelector).String()
-	pods, err := client.List(ctx, latest.namespace, metav1.ListOptions{LabelSelector: selector})
-	if err != nil {
-		return nil, errors.Wrapf(err, "list namespace %s labelSelector [%s] pods", latest.namespace, selector)
-	}
-	instances := make([]*diag.Instance, 0, len(pods.Items))
-	for _, pod := range pods.Items {
-		obj, err := new(instanceserializer.AppInstanceOutputObj).FromPodManifest(pod.Object, latest.deployID)
+// buildInstances 用实例列表同一套口径投影 Pod，任一 Pod 解析失败则整单失败
+func buildInstances(pods []unstructured.Unstructured, deployID string) ([]*rules.Instance, error) {
+	instances := make([]*rules.Instance, 0, len(pods))
+	for _, pod := range pods {
+		obj, err := new(instanceserializer.AppInstanceOutputObj).FromPodManifest(pod.Object, deployID)
 		if err != nil {
 			return nil, errors.Wrapf(err, "parse pod %s", mapx.GetStr(pod.Object, "metadata.name"))
 		}
-		instances = append(instances, &diag.Instance{
+		instances = append(instances, &rules.Instance{
 			ID:           obj.ID,
 			Status:       obj.Status,
 			RestartCount: obj.RestartCount,
 			IsHealthy:    obj.IsHealthy,
-			LogSource:    serializer.LogSourceNone,
+			LogSource:    rules.LogSourceNone,
 			LogLines:     []string{},
 		})
 	}
 	return instances, nil
 }
 
-// fillInstanceLogs 只给重启次数最高的若干异常实例拉日志。返回 true 表示日志未取全
-func (d *Diagnoser) fillInstanceLogs(ctx context.Context, latest *latestDeploy, instances []*diag.Instance) bool {
-	abnormal := make([]*diag.Instance, 0, len(instances))
-	for _, inst := range instances {
-		if !inst.IsHealthy {
-			abnormal = append(abnormal, inst)
-		}
-	}
+// fillInstanceLogs 并发给重启次数最高的若干异常实例拉日志，返回 true 表示日志未取全
+func (d *Diagnoser) fillInstanceLogs(
+	ctx context.Context,
+	target *deploystatus.DeployTarget,
+	abnormal []*rules.Instance,
+) bool {
 	sort.SliceStable(abnormal, func(i, j int) bool {
 		return abnormal[i].RestartCount > abnormal[j].RestartCount
 	})
@@ -267,167 +207,115 @@ func (d *Diagnoser) fillInstanceLogs(ctx context.Context, latest *latestDeploy, 
 		abnormal = abnormal[:maxLogInstances]
 	}
 
-	client := k8sclient.NewPodClient(cluster.NewConfig(latest.clusterID))
-	failed := false
-	for _, inst := range abnormal {
-		if !d.fillOneInstanceLogs(ctx, client, latest.namespace, inst) {
-			failed = true
-		}
+	logs := instancelog.NewPodLogManager(target.ClusterID, target.Namespace, defaults.WorkloadMainContainerName)
+	// 每个协程只写自己的实例和自己的结果位，不需要加锁
+	complete := make([]bool, len(abnormal))
+	var wg sync.WaitGroup
+	for i, inst := range abnormal {
+		wg.Go(func() { complete[i] = d.fillOneInstanceLogs(ctx, logs, inst) })
 	}
-	return truncated || failed
+	wg.Wait()
+	return truncated || lo.Contains(complete, false)
 }
 
-// fillOneInstanceLogs 优先取重启前日志，没有再取当前日志。接口失败返回 false，空日志不算失败
-func (d *Diagnoser) fillOneInstanceLogs(
-	ctx context.Context,
-	client *k8sclient.PodClient,
-	namespace string,
-	inst *diag.Instance,
-) bool {
+// fillOneInstanceLogs 优先取重启前日志，没有再取当前日志；任一接口失败返回 false，空日志不算失败
+func (d *Diagnoser) fillOneInstanceLogs(ctx context.Context, logs *instancelog.LogManager, inst *rules.Instance) bool {
 	sawError := false
-	// previous 优先：有重启才值得读退出前日志
+	// 有重启才值得读退出前日志，它最能说明进程为什么退出
 	if inst.RestartCount > 0 {
-		lines, ok := d.readLogLines(ctx, client, namespace, inst.ID, true)
+		lines, ok := d.readLogLines(ctx, logs, inst.ID, true)
 		if !ok {
 			sawError = true
 		} else if len(lines) > 0 {
-			inst.LogSource = serializer.LogSourcePrevious
-			inst.LogHint = previousLogHint
+			inst.LogSource = rules.LogSourcePrevious
+			inst.LogHint = rules.LogHintPrevious
 			inst.LogLines = lines
 			return true
 		}
 	}
-	lines, ok := d.readLogLines(ctx, client, namespace, inst.ID, false)
+
+	lines, ok := d.readLogLines(ctx, logs, inst.ID, false)
 	if !ok {
 		return false
 	}
 	if len(lines) > 0 {
-		inst.LogSource = serializer.LogSourceCurrent
-		inst.LogHint = currentLogHint
+		inst.LogSource = rules.LogSourceCurrent
+		inst.LogHint = rules.LogHintCurrent
 		inst.LogLines = lines
 	}
-	// previous 失败但 current 成功时，优先日志没取到，仍算未取全
+	// previous 失败但 current 成功时，最有价值的日志没取到，仍算未取全
 	return !sawError
 }
 
-// readLogLines 读取主容器末尾日志；失败时返回未取到，不中断诊断
+// readLogLines 读取主容器末尾日志并去掉空行；失败时打日志并返回未取到，不中断诊断
 func (d *Diagnoser) readLogLines(
 	ctx context.Context,
-	client *k8sclient.PodClient,
-	namespace, podName string,
+	logs *instancelog.LogManager,
+	podName string,
 	previous bool,
 ) ([]string, bool) {
-	tail := logTailLines
-	entries, err := client.ListLogs(ctx, namespace, podName, &corev1.PodLogOptions{
-		Container: defaults.WorkloadMainContainerName,
-		Previous:  previous,
-		TailLines: &tail,
-	})
+	entries, err := logs.ListLogs(ctx, podName, previous, logTailLines)
 	if err != nil {
 		logging.Warnf(ctx, "list logs for pod %s previous=%t: %v", podName, previous, err)
 		return nil, false
 	}
 	lines := make([]string, 0, len(entries))
 	for _, entry := range entries {
-		if entry.Content == "" {
-			continue
+		if entry.Content != "" {
+			lines = append(lines, entry.Content)
 		}
-		lines = append(lines, entry.Content)
 	}
 	return lines, true
 }
 
-// listRelatedEvents 分两次拉取 Pod 事件和工作负载事件，避免工作负载事件占满第一页后把 Pod 事件挤掉
-// 失败或条数超过一页时 partial 为 true，已取到的事件仍然返回
+// listRelatedEvents 拉取本次部署开始后的 Pod 事件和工作负载事件；失败或条数超过一页时 partial 为 true，已取到的仍返回
 func (d *Diagnoser) listRelatedEvents(
 	ctx context.Context,
 	env *envmodel.Environment,
-	latest *latestDeploy,
-	instances []*diag.Instance,
-) ([]diag.Event, bool) {
-	user, err := auth.GetUser(ctx)
+	target *deploystatus.DeployTarget,
+	pods []unstructured.Unstructured,
+) ([]rules.Event, bool) {
+	lister, err := podquery.NewEventLister(ctx, env)
 	if err != nil {
-		logging.Warnf(ctx, "get user for diagnosis events deploy %s: %v", latest.deployID, err)
-		return []diag.Event{}, true
-	}
-	client, err := clusterresources.New(user)
-	if err != nil {
-		logging.Warnf(ctx, "create cluster resources client for diagnosis events deploy %s: %v", latest.deployID, err)
-		return []diag.Event{}, true
+		logging.Warnf(ctx, "create event lister for diagnosis deploy %s: %v", target.DeployID, err)
+		return []rules.Event{}, true
 	}
 
-	podNames := make([]string, 0, len(instances))
-	podNameSet := make(map[string]struct{}, len(instances))
-	for _, inst := range instances {
-		podNames = append(podNames, inst.ID)
-		podNameSet[inst.ID] = struct{}{}
+	podRefs := podquery.BuildPodRefs(pods)
+	podNames := make(map[string]struct{}, len(podRefs))
+	for _, ref := range podRefs {
+		podNames[ref.Name] = struct{}{}
+	}
+	filter := podquery.EventFilter{Page: 1, PageSize: maxEvents}
+	if !target.StartedAt.IsZero() {
+		filter.StartedAt = target.StartedAt.Unix()
 	}
 
-	events := make([]diag.Event, 0)
+	events := make([]rules.Event, 0)
 	partial := false
-	if len(podNames) > 0 {
-		page, pageErr := listEventPage(ctx, client, env, latest, []string{k8skind.Po}, podNames)
-		if pageErr != nil {
-			logging.Warnf(ctx, "list pod events for diagnosis deploy %s: %v", latest.deployID, pageErr)
+	// 两类分开查：合在一起时工作负载事件可能占满第一页，把更关键的 Pod 事件挤掉
+	for _, refs := range [][]podquery.ResourceRef{podRefs, podquery.BuildWorkloadRefs(target.ResourceKeys)} {
+		if len(refs) == 0 {
+			continue
+		}
+		page, err := lister.List(ctx, target.Namespace, refs, filter)
+		if err != nil {
+			logging.Warnf(ctx, "list events for diagnosis deploy %s: %v", target.DeployID, err)
 			partial = true
-		} else {
-			events = append(events, eventsFromPage(page, podNameSet)...)
-			partial = partial || eventPageTruncated(page)
+			continue
 		}
-	}
-	if len(latest.resourceKeys) > 0 {
-		kinds := make([]string, 0, len(latest.resourceKeys))
-		names := make([]string, 0, len(latest.resourceKeys))
-		for _, rk := range latest.resourceKeys {
-			kinds = append(kinds, rk.Kind)
-			names = append(names, rk.Name)
-		}
-		page, pageErr := listEventPage(ctx, client, env, latest, kinds, names)
-		if pageErr != nil {
-			logging.Warnf(ctx, "list workload events for diagnosis deploy %s: %v", latest.deployID, pageErr)
-			partial = true
-		} else {
-			events = append(events, eventsFromPage(page, podNameSet)...)
-			partial = partial || eventPageTruncated(page)
-		}
+		events = append(events, buildEvents(page, podNames)...)
+		partial = partial || page.Count > int64(len(page.Data))
 	}
 	return events, partial
 }
 
-func listEventPage(
-	ctx context.Context,
-	client *clusterresources.ApiClient,
-	env *envmodel.Environment,
-	latest *latestDeploy,
-	kinds, names []string,
-) (*clusterresources.PaginatedEvents, error) {
-	page, err := client.ListEvents(
-		ctx,
-		env.Cluster.ProjectCode,
-		env.Cluster.ClusterID,
-		clusterresources.ListEventParams{
-			Namespace:     latest.namespace,
-			ResourceKinds: kinds,
-			ResourceNames: names,
-			StartedAt:     latest.startedAtUnix,
-			Page:          1,
-			PageSize:      maxEvents,
-		},
-	)
-	if err != nil {
-		return nil, errors.Wrapf(err, "list events in namespace %s", latest.namespace)
-	}
-	return page, nil
-}
-
-func eventsFromPage(page *clusterresources.PaginatedEvents, podNames map[string]struct{}) []diag.Event {
-	if page == nil {
-		return []diag.Event{}
-	}
-	events := make([]diag.Event, 0, len(page.Data))
+// buildEvents 把事件页转成快照事件，并按资源类型决定挂到实例还是分组
+func buildEvents(page *clusterresources.PaginatedEvents, podNames map[string]struct{}) []rules.Event {
+	events := make([]rules.Event, 0, len(page.Data))
 	for _, e := range page.Data {
-		events = append(events, diag.Event{
-			InstanceID:   instanceIDForEvent(e.ResourceKind, e.ResourcesName, podNames),
+		events = append(events, rules.Event{
+			InstanceID:   resolveEventInstanceID(e.ResourceKind, e.ResourcesName, podNames),
 			ResourceKind: e.ResourceKind,
 			ResourceName: e.ResourcesName,
 			CreatedAt:    e.CreatedAt,
@@ -438,22 +326,13 @@ func eventsFromPage(page *clusterresources.PaginatedEvents, podNames map[string]
 	return events
 }
 
-func eventPageTruncated(page *clusterresources.PaginatedEvents) bool {
-	if page == nil {
-		return false
-	}
-	return page.Count > int64(len(page.Data))
-}
-
-// instanceIDForEvent Pod 事件挂到实例；类型为空时仅当名称就是本次 Pod 才挂上，其余视为工作负载事件
-func instanceIDForEvent(kind, name string, podNames map[string]struct{}) string {
+// resolveEventInstanceID Pod 事件挂到实例；类型缺失时仅当名称就是本次的 Pod 才挂上，其余视为工作负载事件
+func resolveEventInstanceID(kind, name string, podNames map[string]struct{}) string {
 	if kind == k8skind.Po {
 		return name
 	}
-	if kind == "" {
-		if _, ok := podNames[name]; ok {
-			return name
-		}
+	if _, ok := podNames[name]; kind == "" && ok {
+		return name
 	}
 	return ""
 }

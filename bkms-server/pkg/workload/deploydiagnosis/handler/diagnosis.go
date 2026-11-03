@@ -44,9 +44,15 @@ func New(registry *storereg.Registry) *Handler {
 
 // GetDeployDiagnosis 获取指定环境的部署诊断结论
 //
-//	@ID			GetDeployDiagnosis
-//	@Summary	获取部署诊断结论
-//	@Tags		deploy-diagnosis
+//	@ID				GetDeployDiagnosis
+//	@Summary		获取部署诊断结论
+//	@Description	诊断该环境（泳道）最新一次部署为什么没有正常运行，给出出错原因、处理步骤和跳转按钮，供部署页面板与 CLI 展示。
+//	@Description	1) 诊断对象固定为最新一次部署，AppModel 应用会把一键构建部署记录也纳入比较，构建阶段失败同样能被诊断。
+//	@Description	2) 采集最新部署的实例、异常实例的日志（重启前日志优先）、本次部署开始后的 Pod 与工作负载事件，以及框架配置。
+//	@Description	3) 有异常实例时按实例规则逐个匹配并按规则分组；没有异常实例时用阶段规则判断部署 / 构建是否已失败。
+//	@Description	4) 部署进行中不做诊断，返回 emptyReason=deploying；日志或事件未取全时仍给结论，并通过 partialReasons 标明。
+//	@Description	5) 只有列实例失败会使整个请求失败。设计说明见 design_notes/deploy_diagnosis.md。
+//	@Tags			deploy-diagnosis
 //	@Produce	json
 //	@Security	BkUserInfo
 //	@Security	BkUserCredential
@@ -72,10 +78,12 @@ func (h *Handler) GetDeployDiagnosis(c *gin.Context) {
 		return
 	}
 
-	data, err := deploydiagnosis.NewDiagnoser(h.registry).Diagnose(ctx, app, env, queryInput.TrafficLaneName)
+	diagnosis, err := deploydiagnosis.NewDiagnoser(h.registry).Diagnose(ctx, app, env, queryInput.TrafficLaneName)
 	if err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return
 	}
-	ginutils.OK(c, serializer.GetDeployDiagnosisOutput{Data: data})
+	ginutils.OK(c, serializer.GetDeployDiagnosisOutput{
+		Data: new(serializer.DeployDiagnosisOutputObj).FromDiagnosis(diagnosis),
+	})
 }

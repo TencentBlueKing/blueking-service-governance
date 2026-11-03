@@ -18,50 +18,53 @@
 
 package rules
 
-import "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/deploydiagnosis/serializer"
+import (
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/autodeploy"
+	deploystatus "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/status"
+)
 
-type deployFailedRule struct{}
+// BuildFailedRule 一键构建部署在构建阶段失败：没有产出新版本，环境里跑的仍是旧版本或者什么都没有
+type BuildFailedRule struct{}
 
-func (deployFailedRule) Match(snap *Snapshot) bool {
-	return IsDeployFailed(snap.Deploy.Status)
+// ID 返回 IDBuildFailed
+func (BuildFailedRule) ID() string { return IDBuildFailed }
+
+// Diagnose 只认构建阶段的失败；进入部署阶段后的失败交给 DeployFailedRule
+func (BuildFailedRule) Diagnose(snap *Snapshot) *Group {
+	if !isFailedAt(snap.Deploy, autodeploy.StageBuild) {
+		return nil
+	}
+
+	// DeployID 为空说明构建前从未有过部署记录
+	detail := buildFailedDetailKeepPrevious
+	if snap.Deploy.DeployID == "" {
+		detail = buildFailedDetailNeverDeploy
+	}
+	return newGroup(buildFailedSpec.withDetail(detail), snap.Events)
 }
 
-func (r deployFailedRule) Render(snap *Snapshot) *serializer.DiagnosisGroupObj {
-	rule := r.spec(len(snap.Instances) == 0)
-	return &serializer.DiagnosisGroupObj{
-		RuleID:         rule.id,
-		RuleName:       rule.name,
-		Category:       rule.category,
-		Confidence:     rule.confidence,
-		Cause:          rule.cause,
-		CauseDetail:    rule.causeDetail,
-		Solutions:      append([]string{}, rule.solutions...),
-		Actions:        buildActions(rule),
-		RelatedConfigs: []*serializer.RelatedConfigRowObj{},
-		RelatedEvents:  workloadEvents(snap.Events),
-		Instances:      []*serializer.DiagnosisInstanceObj{},
+// DeployFailedRule 部署已失败、但实例都已就绪或没有实例时的兜底结论
+type DeployFailedRule struct{}
+
+// ID 返回 IDDeployFailed
+func (DeployFailedRule) ID() string { return IDDeployFailed }
+
+// Diagnose 认直接部署、Helm 部署以及一键构建部署阶段的失败，工作负载事件挂到分组上
+func (DeployFailedRule) Diagnose(snap *Snapshot) *Group {
+	// 构建阶段的失败由排在前面的 BuildFailedRule 处理，这里再挡一次，避免规则集顺序被调整后重复认领
+	if snap.Deploy == nil || snap.Deploy.Phase != deploystatus.DeployPhaseFailed ||
+		snap.Deploy.Stage == autodeploy.StageBuild {
+		return nil
 	}
+
+	detail := deployFailedDetailWithInstances
+	if len(snap.Instances) == 0 {
+		detail = deployFailedDetailNoInstance
+	}
+	return newGroup(deployFailedSpec.withDetail(detail), snap.Events)
 }
 
-func (deployFailedRule) spec(noInstance bool) spec {
-	causeDetail := "实例目前都已就绪，但最近一次部署没有成功。请对照部署记录说明，确认失败发生在哪一步。"
-	if noInstance {
-		causeDetail = "当前环境没有实例，最近一次部署也没有成功。请对照部署记录说明，确认失败发生在哪一步。"
-	}
-	return spec{
-		id:          IDDeployFailed,
-		name:        "未识别的部署失败",
-		category:    "部署失败",
-		confidence:  "low",
-		cause:       "最近一次部署没有成功，尚未匹配到更具体的原因",
-		causeDetail: causeDetail,
-		solutions: []string{
-			"查看该环境最新部署记录中的失败说明",
-			"确认配置后重新部署",
-		},
-		actions: []serializer.DiagnosisActionObj{
-			{ID: serializer.ActionDeployConfig, Label: "前往部署配置"},
-			{ID: serializer.ActionRedeploy, Label: "重新部署"},
-		},
-	}
+// isFailedAt 判断最新部署是否在指定的一键构建部署阶段失败
+func isFailedAt(deploy *Deploy, stage autodeploy.Stage) bool {
+	return deploy != nil && deploy.Phase == deploystatus.DeployPhaseFailed && deploy.Stage == stage
 }

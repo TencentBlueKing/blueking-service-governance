@@ -22,154 +22,204 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/autodeploy"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
+	deploystatus "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/status"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/deploydiagnosis/rules"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/deploydiagnosis/serializer"
 )
 
-func requiredTopLevelFields(out *serializer.DeployDiagnosisOutputObj) {
+func assertTopLevelFields(out *Diagnosis) {
 	Expect(out).NotTo(BeNil())
 	Expect(out.GeneratedAt).NotTo(BeZero())
 	Expect(out.PartialReasons).NotTo(BeNil())
 	Expect(out.Groups).NotTo(BeNil())
 }
 
+func makeDeploy(phase deploystatus.DeployPhase) *rules.Deploy {
+	return &rules.Deploy{DeployID: "d-1", Phase: phase}
+}
+
+func makeCrashingInstance(id string, logLines ...string) *rules.Instance {
+	return &rules.Instance{ID: id, Status: "CrashLoopBackOff", IsHealthy: false, LogLines: logLines}
+}
+
+var trpcFrameworkConfig = rules.FrameworkConfig{
+	FileName: "trpc_go.yaml",
+	FilePath: "/app/conf",
+	Command:  "/app/server",
+}
+
+func findConfigRow(rows []rules.ConfigRow, label string) *rules.ConfigRow {
+	for i := range rows {
+		if rows[i].Label == label {
+			return &rows[i]
+		}
+	}
+	return nil
+}
+
 var _ = Describe("diagnose", func() {
-	It("returns no_instance when pods were listed and none remain", func() {
+	It("returns no_deploy when the env has never been deployed", func() {
+		out := new(Diagnoser).diagnose(&rules.Snapshot{AppType: bkmsapp.AppTypeTRPC})
+
+		assertTopLevelFields(out)
+		Expect(out.EmptyReason).To(Equal(EmptyReasonNoDeploy))
+		Expect(out.Deploy).To(BeNil())
+	})
+
+	It("returns deploying without running rules while a deploy is in progress", func() {
 		out := new(Diagnoser).diagnose(&rules.Snapshot{
 			AppType:         bkmsapp.AppTypeTRPC,
-			Deploy:          serializer.DeployOutputObj{DeployID: "d-1", Status: "deployed"},
+			Deploy:          makeDeploy(deploystatus.DeployPhaseInProgress),
 			InstancesListed: true,
-			Instances:       []*rules.Instance{},
+			Instances:       []*rules.Instance{{ID: "pod-a", Status: "Pending", IsHealthy: false}},
 		})
 
-		requiredTopLevelFields(out)
-		Expect(out.EmptyReason).To(Equal(serializer.EmptyReasonNoInstance))
+		assertTopLevelFields(out)
+		Expect(out.EmptyReason).To(Equal(EmptyReasonDeploying))
 		Expect(out.Groups).To(BeEmpty())
-		Expect(out.Summary.TotalCount).To(Equal(0))
-		Expect(out.Summary.AbnormalCount).To(Equal(0))
 	})
 
-	It("returns unknown when there are no pods and deploy has failed", func() {
-		out := new(Diagnoser).diagnose(&rules.Snapshot{
-			AppType:   bkmsapp.AppTypeTRPC,
-			Deploy:    serializer.DeployOutputObj{Status: "failed", Message: "workload not ready"},
-			Instances: []*rules.Instance{},
-		})
-
-		requiredTopLevelFields(out)
-		Expect(out.EmptyReason).To(BeEmpty())
-		Expect(out.Groups).To(HaveLen(1))
-		Expect(out.Groups[0].RuleID).To(Equal(rules.IDDeployFailed))
-		Expect(out.Groups[0].Instances).To(BeEmpty())
-		Expect(out.Groups[0].Cause).NotTo(BeEmpty())
-	})
-
-	It("returns unknown when every instance is Ready but deploy has failed", func() {
-		out := new(Diagnoser).diagnose(&rules.Snapshot{
-			AppType: bkmsapp.AppTypeTRPC,
-			Deploy:  serializer.DeployOutputObj{Status: "polling-timeout"},
-			Instances: []*rules.Instance{
-				{ID: "pod-a", Status: "Running", IsHealthy: true},
+	DescribeTable("resolves the empty reason when no rule matches",
+		func(snap *rules.Snapshot, want string) {
+			out := new(Diagnoser).diagnose(snap)
+			assertTopLevelFields(out)
+			Expect(out.Groups).To(BeEmpty())
+			Expect(out.EmptyReason).To(Equal(want))
+		},
+		Entry("pods listed but none remain",
+			&rules.Snapshot{Deploy: makeDeploy(deploystatus.DeployPhaseSucceeded), InstancesListed: true},
+			EmptyReasonNoInstance),
+		Entry("deploy exists but pods cannot be listed",
+			&rules.Snapshot{AppType: bkmsapp.AppTypeHelm, Deploy: makeDeploy(deploystatus.DeployPhaseSucceeded)},
+			EmptyReasonInstancesUnavailable),
+		Entry("every instance is ready",
+			&rules.Snapshot{
+				Deploy:          makeDeploy(deploystatus.DeployPhaseSucceeded),
+				InstancesListed: true,
+				Instances:       []*rules.Instance{{ID: "pod-a", IsHealthy: true}, {ID: "pod-b", IsHealthy: true}},
 			},
-		})
+			EmptyReasonAllHealthy),
+		Entry("build was canceled before anything was deployed",
+			&rules.Snapshot{Deploy: &rules.Deploy{Stage: autodeploy.StageBuild, Phase: deploystatus.DeployPhaseOther}},
+			EmptyReasonNoDeploy),
+	)
 
-		requiredTopLevelFields(out)
-		Expect(out.EmptyReason).To(BeEmpty())
-		Expect(out.Summary.TotalCount).To(Equal(1))
-		Expect(out.Summary.AbnormalCount).To(Equal(0))
-		Expect(out.Groups).To(HaveLen(1))
-		Expect(out.Groups[0].RuleID).To(Equal(rules.IDDeployFailed))
-		Expect(out.Groups[0].Instances).To(BeEmpty())
-	})
+	DescribeTable("emits a stage group when there is no abnormal instance",
+		func(snap *rules.Snapshot, wantRuleID, wantDetail string) {
+			out := new(Diagnoser).diagnose(snap)
 
-	It("returns instances_unavailable when a deploy exists but pods were not listed", func() {
-		out := new(Diagnoser).diagnose(&rules.Snapshot{
-			AppType: bkmsapp.AppTypeHelm,
-			Deploy:  serializer.DeployOutputObj{DeployID: "d-helm", Status: "deployed"},
-		})
-
-		requiredTopLevelFields(out)
-		Expect(out.EmptyReason).To(Equal(serializer.EmptyReasonInstancesUnavailable))
-		Expect(out.Groups).To(BeEmpty())
-	})
-
-	It("returns all_healthy when every instance is Ready and deploy has not failed", func() {
-		out := new(Diagnoser).diagnose(&rules.Snapshot{
-			AppType: bkmsapp.AppTypeTRPC,
-			Deploy:  serializer.DeployOutputObj{Status: "deployed"},
-			Instances: []*rules.Instance{
-				{ID: "pod-a", Status: "Running", IsHealthy: true},
-				{ID: "pod-b", Status: "Running", IsHealthy: true},
+			assertTopLevelFields(out)
+			Expect(out.EmptyReason).To(BeEmpty())
+			Expect(out.Groups).To(HaveLen(1))
+			Expect(out.Groups[0].RuleID).To(Equal(wantRuleID))
+			Expect(out.Groups[0].Instances).To(BeEmpty())
+			Expect(out.Groups[0].CauseDetail).To(ContainSubstring(wantDetail))
+		},
+		Entry("deploy failed and no instance",
+			&rules.Snapshot{Deploy: makeDeploy(deploystatus.DeployPhaseFailed), InstancesListed: true},
+			rules.IDDeployFailed, "当前环境没有实例"),
+		Entry("deploy failed while every instance is ready",
+			&rules.Snapshot{
+				Deploy:          makeDeploy(deploystatus.DeployPhaseFailed),
+				InstancesListed: true,
+				Instances:       []*rules.Instance{{ID: "pod-a", IsHealthy: true}},
 			},
-		})
+			rules.IDDeployFailed, "实例目前都已就绪"),
+		Entry("auto deploy failed at the deploy stage",
+			&rules.Snapshot{Deploy: &rules.Deploy{
+				DeployID: "d-1", Stage: autodeploy.StageDeploy, Phase: deploystatus.DeployPhaseFailed,
+			}},
+			rules.IDDeployFailed, "最近一次部署也没有成功"),
+		Entry("build failed while a previous version is still running",
+			&rules.Snapshot{Deploy: &rules.Deploy{
+				DeployID: "d-old", BuildID: "b-1", Stage: autodeploy.StageBuild, Phase: deploystatus.DeployPhaseFailed,
+			}},
+			rules.IDBuildFailed, "运行的仍是上一次部署的版本"),
+		Entry("build failed and the env was never deployed",
+			&rules.Snapshot{Deploy: &rules.Deploy{
+				BuildID: "b-1", Stage: autodeploy.StageBuild, Phase: deploystatus.DeployPhaseFailed,
+			}},
+			rules.IDBuildFailed, "尚未部署过任何版本"),
+	)
 
-		requiredTopLevelFields(out)
-		Expect(out.EmptyReason).To(Equal(serializer.EmptyReasonAllHealthy))
-		Expect(out.Groups).To(BeEmpty())
-		Expect(out.Summary.TotalCount).To(Equal(2))
-		Expect(out.Summary.AbnormalCount).To(Equal(0))
+	It("routes build failures to the build history action", func() {
+		out := new(Diagnoser).diagnose(&rules.Snapshot{Deploy: &rules.Deploy{
+			BuildID: "b-1", Stage: autodeploy.StageBuild, Phase: deploystatus.DeployPhaseFailed,
+		}})
+
+		Expect(out.Groups[0].CategoryID).To(Equal(rules.CategoryBuildFailure))
+		Expect(out.Groups[0].Category).To(Equal("构建失败"))
+		Expect(out.Groups[0].Actions).To(Equal([]rules.Action{{ID: rules.ActionBuildHistory, Label: "查看构建记录"}}))
 	})
 
-	It("matches config-file-not-found and marks a mismatched log path as danger", func() {
+	It("matches framework-config-not-found and marks a mismatched log path as danger", func() {
 		logLine := "open /data/trpc_go.yaml: no such file or directory"
 		out := new(Diagnoser).diagnose(&rules.Snapshot{
-			AppType:   bkmsapp.AppTypeTRPC,
-			Deploy:    serializer.DeployOutputObj{DeployID: "d-1", Status: "deployed"},
-			Framework: rules.Framework{FileName: "trpc_go.yaml", FilePath: "/app/conf", Command: "/app/server"},
-			Instances: []*rules.Instance{
-				{
-					ID:           "pod-a",
-					Status:       "CrashLoopBackOff",
-					RestartCount: 5,
-					IsHealthy:    false,
-					LogSource:    serializer.LogSourcePrevious,
-					LogHint:      previousLogHint,
-					LogLines:     []string{"[INFO] starting trpc server", logLine},
-				},
-			},
+			AppType:         bkmsapp.AppTypeTRPC,
+			Deploy:          makeDeploy(deploystatus.DeployPhaseSucceeded),
+			FrameworkConfig: trpcFrameworkConfig,
+			Instances: []*rules.Instance{{
+				ID:           "pod-a",
+				Status:       "CrashLoopBackOff",
+				RestartCount: 5,
+				LogSource:    rules.LogSourcePrevious,
+				LogHint:      rules.LogHintPrevious,
+				LogLines:     []string{"[INFO] starting trpc server", logLine},
+			}},
 		})
 
-		requiredTopLevelFields(out)
-		Expect(out.EmptyReason).To(BeEmpty())
+		assertTopLevelFields(out)
 		Expect(out.Groups).To(HaveLen(1))
 		group := out.Groups[0]
-		Expect(group.RuleID).To(Equal(rules.IDConfigFileNotFound))
-		Expect(group.Instances).To(HaveLen(1))
-		Expect(group.Instances[0].Evidence).To(ContainElement(logLine))
-		Expect(group.Actions).To(Equal([]*serializer.DiagnosisActionObj{
-			{ID: serializer.ActionFrameworkConfig, Label: "前往框架配置文件"},
-			{ID: serializer.ActionRedeploy, Label: "重新部署"},
+		Expect(group.RuleID).To(Equal(rules.IDFrameworkConfigNotFound))
+		Expect(group.CategoryID).To(Equal(rules.CategoryConfigDelivery))
+		Expect(group.Category).To(Equal("配置下发"))
+		Expect(group.Instances[0].Evidence).To(Equal([]string{logLine}))
+		Expect(group.Actions).To(Equal([]rules.Action{
+			{ID: rules.ActionFrameworkConfig, Label: "前往框架配置文件"},
+			{ID: rules.ActionRedeploy, Label: "重新部署"},
 		}))
 
-		var logPathRow *serializer.RelatedConfigRowObj
-		for _, row := range group.Instances[0].RelatedConfigs {
-			if row.Label == "日志中的读取路径" {
-				logPathRow = row
-			}
-		}
-		Expect(logPathRow).NotTo(BeNil())
-		Expect(logPathRow.Value).To(Equal("/data/trpc_go.yaml"))
-		Expect(logPathRow.Danger).To(BeTrue())
-		Expect(logPathRow.Hint).To(Equal(rules.PathMismatchHint))
+		row := findConfigRow(group.Instances[0].RelatedConfigs, "日志中的读取路径")
+		Expect(row).NotTo(BeNil())
+		Expect(row.Value).To(Equal("/data/trpc_go.yaml"))
+		Expect(row.Danger).To(BeTrue())
+		Expect(row.Hint).NotTo(BeEmpty())
 	})
 
-	DescribeTable("does not treat a non-config missing file as config-file-not-found",
+	DescribeTable("picks framework config solutions by the shape of the log path",
+		func(logLine string, wantDanger bool, wantFirstSolution string) {
+			out := new(Diagnoser).diagnose(&rules.Snapshot{
+				AppType:         bkmsapp.AppTypeTRPC,
+				Deploy:          makeDeploy(deploystatus.DeployPhaseSucceeded),
+				FrameworkConfig: trpcFrameworkConfig,
+				Instances:       []*rules.Instance{makeCrashingInstance("pod-a", logLine)},
+			})
+
+			group := out.Groups[0]
+			Expect(group.RuleID).To(Equal(rules.IDFrameworkConfigNotFound))
+			Expect(findConfigRow(group.Instances[0].RelatedConfigs, "日志中的读取路径").Danger).To(Equal(wantDanger))
+			Expect(group.Solutions[0]).To(ContainSubstring(wantFirstSolution))
+		},
+		Entry("absolute path differs from config",
+			"open /data/trpc_go.yaml: no such file or directory", true, "改为一致"),
+		Entry("relative path depends on working directory",
+			"open trpc_go.yaml: no such file or directory", true, "相对路径"),
+		Entry("same absolute path still missing",
+			"open /app/conf/trpc_go.yaml: no such file or directory", false, "对比日志中的报错"),
+		Entry("no path can be extracted",
+			"load trpc_go.yaml failed: file not found", false, "对比日志中的报错"),
+	)
+
+	DescribeTable("does not treat a non-config missing file as framework-config-not-found",
 		func(logLine string) {
 			out := new(Diagnoser).diagnose(&rules.Snapshot{
-				AppType: bkmsapp.AppTypeTRPC,
-				Framework: rules.Framework{
-					FileName: "trpc_go.yaml",
-					FilePath: "/app/conf",
-				},
-				Instances: []*rules.Instance{
-					{
-						ID:        "pod-c",
-						Status:    "CrashLoopBackOff",
-						IsHealthy: false,
-						LogLines:  []string{logLine},
-					},
-				},
+				AppType:         bkmsapp.AppTypeTRPC,
+				Deploy:          makeDeploy(deploystatus.DeployPhaseSucceeded),
+				FrameworkConfig: trpcFrameworkConfig,
+				Instances:       []*rules.Instance{makeCrashingInstance("pod-c", logLine)},
 			})
 
 			Expect(out.Groups).To(HaveLen(1))
@@ -182,142 +232,123 @@ var _ = Describe("diagnose", func() {
 		Entry("other config file", "open /data/settings.yaml: no such file or directory"),
 	)
 
-	It("puts the more specific rule group before unknown", func() {
+	It("does not emit framework-config-not-found for Helm apps", func() {
 		out := new(Diagnoser).diagnose(&rules.Snapshot{
-			AppType: bkmsapp.AppTypeTRPC,
-			Framework: rules.Framework{
-				FileName: "trpc_go.yaml",
-				FilePath: "/app/conf",
-			},
+			AppType: bkmsapp.AppTypeHelm,
+			Deploy:  makeDeploy(deploystatus.DeployPhaseSucceeded),
 			Instances: []*rules.Instance{
-				{
-					ID:        "pod-unknown",
-					IsHealthy: false,
-					LogLines:  []string{"panic: unexpected nil pointer"},
-				},
-				{
-					ID:        "pod-config",
-					IsHealthy: false,
-					LogLines:  []string{"open /data/trpc_go.yaml: no such file or directory"},
-				},
+				makeCrashingInstance("pod-h", "open /data/trpc_go.yaml: no such file or directory"),
 			},
 		})
 
-		Expect(out.Groups).To(HaveLen(2))
-		Expect(out.Groups[0].RuleID).To(Equal(rules.IDConfigFileNotFound))
-		Expect(out.Groups[1].RuleID).To(Equal(rules.IDUnknown))
-	})
-
-	It("marks a relative config path as danger", func() {
-		out := new(Diagnoser).diagnose(&rules.Snapshot{
-			AppType: bkmsapp.AppTypeTRPC,
-			Framework: rules.Framework{
-				FileName: "trpc_go.yaml",
-				FilePath: "/app/conf",
-			},
-			Instances: []*rules.Instance{
-				{
-					ID:        "pod-rel",
-					IsHealthy: false,
-					LogLines:  []string{"open trpc_go.yaml: no such file or directory"},
-				},
-			},
-		})
-
-		Expect(out.Groups[0].RuleID).To(Equal(rules.IDConfigFileNotFound))
-		Expect(out.Groups[0].Instances[0].RelatedConfigs[2].Danger).To(BeTrue())
-	})
-
-	It("falls back to unknown when an abnormal instance does not match config-file-not-found", func() {
-		out := new(Diagnoser).diagnose(&rules.Snapshot{
-			AppType: bkmsapp.AppTypeTRPC,
-			Instances: []*rules.Instance{
-				{
-					ID:        "pod-b",
-					Status:    "CrashLoopBackOff",
-					IsHealthy: false,
-					LogLines:  []string{"panic: unexpected nil pointer"},
-				},
-			},
-		})
-
-		requiredTopLevelFields(out)
 		Expect(out.Groups).To(HaveLen(1))
 		Expect(out.Groups[0].RuleID).To(Equal(rules.IDUnknown))
-		Expect(out.Groups[0].Actions).To(Equal([]*serializer.DiagnosisActionObj{
-			{ID: serializer.ActionDeployConfig, Label: "前往部署配置"},
-			{ID: serializer.ActionRedeploy, Label: "重新部署"},
+		Expect(out.Groups[0].Actions).To(Equal([]rules.Action{
+			{ID: rules.ActionDeployConfig, Label: "前往部署配置"},
+			{ID: rules.ActionRedeploy, Label: "重新部署"},
 		}))
 	})
 
-	It("does not emit config-file-not-found for Helm apps", func() {
+	It("groups by rule in rule-set order and sorts instances by restart count", func() {
 		out := new(Diagnoser).diagnose(&rules.Snapshot{
-			AppType: bkmsapp.AppTypeHelm,
+			AppType:         bkmsapp.AppTypeTRPC,
+			Deploy:          makeDeploy(deploystatus.DeployPhaseFailed),
+			FrameworkConfig: trpcFrameworkConfig,
 			Instances: []*rules.Instance{
+				makeCrashingInstance("pod-unknown", "panic: unexpected nil pointer"),
 				{
-					ID:        "pod-h",
-					Status:    "CrashLoopBackOff",
-					IsHealthy: false,
-					LogLines:  []string{"open /data/trpc_go.yaml: no such file or directory"},
+					ID:           "pod-config-1",
+					RestartCount: 1,
+					LogLines:     []string{"open /data/trpc_go.yaml: no such file or directory"},
+				},
+				{
+					ID:           "pod-config-9",
+					RestartCount: 9,
+					LogLines:     []string{"open /data/trpc_go.yaml: no such file or directory"},
 				},
 			},
 		})
 
-		Expect(out.Groups).To(HaveLen(1))
-		Expect(out.Groups[0].RuleID).To(Equal(rules.IDUnknown))
+		Expect(out.AbnormalCount).To(Equal(3))
+		Expect(out.Groups).To(HaveLen(2))
+		Expect(out.Groups[0].RuleID).To(Equal(rules.IDFrameworkConfigNotFound))
+		Expect(out.Groups[0].Instances[0].ID).To(Equal("pod-config-9"))
+		Expect(out.Groups[0].Instances[1].ID).To(Equal("pod-config-1"))
+		Expect(out.Groups[1].RuleID).To(Equal(rules.IDUnknown))
 	})
 
 	It("keeps pod events on the instance and workload events on the group", func() {
 		out := new(Diagnoser).diagnose(&rules.Snapshot{
 			AppType:         bkmsapp.AppTypeTRPC,
+			Deploy:          makeDeploy(deploystatus.DeployPhaseSucceeded),
 			InstancesListed: true,
 			Events: []rules.Event{
 				{InstanceID: "pod-a", Content: "pod event", Level: "Warning"},
 				{InstanceID: "pod-b", Content: "other pod", Level: "Warning"},
-				{Content: "quota exceeded", Level: "Warning"},
+				{ResourceKind: "Deployment", ResourceName: "demo", Content: "quota exceeded", Level: "Warning"},
 			},
-			Instances: []*rules.Instance{{
-				ID:        "pod-a",
-				IsHealthy: false,
-				Status:    "CrashLoopBackOff",
-			}},
+			Instances: []*rules.Instance{makeCrashingInstance("pod-a")},
 		})
 
 		Expect(out.Groups).To(HaveLen(1))
-		Expect(out.Groups[0].Instances[0].RelatedEvents).To(Equal([]*serializer.DiagnosisEventObj{
-			{Level: "Warning", Content: "pod event"},
+		Expect(out.Groups[0].Instances[0].RelatedEvents).To(Equal([]rules.Event{
+			{InstanceID: "pod-a", Level: "Warning", Content: "pod event"},
 		}))
-		Expect(out.Groups[0].RelatedEvents).To(Equal([]*serializer.DiagnosisEventObj{
-			{Level: "Warning", Content: "quota exceeded"},
+		Expect(out.Groups[0].RelatedEvents).To(Equal([]rules.Event{
+			{ResourceKind: "Deployment", ResourceName: "demo", Level: "Warning", Content: "quota exceeded"},
 		}))
 	})
 
 	It("attaches workload events when deploy failed and there is no instance", func() {
 		out := new(Diagnoser).diagnose(&rules.Snapshot{
-			Deploy: serializer.DeployOutputObj{Status: "failed"},
+			Deploy: makeDeploy(deploystatus.DeployPhaseFailed),
 			Events: []rules.Event{{Content: "quota exceeded", Level: "Warning"}},
 		})
 
 		Expect(out.Groups).To(HaveLen(1))
 		Expect(out.Groups[0].RuleID).To(Equal(rules.IDDeployFailed))
-		Expect(out.Groups[0].RelatedEvents).To(Equal([]*serializer.DiagnosisEventObj{
-			{Level: "Warning", Content: "quota exceeded"},
-		}))
+		Expect(out.Groups[0].RelatedEvents).To(Equal([]rules.Event{{Content: "quota exceeded", Level: "Warning"}}))
 	})
 
 	It("copies partial reasons from the snapshot", func() {
 		out := new(Diagnoser).diagnose(&rules.Snapshot{
 			InstancesListed: true,
-			PartialReasons:  []string{serializer.PartialReasonLogs, serializer.PartialReasonEvents},
-			Deploy:          serializer.DeployOutputObj{Status: "deployed"},
-			Instances: []*rules.Instance{{
-				ID:        "pod-a",
-				IsHealthy: true,
-			}},
+			PartialReasons:  []string{PartialReasonLogs, PartialReasonEvents},
+			Deploy:          makeDeploy(deploystatus.DeployPhaseSucceeded),
+			Instances:       []*rules.Instance{{ID: "pod-a", IsHealthy: true}},
 		})
 
-		Expect(out.Partial).To(BeTrue())
-		Expect(out.PartialReasons).To(Equal([]string{serializer.PartialReasonLogs, serializer.PartialReasonEvents}))
-		Expect(out.EmptyReason).To(Equal(serializer.EmptyReasonAllHealthy))
+		Expect(out.PartialReasons).To(Equal([]string{PartialReasonLogs, PartialReasonEvents}))
+		Expect(out.EmptyReason).To(Equal(EmptyReasonAllHealthy))
 	})
 })
+
+var _ = DescribeTable("buildFrameworkConfig",
+	func(appType string, workload appmodel.Workload, want rules.FrameworkConfig) {
+		Expect(buildFrameworkConfig(appType, &appmodel.AppModel{Workload: workload})).To(Equal(want))
+	},
+	Entry(
+		"tRPC reads trpc config and joins command with args",
+		bkmsapp.AppTypeTRPC,
+		appmodel.Workload{
+			Command:    []string{"/app/server"},
+			Args:       []string{"-conf", "/app/conf/trpc_go.yaml"},
+			TrpcConfig: appmodel.TrpcConfig{FileName: "trpc_go.yaml", FilePath: "/app/conf"},
+		},
+		rules.FrameworkConfig{
+			FileName: "trpc_go.yaml",
+			FilePath: "/app/conf",
+			Command:  "/app/server -conf /app/conf/trpc_go.yaml",
+		},
+	),
+	Entry("TAF reads taf config",
+		bkmsapp.AppTypeTAF,
+		appmodel.Workload{TafConfig: appmodel.TafConfig{FileName: "app.conf", FilePath: "/usr/local/app"}},
+		rules.FrameworkConfig{FileName: "app.conf", FilePath: "/usr/local/app"},
+	),
+	Entry("other app types only carry the command",
+		bkmsapp.AppTypeHelm,
+		appmodel.Workload{Command: []string{"run"}, TrpcConfig: appmodel.TrpcConfig{FileName: "ignored.yaml"}},
+		rules.FrameworkConfig{Command: "run"},
+	),
+)

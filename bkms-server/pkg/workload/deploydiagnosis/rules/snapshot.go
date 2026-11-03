@@ -16,48 +16,57 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
-// Package rules 存放部署诊断的具体规则。规则集按顺序调用 match，命中后只渲染这一条。
 package rules
 
 import (
 	"time"
 
-	appmodeldeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/appmodel"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/deploydiagnosis/serializer"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/autodeploy"
+	deploystatus "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/status"
 )
 
+// 实例日志来源
 const (
-	// IDConfigFileNotFound 框架配置文件读取失败的规则标识
-	IDConfigFileNotFound = "config-file-not-found"
-	// IDDeployFailed 部署已失败但没有匹配到更具体原因
-	IDDeployFailed = "deploy-failed"
-	// IDUnknown 未命中具体规则时的兜底标识
-	IDUnknown = "unknown"
-
-	// MaxEvidenceLines 单条规则最多保留的证据行数
-	MaxEvidenceLines = 3
-	// maxRelatedEvents 单个实例最多挂上的相关事件条数
-	maxRelatedEvents = 6
-	// PathMismatchHint 日志路径与配置路径不一致时，标红行旁的提示
-	PathMismatchHint = "与上方配置不一致，需改成同一路径"
+	// LogSourcePrevious 最近一次重启前的容器日志
+	LogSourcePrevious = "previous"
+	// LogSourceCurrent 当前容器日志
+	LogSourceCurrent = "current"
+	// LogSourceNone 未取到该实例日志
+	LogSourceNone = "none"
 )
 
-// Snapshot 一次诊断用的原始数据。规则只读这份快照
+// Snapshot 一次诊断用的原始数据，规则只读这份快照
 type Snapshot struct {
-	// AppType 应用类型。只有 tRPC / TAF 才匹配框架配置规则
+	// AppType 应用类型，只有 tRPC / TAF 才匹配框架配置规则
 	AppType string
-	// Deploy 最新一次部署的摘要，空态要靠它判断部署是否已失败
-	Deploy serializer.DeployOutputObj
+	// Deploy 最新一次部署；从未部署过时为 nil
+	Deploy *Deploy
 	// Instances 当前环境的全部实例，含健康实例和没拉到日志的实例
 	Instances []*Instance
-	// InstancesListed 为 true 表示已经按部署记录列过 Pod。有部署 ID 但仍为 false 时，不能当成没有实例
+	// InstancesListed 为 true 表示已经按部署记录列过 Pod。有部署但仍为 false 时，不能当成没有实例
 	InstancesListed bool
 	// Events 本次部署开始后的事件。InstanceID 为空的是工作负载事件，挂到分组上
 	Events []Event
-	// PartialReasons 采集未取全的数据源，取值为 logs / events
+	// PartialReasons 采集未取全的数据源，规则不读，原样带到诊断结论
 	PartialReasons []string
-	// Framework 应用模型里的框架配置，用来和日志中的读取路径比对
-	Framework Framework
+	// FrameworkConfig 应用模型里的框架配置，用来和日志中的读取路径比对
+	FrameworkConfig FrameworkConfig
+}
+
+// Deploy 最新一次部署的摘要
+type Deploy struct {
+	// DeployID 运行实例所属的部署记录 ID，可用来查看资源清单快照；一键构建从未进入部署阶段时为空
+	DeployID string
+	// BuildID 一键构建部署的构建 ID；直接部署时为空
+	BuildID string
+	// Stage 一键构建部署所处阶段 build / deploy；直接部署时为空
+	Stage autodeploy.Stage
+	// Status 最新记录上的原始状态，只用于展示
+	Status string
+	// Phase 归一后的阶段，判断成功、失败、进行中一律用它
+	Phase deploystatus.DeployPhase
+	// Message 最新记录上的说明，失败时通常是失败原因
+	Message string
 }
 
 // Instance 单个 Pod 的状态，以及已经为它拉到的日志
@@ -70,7 +79,7 @@ type Instance struct {
 	RestartCount int64
 	// IsHealthy 与实例列表的健康口径一致；为 false 才进入规则匹配
 	IsHealthy bool
-	// LogSource 日志来源：previous / current / none
+	// LogSource 日志来源，取值见 LogSource* 常量
 	LogSource string
 	// LogHint 交给前端的日志区说明，没拉到日志时为空
 	LogHint string
@@ -94,8 +103,8 @@ type Event struct {
 	Content string
 }
 
-// Framework 应用模型中的框架配置文件和启动命令，只给配置文件规则做路径比对
-type Framework struct {
+// FrameworkConfig 框架配置文件的名称、挂载目录和启动命令，只给框架配置规则做路径比对
+type FrameworkConfig struct {
 	// FileName 框架配置文件名，如 trpc_go.yaml
 	FileName string
 	// FilePath 配置文件在容器内的目录
@@ -104,7 +113,7 @@ type Framework struct {
 	Command string
 }
 
-// AbnormalInstances 筛出不健康实例。健康实例不跑规则
+// AbnormalInstances 筛出不健康实例，健康实例不跑规则
 func (s *Snapshot) AbnormalInstances() []*Instance {
 	out := make([]*Instance, 0)
 	for _, inst := range s.Instances {
@@ -113,14 +122,4 @@ func (s *Snapshot) AbnormalInstances() []*Instance {
 		}
 	}
 	return out
-}
-
-// IsDeployFailed 认失败、轮询超时、轮询中断。Helm 用同一套字面量，快照里只存字符串
-func IsDeployFailed(status string) bool {
-	switch appmodeldeploy.Status(status) {
-	case appmodeldeploy.StatusFailed, appmodeldeploy.StatusPollingTimeout, appmodeldeploy.StatusPollingBroken:
-		return true
-	default:
-		return false
-	}
 }

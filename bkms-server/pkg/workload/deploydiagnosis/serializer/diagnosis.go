@@ -22,47 +22,11 @@ package serializer
 import (
 	"time"
 
+	"github.com/samber/lo"
+
 	_ "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/validators" // register global validators
-)
-
-// 空态文案由 emptyReason 决定，有结论时必须是空字符串
-const (
-	// EmptyReasonAllHealthy 实例均已启动并通过健康检查，无需处理
-	EmptyReasonAllHealthy = "all_healthy"
-	// EmptyReasonNoInstance 已经列过实例，当前环境没有可诊断的实例
-	EmptyReasonNoInstance = "no_instance"
-	// EmptyReasonInstancesUnavailable 有部署记录，但本波次不能列出实例，例如 Helm
-	EmptyReasonInstancesUnavailable = "instances_unavailable"
-)
-
-// 部分结果的数据源，没有则为空数组
-const (
-	// PartialReasonLogs 日志未取全：接口失败，或异常实例超过采集上限
-	PartialReasonLogs = "logs"
-	// PartialReasonEvents 事件未取全：接口失败，或条数超过第一页
-	PartialReasonEvents = "events"
-)
-
-// 日志来源
-const (
-	// LogSourcePrevious 最近一次重启前的容器日志
-	LogSourcePrevious = "previous"
-	// LogSourceCurrent 当前容器日志
-	LogSourceCurrent = "current"
-	// LogSourceNone 未取到该实例日志
-	LogSourceNone = "none"
-)
-
-// 动作 id 仅四值，前端写死映射
-const (
-	// ActionFrameworkConfig 前往框架配置文件
-	ActionFrameworkConfig = "frameworkConfig"
-	// ActionEnvVarConfig 前往环境变量。本波次没有规则使用，保留给后续规则
-	ActionEnvVarConfig = "envVarConfig"
-	// ActionDeployConfig 前往部署配置
-	ActionDeployConfig = "deployConfig"
-	// ActionRedeploy 重新部署
-	ActionRedeploy = "redeploy"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/deploydiagnosis"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/deploydiagnosis/rules"
 )
 
 // AppEnvURIInput 按应用和环境限定的路径参数
@@ -77,70 +41,75 @@ type GetDeployDiagnosisQueryInput struct {
 	TrafficLaneName string `form:"trafficLaneName"`
 }
 
-// GetDeployDiagnosisOutput 诊断接口成功响应，data 即契约业务 JSON
+// GetDeployDiagnosisOutput 诊断接口成功响应
 type GetDeployDiagnosisOutput struct {
 	Data *DeployDiagnosisOutputObj `json:"data"`
 }
 
 // DeployDiagnosisOutputObj 一次环境诊断结论
 type DeployDiagnosisOutputObj struct {
-	// GeneratedAt 诊断计算完成时间
+	// GeneratedAt 诊断完成时间
 	GeneratedAt time.Time `json:"generatedAt"`
-	// CacheHit 是否直接返回缓存结果。本波次没有缓存，恒为 false
-	CacheHit bool `json:"cacheHit"`
-	// Partial 日志或事件未取全时为 true，面板提示「部分证据未取到」
+	// Partial 日志或事件未取全时为 true，提示「部分证据未取到」
 	Partial bool `json:"partial"`
-	// PartialReasons 未取全的数据源，取值为 logs / events；没有则为空数组
+	// PartialReasons 未取全的数据源：logs / events；没有则为空数组
 	PartialReasons []string `json:"partialReasons"`
-	// EmptyReason groups 为空时的空态：all_healthy / no_instance / instances_unavailable；有结论时为空字符串
+	// EmptyReason groups 为空时的空态：no_deploy / deploying / all_healthy / no_instance / instances_unavailable；
+	// 有结论时为空字符串
 	EmptyReason string `json:"emptyReason"`
-	// Deploy 最新部署记录，DeployID 只供查看完整资源 YAML
+	// Deploy 最新一次部署；从未部署过时各字段为空
 	Deploy DeployOutputObj `json:"deploy"`
 	// Summary 实例计数
 	Summary DiagnosisSummaryObj `json:"summary"`
-	// Groups 按规则分组的结论，多条时前端做标签，默认第一组
+	// Groups 按规则分组的结论，多条时默认展示第一组
 	Groups []*DiagnosisGroupObj `json:"groups"`
 }
 
-// DeployOutputObj 最新部署记录摘要
+// DeployOutputObj 最新一次部署摘要
 type DeployOutputObj struct {
-	// DeployID 最新部署记录 ID
+	// DeployID 运行实例所属的部署记录 ID，用于查看完整资源 YAML；一键构建从未进入部署阶段时为空
 	DeployID string `json:"deployID"`
-	// Status 部署状态，如 deployed / failed
+	// BuildID 一键构建部署的构建 ID，用于跳转构建记录；直接部署时为空
+	BuildID string `json:"buildID"`
+	// Stage 一键构建部署所处阶段：build / deploy；直接部署时为空
+	Stage string `json:"stage"`
+	// Status 最新记录上的原始状态，只用于展示
 	Status string `json:"status"`
-	// Message 部署记录上的补充说明
+	// Phase 归一后的阶段：inProgress / succeeded / failed / other
+	Phase string `json:"phase"`
+	// Message 最新记录上的说明，失败时通常是失败原因
 	Message string `json:"message"`
 }
 
-// DiagnosisSummaryObj 实例计数，与入口异常数对齐
+// DiagnosisSummaryObj 实例计数
 type DiagnosisSummaryObj struct {
-	// TotalCount 当前环境实例总数，用于判断「有实例但都健康」
+	// TotalCount 当前环境实例总数
 	TotalCount int `json:"totalCount"`
-	// AbnormalCount 异常实例数，与部署入口的异常数对齐
+	// AbnormalCount 异常实例数，与部署入口的异常数口径一致
 	AbnormalCount int `json:"abnormalCount"`
 }
 
 // DiagnosisGroupObj 一条命中规则及其覆盖的实例
 type DiagnosisGroupObj struct {
-	// RuleID 规则标识，作标签 key，不直接展示
+	// RuleID 规则标识，作标签 key：framework-config-not-found / unknown / deploy-failed / build-failed
 	RuleID string `json:"ruleId"`
 	// RuleName 标签文案，展示为「规则名 · 实例数」
 	RuleName string `json:"ruleName"`
-	// Category 出错原因旁的分类，如「配置下发」
+	// CategoryID 分类标识：config_delivery / startup_failure / deploy_failure / build_failure
+	CategoryID string `json:"categoryId"`
+	// Category 分类的展示文案，如「配置下发」
 	Category string `json:"category"`
-	// Confidence 置信度，面板不展示
+	// Confidence 置信度：high / low，面板不展示
 	Confidence string `json:"confidence"`
-	// Cause 出错原因主句，原样展示
+	// Cause 出错原因主句
 	Cause string `json:"cause"`
-	// CauseDetail 主句下的说明，原样展示
+	// CauseDetail 主句下的说明
 	CauseDetail string `json:"causeDetail"`
 	// Solutions 处理步骤，按数组顺序编号展示
 	Solutions []string `json:"solutions"`
-	// Actions 解决方案按钮，ID 决定跳转，Label 是按钮文案
+	// Actions 解决方案按钮
 	Actions []*DiagnosisActionObj `json:"actions"`
-	// RelatedConfigs 无实例时的相关配置；有实例时改读实例上的同名字段
-	RelatedConfigs []*RelatedConfigRowObj `json:"relatedConfigs"`
-	// Instances 命中该规则的实例，已按重启次数降序；无实例的结论为空数组
+	// Instances 命中该规则的实例，已按重启次数降序；阶段性结论（部署 / 构建失败）为空数组
 	Instances []*DiagnosisInstanceObj `json:"instances"`
 	// RelatedEvents 不归属某个实例的工作负载事件，如副本创建失败、配额不足
 	RelatedEvents []*DiagnosisEventObj `json:"relatedEvents"`
@@ -148,7 +117,7 @@ type DiagnosisGroupObj struct {
 
 // DiagnosisActionObj 解决方案区按钮
 type DiagnosisActionObj struct {
-	// ID 按钮行为，仅 frameworkConfig / envVarConfig / deployConfig / redeploy
+	// ID 跳转目标：frameworkConfig / deployConfig / buildHistory / redeploy
 	ID string `json:"id"`
 	// Label 按钮文案
 	Label string `json:"label"`
@@ -158,7 +127,7 @@ type DiagnosisActionObj struct {
 type RelatedConfigRowObj struct {
 	// Label 左列名称
 	Label string `json:"label"`
-	// Value 右列取值，环境变量只放变量名
+	// Value 右列取值
 	Value string `json:"value"`
 	// Danger 为 true 时 Value 标红，表示与日志中的路径不一致
 	Danger bool `json:"danger"`
@@ -172,7 +141,7 @@ type DiagnosisInstanceObj struct {
 	ID string `json:"id"`
 	// Status 实例状态，如 CrashLoopBackOff
 	Status string `json:"status"`
-	// RestartCount 重启次数，分组内已按它降序
+	// RestartCount 重启次数
 	RestartCount int64 `json:"restartCount"`
 	// Evidence 命中规则的日志行，空则不展示
 	Evidence []string `json:"evidence"`
@@ -182,18 +151,92 @@ type DiagnosisInstanceObj struct {
 	LogSource string `json:"logSource"`
 	// LogHint 日志区说明，空则不展示
 	LogHint string `json:"logHint"`
-	// LogLines 日志正文，空则前端展示未取到该实例日志
+	// LogLines 日志正文，空表示未取到该实例日志
 	LogLines []string `json:"logLines"`
-	// RelatedEvents 本次部署开始后与该实例相关的事件，空则前端展示没有相关事件
+	// RelatedEvents 本次部署开始后与该实例相关的事件，空表示没有相关事件
 	RelatedEvents []*DiagnosisEventObj `json:"relatedEvents"`
 }
 
-// DiagnosisEventObj 与实例相关的集群事件
+// DiagnosisEventObj 一条集群事件
 type DiagnosisEventObj struct {
 	// CreatedAt 事件发生时间
 	CreatedAt time.Time `json:"createdAt"`
 	// Level 事件级别，如 Normal / Warning
 	Level string `json:"level"`
+	// ResourceKind 事件关联的资源类型，如 Pod、Deployment
+	ResourceKind string `json:"resourceKind"`
+	// ResourceName 事件关联的资源名
+	ResourceName string `json:"resourceName"`
 	// Content 事件内容
 	Content string `json:"content"`
+}
+
+// FromDiagnosis 把诊断结论转成响应结构，所有切片字段都保证输出 [] 而不是 null
+func (o *DeployDiagnosisOutputObj) FromDiagnosis(d *deploydiagnosis.Diagnosis) *DeployDiagnosisOutputObj {
+	o.GeneratedAt = d.GeneratedAt
+	o.Partial = len(d.PartialReasons) > 0
+	o.PartialReasons = append([]string{}, d.PartialReasons...)
+	o.EmptyReason = d.EmptyReason
+	if d.Deploy != nil {
+		o.Deploy = DeployOutputObj{
+			DeployID: d.Deploy.DeployID,
+			BuildID:  d.Deploy.BuildID,
+			Stage:    string(d.Deploy.Stage),
+			Status:   d.Deploy.Status,
+			Phase:    string(d.Deploy.Phase),
+			Message:  d.Deploy.Message,
+		}
+	}
+	o.Summary = DiagnosisSummaryObj{TotalCount: d.TotalCount, AbnormalCount: d.AbnormalCount}
+	o.Groups = lo.Map(d.Groups, func(g *rules.Group, _ int) *DiagnosisGroupObj { return newGroupObj(g) })
+	return o
+}
+
+func newGroupObj(g *rules.Group) *DiagnosisGroupObj {
+	return &DiagnosisGroupObj{
+		RuleID:      g.RuleID,
+		RuleName:    g.RuleName,
+		CategoryID:  g.CategoryID,
+		Category:    g.Category,
+		Confidence:  g.Confidence,
+		Cause:       g.Cause,
+		CauseDetail: g.CauseDetail,
+		Solutions:   append([]string{}, g.Solutions...),
+		Actions: lo.Map(g.Actions, func(a rules.Action, _ int) *DiagnosisActionObj {
+			return &DiagnosisActionObj{ID: a.ID, Label: a.Label}
+		}),
+		Instances: lo.Map(
+			g.Instances,
+			func(inst *rules.GroupInstance, _ int) *DiagnosisInstanceObj { return newInstanceObj(inst) },
+		),
+		RelatedEvents: newEventObjs(g.RelatedEvents),
+	}
+}
+
+func newInstanceObj(inst *rules.GroupInstance) *DiagnosisInstanceObj {
+	return &DiagnosisInstanceObj{
+		ID:           inst.ID,
+		Status:       inst.Status,
+		RestartCount: inst.RestartCount,
+		Evidence:     append([]string{}, inst.Evidence...),
+		RelatedConfigs: lo.Map(inst.RelatedConfigs, func(row rules.ConfigRow, _ int) *RelatedConfigRowObj {
+			return &RelatedConfigRowObj{Label: row.Label, Value: row.Value, Danger: row.Danger, Hint: row.Hint}
+		}),
+		LogSource:     inst.LogSource,
+		LogHint:       inst.LogHint,
+		LogLines:      append([]string{}, inst.LogLines...),
+		RelatedEvents: newEventObjs(inst.RelatedEvents),
+	}
+}
+
+func newEventObjs(events []rules.Event) []*DiagnosisEventObj {
+	return lo.Map(events, func(ev rules.Event, _ int) *DiagnosisEventObj {
+		return &DiagnosisEventObj{
+			CreatedAt:    ev.CreatedAt,
+			Level:        ev.Level,
+			ResourceKind: ev.ResourceKind,
+			ResourceName: ev.ResourceName,
+			Content:      ev.Content,
+		}
+	})
 }

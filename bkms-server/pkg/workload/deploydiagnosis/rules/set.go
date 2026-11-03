@@ -18,62 +18,57 @@
 
 package rules
 
-import "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/deploydiagnosis/serializer"
-
-// Hit 规则命中后交给 Render 的证据，具体类型由规则自己断言
-type Hit any
-
-// InstanceRule 针对单个异常实例。规则集按顺序调用 Match，命中后只调这一条的 Render
+// InstanceRule 针对单个异常实例的诊断规则
 type InstanceRule interface {
-	// ID 规则标识，分组输出时按规则集中的顺序排列
+	// ID 规则标识；同一规则命中的实例会合并成一组，组的输出顺序与规则集中的顺序一致
 	ID() string
-	Match(snap *Snapshot, inst *Instance) (Hit, bool)
-	Render(snap *Snapshot, inst *Instance, hit Hit) *serializer.DiagnosisGroupObj
+	// Diagnose 未命中返回 nil；命中时返回只含该实例的分组，文案和按钮可按命中的分支变化
+	Diagnose(snap *Snapshot, inst *Instance) *Group
 }
 
-// StageRule 针对没有异常实例的快照，例如部署已失败但没有 Pod
+// StageRule 只在没有异常实例时运行的规则，处理部署 / 构建已失败、但实例看不出问题的情况
 type StageRule interface {
-	Match(snap *Snapshot) bool
-	Render(snap *Snapshot) *serializer.DiagnosisGroupObj
+	// ID 规则标识
+	ID() string
+	// Diagnose 未命中返回 nil；命中时返回不含实例的分组
+	Diagnose(snap *Snapshot) *Group
 }
 
 // InstanceRuleSet 按顺序匹配异常实例，第一条命中即停
 type InstanceRuleSet []InstanceRule
 
-// StageRuleSet 没有异常实例时按顺序匹配
+// StageRuleSet 没有异常实例时按顺序匹配，第一条命中即停
 type StageRuleSet []StageRule
 
 var (
-	// InstanceRules 异常实例规则。unknownRule 必须放最后
+	// InstanceRules 异常实例规则。UnknownRule 恒命中，必须放最后
 	InstanceRules = InstanceRuleSet{
-		configFileRule{},
-		unknownRule{},
+		FrameworkConfigRule{},
+		UnknownRule{},
 	}
-	// StageRules 没有异常实例时的规则。部署失败的兜底放在这里
+	// StageRules 没有异常实例时的规则，构建失败比部署失败更具体，排在前面
 	StageRules = StageRuleSet{
-		deployFailedRule{},
+		BuildFailedRule{},
+		DeployFailedRule{},
 	}
 )
 
-// Run 按顺序匹配，把第一条命中的规则渲染成分组
-func (s InstanceRuleSet) Run(snap *Snapshot, inst *Instance) *serializer.DiagnosisGroupObj {
+// Diagnose 返回第一条命中规则的分组；规则集以 UnknownRule 结尾时不会返回 nil
+func (s InstanceRuleSet) Diagnose(snap *Snapshot, inst *Instance) *Group {
 	for _, rule := range s {
-		hit, ok := rule.Match(snap, inst)
-		if !ok {
-			continue
+		if group := rule.Diagnose(snap, inst); group != nil {
+			return group
 		}
-		return rule.Render(snap, inst, hit)
 	}
 	return nil
 }
 
-// Run 按顺序匹配，把第一条命中的阶段规则渲染成分组
-func (s StageRuleSet) Run(snap *Snapshot) (*serializer.DiagnosisGroupObj, bool) {
+// Diagnose 返回第一条命中规则的分组，都未命中返回 nil
+func (s StageRuleSet) Diagnose(snap *Snapshot) *Group {
 	for _, rule := range s {
-		if !rule.Match(snap) {
-			continue
+		if group := rule.Diagnose(snap); group != nil {
+			return group
 		}
-		return rule.Render(snap), true
 	}
-	return nil, false
+	return nil
 }
