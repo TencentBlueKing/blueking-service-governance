@@ -16,9 +16,15 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
-import { formatOptionTarget } from '~/pages/application/detail/deploy/release-preview';
+import {
+  buildSquaresByRatio,
+  formatOptionTarget,
+  parseBatchTarget,
+  shouldAppendAutoFullBatch,
+} from '~/pages/application/detail/deploy/release-preview';
 
 import type { BatchInput, BatchOutputObj, ReleaseStrategyOutputObj } from '~/@types/v1/release-strategies';
+import type { ProgressSquareState } from '~/pages/application/detail/deploy/release-preview';
 import type { TargetTexts } from '~/pages/application/detail/deploy/release-preview';
 
 /** 详情面板的带参错误文案：key 为 i18n 模板，params 依序插值 */
@@ -30,8 +36,8 @@ export interface BatchErrorDetail {
 /** 批次完成后的暂停方式：none 不暂停 / duration 定时暂停 / permanent 永久暂停 */
 export type PauseMode = 'duration' | 'none' | 'permanent';
 
-/** 进度方块单格状态：已更新 / 本批新增 / 待更新 */
-export type PreviewSquareState = 'new' | 'pending' | 'prev';
+/** 进度方块单格状态：已更新 / 本批新增 / 待更新（与部署预览共用同一类型） */
+export type PreviewSquareState = ProgressSquareState;
 
 /**
  * 批次行表单模型。
@@ -142,6 +148,14 @@ export const NAME_MAX_LENGTH = 32;
 export const DESCRIPTION_MAX_LENGTH = 100;
 export const PAUSE_SECONDS_MIN = 30;
 export const PAUSE_SECONDS_MAX = 86_400;
+
+/**
+ * 后端「策略名称冲突」错误文案匹配（bkms-server ErrStrategyNameConflict：
+ * "release strategy name already exists" / 内置策略占用同链路文案）。
+ * 只精确匹配已存在类表述，供提交失败时决定是否内联到「策略名称」项；
+ * 不能宽松匹配 name，否则 envName invalid 等其他含 name 的报错会被误归类。
+ */
+export const STRATEGY_NAME_CONFLICT_PATTERN = /name already exists|名称[^\n]*已存在|已存在同名/;
 /** 切到「定时暂停」时的默认时长，与设计稿一致 */
 export const DEFAULT_PAUSE_SECONDS = 30;
 
@@ -178,25 +192,23 @@ export function buildBatchDetailRows(
 /**
  * 进度方块着色：第 i 格代表区间 [i / count, (i + 1) / count]，
  * 按格中心落在「已更新 / 本批新增 / 待更新」哪一段决定颜色。
+ * 着色规则实现在 release-preview 的 buildSquaresByRatio，与部署预览共用。
  */
 export function buildPreviewSquares(
   row: Pick<StrategyPreviewRow, 'accumulatedRatio' | 'prevRatio'>,
   count = PREVIEW_SQUARE_COUNT,
 ): PreviewSquareState[] {
-  return Array.from({ length: count }, (_, index) => {
-    const position = (index + 0.5) / count;
-    if (position <= row.prevRatio) return 'prev';
-    if (position <= row.accumulatedRatio) return 'new';
-    return 'pending';
-  });
+  return buildSquaresByRatio(row, count);
 }
 
 /**
  * 已校验的表单批次 → 预览弹窗时间线行。
  *
  * 全量由系统补齐：用户把末批配置到 100% 时即视为全量批；
- * 未配置到 100%（如配置 25% / 70%）时，系统会在末批确认后自动补一个全量批，
- * 与「最后自动全量」的语义对齐，因此此处追加一行系统补齐的全量批。
+ * 未配置到 100%（如配置 25% / 70%）时，系统会在末批确认后自动补一个全量批
+ * （后端 UpdatingPrimary 阶段），因此追加一行系统补齐的全量批。
+ * 「是否需要补齐」由 release-preview 的 shouldAppendAutoFullBatch 统一判断，
+ * 与部署侧发布预览/提示共用同一语义。
  */
 export function buildStrategyPreviewRows(batches: StrategyBatchForm[], t: TranslateFn): StrategyPreviewRow[] {
   const ratios = resolvePreviewRatios(batches);
@@ -224,7 +236,7 @@ export function buildStrategyPreviewRows(batches: StrategyBatchForm[], t: Transl
 
   // 末批已全量则无需补齐；否则系统在末批确认后自动补齐剩余实例
   const lastBatch = batches[batches.length - 1];
-  if (lastBatch && !isFullBatch(lastBatch)) {
+  if (shouldAppendAutoFullBatch(batches.map(formatTargetValue))) {
     rows.push({
       key: `${lastBatch.key}-auto-full`,
       label: translate(t, '第 {0} 批', [batches.length + 1]),
@@ -259,19 +271,17 @@ export function buildStrategyPreviewSummary(batches: StrategyBatchForm[]): Strat
 
 /**
  * 计算批次分段条各段宽度占比（0 ~ 1）。
- * 每段按本批新增占比绘制：将各批累计 target 解析为数值（百分比去 %、正整数原样），
- * 取相邻差值为段宽，差值过小的批次兜底 0.5 保证可见。
+ * 每段按本批新增占比绘制：将各批累计 target 经 parseBatchTarget 解析为数值
+ * （百分比去 % 并收敛到 0 ~ 100、正整数原样），取相邻差值为段宽，差值过小的批次兜底 0.5 保证可见。
  * 注意：仅作可视化示意，混用「正整数实例数」与「百分比」两种量纲时差值不具精确占比语义。
  */
 export function calcBatchSegmentRatios(batches: BatchOutputObj[] | undefined): number[] {
   const values = (batches ?? []).map(batch => {
-    const target = (batch.target ?? '').trim() || '100%';
-    if (target.endsWith('%')) {
-      const pct = Number.parseFloat(target.slice(0, -1));
-      return Number.isNaN(pct) ? 100 : Math.min(Math.max(pct, 0), 100);
+    const parsed = parseBatchTarget(batch.target);
+    if (parsed.unit === 'percent') {
+      return parsed.value === undefined ? 100 : Math.min(Math.max(parsed.value, 0), 100);
     }
-    const count = Number.parseInt(target, 10);
-    return Number.isNaN(count) || count < 0 ? 0 : count;
+    return parsed.value ?? 0;
   });
   if (values.length === 0) return [];
 
@@ -321,8 +331,9 @@ export function formatAccumulatedTarget(
   texts: TargetTexts,
   t: TranslateFn,
 ): string {
-  const target = (batch.target ?? '').trim();
-  const isFull = target.endsWith('%') && Number.parseFloat(target) >= 100;
+  const parsed = parseBatchTarget(batch.target);
+  // 仅「显式配置的百分比 ≥ 100」追加（全量）后缀；空 target 保持走全量 token 兜底
+  const isFull = parsed.unit === 'percent' && parsed.isFull;
   const token = isFull ? t('{0}（全量）', ['100%']) : formatOptionTarget(batch.target, texts);
   return index === 0 ? token : t('累计 {0}', [token]);
 }
@@ -409,9 +420,9 @@ export function generateCloneName(sourceName: string | undefined, existingNames:
   return name;
 }
 
-/** 是否为全量：累计目标达到 100%（全量批由系统在末批之后隐含补齐，用户配置到 100% 属等价场景） */
+/** 是否为全量：累计目标达到 100%（判定与部署预览的 isFullTarget 口径一致，均为百分比 ≥ 100） */
 export function isFullBatch(batch: Pick<StrategyBatchForm, 'targetUnit' | 'targetValue'>): boolean {
-  return batch.targetUnit === 'percent' && Number(batch.targetValue) === 100;
+  return parseBatchTarget(formatTargetValue(batch)).isFull;
 }
 
 /** 归一化暂停方式：接口返回的非法值降级为 none */
@@ -419,16 +430,14 @@ export function normalizePauseMode(mode: string | undefined): PauseMode {
   return PAUSE_MODES.includes(mode as PauseMode) ? (mode as PauseMode) : 'none';
 }
 
-/** 解析接口 target（"1" / "25%"）为「数值 + 单位」 */
+/**
+ * 解析接口 target（"1" / "25%"）为「数值 + 单位」。
+ * 与部署侧共用 parseBatchTarget；差异仅在空 target 语义：
+ * 表单回填时空值表示「待填写」（count / undefined），展示与全量判断才按契约兜底 100%。
+ */
 export function parseTarget(target: string | undefined): { unit: TargetUnit; value?: number } {
-  const trimmed = (target ?? '').trim();
-  if (trimmed.endsWith('%')) {
-    const pct = Number.parseFloat(trimmed.slice(0, -1));
-    return { unit: 'percent', value: Number.isFinite(pct) ? pct : undefined };
-  }
-  if (!trimmed) return { unit: 'count', value: undefined };
-  const count = Number.parseInt(trimmed, 10);
-  return { unit: 'count', value: Number.isFinite(count) ? count : undefined };
+  const parsed = parseBatchTarget(target);
+  return { unit: parsed.unit, value: parsed.text ? parsed.value : undefined };
 }
 
 /**
@@ -507,21 +516,27 @@ export function validateStrategyForm(
     }
   });
 
-  // 同单位累计值需严格递增
-  for (let index = 1; index < form.batches.length; index += 1) {
-    const prev = form.batches[index - 1] as StrategyBatchForm;
-    const current = form.batches[index] as StrategyBatchForm;
-    if (batchErrors[prev.key] || batchErrors[current.key]) continue;
-    if (prev.targetUnit !== current.targetUnit) continue;
-    if (Number(current.targetValue) <= Number(prev.targetValue)) {
+  // 同单位累计值需严格递增：按单位分别记录「上一次出现的同单位值」再比较。
+  // 只比较相邻同单位对会漏判混合单位配置（如 [5 个, 50%, 3 个]）；
+  // 跨单位比较跳过——「个」与「%」是两种量纲，无可比性，绝对关系由后端 target 校验兜底。
+  const lastSameUnit: Partial<Record<TargetUnit, { text: string; value: number }>> = {};
+  form.batches.forEach(current => {
+    if (batchErrors[current.key]) return;
+    const value = Number(current.targetValue);
+    const last = lastSameUnit[current.targetUnit];
+    if (last && value <= last.value) {
       // 卡片文案受宽度限制不带参数；详情面板补上「上一批累计值」，与设计稿一致
       batchErrors[current.key] = '累计更新数需大于上一批';
       batchErrorDetails[current.key] = {
         key: '累计更新数需大于上一批（{0}）',
-        params: [formatBatchTargetText(prev, key => key)],
+        params: [last.text],
       };
+      return;
     }
-  }
+    if (Number.isFinite(value)) {
+      lastSameUnit[current.targetUnit] = { text: formatBatchTargetText(current, key => key), value };
+    }
+  });
 
   return {
     valid: !nameError && !descriptionError && !batchesEmptyError && Object.keys(batchErrors).length === 0,
