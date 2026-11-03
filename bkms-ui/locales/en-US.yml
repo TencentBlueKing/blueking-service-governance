@@ -30,7 +30,7 @@
 启用: start up
 添加: Add
 请输入: Please enter
-"搜索{0}": "Search {0}"
+'搜索{0}': 'Search {0}'
 状态: Status
 创建者: Creator
 更新者: Updater
@@ -106,8 +106,7 @@ SRE 成员: SRE Members
 请输入 SRE 成员: Please enter SRE members
 请输入运营成员: Please enter the operating member
 空间ID不能为空: Space ID cannot be empty
-空间ID应为2到24个字符，只能包含小写字母、数字和连字符，且不能以连字符开头或结尾:
-  Space ID should be 2 to 24
+空间ID应为2到24个字符，只能包含小写字母、数字和连字符，且不能以连字符开头或结尾: Space ID should be 2 to 24
   characters, only lowercase letters, numbers and hyphens can be used, and it
   cannot start or end with a hyphen
 空间名称不能为空: Space Name cannot be empty
@@ -120,8 +119,7 @@ SRE 成员: SRE Members
 编辑团队空间: Edit Team Space
 启用过程中无法停用: Unable to deactivate during activation
 应用管理: Application management
-必须以小写字母开头，且只能包含小写字母、数字或连字符（a-z, 0-9, -）:
-  Must start with a lowercase letter and
+必须以小写字母开头，且只能包含小写字母、数字或连字符（a-z, 0-9, -）: Must start with a lowercase letter and
   can only contain lowercase letters, numbers, or hyphens (a-z, 0-9, -)
 设置模式: Setting mode
 简易模式: Simple mode
@@ -164,18 +162,16 @@ values 文件: Values File
 构建参数: Build Parameters
 选择模板: Select a template
 参数配置: Parameter configuration
-"{name} 应用创建成功": "The {name} application has been created successfully"
-"{name} 应用创建失败": "The {name} application creation has failed"
-"{name} 应用创建中，请稍等...": "The {name} application is being created, please wait..."
-接下来你可以直接 "查看应用" 或 继续 "创建应用":
-  'Next, you can either "View Application" directly
+'{name} 应用创建成功': 'The {name} application has been created successfully'
+'{name} 应用创建失败': 'The {name} application creation has failed'
+'{name} 应用创建中，请稍等...': 'The {name} application is being created, please wait...'
+接下来你可以直接 "查看应用" 或 继续 "创建应用": 'Next, you can either "View Application" directly
   or continue to "Create Application".'
-接下来你可以根据失败的原因，重新修改配置:
-  "Next, you can modify the configuration again based on the
-  reason for the failure."
+接下来你可以根据失败的原因，重新修改配置: 'Next, you can modify the configuration again based on the
+  reason for the failure.'
 tRPC: tRPC
 Java: Java
-"tRPC 应用": "tRPC Application"
+'tRPC 应用': 'tRPC Application'
 采用 tRPC 框架实现的服务端应用: Server application implemented using the tRPC framework.
 Kubernetes 原生应用: Kubernetes-native Application
 采用 HelmCharts 管理 K8S 资源: Managing Kubernetes resources using Helm Charts.
@@ -188,8 +184,7 @@ Kubernetes 原生应用: Kubernetes-native Application
 描述: Description
 语言: Language
 应用名称不能为空: Application Name cannot be empty
-长度范围1~20个字符，以小写字母开头，可包含小写字母、数字、中划线:
-  Length range is 1 to 20 characters, starting
+长度范围1~20个字符，以小写字母开头，可包含小写字母、数字、中划线: Length range is 1 to 20 characters, starting
   with a lowercase letter, and can include lowercase letters, numbers, and
   hyphens(-)
 应用显示名称不能为空: Application Display Name cannot be empty
@@ -205,7 +200,7 @@ Kubernetes 原生应用: Kubernetes-native Application
 添加组件: Add Component
 编辑组件: Edit Component
 执行: Execute
-请输入版本号，如：: "Please enter the version number, such as: "
+请输入版本号，如：: 'Please enter the version number, such as: '
 构建号: Build Number
 源材料: SourceMaterial
 触发人: Creator
@@ -219,7 +214,7 @@ tag不能为空: Tag cannot be empty
 构建时间: createAt
 大小: size
 确定删除该制品？: Confirm delete this artifact?
-"组件tag: {tag}": "Component tag: {tag}"
+'组件tag: {tag}': 'Component tag: {tag}'
 删除后，将不可恢复，请谨慎操作！: Once deleted, it cannot be restored. Please proceed with caution!
 实例列表: list
 观测数据: observability
@@ -234,7 +229,7 @@ tag不能为空: Tag cannot be empty
 失败: failed
 请选择应用: Please select an application
 请输入应用名称: Please enter the application name
-搜索操作人、操作类型、操作状态: "search operator, type, status"
+搜索操作人、操作类型、操作状态: 'search operator, type, status'
 环境管理: Environment management
 集群组件: Cluster Components
 新建环境: Create environment
@@ -249,7 +244,7 @@ tag不能为空: Tag cannot be empty
 禁止: Disabled
 可直接部署: Direct deployment
 镜像晋级: Image promotion
-"需 {0} 后才能部署": "Requires {0} before deployment"
+'需 {0} 后才能部署': 'Requires {0} before deployment'
 泳道: Swimlane
 开发: Development
 生产: Production
@@ -292,12 +287,10 @@ tag不能为空: Tag cannot be empty
 请先设置: Please set it up first
 请选择集群/命名空间: Please select cluster/namespace
 请选择项目: Please select project
-启用泳道，需创建基线泳道，作为基础配置，后续创建的"特性泳道"将会引用相关配置:
-  Enable lane, need to create a base lane
+启用泳道，需创建基线泳道，作为基础配置，后续创建的"特性泳道"将会引用相关配置: Enable lane, need to create a base lane
   as the basic configuration. Subsequent created "feature lanes" will reference
   related configurations.
-停用后，相关功能将会停用，请谨慎操作！:
-  After disabling, related functions will be disabled. Please
+停用后，相关功能将会停用，请谨慎操作！: After disabling, related functions will be disabled. Please
   operate with caution!
 启用后，相关功能将会恢复使用: After enabling, related functions will be restored.
 环境名称、环境ID、环境分类: Environment Name, Environment ID, Environment Category
@@ -359,7 +352,7 @@ kubeConfig导入: KubeConfig
 平台创建: Platform created
 控制面服务器导入: Machine
 标准集群: Standard
-"已选 {0} 个实例": "Selected {0} instances"
+'已选 {0} 个实例': 'Selected {0} instances'
 应用编排: Application Orchestration
 填写入参: Fill in the participation form
 点击配置: Click on configuration
@@ -371,11 +364,11 @@ kubeConfig导入: KubeConfig
 流水线配置: Pipeline configuration
 使用上一次的参数: Use the previous parameters
 恢复默认: Restore Default
-"在 “{0}” 页面构建镜像后，可通过以下变量引用镜像信息。": "After building an image on the “{0}” page, image information can be referenced via the following variables."
-"行 {0}, 列 {1}, 异常 {2}": "Line {0}, Column {1}, Exception {2}"
-"实例: {0}": "Instance: {0}"
-"实例名称: {0}": "Instance Name: {0}"
-"确定批量删除 {0} 个实例？": "Are you sure you want to delete {0} instances?"
+'在 “{0}” 页面构建镜像后，可通过以下变量引用镜像信息。': 'After building an image on the “{0}” page, image information can be referenced via the following variables.'
+'行 {0}, 列 {1}, 异常 {2}': 'Line {0}, Column {1}, Exception {2}'
+'实例: {0}': 'Instance: {0}'
+'实例名称: {0}': 'Instance Name: {0}'
+'确定批量删除 {0} 个实例？': 'Are you sure you want to delete {0} instances?'
 部署状态: Deployment Status
 更新: Update
 该环境尚未部署应用: This environment has not deployed any applications yet.
@@ -385,7 +378,7 @@ kubeConfig导入: KubeConfig
 更新应用: Update Application
 Chart 版本: Chart Version
 镜像 Tag: Image Tag
-"搜索 Chart 版本/镜像 Tag/操作人": "Search Chart Version/Image Tag/Operator"
+'搜索 Chart 版本/镜像 Tag/操作人': 'Search Chart Version/Image Tag/Operator'
 查看 Values: View Values
 已部署: Deployed
 已卸载: Uninstalled
@@ -453,14 +446,12 @@ Helm Chart 来源: Helm Chart Source
 Dockerfile 路径: Dockerfile Path
 Helm chart 配置: Helm Chart Configuration
 编辑 Helm chart 配置: Edit Helm Chart Configuration
-请输入应用所在子目录，不填则默认为根目录:
-  Please enter the subdirectory where the application is
+请输入应用所在子目录，不填则默认为根目录: Please enter the subdirectory where the application is
   located, or leave blank to default to the root directory
-相对于构建目录的路径，若留空，默认为构建目录下名为 “Dockerfile” 的文件:
-  The path relative to the build
+相对于构建目录的路径，若留空，默认为构建目录下名为 “Dockerfile” 的文件: The path relative to the build
   directory. If left blank, it defaults to a file named "Dockerfile" under the
   build directory
-"请输入镜像仓库，如：{0}": Please input the image repository, such as {0}
+'请输入镜像仓库，如：{0}': Please input the image repository, such as {0}
 用户名: Username
 密码: Password
 默认使用 values.yaml: Default to values.yaml
@@ -485,10 +476,9 @@ Helm chart 配置: Helm Chart Configuration
 登录: Login
 确认删除该实例: Confirm to delete this instance
 此操作将删除该实例，并调整实例数: This operation will delete this instance and adjust the number of instances
-此操作将删除以下实例，并调整实例数:
-  This operation will delete the following instances and adjust
+此操作将删除以下实例，并调整实例数: This operation will delete the following instances and adjust
   the number of instances
-"已选择以下 {0} 个实例": "The following {0} instances have been selected"
+'已选择以下 {0} 个实例': 'The following {0} instances have been selected'
 实例名称: Instance Name
 应用概览: Application Overview
 构建管理: Build Management
@@ -499,18 +489,18 @@ Helm chart 配置: Helm Chart Configuration
 离开将会导致未保存信息丢失: Leaving will result in the loss of unsaved information
 离开: Leave
 系统内置: Built in system
-"镜像地址，如：{0}": "Mirror address, such as {0}"
-"镜像名，如：{0}": "Mirror name, such as: {0}"
-"镜像 Tag，如：{0}": "Mirror Tag, such as: {0}"
-"镜像仓库，如：{0}": "Mirror repository, such as: {0}"
-"如：{0}": "such as: {0}"
-"包含镜像凭证的 {0} 名称": "Name of {0} containing mirror credentials"
+'镜像地址，如：{0}': 'Mirror address, such as {0}'
+'镜像名，如：{0}': 'Mirror name, such as: {0}'
+'镜像 Tag，如：{0}': 'Mirror Tag, such as: {0}'
+'镜像仓库，如：{0}': 'Mirror repository, such as: {0}'
+'如：{0}': 'such as: {0}'
+'包含镜像凭证的 {0} 名称': 'Name of {0} containing mirror credentials'
 修改环境变量: Modify environment variables
 仓库凭证: Git Credentials
 刷新列表: Refresh List
 命令参数: Command Parameters
 仅支持查看近期部署历史的 Values: Only recent deployment history Values are supported
-"在 Values 文件可通过表达式 {0} 引用{1}。": "{1} can be referenced in the Values file using the expression {0}."
+'在 Values 文件可通过表达式 {0} 引用{1}。': '{1} can be referenced in the Values file using the expression {0}.'
 镜像变量: Image Variables
 组件变量: Component Variables
 组件配置: Component Config
@@ -519,8 +509,7 @@ Helm chart 配置: Helm Chart Configuration
 策略: Strategy
 存储: Storage
 其他: Other
-应用必须且只有一个部署类组件，无法新增部署组件。:
-  The application must have only one deployment
+应用必须且只有一个部署类组件，无法新增部署组件。: The application must have only one deployment
   component and cannot add a deployment component.
 说明: Description
 重选: Re-select
@@ -542,7 +531,7 @@ yaml 文件路径: yaml FilePath
 知道了: Understood
 关闭: Close
 yaml 文件路径已更改: yaml FilePath has been changed
-"请检查并更新 {0} 文件中的相关路径指引": "Please check and update the relevant path guidance in the {0} file"
+'请检查并更新 {0} 文件中的相关路径指引': 'Please check and update the relevant path guidance in the {0} file'
 新增环境变量: Add Environment Variable
 新增成功: Added Successfully
 修改成功: Modified Successfully
@@ -562,22 +551,18 @@ yaml 文件路径已更改: yaml FilePath has been changed
 部署配置不能为空: Deployment configuration cannot be empty
 部署组件为必填: Deployment component is required
 未找到实例: Not found
-"可通过表达式 {0} 引用。": "Can be referenced via expression {0}."
-"搜索变量名、变量值、描述": Search by variable name, variable value, or description
-在环境上配置的组件需要应用主动引用才能生效:
-  Components configured in the environment require active
+'可通过表达式 {0} 引用。': 'Can be referenced via expression {0}.'
+'搜索变量名、变量值、描述': Search by variable name, variable value, or description
+在环境上配置的组件需要应用主动引用才能生效: Components configured in the environment require active
   referencing to take effect
 编辑组件实例: Edit component instance
-为应用创建独立的组件配置，所有环境都生效:
-  Create independent component configurations for the
+为应用创建独立的组件配置，所有环境都生效: Create independent component configurations for the
   application, effective for all environments
 使用空间上已配置好的组件: Use components configured in the workspace
-请确保组件已对目标环境可用，否则将会影响用户部署:
-  Make sure the component is available to the target
+请确保组件已对目标环境可用，否则将会影响用户部署: Make sure the component is available to the target
   environment, otherwise it will affect user deployment
 请输入 1-32 字符的环境展示名: Please enter a display name for the environment consisting of 1-32 characters
-请输入 1-20 个字符小写字母、数字、中划线，以小写字母开头，提交后不可修改:
-  Enter 1-20 characters lowercase
+请输入 1-20 个字符小写字母、数字、中划线，以小写字母开头，提交后不可修改: Enter 1-20 characters lowercase
   letters, numbers, hyphens, starting with a lowercase letter; immutable upon
   submission
 搜索制品、操作人: Search by artifact, operator
@@ -585,7 +570,7 @@ yaml 文件路径已更改: yaml FilePath has been changed
 回滚版本: Rollback Version
 移除: Remove
 确认移除部署？: Confirm removal of deployment?
-"成员：{0}": "Member {0}"
+'成员：{0}': 'Member {0}'
 空间设置: Space Settings
 开发者: Developer
 运营: Operations
@@ -613,65 +598,51 @@ yaml 文件路径已更改: yaml FilePath has been changed
 删除环境: Delete Environment
 资源类型: Resource Type
 确定删除该成员？: Are you sure you want to delete this member?
-删除后该用户将失去此空间的所有权限，请谨慎操作:
-  Once deleted, the user will lose all permissions for
+删除后该用户将失去此空间的所有权限，请谨慎操作: Once deleted, the user will lose all permissions for
   this space. Please be cautious.
-专注于应用开发和部署，可以创建和管理应用，部署环境，但无法管理空间和环境的配置:
-  Focus on application development and
+专注于应用开发和部署，可以创建和管理应用，部署环境，但无法管理空间和环境的配置: Focus on application development and
   deployment, can create and manage applications, deploy environments, but
   cannot manage space and environment configurations.
-负责环境运维管理，可以创建、编辑、删除环境，创建和管理应用，但无法删除应用和管理空间:
-  Responsible for environment
+负责环境运维管理，可以创建、编辑、删除环境，创建和管理应用，但无法删除应用和管理空间: Responsible for environment
   operation and maintenance management, can create, edit, and delete
   environments, create and manage applications, but cannot delete applications
   or manage spaces.
-仅具有只读权限，可以查看所有空间、应用和环境信息，但无法进行任何修改操作:
-  Has read-only permissions, can view all
+仅具有只读权限，可以查看所有空间、应用和环境信息，但无法进行任何修改操作: Has read-only permissions, can view all
   space, application, and environment information, but cannot perform any
   modification operations.
-可以创建和管理应用，部署和管理环境，但无法管理空间:
-  Can create and manage applications, deploy and manage
+可以创建和管理应用，部署和管理环境，但无法管理空间: Can create and manage applications, deploy and manage
   environments, but cannot manage spaces
-可以创建和管理应用，部署环境，同时具有全局查看权限，但无法管理空间和环境配置:
-  Can create and manage applications,
+可以创建和管理应用，部署环境，同时具有全局查看权限，但无法管理空间和环境配置: Can create and manage applications,
   deploy environments, and has global view permissions, but cannot manage spaces
   or environment configurations.
-可以创建、编辑、删除环境，创建和管理应用，同时具有全局查看权限，但无法删除应用和管理空间:
-  Can create, edit, and delete
+可以创建、编辑、删除环境，创建和管理应用，同时具有全局查看权限，但无法删除应用和管理空间: Can create, edit, and delete
   environments, create and manage applications, and has global view permissions,
   but cannot delete applications or manage spaces.
-可以创建和管理应用，管理环境，具有全局查看权限，但无法管理空间:
-  Can create and manage applications, manage
+可以创建和管理应用，管理环境，具有全局查看权限，但无法管理空间: Can create and manage applications, manage
   environments, have global viewing permissions, but cannot manage spaces
-请输入 2-32 字符的空间 ID，由小写字母、数字、中划线组成，以小写字母开头，提交后不可修改:
-  Please enter a space ID of
+请输入 2-32 字符的空间 ID，由小写字母、数字、中划线组成，以小写字母开头，提交后不可修改: Please enter a space ID of
   2-32 characters, consisting of lowercase letters, numbers, and a dash,
   starting with a lowercase letter. It cannot be modified after submission
 请输入 1-32 字符的空间名称: Please enter a space name of 1-32 characters
 请输入1-32字符的环境名称: Please enter an environment name of 1-32 characters
-只能包含小写字母、数字及中划线，必须以字母开头、以字母或数字结尾，长度限制20位以内:
-  Only lowercase letters, numbers, and
+只能包含小写字母、数字及中划线，必须以字母开头、以字母或数字结尾，长度限制20位以内: Only lowercase letters, numbers, and
   dashes can be included, must start with a letter, end with a letter or number,
   and the length limit is within 20
 容器项目来源: Container project source
-"平台自动创建容器项目 bkms-{0}": "Platform automatically creates container project bkms-{0}"
-仅能绑定具备运维权限的容器项目，并需同时拥有对应蓝盾项目的管理员权限:
-  Only container projects with operation and
+'平台自动创建容器项目 bkms-{0}': 'Platform automatically creates container project bkms-{0}'
+仅能绑定具备运维权限的容器项目，并需同时拥有对应蓝盾项目的管理员权限: Only container projects with operation and
   maintenance permissions can be bound, and corresponding administrator
   permissions for the Blue Shield project must also be obtained
 绑定已有项目: Bind existing projects
 绑定已有镜像仓库: Bind an existing image repository
 使用平台镜像仓库: Use the platform image repository
-平台提供的镜像仓库资源有限，不适合大规模镜像拉取，请谨慎选择。:
-  The image repository provided by the platform has limited resources and is unsuitable for large-scale image pulls. Please choose carefully.
-"在容器项目{0}的制品库中新建名为 repo 的 docker 仓库":
-  "Create a new Docker repository named repo
-  in the artifact library of container project {0}"
+平台提供的镜像仓库资源有限，不适合大规模镜像拉取，请谨慎选择。: The image repository provided by the platform has limited resources and is unsuitable for large-scale image pulls. Please choose carefully.
+'在容器项目{0}的制品库中新建名为 repo 的 docker 仓库': 'Create a new Docker repository named repo
+  in the artifact library of container project {0}'
 容器项目 ID: Container Project ID
 镜像命名空间: Mirror namespace
 镜像账号: Mirror account
-仅填写命名空间即可，创建应用的时候再填写具体的仓库名称:
-  Just fill in the namespace, and then fill in the
+仅填写命名空间即可，创建应用的时候再填写具体的仓库名称: Just fill in the namespace, and then fill in the
   specific repository name when creating the application
 填写示例: Fill in Example
 仓库名称: Git Name
@@ -687,7 +658,7 @@ yaml 文件路径已更改: yaml FilePath has been changed
 选择实例: Select instance
 请先完善组件配置: Please complete the component configuration first
 该组件无输出参数: This component has no output parameters
-"{0} 内容（只读，不可修改）": "{0} content (read-only, cannot be modified)"
+'{0} 内容（只读，不可修改）': '{0} content (read-only, cannot be modified)'
 （来源于 BSCP 的文件仅能查看，不能编辑）: (Files sourced from BSCP can only be viewed, not edited)
 '服务"{0}"未上线全量版本，请先将服务上线到全部实例。': Service "{0}" has no fully released version. Please complete the release to all instances first.
 '您没有服务 “{0}” 的权限，请重新选择': You do not have permission for service "{0}". Please select another service.
@@ -707,13 +678,11 @@ BSCP 配置内容非合法 YAML 格式，无法保存: The BSCP configuration co
   Enter 1-20 characters using lowercase letters, numbers, or hyphens. Start
   with a lowercase letter and do not end with a hyphen. This cannot be changed
   after submission.
-当前空间是绑定已有项目，而非平台新建的项目，暂不支持直接从源码仓库进行构建。:
-  The current space is bound to existing
+当前空间是绑定已有项目，而非平台新建的项目，暂不支持直接从源码仓库进行构建。: The current space is bound to existing
   projects, not newly created projects on the platform, and does not currently
   support building directly from the source code repository.
 仅可使用有全部实例上线版本的服务: Only services with all instances having an online version can be used
-接下来可在“应用编排”中重写 values，或继续创建应用:
-  Next, you can rewrite the values in "Application
+接下来可在“应用编排”中重写 values，或继续创建应用: Next, you can rewrite the values in "Application
   Choreography" or continue creating the application
 权限内容: Permission Content
 搜索用户名: Search Username
@@ -738,19 +707,16 @@ Helm 应用部署时需指定 values 文件（默认使用 chart 自带），用
 配置命令: Configuration Command
 执行结果: Execution Result
 编辑器: Editor
-请输入参数名和参数值，如 {0}，多个参数换行分隔:
-  Please enter parameter names and values, such as {0},
+请输入参数名和参数值，如 {0}，多个参数换行分隔: Please enter parameter names and values, such as {0},
   multiple parameters separated by line breaks
 表格模式: Table Mode
 文本模式: Text Mode
 参数名: Name
 参数值: Value
 执行结果为空: Execution result is empty
-请先选择命令，填写相应的参数，然后点击执行按钮发送请求:
-  Please select a command, enter the corresponding
+请先选择命令，填写相应的参数，然后点击执行按钮发送请求: Please select a command, enter the corresponding
   parameters, and then click the execute button to send a request
-使用管理命令，必须在 {app} 框架配置的 Server 下增加 admin 配置。:
-  Use management commands, you must
+使用管理命令，必须在 {app} 框架配置的 Server 下增加 admin 配置。: Use management commands, you must
   add admin configuration under the {app} framework configuration Server.
 执行成功: Execution succeeded
 执行失败: Execution failed
@@ -760,7 +726,7 @@ Helm 应用部署时需指定 values 文件（默认使用 chart 自带），用
 API 请求失败: API request failed
 默认分支: Default Branch
 集群资源: Cluster Resources
-"下一步：{0}": "Next step: {0}"
+'下一步：{0}': 'Next step: {0}'
 预览部署: Preview deployment
 预览更新: Preview updates
 新版本: New version
@@ -777,20 +743,19 @@ API 请求失败: API request failed
 操作后: After Operation
 请选择操作时间范围: Please select the operating time range
 确认移除部署: Confirm removal of deployment
-"将移除应用在「{0}」的全部实例，移除后": "All instances of the application on '{0}' will be removed; after removal"
+'将移除应用在「{0}」的全部实例，移除后': "All instances of the application on '{0}' will be removed; after removal"
 所有相关的 Pod 将被删除: All related Pods will be deleted
 应用服务将立即停止: The application service will be stopped immediately
 数据可能会丢失（ 如未持久化 ）: Data may be lost (such as not persisted)
-"该操作不可撤销，请输入应用名称：{0} 进行确认": "This operation cannot be undone. Please enter the application name {0} to confirm"
-"该操作不可撤销，请输入环境名称：{0} 进行确认": "This action is irreversible. Please enter the environment name: {0} to confirm"
-"{0}填写错误": "{0} filled in incorrectly"
+'该操作不可撤销，请输入应用名称：{0} 进行确认': 'This operation cannot be undone. Please enter the application name {0} to confirm'
+'该操作不可撤销，请输入环境名称：{0} 进行确认': 'This action is irreversible. Please enter the environment name: {0} to confirm'
+'{0}填写错误': '{0} filled in incorrectly'
 更新类型: Update Type
 实例扩缩容: Instance Scale
 仅更新容器镜像，不重建 Pod，更新速度更快: Only update container images, do not rebuild Pods, update faster
 应用的镜像来源为镜像仓库，无需执行构建: The application's image source is the image repository; no build is required
 不可回滚到当前版本: Cannot revert to the current version
-项目已被其他空间关联，无法重复关联:
-  The project is already associated with another space and
+项目已被其他空间关联，无法重复关联: The project is already associated with another space and
   cannot be associated again
 集群健康诊断: Cluster Health Diagnosis
 集群: Cluster
@@ -812,7 +777,7 @@ API 请求失败: API request failed
 致命: Fatal
 预警: Warning
 集群健康分数: Cluster Health Score
-"基于 {0} 个未恢复问题的综合评估": Comprehensive evaluation based on {0} unrecovered issues
+'基于 {0} 个未恢复问题的综合评估': Comprehensive evaluation based on {0} unrecovered issues
 已恢复问题: Recovered issue
 健康分: Health Score
 健康: Health
@@ -827,12 +792,11 @@ K8s 版本: K8s Version
 集群 CIDR: Cluster CIDR
 搜索问题关键词: Search for problem keywords
 集群诊断: Cluster Diagnosis
-"{count}天": "{count} day | {count} days "
-"{count}小时": "{count} hour | {count} hours "
-"{count}分钟": "{count} minute | {count} minutes "
-"{count}秒": "{count} second | {count} seconds "
-集群未正确安装 kubeinsight 组件，无法查看健康诊断结果:
-  Cluster not correctly installed kubeinsight
+'{count}天': '{count} day | {count} days '
+'{count}小时': '{count} hour | {count} hours '
+'{count}分钟': '{count} minute | {count} minutes '
+'{count}秒': '{count} second | {count} seconds '
+集群未正确安装 kubeinsight 组件，无法查看健康诊断结果: Cluster not correctly installed kubeinsight
   component, unable to view health diagnosis results
 所有级别: All Levels
 所有类型: All Types
@@ -856,19 +820,17 @@ K8s 版本: K8s Version
 更新内容: Update Content
 联邦集群不支持原地重启: Federated clusters do not support in-place restart.
 请选择镜像 Tag: Please select an image tag
-本次更新仅变更应用的配置信息（包括环境变量等），镜像 Tag 保持不变:
-  This update only changes the application
+本次更新仅变更应用的配置信息（包括环境变量等），镜像 Tag 保持不变: This update only changes the application
   configuration (including environment variables, etc.), the image tag remains
   unchanged
 本次更新仅变更镜像 Tag，应用的配置信息（包括环境变量等）保持不变。仅更新容器镜像，不重建 Pod，更新速度更快: This update changes only the image tag and keeps the application configuration (including environment variables) unchanged. It updates the container image without rebuilding Pods, so the update is faster.
-本次更新仅变更镜像 Tag，应用的配置信息（包括环境变量等）保持不变:
-  This update only changes the image tag, the
+本次更新仅变更镜像 Tag，应用的配置信息（包括环境变量等）保持不变: This update only changes the image tag, the
   application configuration (including environment variables, etc.) remains
   unchanged
 确认删除该环境变量？: Confirm to delete this environment variable?
 无集群资源信息: No cluster resource information available
 更新内容包含配置时，不支持原地更新: When the update content contains configuration, InplaceUpdate is not supported
-"共 {0} 个": "Total {0}"
+'共 {0} 个': 'Total {0}'
 命名空间: Namespace
 环境展示名: Environment Display Name
 请选择容器项目: Please select a container project
@@ -887,31 +849,27 @@ K8s 版本: K8s Version
 端口名称不能为空: Port name cannot be empty
 端口范围为 1-65535: Port range is 1-65535
 至少保留一个: At least one must be retained
-以小写字母开头，只能包含小写字母、数字和连字符，长度 1-63 个字符:
-  Start with a lowercase letter, can only
+以小写字母开头，只能包含小写字母、数字和连字符，长度 1-63 个字符: Start with a lowercase letter, can only
   contain lowercase letters, numbers and hyphens, length 1-63 characters
 确认删除该服务？: Confirm to delete this service?
 删除后，不可恢复，请谨慎操作！: Once deleted, it cannot be recovered. Please operate with caution!
 暂无服务: No service available
 搜索结果为空: Search result is empty
-"如果应用需要使用泳道做全链路灰度发布，则必须添加一个 Service，并设置为泳道服务（目前创建的 Service 默认为泳道服务）":
-  "If the application needs to use swimlane for full-link grayscale release, a
+'如果应用需要使用泳道做全链路灰度发布，则必须添加一个 Service，并设置为泳道服务（目前创建的 Service 默认为泳道服务）':
+  'If the application needs to use swimlane for full-link grayscale release, a
   Service must be added and set as a swimlane service (currently created
-  Services are swimlane services by default)"
-请输入 20 个字符以内的小写字母、数字和中划线，以小写字母开头:
-  20 characters or less, lowercase letters,
+  Services are swimlane services by default)'
+请输入 20 个字符以内的小写字母、数字和中划线，以小写字母开头: 20 characters or less, lowercase letters,
   numbers and hyphens, starting with a lowercase letter
-请输入 1-27 字符的空间 ID，由小写字母、数字、中划线组成，以小写字母开头，提交后不可修改:
-  1-27 characters, lowercase
+请输入 1-27 字符的空间 ID，由小写字母、数字、中划线组成，以小写字母开头，提交后不可修改: 1-27 characters, lowercase
   letters, numbers and hyphens, starting with a lowercase letter
 部署中: Deploying
 部署失败: Deploy failed
-请输入 1-63 个字符服务名称，只能包含小写字母、数字和连字符，以小写字母开头:
-  please enter a service name of 1-63
+请输入 1-63 个字符服务名称，只能包含小写字母、数字和连字符，以小写字母开头: please enter a service name of 1-63
   characters, which can only contain lowercase letters, numbers, and hyphens,
   and must start with a lowercase letter
 部署规格: Deployment specifications
-"{0} 核": "{0} core | {0} cores"
+'{0} 核': '{0} core | {0} cores'
 内存: Memory
 最多新增实例数: Maximum number of newly added instances
 最多停止实例数: Maximum number of stopped instances
@@ -919,18 +877,16 @@ K8s 版本: K8s Version
 Request为最小值，Limit为最大值: Request is the minimum value, Limit is the maximum value
 更新策略: Update Strategy
 不能为空: cannot be empty
-在滚动更新期间，允许超出原定副本数额外创建的新 Pod 的最大数量:
-  The maximum number of new Pods allowed to be
+在滚动更新期间，允许超出原定副本数额外创建的新 Pod 的最大数量: The maximum number of new Pods allowed to be
   created beyond the original replica amount during rolling updates
-在滚动更新期间，允许同时不可用的 Pod 的最大数量:
-  The maximum number of Pods that are allowed to be
+在滚动更新期间，允许同时不可用的 Pod 的最大数量: The maximum number of Pods that are allowed to be
   unavailable simultaneously during a rolling update period
 最大不可用数量: Maximum Unavailable Quantity
 最大超出数量: Maximum Excess Quantity
 请输入非负整数或百分比: Please enter a non-negative integer or percentage
 请输入正整数: Please enter a positive integer
 确认删除该组件？: Confirm to delete this component?
-"组件名称: {name}": "Component Name: {name}"
+'组件名称: {name}': 'Component Name: {name}'
 新建组件: Create Component
 使用范围: Usage Scope
 请输入组件ID: Please enter component ID
@@ -938,8 +894,7 @@ Request为最小值，Limit为最大值: Request is the minimum value, Limit is 
 仅本空间可见: Visible only in this space
 所有空间可见: Visible to all spaces
 泳道应用: Lane Application
-（建议基线泳道应当包含全部应用，后续特性泳道将基于该范围创建）:
-  (It is recommended that the baseline lane
+（建议基线泳道应当包含全部应用，后续特性泳道将基于该范围创建）: (It is recommended that the baseline lane
   should include all applications, and subsequent feature lanes will be created
   based on this range)
 特性泳道: Characteristic Lane
@@ -947,11 +902,10 @@ Request为最小值，Limit为最大值: Request is the minimum value, Limit is 
 长度限制: Length limit
 首尾字符: First and last characters
 中间字符: Middle character
-"最多 {0} 个字符": "Up to {0} characters"
+'最多 {0} 个字符': 'Up to {0} characters'
 必须以字母或数字（[a-zA-Z0-9]）开头和结尾: Must start and end with a letter or number ([a-zA-Z0-9])
 存在特性泳道的情况下，不支持删除基线泳道: When there are characteristic lanes, deleting baseline lanes is not supported
-存在特性泳道的情况下，不支持停用基线泳道:
-  When there are characteristic lanes, it is not supported
+存在特性泳道的情况下，不支持停用基线泳道: When there are characteristic lanes, it is not supported
   to disable baseline lanes
 泳道名称格式不正确: The format of the lane name is incorrect
 预留: Reserve
@@ -963,19 +917,16 @@ Request为最小值，Limit为最大值: Request is the minimum value, Limit is 
 测试环境: Test
 开发环境: Development
 可用环境: Available Environment
-通过组件可以灵活修改应用的 Kubernetes 资源配置，如调整参数、添加网络策略等。:
-  Through components, you can
+通过组件可以灵活修改应用的 Kubernetes 资源配置，如调整参数、添加网络策略等。: Through components, you can
   flexibly modify the Kubernetes resource configuration of the application, such
   as adjusting parameters, adding network policies, etc.
 确定删除该实例？: Are you sure to delete this instance?
 已使用的应用: Used Applications
 配置内容: Configuration Content
-在空间上配置的组件需要应用主动引用才能生效:
-  Components configured on the workspace need to be
+在空间上配置的组件需要应用主动引用才能生效: Components configured on the workspace need to be
   actively referenced by applications to take effect
 组件已被应用使用，不支持删除: The component has been used by the application and cannot be deleted
-以字母开头，可包含字母、数字、中划线，长度2-20位:
-  Starts with a letter, may include letters, numbers,
+以字母开头，可包含字母、数字、中划线，长度2-20位: Starts with a letter, may include letters, numbers,
   and hyphens, length 2-20 characters
 组件实例: Component Instance
 引用空间组件实例: Reference Space Component Instance
@@ -984,12 +935,11 @@ Request为最小值，Limit为最大值: Request is the minimum value, Limit is 
 已添加实例: Added Instance
 网络: Network
 仅支持实例状态为 Running、Pending 的实例: Only instances with status Running or Pending are supported
-不支持全量删除实例，如需全量删除可以直接移除部署:
-  Does not support full deletion of instances; for full
+不支持全量删除实例，如需全量删除可以直接移除部署: Does not support full deletion of instances; for full
   deletion, you can directly remove the deployment
-"已跨页全选 “{0}” 条，": "Cross-page selected {0} entries,"
-"已选择 “{0}” 条，": "Selected {0} entries,"
-"选择所有页共 {0} 条": "Select all pages, total of {0} entries"
+'已跨页全选 “{0}” 条，': 'Cross-page selected {0} entries,'
+'已选择 “{0}” 条，': 'Selected {0} entries,'
+'选择所有页共 {0} 条': 'Select all pages, total of {0} entries'
 跨页全选: Select All Pages
 取消选择: Deselect
 本页全选: Select Current Page
@@ -997,7 +947,7 @@ Request为最小值，Limit为最大值: Request is the minimum value, Limit is 
 搜索环境名称: Search Environment Name
 组件视角: Component View
 环境视角: Environment View
-"可以尝试 调整关键词 或 {0}": "You can try adjusting keywords or {0}"
+'可以尝试 调整关键词 或 {0}': 'You can try adjusting keywords or {0}'
 刷新: Refresh
 立即刷新: Refresh Now
 清空筛选条件: Clear filtering criteria
@@ -1010,14 +960,11 @@ Request为最小值，Limit为最大值: Request is the minimum value, Limit is 
 查看凭证: View Certificate
 北极星服务名: Polaris Service Name
 北极星环境类型: Polaris Environment Type
-请输入1-20 字符的实例名称，包含字母、数字、下划线:
-  Please enter an instance name of 1-20 characters,
+请输入1-20 字符的实例名称，包含字母、数字、下划线: Please enter an instance name of 1-20 characters,
   including letters, numbers, and underscores
-"服务端口会写入到应用的环境变量 {0}_serviceport 中":
-  "The service port will be written to the
+'服务端口会写入到应用的环境变量 {0}_serviceport 中': "The service port will be written to the
   application's environment variables {0}_serviceport In the middle"
-将北极星相关的凭证信息通过环境变量注入到哪些环境中:
-  Inject the credential information related to the
+将北极星相关的凭证信息通过环境变量注入到哪些环境中: Inject the credential information related to the
   Polaris into which environments through environment variables
 预发布环境: Pre-release Environment
 正式环境: Production Environment
@@ -1026,27 +973,26 @@ Request为最小值，Limit为最大值: Request is the minimum value, Limit is 
 从现有引入: Import from Existing
 北极星Token: Polaris Token
 请输入北极星Token: Please enter Polaris Token
-"配置已保存，需重新部署后生效": "Configuration saved. Redeploy to make it effective"
-"你修改了以下配置，这些变更需要": "You changed the following configuration. These changes need "
-"后才会真正生效：": " to take effect:"
-"待部署的环境（{0}）": "Environments to deploy ({0})"
-"请点击以下部署链接进行部署，或前往": "Click a deployment link below, or go to "
-"「部署管理」": "Deployment Management"
-"选择对应环境执行部署；": " and select the corresponding environment;"
-"本次操作会记录在部署历史中，可追溯、可回滚；": "This operation will be recorded in deployment history for traceability and rollback;"
+'配置已保存，需重新部署后生效': 'Configuration saved. Redeploy to make it effective'
+'你修改了以下配置，这些变更需要': 'You changed the following configuration. These changes need '
+'后才会真正生效：': ' to take effect:'
+'待部署的环境（{0}）': 'Environments to deploy ({0})'
+'请点击以下部署链接进行部署，或前往': 'Click a deployment link below, or go to '
+'「部署管理」': 'Deployment Management'
+'选择对应环境执行部署；': ' and select the corresponding environment;'
+'本次操作会记录在部署历史中，可追溯、可回滚；': 'This operation will be recorded in deployment history for traceability and rollback;'
 待部署生效: Pending deployment
 重新部署应用: Redeploy Application
 您修改了北极星配置信息，以上环境需要重新部署应用后方可生效: You have modified Polaris configuration. The above environments require redeployment to take effect.
-"您修改了以下内容，需要重新部署应用后方可生效：": "You have modified the following content. Redeployment is required for the changes to take effect:"
+'您修改了以下内容，需要重新部署应用后方可生效：': 'You have modified the following content. Redeployment is required for the changes to take effect:'
 权重: Weight
 权重因子: Weight Factor
-"按实例机型动态分配流量。开启后，可在关联环境中打开「动态权重」": Dynamically distribute traffic based on instance machine type. After enabling it, you can enable Dynamic Weight in associated environments.
+'按实例机型动态分配流量。开启后，可在关联环境中打开「动态权重」': Dynamically distribute traffic based on instance machine type. After enabling it, you can enable Dynamic Weight in associated environments.
 北极星负责人: Polaris Owner
 请输入负责人: Please enter owner
 服务标签: Service Labels
-"服务标签支持通过表达式 {0} 引用环境变量":
-  "Service labels support referencing environment
-  variables through expression {0}"
+'服务标签支持通过表达式 {0} 引用环境变量': 'Service labels support referencing environment
+  variables through expression {0}'
 实例名称不能为空: Instance name cannot be empty
 请输入1-65535之间的端口号: Please enter a port number between 1-65535
 北极星Token不能为空: Polaris Token cannot be empty
@@ -1057,20 +1003,17 @@ Request为最小值，Limit为最大值: Request is the minimum value, Limit is 
 所有SRE: All SREs
 所有开发者: All Developers
 该角色下暂无成员: No members in this role
-凭证信息会写入到应用环境变量中:
-  The credential information will be written into the application
+凭证信息会写入到应用环境变量中: The credential information will be written into the application
   environment variable
-"该配置为立即生效，凭证不会写入应用环境变量。如需查看北极星 Token，请到北极星控制台查看（仅北极星负责人可见）。":
+'该配置为立即生效，凭证不会写入应用环境变量。如需查看北极星 Token，请到北极星控制台查看（仅北极星负责人可见）。':
   This configuration takes effect immediately, so credentials are not written to application environment variables.
   To view the Polaris token, go to the Polaris console (visible only to Polaris owners).
 前往北极星: Go to Polaris
 敏感字段，仅支持在应用环境变量中获取: Sensitive field, only available in application environment variables
-请输入数字、英文字母、.、-、_，长度不超过128个字符:
-  Please enter numbers, English letters , -, _, with
+请输入数字、英文字母、.、-、_，长度不超过128个字符: Please enter numbers, English letters , -, _, with
   a length not exceeding 128 characters
 数值越大权重越高: The higher the numerical value, the greater the weight
-实例名称格式不正确，长度范围1~20个字符，且以字母开头，只能包含字母、数字、下划线:
-  The instance name format is
+实例名称格式不正确，长度范围1~20个字符，且以字母开头，只能包含字母、数字、下划线: The instance name format is
   incorrect. It must be between 1 and 20 characters long, start with a letter,
   and can only contain letters, numbers, and underscores.
 确认删除该配置吗？: Are you sure to delete the configuration?
@@ -1084,15 +1027,12 @@ Request为最小值，Limit为最大值: Request is the minimum value, Limit is 
 未修改: Unmodified
 实例数不能小于1: The number of instances cannot be less than 1
 请输入大于或等于 1 的整数: Please enter an integer greater than or equal to 1
-实例删除后副本数已变为 0，请填写期望实例数后重新部署:
-  All instances have been deleted and the replica count is now 0. Enter the desired number of instances and redeploy.
-在滚动更新期间,允许超出原定副本数额外创建的新 Pod 的最大数量:
-  During rolling updates, the maximum number of
+实例删除后副本数已变为 0，请填写期望实例数后重新部署: All instances have been deleted and the replica count is now 0. Enter the desired number of instances and redeploy.
+在滚动更新期间,允许超出原定副本数额外创建的新 Pod 的最大数量: During rolling updates, the maximum number of
   additional new Pods that can be created beyond the original replica count
-"{0} {1} 个实例": "{0} {1} instances"
+'{0} {1} 个实例': '{0} {1} instances'
 全部应用（包括后续动态变化部分）: All applications (including dynamically added ones)
-允许包含破折号（-）、下划线（_）、点（.）以及字母数字:
-  Allow to include dashes (-), underscores (_), dots
+允许包含破折号（-）、下划线（_）、点（.）以及字母数字: Allow to include dashes (-), underscores (_), dots
   (.), and alphanumeric characters
 添加成功: Add successfully
 请输入关键字: Please enter keywords
@@ -1108,20 +1048,18 @@ Request为最小值，Limit为最大值: Request is the minimum value, Limit is 
 网络接入: Network Access
 VPC 网络（underlay）: VPC Network (underlay)
 为容器分配 VPC IP，可以腾讯自研云（IDC）直接互通: Assigns VPC IPs to containers for direct connectivity with Tencent's internal cloud (IDC)
-"开启后部署时自动为工作负载注入 annotation {0}。": "After it is enabled, the annotation {0} is automatically injected into the workload during deployment."
+'开启后部署时自动为工作负载注入 annotation {0}。': 'After it is enabled, the annotation {0} is automatically injected into the workload during deployment.'
 确认启用 VPC 网络？: Confirm enabling the VPC network?
 启用后，需要重新部署应用才能生效。: After enabling, redeploy the application for the change to take effect.
 确认禁用 VPC 网络？: Confirm disabling the VPC network?
 禁用后，需要重新部署应用才能生效。: After disabling, redeploy the application for the change to take effect.
-支持通过 bkms-cli 上传二进制的方式热更新服务，更新过程不会重启容器实例。:
-  Support hot-reloading services by
+支持通过 bkms-cli 上传二进制的方式热更新服务，更新过程不会重启容器实例。: Support hot-reloading services by
   uploading binaries via bkms-cli without restarting container instances.
 查看详细文档: View Documentation
 当前环境: Current Environment
 确认开启开发模式？: Confirm to enable Dev Mode?
 确认关闭开发模式？: Confirm to disable Dev Mode?
-开启后，允许通过 bkms-cli 上传二进制到应用实例中进行调试:
-  After enabling, it allows uploading binary
+开启后，允许通过 bkms-cli 上传二进制到应用实例中进行调试: After enabling, it allows uploading binary
   files to application instances for debugging via bkms-cli
 请注意: Please Note
 该模式会在 Pod 中注入管理脚本: This mode will inject management scripts into the Pod
@@ -1145,24 +1083,20 @@ Pod 中的管理脚本将在重新部署后移除: Management scripts in the Pod
 开启后，暂不支持关闭: Once enabled, it cannot be disabled
 编辑 Yaml: Edit Yaml
 确认开启环境配置？: Confirm to enable environment configuration?
-开启后，将无法再切回默认模式，请谨慎操作！:
-  After activation, it will no longer be possible to switch
+开启后，将无法再切回默认模式，请谨慎操作！: After activation, it will no longer be possible to switch
   back to the default mode. Please operate with caution!
 完整配置: Complete Configuration
-所有环境的基准配置，修改后对所有环境生效。:
-  The baseline configuration for all environments, after
+所有环境的基准配置，修改后对所有环境生效。: The baseline configuration for all environments, after
   modification, will take effect for all environments.
-仅定义差异项，与默认配置合并后生成完整配置。:
-  Only define differential items and merge them with the
+仅定义差异项，与默认配置合并后生成完整配置。: Only define differential items and merge them with the
   default configuration to generate a complete configuration.
 合并后的完整内容，仅供查看: Merged full content, for viewing only
 值会通过变量 {0} 传给流水线: The value will be passed to the pipeline via variable {0}
 查看操作指引: View Operation Guide
-需要保证流水线会将构建的镜像推送到当前空间的镜像仓库下:
-  Ensure that the pipeline pushes the built image to
+需要保证流水线会将构建的镜像推送到当前空间的镜像仓库下: Ensure that the pipeline pushes the built image to
   the image repository of the current space
 查看解决方案: View solutions
-"{0} Limits 不能小于 Requests": "{0} Limits cannot be less than Requests"
+'{0} Limits 不能小于 Requests': '{0} Limits cannot be less than Requests'
 格式化: Format
 框架配置文件: Framework Configuration File
 配置文件路径: Configuration File Path
@@ -1188,49 +1122,44 @@ TAEF 应用: TAEF Application
 版本规则: Version Rule
 自定义版本: Custom Version
 自定义前缀: Custom Prefix
-"语义化版本（格式：v1.0.0）": "Semantic Version (Format: v1.0.0)"
-"构建时间（示例：master-202510151300）": "Build Time (Example: master-202510151300)"
-"语义化版本（格式为：主版本.特性版本.修正版本，示例：1.0.1）": "Semantic Version (Format: major.minor.patch, Example: 1.0.1)"
+'语义化版本（格式：v1.0.0）': 'Semantic Version (Format: v1.0.0)'
+'构建时间（示例：master-202510151300）': 'Build Time (Example: master-202510151300)'
+'语义化版本（格式为：主版本.特性版本.修正版本，示例：1.0.1）': 'Semantic Version (Format: major.minor.patch, Example: 1.0.1)'
 执行构建: Execute Build
 构建失败，已有应用构建任务进行中: Build failed, an application build task is already in progress
-"(示例：{0})": "(Example: {0})"
-"admin.ip 当前值不合法，仅支持 127.0.0.1、0.0.0.0 或 {0}":
-  "The current value of admin.ip is
-  invalid, only 127.0.0.1, 0.0.0.0 or {0} are supported"
-"admin.ip 配置为 {0} 时，将无法使用「部署管理 - 管理命令」功能。如需使用，请替换为 127.0.0.1（仅 Pod 内访问）或 0.0.0.0（IDC 内访问）。":
+'(示例：{0})': '(Example: {0})'
+'admin.ip 当前值不合法，仅支持 127.0.0.1、0.0.0.0 或 {0}': 'The current value of admin.ip is
+  invalid, only 127.0.0.1, 0.0.0.0 or {0} are supported'
+'admin.ip 配置为 {0} 时，将无法使用「部署管理 - 管理命令」功能。如需使用，请替换为 127.0.0.1（仅 Pod 内访问）或 0.0.0.0（IDC 内访问）。':
   'When admin.ip is configured as {0}, the "Deployment Management - Manage
   Command" feature will not be available. If needed, please replace it with
   127.0.0.1 (Pod internal access only) or 0.0.0.0 (IDC access).'
 确定删除应用: Confirm Delete Application
-删除应用后，所有相关的配置、部署信息和操作记录将永久丢失:
-  All related configurations, deployment
+删除应用后，所有相关的配置、部署信息和操作记录将永久丢失: All related configurations, deployment
   information, and operation records will be permanently lost after deleting the
   application
 实例数量: Instance Count
 自动创建: Auto Create
 自动创建独立 APM 实例，适用于大多数场景: Automatically create an independent APM instance, suitable for most scenarios
 关联已有 APM: Associate Existing APM
-关联到同一环境分类下已有的 APM 实例，适用于多个环境共用 APM 场景:
-  Associate with an existing APM instance
+关联到同一环境分类下已有的 APM 实例，适用于多个环境共用 APM 场景: Associate with an existing APM instance
   under the same environment category, suitable for scenarios where multiple
   environments share APM
 选择 APM 实例: Select APM Instance
 请选择 APM 实例: Please select an APM instance
 独占: Exclusive
-"共享中，关联{n}个环境": "Sharing, associated with {n} environments"
+'共享中，关联{n}个环境': 'Sharing, associated with {n} environments'
 APM 实例: APM Instance
 切换 APM 实例: Switch APM Instance
 共享: Shared
-"该 APM 实例仅当前环境使用。": "This APM instance is used exclusively by the current environment."
-"该实例被以下环境共享：{names}。": "This instance is shared by the following environments: {names}."
+'该 APM 实例仅当前环境使用。': 'This APM instance is used exclusively by the current environment.'
+'该实例被以下环境共享：{names}。': 'This instance is shared by the following environments: {names}.'
 当前环境暂无关联的 APM 实例。: No APM instance is associated with the current environment.
-"切换 APM 实例将产生以下影响，": "Switching APM instance will have the following impacts, "
+'切换 APM 实例将产生以下影响，': 'Switching APM instance will have the following impacts, '
 请谨慎操作!: Please proceed with caution!
-当前环境的 APM Token 环境变量将被替换为目标实例的值:
-  The APM Token environment variable of the
+当前环境的 APM Token 环境变量将被替换为目标实例的值: The APM Token environment variable of the
   current environment will be replaced with the value of the target instance
-切换后新产生的观测数据将上报到新的 APM 实例，历史数据不会迁移:
-  Newly generated observability data will be
+切换后新产生的观测数据将上报到新的 APM 实例，历史数据不会迁移: Newly generated observability data will be
   reported to the new APM instance after switching, historical data will not be
   migrated
 运行中的服务需要重新部署后新配置才会生效: Running services need to be redeployed for the new configuration to take effect
@@ -1247,78 +1176,70 @@ APM 实例: APM Instance
 启动配置: Startup Configuration
 文件信息: File Information
 文件内容: File Content
-"环境：{0}": "Environment: {0}"
-"默认值：{0}": "Default Value: {0}"
-"全局配置跨环境共享，请先将环境视角切换到「默认配置」后再修改":
+'环境：{0}': 'Environment: {0}'
+'默认值：{0}': 'Default Value: {0}'
+'全局配置跨环境共享，请先将环境视角切换到「默认配置」后再修改':
   Global configuration is shared across environments. Please switch the
   environment view to "Default Configuration" before making changes
-"全局：所有环境共用，不可按环境修改。": "Global: Shared by all environments, cannot be modified per environment."
-"按环境：继承默认配置，支持按环境单独覆盖。":
-  "Per-Environment: Inherits default configuration,
-  supports individual override per environment."
-"带 {0} 标记的字段已脱离继承，不再跟随默认配置变更。":
-  "Fields marked with {0} have detached from
-  inheritance and will no longer follow default configuration changes."
+'全局：所有环境共用，不可按环境修改。': 'Global: Shared by all environments, cannot be modified per environment.'
+'按环境：继承默认配置，支持按环境单独覆盖。': 'Per-Environment: Inherits default configuration,
+  supports individual override per environment.'
+'带 {0} 标记的字段已脱离继承，不再跟随默认配置变更。': 'Fields marked with {0} have detached from
+  inheritance and will no longer follow default configuration changes.'
 本空间: This Space
 内置: Built-in
 其他空间共享: Shared by Other Spaces
-"内置 & 共享": Built-in & Shared
-"来自「{space}」": "From「{space}」"
-"内置组件，不可编辑": "Built-in component, not editable"
+'内置 & 共享': Built-in & Shared
+'来自「{space}」': 'From「{space}」'
+'内置组件，不可编辑': 'Built-in component, not editable'
 健康检查: Health Check
 已开启: Enabled
 未启用: Disabled
-开启后将自动上报 tRPC 服务的健康状态到北极星:
-  After enabling, the health status of the tRPC service
+开启后将自动上报 tRPC 服务的健康状态到北极星: After enabling, the health status of the tRPC service
   will be automatically reported to Polaris
 生效方式: Effective Mode
 请选择生效方式: Please select the effective mode
 立即生效: Effective Immediately
 下次部署生效: Effective on Next Deployment
 生效方式创建后不可修改。切换后环境变量会突然出现或消失，可能影响已运行的实例。: The effective mode cannot be modified after creation. Switching it would make environment variables suddenly appear or disappear, which may affect running instances.
-"部署后才将实例注册到北极星，同时注入北极星 Token、服务端口等内容到应用环境变量中": "Instances are registered to Polaris only after deployment, and the Polaris token, service port, and related values are injected into the application's environment variables"
+'部署后才将实例注册到北极星，同时注入北极星 Token、服务端口等内容到应用环境变量中': "Instances are registered to Polaris only after deployment, and the Polaris token, service port, and related values are injected into the application's environment variables"
 实例何时注册、摘除北极星，还受生命周期和健康探针影响: When Polaris instances are registered or deregistered is also affected by lifecycle and health probes
 立即生效时，服务端口不会写入环境变量: In immediate mode, the service port is not written to environment variables
 平台会自动在框架配置文件追加服务注册信息，由 tRPC 框架自动完成心跳上报:
   The platform will append the service registration to the framework config file,
   and the tRPC framework will report heartbeats automatically
-"需要业务主动完成心跳上报 {0}": The application must report heartbeats itself {0}
+'需要业务主动完成心跳上报 {0}': The application must report heartbeats itself {0}
 参考文档: See documentation
-需要在框架配置文件的 server.service 中包含该北极星服务名，健康检查才会生效：:
-  "The Polaris service name must
+需要在框架配置文件的 server.service 中包含该北极星服务名，健康检查才会生效：: 'The Polaris service name must
   be included in server.service of the framework configuration file for health
-  check to take effect:"
+  check to take effect:'
 北极星服务名需与此处一致: Polaris service name must be consistent with here
 如果要开启健康检查，配置文件中要写有北极星的名称: To enable health check, the configuration file must contain the Polaris name
-"停止等待时间 {0} 秒": "Sleep {0} seconds before stopping"
-"默认值：停止等待时间 {0} 秒": "Default: Sleep {0} seconds before stopping"
+'停止等待时间 {0} 秒': 'Sleep {0} seconds before stopping'
+'默认值：停止等待时间 {0} 秒': 'Default: Sleep {0} seconds before stopping'
 生命周期: Lifecycle
 按环境: Per-Environment
-"退出前命令 (preStop)": "Pre-stop Command (preStop)"
+'退出前命令 (preStop)': 'Pre-stop Command (preStop)'
 优雅退出时间: Graceful Termination Period
-"优雅退出时间 (terminationGracePeriodSeconds)": "Graceful Termination Period (terminationGracePeriodSeconds)"
+'优雅退出时间 (terminationGracePeriodSeconds)': 'Graceful Termination Period (terminationGracePeriodSeconds)'
 停止等待时间: Sleep Before Stop
 自定义命令: Custom Command
 秒: s
-容器终止前执行的命令，常用于优雅退出场景，如等待北极星权重变更在主调方生效。:
-  Command executed before container
+容器终止前执行的命令，常用于优雅退出场景，如等待北极星权重变更在主调方生效。: Command executed before container
   termination, commonly used for graceful shutdown scenarios, such as waiting
   for Polaris weight changes to take effect on the caller side.
-等待 preStop 执行的最大时间，时间超过而 preStop 未执行完时，将强制杀死容器:
-  Maximum time to wait for preStop
+等待 preStop 执行的最大时间，时间超过而 preStop 未执行完时，将强制杀死容器: Maximum time to wait for preStop
   execution. If preStop has not completed when the time expires, the container
   will be forcefully killed.
-"默认值：未启用": "Default: Not Enabled"
+'默认值：未启用': 'Default: Not Enabled'
 健康探针: Health Probes
 存活探针: Liveness Probe
 就绪探针: Readiness Probe
 启动探针: Startup Probe
-用于检测容器是否存活，探测失败时 kubelet 将杀死容器并根据重启策略处理。:
-  Detects whether the container is
+用于检测容器是否存活，探测失败时 kubelet 将杀死容器并根据重启策略处理。: Detects whether the container is
   alive. On probe failure, kubelet will kill the container and handle it
   according to the restart policy.
-用于检测容器是否可以接收流量，探测失败时 Service 将移除该 Pod 的 Endpoint。:
-  Detects whether the container
+用于检测容器是否可以接收流量，探测失败时 Service 将移除该 Pod 的 Endpoint。: Detects whether the container
   is ready to receive traffic. On probe failure, the Service will remove the
   Pod's Endpoint.
 需配置就绪探测后才可配置启动探测: Startup probe can only be configured after readiness probe is configured
@@ -1326,12 +1247,12 @@ APM 实例: APM Instance
   Detects whether the container has started successfully. If not, the container
   will be restarted. Startup probe runs at the configured frequency after the
   first start or container restart, and stops after a successful probe.
-"默认值：未配置": "Default: Not Configured"
+'默认值：未配置': 'Default: Not Configured'
 探测方法: Probe Method
 检查端口: Check Port
 执行命令: Exec Command
 检查路径: Check Path
-请输入，如 /healthz: "Please enter, e.g. /healthz"
+请输入，如 /healthz: 'Please enter, e.g. /healthz'
 延迟探测时间: Initial Delay
 探测超时时间: Timeout
 探测频率: Period
@@ -1339,49 +1260,42 @@ APM 实例: APM Instance
 连续探测失败次数: Failure Threshold
 检查路径不能为空: Check path cannot be empty
 请输入 1-65535 之间的端口号: Please enter a port number between 1-65535
-"不能小于 {0}": "Cannot be less than {0}"
+'不能小于 {0}': 'Cannot be less than {0}'
 已启用: Enabled
 次: time(s)
-"确认停用 “{0}” ？": 'Confirm to disable "{0}"?'
+'确认停用 “{0}” ？': 'Confirm to disable "{0}"?'
 会同步停用 "启动探针" 请确认: Startup probe will also be disabled, please confirm
 尚未配置: Not configured
 立即配置: Configure now
 启动探针需依赖就绪探针开启后方可配置: Startup probe requires readiness probe to be enabled first
 确认恢复: Confirm Restore
 确认恢复默认配置？: Confirm to restore default configuration?
-"恢复默认配置将停用就绪探针，会同步停用 “启动探针” 请确认":
-  Restoring default configuration will disable
+'恢复默认配置将停用就绪探针，会同步停用 “启动探针” 请确认': Restoring default configuration will disable
   readiness probe, and startup probe will also be disabled, please confirm
-检测容器是否存活，探测失败时 kubelet 将杀死容器并根据重启策略处理。:
-  Detects whether the container is alive.
+检测容器是否存活，探测失败时 kubelet 将杀死容器并根据重启策略处理。: Detects whether the container is alive.
   On probe failure, kubelet will kill the container and handle it according to
   the restart policy.
-检测容器是否准备好接收流量，探测失败时 Service 将移除该 Pod 的 Endpoint。:
-  Detects whether the container
+检测容器是否准备好接收流量，探测失败时 Service 将移除该 Pod 的 Endpoint。: Detects whether the container
   is ready to receive traffic. On probe failure, the Service will remove the
   Pod's Endpoint.
-检测容器内应用是否已完成启动，成功前其余探针均不生效，探测失败时将杀死容器并重启。:
-  Detects whether the application in
+检测容器内应用是否已完成启动，成功前其余探针均不生效，探测失败时将杀死容器并重启。: Detects whether the application in
   the container has finished starting. Other probes will not take effect until
   successful. On probe failure, the container will be killed and restarted.
 暂无可用的环境: No Available Environment
-环境必须先配置集群资源后才能部署应用:
-  Environments must be configured with cluster resources
+环境必须先配置集群资源后才能部署应用: Environments must be configured with cluster resources
   before deploying applications
 前往配置: Go to Configuration
 已部署环境: Deployed Environment
 未设置: Not Set
-"搜索空间ID、名称": Search Space ID or Name
-"共 {0} 个应用": "{0} Applications in Total"
+'搜索空间ID、名称': Search Space ID or Name
+'共 {0} 个应用': '{0} Applications in Total'
 欢迎回到蓝鲸服务治理平台: Welcome back to BlueKing Service Governance Platform
 欢迎使用蓝鲸服务治理平台: Welcome to BlueKing Service Governance Platform
-一站式应用全生命周期管理服务，从开发、构建、部署到运维的完整解决方案:
-  One-stop application lifecycle management
+一站式应用全生命周期管理服务，从开发、构建、部署到运维的完整解决方案: One-stop application lifecycle management
   service, providing a complete solution from development and build to
   deployment and operations
 全流程自动化: End-to-End Automation
-打通代码构建、部署到运维观测的完整闭环:
-  A complete closed loop connecting code build, deployment,
+打通代码构建、部署到运维观测的完整闭环: A complete closed loop connecting code build, deployment,
   and operational observability
 深度生态集成: Deep Ecosystem Integration
 集成配置管理、服务发现、全链路追踪: Integrates configuration management, service discovery, and end-to-end tracing
@@ -1395,9 +1309,9 @@ APM 实例: APM Instance
 上午好: Good Morning
 下午好: Good Afternoon
 晚上好: Good Evening
-"框架配置文件中 admin.ip 设置无效。若要开启管理命令功能，请将其设置为 127.0.0.1 或 0.0.0.0。":
-  "The admin.ip setting in the framework configuration file is invalid. To
-  enable the management command feature, set it to 127.0.0.1 or 0.0.0.0."
+'框架配置文件中 admin.ip 设置无效。若要开启管理命令功能，请将其设置为 127.0.0.1 或 0.0.0.0。':
+  'The admin.ip setting in the framework configuration file is invalid. To
+  enable the management command feature, set it to 127.0.0.1 or 0.0.0.0.'
 管理命令配置说明: Management Command Configuration Guide
 尚未开启观测功能: Observability Not Enabled
 应用框架配置文件中未配置可观测: Observability is not configured in the application framework configuration file
@@ -1410,28 +1324,24 @@ APM 实例: APM Instance
 数据有 15s 左右延迟: Data has approximately 15s delay
 调整权重: Adjust Weight
 更多操作: More Actions
-权重为 0 时 该实例将不再接收流量，权重值修改后将同步到实例下的所有 ServiceName:
-  When the weight is 0, the
+权重为 0 时 该实例将不再接收流量，权重值修改后将同步到实例下的所有 ServiceName: When the weight is 0, the
   instance will no longer receive traffic. The weight value will be synchronized
   to all ServiceName under the instance
 摘要: Digest
 仅展示前 5 条: Display Only the First 5 Entries
-"{0} 部署 {1}": "{0} deployed {1}"
-部分制品的镜像信息同步失败，大小、更新时间、摘要可能显示不完整。:
-  Some artifacts failed to sync image
+'{0} 部署 {1}': '{0} deployed {1}'
+部分制品的镜像信息同步失败，大小、更新时间、摘要可能显示不完整。: Some artifacts failed to sync image
   information, so size, updated time, and digest may be incomplete.
 重新同步: Resync
 已晋级: Promoted
 晋级: Promote
 去部署: Go to Deploy
 确认晋级: Confirm Promotion
-"制品仅在手动晋级后，才允许被部署到生产类型环境中：":
-  "Artifacts can only be deployed to production-type
-  environments after manual promotion:"
+'制品仅在手动晋级后，才允许被部署到生产类型环境中：': 'Artifacts can only be deployed to production-type
+  environments after manual promotion:'
 可部署到生产类型环境: Deployable to production-type environments
-"由 {0} 于 {1} 晋级": Promoted by {0} at {1}
-该镜像尚未部署到任何测试环境，请确认是否仍要晋级:
-  This image has not been deployed to any test
+'由 {0} 于 {1} 晋级': Promoted by {0} at {1}
+该镜像尚未部署到任何测试环境，请确认是否仍要晋级: This image has not been deployed to any test
   environment yet. Are you sure you still want to promote it?
 Agones 应用: Agones Application
 Agones 应用不支持该功能: Agones Application does not support this feature
@@ -1447,7 +1357,7 @@ Agones 应用不支持该功能: Agones Application does not support this featur
 未获取到北极星信息，无法调整权重: No Polaris information found, unable to adjust weight
 生产类型环境仅支持部署已晋级的 Tag: Production-type environments only support deploying promoted Tags
 暂无可用镜像: No available images
-"确定卸载组件 {name} ？": "Confirm uninstall component {name}?"
+'确定卸载组件 {name} ？': 'Confirm uninstall component {name}?'
 暂无组件: No components
 必选组件: Required components
 可选组件: Optional components
@@ -1470,32 +1380,32 @@ Agones 性能参数优化: Agones Performance Parameter Optimization
 请输入端口池名称: Please enter port pool name
 起始端口: Start Port
 结束端口: End Port
-"请输入 1-65535 之间的数字": "Please enter a number between 1-65535"
+'请输入 1-65535 之间的数字': 'Please enter a number between 1-65535'
 端口段长度: Port Range Length
 端口数量需要与 Agones 组件中端口数量的配置保持一致: The number of ports must be consistent with the port count configured in the Agones component
 负载均衡配置: Load Balancer Configuration
 负载均衡 ID: Load Balancer ID
 输入后按回车添加: Press Enter to add
-"附加信息（external）": "Additional Info (external)"
-"{label}范围为 1-65535": "{label} range is 1-65535"
+'附加信息（external）': 'Additional Info (external)'
+'{label}范围为 1-65535': '{label} range is 1-65535'
 结束端口必须大于起始端口: End port must be greater than start port
 修改端口池配置时，结束端口的值只能改大: When modifying port pool configuration, the end port value can only be increased
 负载均衡 ID 不能为空: Load Balancer ID cannot be empty
 端口池配置: Port Pool Configuration
 暂无端口池数据: No port pool data
-"确认删除端口池？": "Confirm delete port pool?"
+'确认删除端口池？': 'Confirm delete port pool?'
 端口池删除后数据不可恢复，请确认: Port pool data cannot be recovered after deletion, please confirm
 请选择Agones版本: Please select Agones version
 镜像仓库地址: Image Registry Address
-"示例：gcr.io/agones-images": "Example: gcr.io/agones-images"
+'示例：gcr.io/agones-images': 'Example: gcr.io/agones-images'
 如需使用私有镜像仓库，请填写完整地址: If using a private image registry, please enter the full address
 开启优化: Enable Optimization
-"Workers 数量": "Workers Count"
-"API 并发数": "API Concurrency"
+'Workers 数量': 'Workers Count'
+'API 并发数': 'API Concurrency'
 请选择Chart版本: Please select Chart version
 CLB 区域: CLB Region
 请选择CLB区域: Please select CLB region
-"默认 CLB 区域": "Default CLB Region"
+'默认 CLB 区域': 'Default CLB Region'
 腾讯云: Tencent Cloud
 请输入腾讯云 SecretID: Please enter Tencent Cloud SecretID
 请输入腾讯云 SecretKey: Please enter Tencent Cloud SecretKey
@@ -1525,7 +1435,7 @@ CLB 区域: CLB Region
 配置变更 {0} 项: 'Configuration Changes: {0}'
 版本号自动生成规则: Version Number Auto-Generation Rules
 每次保存或回滚将自动递增生成新版本号，格式为: A new version number is automatically incremented on each save or rollback, in the format
-"示例：（ V1:V2:V3... ）": "Example: ( V1:V2:V3... )"
+'示例：（ V1:V2:V3... ）': 'Example: ( V1:V2:V3... )'
 回滚操作也会生成新版本号，原历史记录始终保留，不会被覆盖。: Rollback operations also generate a new version number. The original history is always preserved and will not be overwritten.
 版本描述: Version Description
 回滚到此版本: Rollback to This Version
@@ -1540,6 +1450,43 @@ CLB 区域: CLB Region
 确认回滚: Confirm Rollback
 已构建镜像: Built Image
 从源码构建: Build from Source
+发布策略: Release Strategy
+发布方式: Release Mode
+平台内置: Built-in
+一次更新全部实例: Update All Instances at Once
+按策略分批更新: Release in Batches by Strategy
+请选择发布策略: Please select a release strategy
+暂无发布策略，请先在工作空间创建: No release strategies available. Please create one in the workspace first
+构建部署暂不支持分批发布: Build deployment does not support batch release yet
+联邦集群环境暂不支持分批发布: Federation cluster environments do not support batch release yet
+仅应用模型应用支持分批发布: Batch release is only supported for app model applications (tRPC / TAF)
+仅主工作负载为 GameDeployment 的应用支持分批发布: Batch release is only supported when the main workload is GameDeployment
+发布预览: Release Preview
+灰度发布中: Grayscale releasing
+'灰度发布中 · 第 {0}/{1} 批': 'Grayscale releasing · batch {0}/{1}'
+'按所选环境的 {0} 个实例换算': 'Converted based on {0} instances in the selected environment'
+批次数: Batches
+暂停次数: Pauses
+首批数量: First Batch Count
+首批: First batch
+累计: Cumulative
+实例总数: Total Instances
+流量批次: Traffic Batches
+批: batches
+个: ''
+全量: Full
+按配置比例示意（方格只表示比例）；实例数在部署时按应用实际实例数换算: Illustrated by configured ratio (squares only show the ratio); instance counts are converted based on actual instances at deployment
+'第 {0} 批': 'Batch {0}'
+'{0} 个实例': '{0} instances'
+'累计 {0} 个': 'Cumulative to {0}'
+'{0}/{1}': '{0}/{1}'
+永久暂停 · 手动继续: 'Pause permanently · resume manually'
+'暂停 {0} 秒后自动继续': 'Pause for {0} seconds before auto-continuing'
+'先 {0} 个实例': 'Start with {0} instances'
+'先更新到 {0}': 'Start at {0}'
+'确认后累计到 {0}': 'After confirmation, accumulate to {0}'
+最后自动全量: 'Finally release to all instances'
+'最后累计到 {0}': 'Finally accumulate to {0}'
 代码分支: Code Branch
 源码构建: Build from Source
 暂无选项: No options
@@ -1557,7 +1504,7 @@ CLB 区域: CLB Region
 该环境已部署应用，请先卸载后再修改集群信息: Applications are deployed in this environment. Please undeploy them before modifying cluster information.
 确定删除环境: Confirm Delete Environment
 删除环境后，所有配置、环境变量和操作记录将永久删除: After deleting the environment, all configurations, environment variables, and operation records will be permanently deleted
-"该操作不可恢复，请输入环境名称：{0} 进行确认": "This operation cannot be undone. Please enter the environment name: {0} to confirm"
+'该操作不可恢复，请输入环境名称：{0} 进行确认': 'This operation cannot be undone. Please enter the environment name: {0} to confirm'
 点击复制: Click to copy
 待删除环境名称: Environment name to delete
 请输入环境名称: Please enter environment name
@@ -1571,14 +1518,14 @@ Helm Chart 在仓库内的相对路径（根目录请填 .）: Helm Chart relati
 版本详情: Version Details
 应用的 HelmChart 来源非代码仓库，暂不支持该功能: The HelmChart source of the application is not a code repository, so this feature is not supported
 查看构建记录: 查看构建记录
-"{0} 版本正在构建中，{1}": "{0} build in progress, {1}"
-"版本构建成功": "build succeeded"
-"版本构建失败": "build failed"
-"构建 {0}：流水线构建任务已触发，正在执行中": "build {0}: pipeline build task triggered, executing"
-"构建 {0}：流水线构建{1}": "build {0}: pipeline build {1}"
+'{0} 版本正在构建中，{1}': '{0} build in progress, {1}'
+'版本构建成功': 'build succeeded'
+'版本构建失败': 'build failed'
+'构建 {0}：流水线构建任务已触发，正在执行中': 'build {0}: pipeline build task triggered, executing'
+'构建 {0}：流水线构建{1}': 'build {0}: pipeline build {1}'
 主版本号.次版本号.修正版本号: Major Version.Minor Version.Patch Version
 根据选择的版本类型自动生成: Generated automatically based on the selected version type
-"当前版本 {0}，{1}": "Current Version {0}, {1}"
+'当前版本 {0}，{1}': 'Current Version {0}, {1}'
 生效范围: Effective Range
 实例名称已存在: Instance name already exists
 字母或下划线开头，仅允许字母、数字、下划线: The instance name must start with a letter or underscore, and only letters, numbers, and underscores are allowed
@@ -1617,26 +1564,26 @@ Yaml 模式: Yaml Mode
 组件输出至少要包含一个资源: Component output must contain at least one resource
 不能和已有的参数名称重复: Cannot be repeated with existing parameter name
 不能和内置系统变量重复: Cannot be repeated with built-in system variable
-"在组件配置中，可通过 {0} 引用环境变量。": "In component configuration, you can reference environment variables using {0}."
+'在组件配置中，可通过 {0} 引用环境变量。': 'In component configuration, you can reference environment variables using {0}.'
 帮助文档: Help Documentation
 试运行: Trial Run
 工作负载 Patch 内容: Workload Patch Content
 选项值: Option Value
 请输入 2-20 字符的字母、数字、中划线，以字母开头: Please enter 2-20 characters of letters, numbers, and hyphens, starting with a letter
 Key 不能重复: Key 不能重复
-"第 {0} 行的 key {1} 重复": "第 {0} 行的 key {1} 重复"
-"第 {0} 行的 Value 格式不正确，{1}": "第 {0} 行的 Value 格式不正确，{1}"
-"第 {0} 行的 Key {1} 为系统保留字段，禁止写入": "第 {0} 行的 Key {1} 为系统保留字段，禁止写入"
-"第 {0} 行的 Key {1} 格式不正确，{2}": "第 {0} 行的 Key {1} 格式不正确，{2}"
-"第 {0} 行格式错误，{1}": "第 {0} 行格式错误，{1}"
-"以字母或数字开头和结尾，中间可含 字母、数字、- _ .，最长 63 字符。": "以字母或数字开头和结尾，中间可含 字母、数字、- _ .，最长 63 字符。"
+'第 {0} 行的 key {1} 重复': '第 {0} 行的 key {1} 重复'
+'第 {0} 行的 Value 格式不正确，{1}': '第 {0} 行的 Value 格式不正确，{1}'
+'第 {0} 行的 Key {1} 为系统保留字段，禁止写入': '第 {0} 行的 Key {1} 为系统保留字段，禁止写入'
+'第 {0} 行的 Key {1} 格式不正确，{2}': '第 {0} 行的 Key {1} 格式不正确，{2}'
+'第 {0} 行格式错误，{1}': '第 {0} 行格式错误，{1}'
+'以字母或数字开头和结尾，中间可含 字母、数字、- _ .，最长 63 字符。': '以字母或数字开头和结尾，中间可含 字母、数字、- _ .，最长 63 字符。'
 系统保留字段，禁止写入: 系统保留字段，禁止写入
 注解，常用于监控采集、调度筛选、资源关联等场景。填写的内容会追加在平台默认配置之上，不会覆盖平台已有内容。: Annotations, commonly used for monitoring collection, scheduling filtering, resource association, and other scenarios. The content entered will be appended on top of the platform's default configuration and will not overwrite existing platform content.
 添加平台管理员: Add Platform Administrator
 搜索管理员: Search Administrator
 添加人: Added By
 添加时间: Added Time
-"人员：{name}": "User: {name}"
+'人员：{name}': 'User: {name}'
 管理员能查看并执行"平台管理"导航下所有操作。: Administrators can view and perform all operations under the "Platform Management" navigation.
 确认删除该管理员？: Confirm to delete this administrator?
 删除后，将不再具有该平台的相关权限，请谨慎操作！: After deletion, the user will lose all permissions related to this platform. Please proceed with caution!
@@ -1651,25 +1598,25 @@ Key 不能重复: Key 不能重复
 触发条件: Trigger Condition
 失败详情: Failure Details
 原因: Reason
-确定删除镜像 Tag ?: "Confirm to delete image tag ?"
-"该镜像 Tag ({0}) 目前正被以下环境使用，{1}，请谨慎确认是否删除": "The image tag ({0}) is currently being used by the following environments, {1}, please be careful to confirm whether to delete"
+确定删除镜像 Tag ?: 'Confirm to delete image tag ?'
+'该镜像 Tag ({0}) 目前正被以下环境使用，{1}，请谨慎确认是否删除': 'The image tag ({0}) is currently being used by the following environments, {1}, please be careful to confirm whether to delete'
 删除后可能会影响已部署的环境（如扩缩容、重启、回滚将无法拉取该镜像）: After deletion, it may affect the deployed environment (such as scaling, restart, rollback will not be able to pull the image)
 请输入镜像 Tag: Please enter the image tag
 镜像 Tag 删除成功: Image tag deleted successfully
-该操作不可恢复，请输入镜像 Tag：{0} 进行确认: "This operation cannot be undone. Please enter the image tag: {0} to confirm"
+该操作不可恢复，请输入镜像 Tag：{0} 进行确认: 'This operation cannot be undone. Please enter the image tag: {0} to confirm'
 应用最近的部署记录中未检测到该镜像 Tag 的使用，但是镜像 Tag 一旦删除后无法找回: In the recent deployment record of the application, the use of the image tag was not detected, but once the image tag is deleted, it cannot be recovered
 镜像 Tag 删除失败: Image tag deletion failed
-"删除需要具备写权限的凭证。跳转到：{0} 配置凭证后重试。": "Delete requires write permission credentials. Please go to {0} to configure credentials and try again."
+'删除需要具备写权限的凭证。跳转到：{0} 配置凭证后重试。': 'Delete requires write permission credentials. Please go to {0} to configure credentials and try again.'
 去配置: Configure
 调整配置: Adjust Configuration
-"部署预检发现{0}类问题": "Pre-deployment check found {0} type(s) of issues"
+'部署预检发现{0}类问题': 'Pre-deployment check found {0} type(s) of issues'
 联邦集群资源规格不一致: Federated cluster resource spec mismatch
 当前环境已绑定联邦集群。联邦集群要求 CPU、内存的 Requests 与 Limits 必须一致，否则无法部署。: This environment is bound to a federated cluster. CPU and memory Requests must match Limits, otherwise the environment cannot be deployed.
-"建议前往 {0} 将 Requests 调整为与 Limits 一致后再部署。": "Go to {0} and set Requests equal to Limits before deploying."
+'建议前往 {0} 将 Requests 调整为与 Limits 一致后再部署。': 'Go to {0} and set Requests equal to Limits before deploying.'
 缺少必选集群组件: Missing Required Cluster Components
-"{0} 个组件": "{0} component(s)"
+'{0} 个组件': '{0} component(s)'
 以下必选集群组件在目标环境所在集群中尚未安装，缺失时应用无法正常部署。: The following required cluster components are not installed in the target environment's cluster, so the application cannot be deployed normally.
-"建议前往 {0} 安装组件后再部署。": "Go to {0}, install the components, and then deploy."
+'建议前往 {0} 安装组件后再部署。': 'Go to {0}, install the components, and then deploy.'
 存在阻断问题，请先解决后再部署: Blocking issues exist. Resolve them before deploying.
 资源: Resource
 联邦集群不支持灰度操作: Federated clusters do not support gray deployment.
@@ -1677,19 +1624,19 @@ Key 不能重复: Key 不能重复
 该环境绑定联邦集群，不支持作为来源环境创建新环境: This environment is bound to a federated cluster and cannot be used as the source for a new environment.
 暂不支持选择绑定联邦集群的环境: Environments bound to federated clusters are not currently supported.
 环境变量未定义: Undefined Environment Variables
-"{0} 个变量": "{0} variables"
-"以下环境变量在当前配置中被引用，但在目标部署环境中未定义，部署后将被渲染为空值，{0}": "The following environment variables are referenced in the current configuration but are not defined in the target deployment environment. The deployment will be rendered as empty value, {0}"
-"可能导致服务异常！": "May cause service exceptions！"
-"建议前往 {0} 补充配置后再部署，避免服务注册异常或配置错误。": "It is recommended to go to {0} to supplement the configuration before deployment to avoid service registration exceptions or configuration errors."
-"环境管理 / 环境变量": "Environment Management / Environment Variables"
+'{0} 个变量': '{0} variables'
+'以下环境变量在当前配置中被引用，但在目标部署环境中未定义，部署后将被渲染为空值，{0}': 'The following environment variables are referenced in the current configuration but are not defined in the target deployment environment. The deployment will be rendered as empty value, {0}'
+'可能导致服务异常！': 'May cause service exceptions！'
+'建议前往 {0} 补充配置后再部署，避免服务注册异常或配置错误。': 'It is recommended to go to {0} to supplement the configuration before deployment to avoid service registration exceptions or configuration errors.'
+'环境管理 / 环境变量': 'Environment Management / Environment Variables'
 未定义变量: Undefined Variables
-"以下变量在当前配置中被引用，但未定义，部署后将被渲染为空值，{0}": "The following variables are referenced in the current configuration but are not defined. The deployment will be rendered as empty value, {0}"
-"建议前往 {0} 修改 Values 文件，避免服务注册异常或配置错误。": "It is recommended to go to {0} to modify the Values file to avoid service registration exceptions or configuration errors."
+'以下变量在当前配置中被引用，但未定义，部署后将被渲染为空值，{0}': 'The following variables are referenced in the current configuration but are not defined. The deployment will be rendered as empty value, {0}'
+'建议前往 {0} 修改 Values 文件，避免服务注册异常或配置错误。': 'It is recommended to go to {0} to modify the Values file to avoid service registration exceptions or configuration errors.'
 前往修改: Go to Modify
 仍然部署: Deploy Anyway
 内存使用率: Memory Usage
 CPU 使用率: CPU Usage
-"容忍度机制：使用率在 0.9~1.1 之间时不改变实例数，避免指标微小波动造成频繁伸缩": "Tolerance mechanism: When the usage rate is between 0.9 and 1.1, the number of instances remains unchanged to avoid frequent scaling due to minor metric fluctuations."
+'容忍度机制：使用率在 0.9~1.1 之间时不改变实例数，避免指标微小波动造成频繁伸缩': 'Tolerance mechanism: When the usage rate is between 0.9 and 1.1, the number of instances remains unchanged to avoid frequent scaling due to minor metric fluctuations.'
 不支持跨环境操作: Does not support cross environment operations
 启用空间: Enable Space
 请输入至少一位管理员: Please enter at least one administrator
@@ -1775,10 +1722,10 @@ CPU requests 使用率: CPU Requests Usage
 网络出带宽: Network Transmit Bandwidth
 磁盘使用量: Disk Usage
 自动刷新设置: Auto Refresh Settings
-"{0} 秒": "{0} sec"
-"{0} 分钟": "{0} min"
-"{0} 小时": "{0} hr"
-"期望实例数必须在 {0} ~ {1} 之间": "The expected number of instances must be between {0} and {1}"
+'{0} 秒': '{0} sec'
+'{0} 分钟': '{0} min'
+'{0} 小时': '{0} hr'
+'期望实例数必须在 {0} ~ {1} 之间': 'The expected number of instances must be between {0} and {1}'
 启用该策略: Enable This Policy
 新增策略: Add Policy
 高级设置: Advanced Settings
@@ -1806,7 +1753,7 @@ CPU requests 使用率: CPU Requests Usage
 构建镜像: Build Image
 运行镜像: Runtime Image
 打包额外文件: Extra Files
-"每行一个，可填写文件路径或目录，相对构建目录，例如：": "One path or directory per line, relative to the build directory, for example:"
+'每行一个，可填写文件路径或目录，相对构建目录，例如：': 'One path or directory per line, relative to the build directory, for example:'
 文件会按相对路径打包到运行镜像的 /app 目录，例如 data/privatekey.pem 打包后为 /app/data/privatekey.pem。: Files are copied into /app in the runtime image by relative path. For example, data/privatekey.pem becomes /app/data/privatekey.pem.
 请选择镜像: Please select an image
 请选择标签: Please select a tag
@@ -1814,7 +1761,7 @@ CPU requests 使用率: CPU Requests Usage
 所选镜像 Tag 已不在当前镜像的 Tag 列表中，请重新选择: The selected image tag is no longer in the current image's tag list, please select again
 用于编译源码的镜像（含 Go 工具链），对应 builder 阶段基础镜像。: Image for compiling source code (includes Go toolchain), corresponds to the builder stage base image.
 运行服务的基础镜像（精简、无编译器），对应 runner 阶段基础镜像。: Base image for running services (lightweight, no compiler), corresponds to the runner stage base image.
-"构建镜像的版本（{0}）与运行镜像（{1}）不一致，可能导致 glibc/musl 等基础库差异，引发运行时兼容问题。建议保持两者一致，如已确认可忽略。": "The version of the build image ({0}) does not match the runtime image ({1}), which may cause differences in base libraries such as glibc/musl and lead to runtime compatibility issues. It is recommended to keep them consistent; can be ignored if confirmed."
+'构建镜像的版本（{0}）与运行镜像（{1}）不一致，可能导致 glibc/musl 等基础库差异，引发运行时兼容问题。建议保持两者一致，如已确认可忽略。': 'The version of the build image ({0}) does not match the runtime image ({1}), which may cause differences in base libraries such as glibc/musl and lead to runtime compatibility issues. It is recommended to keep them consistent; can be ignored if confirmed.'
 高级命令: Advanced Commands
 高级构建命令: Advanced Build Commands
 可选，补充或覆盖平台默认的构建步骤: Optional, supplement or override default build steps
@@ -1822,11 +1769,11 @@ CPU requests 使用率: CPU Requests Usage
 builder 阶段: Builder Stage
 在 go build 之前执行，如代码生成、安装工具等: Execute before go build, e.g., code generation, installing tools
 编译命令: Build Command
-"留空则使用平台默认：{0}": "Leave blank to use the platform default: {0}"
+'留空则使用平台默认：{0}': 'Leave blank to use the platform default: {0}'
 运行环境命令: Runtime Environment Commands
 runner 阶段: Runner Stage
 配置运行镜像环境，如 apk add --no-cache ca-certificates: Configure runtime image environment, e.g., apk add --no-cache ca-certificates
-"留空则使用平台默认：运行编译产物二进制": 'Leave blank to use the platform default: run the compiled binary'
+'留空则使用平台默认：运行编译产物二进制': 'Leave blank to use the platform default: run the compiled binary'
 写入镜像的默认启动方式（ENTRYPOINT），构建时固化到镜像中。部署时可被「运行命令」覆盖: Default startup method (ENTRYPOINT) written into the image, baked into the image during build. Can be overridden by the deployment run command.
 等价构建命令（示意）: Equivalent Build Command (Reference)
 必填: Required
@@ -1837,7 +1784,7 @@ runner 阶段: Runner Stage
 暂不支持: Not supported
 构建目录不能以 / 开头: Source directory cannot start with /
 镜像入口命令: Image Entry Command
-"请输入{0}": "Please enter {0}"
+'请输入{0}': 'Please enter {0}'
 是: 'Yes'
 否: 'No'
 自定义变量: Custom Variable
@@ -1845,53 +1792,52 @@ runner 阶段: Runner Stage
 '敏感环境变量的值将在页面上以脱敏形式展示，只有应用进程内能够获取到这些变量的明文值。': Sensitive environment variable values are displayed in a desensitized format. Only application processes can access the plaintext values of these variables.
 确认保存: Confirm Save
 清空文件内容: Clear File Content
-"文件清空后，该环境将恢复为默认配置。请选择处理方式：": "After clearing the file, this environment will revert to the default configuration. Please choose a handling method:"
-"环境列表中仍会标记为：": "It will still be marked as in the environment list:"
+'文件清空后，该环境将恢复为默认配置。请选择处理方式：': 'After clearing the file, this environment will revert to the default configuration. Please choose a handling method:'
+'环境列表中仍会标记为：': 'It will still be marked as in the environment list:'
 保留环境下差异配置文件，可查看历史版本、随时回滚。: Keep the environment-specific diff configuration file, allowing you to view historical versions and rollback at any time.
 删除环境下差异配置文件，历史版本一起删除，不可恢复、回滚。: Delete the environment-specific diff configuration file, along with its historical versions. This action is irreversible and cannot be rolled back.
 查看日志: View Logs
 构建日志: Build Logs
-"应用关联的特性环境：{0} 个": "Feature environments associated with the application: {0}"
+'应用关联的特性环境：{0} 个': 'Feature environments associated with the application: {0}'
 来源环境: Source Environment
 请选择来源环境: Please select a source environment
 无法获取环境标识: Unable to get the environment identifier
 环境展示名称: Environment Display Name
-"这里创建的是当前应用的特性环境：只属于本应用，其他应用无法使用，适合灰度验证、联调等场景，用完可以销毁。": "This creates a feature environment for the current application: it belongs to this application only and cannot be used by other applications. It suits scenarios such as grayscale verification and joint debugging, and can be destroyed when no longer needed."
+'这里创建的是当前应用的特性环境：只属于本应用，其他应用无法使用，适合灰度验证、联调等场景，用完可以销毁。': 'This creates a feature environment for the current application: it belongs to this application only and cannot be used by other applications. It suits scenarios such as grayscale verification and joint debugging, and can be destroyed when no longer needed.'
 沿用来源环境的集群和环境分类。应用配置不会复制，新环境使用应用的默认配置。: The cluster and environment category are taken from the source environment. Application configuration is not copied; the new environment uses the application's default configuration.
 环境创建成功: Environment Created
 当前使用应用默认配置，未配置环境级变量。可直接部署，也可先调整配置。: The application is currently using default configurations; no environment-level variables have been set. You can deploy immediately or adjust the configuration first.
-"该操作不可恢复，请输入特性环境命名空间：{0} 进行确认": "This operation is irreversible. Please enter the feature environment namespace: {0} to confirm"
+'该操作不可恢复，请输入特性环境命名空间：{0} 进行确认': 'This operation is irreversible. Please enter the feature environment namespace: {0} to confirm'
 特性环境只属于当前应用，其他应用无法使用。来源环境仅为创建时快照，之后互不影响。: A feature environment belongs to the current application only and cannot be used by other applications. The source environment is just a snapshot taken at creation time; the two are independent afterwards.
-"环境变量不会从来源环境复制，可在列表中单独配置。": "Environment variables are not copied from the source environment. Configure them separately from the list."
-"环境创建后不会自动部署，需要单独执行部署；销毁前需先移除部署。": "Creating an environment does not deploy it; deployment is a separate action. Remove the deployment before destroying the environment."
+'环境变量不会从来源环境复制，可在列表中单独配置。': 'Environment variables are not copied from the source environment. Configure them separately from the list.'
+'环境创建后不会自动部署，需要单独执行部署；销毁前需先移除部署。': 'Creating an environment does not deploy it; deployment is a separate action. Remove the deployment before destroying the environment.'
 无法销毁特性环境: Cannot Destroy Feature Environment
 该特性环境有部署实例，请先移除部署后再销毁环境: This feature environment has deployment instances. Please remove the deployment before destroying the environment.
 立即移除部署: Remove Deployment Immediately
 部署中或卸载中的特性环境暂不支持销毁: Feature environments that are deploying or uninstalling do not support destruction
 确认销毁特性环境: Confirm Destruction of Feature Environment
-"将永久删除特性环境及其命名空间，并清理应用配置 / 北极星 / 组件中的引用。": "The feature environment and its namespace will be permanently deleted, and references in application configuration / Polaris / components will be cleaned up."
-"{0}已修改，保存后需重新部署才会生效。": "{0} has been modified; changes will take effect only after saving and redeploying."
-"已复制 {0}": "Copied {0}"
-"推荐用法：点击复制获取 {0}，由 tRPC 框架运行时解析；平台不会将环境变量值渲染进配置文件。": "Recommended: Copy to get {0}, resolved by the tRPC framework at runtime; the platform will not render the environment variable value into the configuration file."
-"特殊场景：若需平台在下发配置前完成变量渲染，可通过复制按钮旁的下拉菜单获取 {0}": "Special case: To have the platform render variables before delivering the configuration, get {0} from the dropdown menu beside the copy button"
-"复制 {0}（推荐）": "Copy {0} (Recommended)"
-"复制 {0}": "Copy {0}"
+'将永久删除特性环境及其命名空间，并清理应用配置 / 北极星 / 组件中的引用。': 'The feature environment and its namespace will be permanently deleted, and references in application configuration / Polaris / components will be cleaned up.'
+'{0}已修改，保存后需重新部署才会生效。': '{0} has been modified; changes will take effect only after saving and redeploying.'
+'已复制 {0}': 'Copied {0}'
+'推荐用法：点击复制获取 {0}，由 tRPC 框架运行时解析；平台不会将环境变量值渲染进配置文件。': 'Recommended: Copy to get {0}, resolved by the tRPC framework at runtime; the platform will not render the environment variable value into the configuration file.'
+'特殊场景：若需平台在下发配置前完成变量渲染，可通过复制按钮旁的下拉菜单获取 {0}': 'Special case: To have the platform render variables before delivering the configuration, get {0} from the dropdown menu beside the copy button'
+'复制 {0}（推荐）': 'Copy {0} (Recommended)'
+'复制 {0}': 'Copy {0}'
 tRPC 运行时解析，平台不渲染进配置文件: Resolved by tRPC at runtime, not rendered into config files by the platform
 平台下发前渲染为实际值写入配置: Rendered to actual value and written to config before platform delivery
 全选: Select All
-"需要重新部署的 {0} 个环境": "{0} environment(s) requiring redeployment"
-"北极星 {0} 已关联以下环境，需要按以下顺序完成后才能删除：": "Polaris {0} is associated with the following environments. Complete them in the following order before deletion:"
-"共有 {0} 个环境的北极星更新，需要重新部署后方可生效": "Polaris updates for {0} environment(s) require redeployment to take effect"
-北极星配置待重新部署生效:
-  The Polaris config takes effect after redeployment
+'需要重新部署的 {0} 个环境': '{0} environment(s) requiring redeployment'
+'北极星 {0} 已关联以下环境，需要按以下顺序完成后才能删除：': 'Polaris {0} is associated with the following environments. Complete them in the following order before deletion:'
+'共有 {0} 个环境的北极星更新，需要重新部署后方可生效': 'Polaris updates for {0} environment(s) require redeployment to take effect'
+北极星配置待重新部署生效: The Polaris config takes effect after redeployment
 待部署环境: Pending Environment
 修改内容: Changes
-"默认值为{0}": "The default value is {0}"
+'默认值为{0}': 'The default value is {0}'
 一键添加: One-click Add
-"构建产物需输出为文件 {0}，runner 阶段只会把这个文件拷贝进运行镜像。不限定命令形式（{1} 等均可），只要最终产物是该文件即可，例如：": "Build artifacts must be output as the file {0}. The runner stage only copies this file into the runtime image. There is no restriction on command format (e.g., {1}), as long as the final artifact is this file, for example:"
-"若 go.mod 有使用工蜂私有仓库依赖包，构建参数中需要添加 {0}，取值见：": "If go.mod uses dependencies from Woa's private repository, you need to add {0} to the build parameters. Refer to:"
+'构建产物需输出为文件 {0}，runner 阶段只会把这个文件拷贝进运行镜像。不限定命令形式（{1} 等均可），只要最终产物是该文件即可，例如：': 'Build artifacts must be output as the file {0}. The runner stage only copies this file into the runtime image. There is no restriction on command format (e.g., {1}), as long as the final artifact is this file, for example:'
+'若 go.mod 有使用工蜂私有仓库依赖包，构建参数中需要添加 {0}，取值见：': "If go.mod uses dependencies from Woa's private repository, you need to add {0} to the build parameters. Refer to:"
 一般可留空: Can generally be left empty
-"请确认以下变量信息（共 {count} 个）": "Please confirm the following variable information (total of {count} items)"
+'请确认以下变量信息（共 {count} 个）': 'Please confirm the following variable information (total of {count} items)'
 目标环境: Target Environment
 未部署环境: Undeployed Environments
 单实例权重: Per-instance Weight
@@ -1906,7 +1852,7 @@ tRPC 运行时解析，平台不渲染进配置文件: Resolved by tRPC at runti
   Dynamic weight is on. Polaris adjusts the actual weight by instance machine
   type.
 部分实例已覆盖: Some Instances Overridden
-"该环境下有 {count} 个实例在实例列表中单独调整过权重；总权重按各实例实际权重求和": "{count} instances in this environment have individually adjusted weights in the instance list. The total weight is the sum of the actual weights of all instances"
+'该环境下有 {count} 个实例在实例列表中单独调整过权重；总权重按各实例实际权重求和': '{count} instances in this environment have individually adjusted weights in the instance list. The total weight is the sum of the actual weights of all instances'
 健康实例数: Healthy Instances
 来自北极星实时数据，约 15 秒延迟: Real-time data from Polaris, with an approximate 15-second delay
 总权重（占比）: Total Weight (Percentage)
@@ -1916,19 +1862,19 @@ tRPC 运行时解析，平台不渲染进配置文件: Resolved by tRPC at runti
 权重在该环境首次部署时生效: The weight takes effect when the environment is deployed for the first time
 权重为 0 时，该环境将不再接收流量: When the weight is 0, this environment will no longer receive traffic
 请输入0-10000之间的整数: Enter an integer from 0 to 10000
-"请输入 0-10000 的整数": "Enter an integer from 0 to 10000"
+'请输入 0-10000 的整数': 'Enter an integer from 0 to 10000'
 权重不能为空: Weight cannot be empty
 设置初始权重: Set Initial Weight
 调整说明: Adjustment Notes
-"数值越大权重越高；保存后按新的单实例权重重算总权重。权重为 {0} 时该环境将不再接收流量。": "A larger value gives a higher weight. After saving, the total weight is recalculated using the new per-instance weight. When the weight is {0}, this environment will no longer receive traffic."
+'数值越大权重越高；保存后按新的单实例权重重算总权重。权重为 {0} 时该环境将不再接收流量。': 'A larger value gives a higher weight. After saving, the total weight is recalculated using the new per-instance weight. When the weight is {0}, this environment will no longer receive traffic.'
 保存后立即同步到该环境下全部实例的北极星注册权重，无需重新部署应用。: After saving, the Polaris registration weight is immediately synchronized to all instances in this environment without redeploying the application.
 该环境尚未部署，此处设置的是实例首次注册到北极星时的权重。: This environment has not been deployed. This value is used when instances first register with Polaris.
-"数值越大权重越高；填 {0} 则该环境部署后不参与分流。": "A larger value gives a higher weight. Enter {0} to exclude this environment from traffic distribution after deployment."
-"实例数统计的维度为：健康的实例": "Instance count includes healthy instances only"
+'数值越大权重越高；填 {0} 则该环境部署后不参与分流。': 'A larger value gives a higher weight. Enter {0} to exclude this environment from traffic distribution after deployment.'
+'实例数统计的维度为：健康的实例': 'Instance count includes healthy instances only'
 总权重（权重占比）: Total Weight (Weight Percentage)
 单个实例权重: Per-instance Weight
-"单个实例权重需为 {0} ~ {1} 的整数": "Per-instance weight must be an integer from {0} to {1}"
-"总权重 = {0}，预计占比 {1}%": "Total weight = {0}, estimated percentage {1}%"
+'单个实例权重需为 {0} ~ {1} 的整数': 'Per-instance weight must be an integer from {0} to {1}'
+'总权重 = {0}，预计占比 {1}%': 'Total weight = {0}, estimated percentage {1}%'
 新建告警组: Create Alert Group
 告警组空间级资源提示: Alert groups are workspace-level resources. Any alert groups added or modified here will be shared and take effect across all applications in the current workspace.
 告警组名称: Alert Group Name
@@ -1956,8 +1902,8 @@ tRPC 运行时解析，平台不渲染进配置文件: Resolved by tRPC at runti
 停用后，所有的业务将会停用该策略，请谨慎操作！: After disabling, all services will stop using this policy. Please proceed with caution!
 确定停用该策略？: Are you sure you want to disable this policy?
 提醒: Reminder
-确认删除该策略: Confirm deleting this policy
-"策略名称: {name}": "Policy Name: {name}"
+确定删除该发布策略？: Delete this release strategy?
+删除后无法恢复，部署应用时将不能再选择该策略。: Once deleted, it cannot be restored and the strategy will no longer be selectable when deploying applications.
 启用成功: Enabled successfully
 停用成功: Disabled successfully
 通知对象: Notification Recipients
@@ -1988,25 +1934,25 @@ tRPC 运行时解析，平台不渲染进配置文件: Resolved by tRPC at runti
 请选择监控指标: Please select a monitoring metric
 检测规则: Detection Rules
 请选择告警级别: Please select an alert level
-"当前值 {0} {1}% 时触发告警": "Alert triggered when current value is {0} {1}%"
-"当前值 {0} {1}次 时触发告警": "Alert triggered when current value is {0} {1} time(s)"
+'当前值 {0} {1}% 时触发告警': 'Alert triggered when current value is {0} {1}%'
+'当前值 {0} {1}次 时触发告警': 'Alert triggered when current value is {0} {1} time(s)'
 判断条件: Judgment Condition
-"在 {0} 个周期内累计满足 {1} 次检测条件时，触发告警通知": "When the detection condition is met {1} times within {0} periods, an alert notification is triggered"
+'在 {0} 个周期内累计满足 {1} 次检测条件时，触发告警通知': 'When the detection condition is met {1} times within {0} periods, an alert notification is triggered'
 恢复条件: Recovery Condition
-"连续 {0} 个周期内不满足触发条件": "Trigger condition not met for {0} consecutive periods"
+'连续 {0} 个周期内不满足触发条件': 'Trigger condition not met for {0} consecutive periods'
 生效时间段: Effective Time Period
 开始时间 - 结束时间: Start Time - End Time
-"( 所有环境都生效，包括新增的环境也会生效 )": "( Takes effect in all environments, including newly added ones )"
-"( 针对环境类型生效，包括新增的环境也会生效 )": "( Takes effect for the environment type, including newly added environments )"
+'( 所有环境都生效，包括新增的环境也会生效 )': '( Takes effect in all environments, including newly added ones )'
+'( 针对环境类型生效，包括新增的环境也会生效 )': '( Takes effect for the environment type, including newly added environments )'
 特定环境: Specific Environments
-"( 针对指定的环境生效，新增同类环境不会自动生效 )": "( Takes effect only for the specified environments; newly added environments of the same type will not take effect automatically )"
+'( 针对指定的环境生效，新增同类环境不会自动生效 )': '( Takes effect only for the specified environments; newly added environments of the same type will not take effect automatically )'
 通知设置: Notification Settings
 通知渠道在告警组内配置，选择告警组即关联其通知方式。: Notification channels are configured within the alert group; selecting an alert group links its notification methods.
 CPU Request 利用率: CPU Request Utilization
 CPU Requests 利用率: CPU Requests Utilization
-">=": ">="
-"<": "<"
-"≠": "≠"
+'>=': '>='
+'<': '<'
+'≠': '≠'
 监控告警: Monitoring Alerts
 告警记录: Alert Records
 告警策略: Alert Policies
@@ -2017,17 +1963,17 @@ CPU Limit 利用率: CPU Limit Utilization
 CPU Limits 利用率: CPU Limits Utilization
 内存 Limit 利用率: Memory Limit Utilization
 内存 Limits 利用率: Memory Limits Utilization
-">": ">"
-"<=": "<="
-"=": "="
-"已选 {n} 个告警组": "Selected {n} alert group(s)"
+'>': '>'
+'<=': '<='
+'=': '='
+'已选 {n} 个告警组': 'Selected {n} alert group(s)'
 请输入阈值: Please enter the threshold
 请选择告警组: Please select an alert group
-"{0} 核 / {1}": "{0} Cores / {1}"
-"CPU：Requests {0} 核 / Limits {1} 核": "CPU: Requests {0} Cores / Limits {1} Cores"
-"内存：Requests {0} / Limits {1}": "Memory: Requests {0} / Limits {1}"
-"{0} {1} 使用率：{2}%": "{0} {1} Utilization: {2}%"
-"实例数区间：{0} ~ {1} 个": "Instance Range: {0} - {1}"
+'{0} 核 / {1}': '{0} Cores / {1}'
+'CPU：Requests {0} 核 / Limits {1} 核': 'CPU: Requests {0} Cores / Limits {1} Cores'
+'内存：Requests {0} / Limits {1}': 'Memory: Requests {0} / Limits {1}'
+'{0} {1} 使用率：{2}%': '{0} {1} Utilization: {2}%'
+'实例数区间：{0} ~ {1} 个': 'Instance Range: {0} - {1}'
 实例数（运行/期望/异常）: Instances (Running/Desired/Abnormal)
 新增部署: New Deployment
 最近部署: Latest Deployment
@@ -2038,11 +1984,10 @@ CPU Limits 利用率: CPU Limits Utilization
 部署中环境: Deploying Environments
 部署失败环境: Failed Environments
 异常实例: Abnormal Instances
-"运行实例 {0} / {1}": "Running Instances {0} / {1}"
-"涉及 {0} 个环境": "Across {0} Environment(s)"
+'运行实例 {0} / {1}': 'Running Instances {0} / {1}'
+'涉及 {0} 个环境': 'Across {0} Environment(s)'
 本页配置只会影响本空间之后新建的应用，已有应用不受影响。仅适用于平台托管部署的应用（如 tRPC、TAF），Helm / Agones 等自定义编排应用不适用。: This page's configuration will only affect newly created applications in the current workspace. Existing applications are not affected. Only applicable to platform-managed applications (e.g., tRPC, TAF), not applicable to custom编排 applications (e.g., Helm / Agones).
-"该配置为立即生效，删除后将同步从已关联环境中摘除北极星实例并移除配置。":
-  This configuration takes effect immediately. Deleting it will synchronously deregister Polaris instances from associated environments and remove the configuration.
+'该配置为立即生效，删除后将同步从已关联环境中摘除北极星实例并移除配置。': This configuration takes effect immediately. Deleting it will synchronously deregister Polaris instances from associated environments and remove the configuration.
 平台推荐镜像: Platform Recommended Images
 自定义镜像: Custom Images
 查看推送指引: View Push Guide
@@ -2055,7 +2000,7 @@ CPU Limits 利用率: CPU Limits Utilization
 请输入镜像名称: Please enter an image name
 请输入镜像名称，且不能包含 tag: Please enter an image name without a tag
 快捷填入镜像名称: Quick-fill image name
-"请先将自定义的镜像推送至空间，{0}": "Please push the custom image to the workspace first, {0}"
+'请先将自定义的镜像推送至空间，{0}': 'Please push the custom image to the workspace first, {0}'
 请先将自定义的镜像推送至空间: Please push the custom image to the workspace first
 刷新 Tag 列表: Refresh Tag List
 镜像 Tag 刷新成功: Image tags refreshed successfully
@@ -2068,7 +2013,7 @@ HostPort 端口映射: HostPort Mapping
 端口声明: Port Declaration
 容器端口: Container Port
 对应环境变量: Corresponding Environment Variable
-"{count} 个环境待部署生效": "{count} environment(s) pending deployment"
+'{count} 个环境待部署生效': '{count} environment(s) pending deployment'
 如 8080: e.g. 8080
 添加容器端口: Add Container Port
 对所有绑定联邦集群的环境生效: Takes effect for all environments bound to federation clusters
@@ -2076,8 +2021,8 @@ HostPort 端口映射: HostPort Mapping
 端口需为 1-65535 之间的整数: Port must be an integer between 1 and 65535
 端口重复: Duplicate port
 保存成功，需重新部署绑定联邦集群的环境后才会生效: Saved successfully. Redeploy environments bound to federation clusters for the changes to take effect.
-"新增端口：{ports}": "Add port(s): {ports}"
-"删除端口：{ports}": "Remove port(s): {ports}"
+'新增端口：{ports}': 'Add port(s): {ports}'
+'删除端口：{ports}': 'Remove port(s): {ports}'
 节点端口的环境变量: Environment variable for node port
 填写容器端口后自动生成: Container port automatically generated
 当前空间没有绑定联邦集群的环境: No environments bound to a federation cluster in the current workspace
@@ -2098,7 +2043,7 @@ HostPort 目前仅对绑定联邦集群的环境生效: HostPort currently only 
 从监控平台已有仪表盘中选择，新建后可刷新列表: Select from existing monitoring dashboards. Refresh the list after creating a new one.
 已添加到本应用: Added to this application
 确认删除该仪表盘？: Delete this dashboard?
-"仪表盘名称: {name}": "Dashboard Name: {name}"
+'仪表盘名称: {name}': 'Dashboard Name: {name}'
 可嵌入蓝鲸监控仪表盘，查看应用指标。配置步骤见 {0}: Embed BlueKing Monitor dashboards to view application metrics. See {0} for setup steps.
 环境不存在或已被删除: The environment does not exist or has been deleted
 环境详情加载失败: Failed to load environment details
@@ -2118,7 +2063,7 @@ HostPort 目前仅对绑定联邦集群的环境生效: HostPort currently only 
 目标实例: Target Instance
 字段: Field
 值: Value
-"集群 {0} 的命名空间 {1} 已被工作空间 {2} 下的环境 {3} 占用": "Namespace {1} in cluster {0} is already used by environment {3} in workspace {2}"
+'集群 {0} 的命名空间 {1} 已被工作空间 {2} 下的环境 {3} 占用': 'Namespace {1} in cluster {0} is already used by environment {3} in workspace {2}'
 连通测试: Connectivity Test
 连接成功: Connection succeeded
 连接失败: Connection failed
@@ -2170,14 +2115,14 @@ HostPort 目前仅对绑定联邦集群的环境生效: HostPort currently only 
 差异内容: Differences
 当前配置已被他人更新。为避免数据被覆盖，请刷新页面获取最新版本后重新编辑。: The configuration was updated elsewhere. Refresh it before editing again to avoid overwriting the latest version.
 该环境的单独配置及历史版本将被删除，之后使用默认配置。: The environment-specific configuration and its version history will be deleted, and the default configuration will be used.
-"共 {0} 个文件；未挂载到该环境的配置文件不会出现在容器内。": "{0} files in total. Files not mounted to this environment will not appear in the container."
+'共 {0} 个文件；未挂载到该环境的配置文件不会出现在容器内。': '{0} files in total. Files not mounted to this environment will not appear in the container.'
 挂载环境: Mounted environments
 挂载环境不能为空: Mounted environments cannot be empty
 挂载路径: Mount path
 挂载预览: Mount preview
 恢复为默认配置: Restore default configuration
 恢复为默认配置？: Restore the default configuration?
-"开启后，文件内容中的 {0} 会在下发前被渲染为实际值": "When enabled, {0} in the file content is rendered to the actual value before delivery"
+'开启后，文件内容中的 {0} 会在下发前被渲染为实际值': 'When enabled, {0} in the file content is rendered to the actual value before delivery'
 默认配置 + 本环境差异项: Default configuration + environment differences
 默认配置，仅对未单独配置的环境生效: Default configuration; applies only to environments without their own configuration
 修改后该环境将独立配置，需填写完整内容: Editing creates a separate configuration for this environment; enter the full content
@@ -2207,31 +2152,31 @@ HostPort 目前仅对绑定联邦集群的环境生效: HostPort currently only 
 文件名: File name
 文件名仅支持数字、字母、下划线(_)、中划线(-)、点(.): The file name only supports numbers, letters, underscores (_), hyphens (-), and dots (.).
 文件名仅支持数字、字母、下划线(_)、中划线(-)、点(.)，长度 1-64 之间: File names must be 1-64 characters and contain only numbers, letters, underscores (_), hyphens (-), and dots (.).
-"目录 {0} 下已存在文件 {1}，请修改文件名或挂载目录": "A file named {1} already exists in directory {0}. Please change the file name or mount directory."
-"当前应用已存在文件 {0}，请修改文件名": "A file named {0} already exists in this application. Please change the file name."
+'目录 {0} 下已存在文件 {1}，请修改文件名或挂载目录': 'A file named {1} already exists in directory {0}. Please change the file name or mount directory.'
+'当前应用已存在文件 {0}，请修改文件名': 'A file named {0} already exists in this application. Please change the file name.'
 文件名与配置文件路径不能为空: File name and configuration path are required
 保存失败，请稍后重试: Save failed. Please try again later.
-"文件最终挂载到 {0}": "The file will be mounted at {0}"
+'文件最终挂载到 {0}': 'The file will be mounted at {0}'
 新建配置文件: Create configuration file
 渲染环境变量: Render environment variables
-"可通过表达式 {0} 引用。平台会在下发前将变量渲染为实际值": "Use the expression {0} to reference a variable. The platform renders it to its actual value before delivery."
-"当前未开启环境变量渲染，文件中的 {0} 不会被渲染": "Environment variable rendering is currently disabled. The expression {0} in the file will not be rendered."
+'可通过表达式 {0} 引用。平台会在下发前将变量渲染为实际值': 'Use the expression {0} to reference a variable. The platform renders it to its actual value before delivery.'
+'当前未开启环境变量渲染，文件中的 {0} 不会被渲染': 'Environment variable rendering is currently disabled. The expression {0} in the file will not be rendered.'
 已创建，请填写文件内容: Created. Enter the file content.
 暂无其他配置文件，可点击新建: No other configuration files. Click Create to add one.
-"指定 {0} 个": "{0} selected"
+'指定 {0} 个': '{0} selected'
 指定环境: Specific environments
 就绪: Readiness
 就绪状态: Readiness
 实例是否可以接收流量: Can the instance receive traffic?
-设置可见环境: "Set visible environments"
-特性环境始终可见，无需设置。可仅勾选需要在「部署管理」页面环境下拉列表中显示的环境；其他页面不受此设置影响，仍会显示全部环境。: "Feature environments are always visible and need no configuration. You only need to select the environments to show in the environment dropdown on the Deployment Management page; other pages are not affected and still show all environments."
-恢复全部: "Restore all"
-已按可见环境筛选，共 {0} 个: "Filtered by visible environments, {0} in total"
-显示全部环境: "Showing all environments"
-该应用未配置部署到此环境: "This application is not configured to deploy to this environment"
-该环境已有部署，必须保持可见，不能取消: "This environment has a deployment and must remain visible. It cannot be deselected."
-该环境是特性环境的父环境，必须保持可见，不能取消: "This environment is the parent of a feature environment and must remain visible. It cannot be deselected."
-配置已保存，获取最新配置失败，请刷新页面重试: "Configuration saved, but failed to load the latest configuration. Refresh the page to retry"
+设置可见环境: 'Set visible environments'
+特性环境始终可见，无需设置。可仅勾选需要在「部署管理」页面环境下拉列表中显示的环境；其他页面不受此设置影响，仍会显示全部环境。: 'Feature environments are always visible and need no configuration. You only need to select the environments to show in the environment dropdown on the Deployment Management page; other pages are not affected and still show all environments.'
+恢复全部: 'Restore all'
+已按可见环境筛选，共 {0} 个: 'Filtered by visible environments, {0} in total'
+显示全部环境: 'Showing all environments'
+该应用未配置部署到此环境: 'This application is not configured to deploy to this environment'
+该环境已有部署，必须保持可见，不能取消: 'This environment has a deployment and must remain visible. It cannot be deselected.'
+该环境是特性环境的父环境，必须保持可见，不能取消: 'This environment is the parent of a feature environment and must remain visible. It cannot be deselected.'
+配置已保存，获取最新配置失败，请刷新页面重试: 'Configuration saved, but failed to load the latest configuration. Refresh the page to retry'
 仅对选中实例原地更新镜像 Tag，不重建 Pod、不变更配置。同一环境内允许部分实例使用不同镜像。: Only update the image tag of the selected instances in place, without rebuilding Pods or changing the configuration. Instances in the same environment are allowed to use different images.
 修改镜像仓库: Edit Image Registry
 仓库类型: Registry Type
@@ -2245,37 +2190,96 @@ HostPort 目前仅对绑定联邦集群的环境生效: HostPort currently only 
 存量镜像不会迁移，使用旧镜像的应用仍需重新构建后再部署: Existing images will not be migrated; apps using old images must be rebuilt before deploying
 当前运行中的实例不受此影响: Running instances are not affected
 我已确认目标仓库可用，并知晓存量镜像不会迁移: I have confirmed the target registry is available and understand existing images will not be migrated
-"请输入镜像仓库地址，如：{0}": "Please enter the registry address, e.g. {0}"
+'请输入镜像仓库地址，如：{0}': 'Please enter the registry address, e.g. {0}'
 填写到命名空间即可，不带协议前缀，不含镜像名与 tag: Fill in up to the namespace, without protocol prefix, image name or tag
 留空则沿用该空间已有外部仓库的密码: Leave blank to keep the password of this workspace's existing external registry
 
-"平台托管应用": "Platform-managed application"
-"当前应用不支持平台通用构建": "This application does not support platform builds"
-"应用能力加载失败，部分功能暂不可用": "Failed to load application capabilities. Some features are temporarily unavailable."
-"应用尚未接入可观测": "Observability has not been configured for this application"
-"暂无配置文件，可点击新建": "No configuration files. Click Create to add one."
-"暂无配置文件，可点击左侧新建": "No configuration files. Click Create on the left to add one."
+'平台托管应用': 'Platform-managed application'
+'当前应用不支持平台通用构建': 'This application does not support platform builds'
+'应用能力加载失败，部分功能暂不可用': 'Failed to load application capabilities. Some features are temporarily unavailable.'
+'应用尚未接入可观测': 'Observability has not been configured for this application'
+'暂无配置文件，可点击新建': 'No configuration files. Click Create to add one.'
+'暂无配置文件，可点击左侧新建': 'No configuration files. Click Create on the left to add one.'
 
-"应用运行时目录加载失败，请重试": "Failed to load application runtimes. Please retry"
-"请选择一个应用模板": "Select an application template"
-"框架应用": "Framework applications"
-"通用应用": "General-purpose applications"
-"不限框架，平台提供构建、部署、配置等通用能力": "Use any framework with platform capabilities for building, deployment, and configuration"
-"更换": "Change"
-"添加启动命令": "Add startup command"
-"添加命令参数": "Add command argument"
-"适合 Gin、Echo 等 Web 服务": "For web services using Gin, Echo, and similar frameworks"
-"适合数据服务与 AI 应用": "For data services and AI applications"
-"适合接口与前后端一体服务": "For APIs and full-stack services"
-"全部实例（{0}）": "All instances ({0})"
-"全部实例": "All instances"
-"输入实例名称搜索": "Search by instance name"
-"共 {0} 个实例，输入名称后再选择": "{0} instances in total. Enter a name to select instances"
-"仅展示前 100 个结果，请缩小搜索范围": "Only the first 100 results are shown. Refine your search"
-"最多选择 50 个实例": "Select up to 50 instances"
-"一次最多选择 50 个实例，请减少勾选数量，或清空选择后查看全部实例": "Select up to 50 instances. Select fewer instances, or clear the selection to view all instances"
-"选择实例后展示全部已选实例": "Show all selected instances after selecting instances"
-"所有图表按平均 CPU 使用量选取实例": "All charts use instances ranked by average CPU usage"
-"请输入 0-50 的数字": "Enter 0–50"
-"汇聚方法": "Aggregation method"
-"COUNT 下使用率指标的分子、分母分别计数，结果恒为 100%": "COUNT counts the numerator and denominator of usage ratios separately, so the result is always 100%"
+'应用运行时目录加载失败，请重试': 'Failed to load application runtimes. Please retry'
+'请选择一个应用模板': 'Select an application template'
+'框架应用': 'Framework applications'
+'通用应用': 'General-purpose applications'
+'不限框架，平台提供构建、部署、配置等通用能力': 'Use any framework with platform capabilities for building, deployment, and configuration'
+'更换': 'Change'
+'添加启动命令': 'Add startup command'
+'添加命令参数': 'Add command argument'
+'适合 Gin、Echo 等 Web 服务': 'For web services using Gin, Echo, and similar frameworks'
+'适合数据服务与 AI 应用': 'For data services and AI applications'
+'适合接口与前后端一体服务': 'For APIs and full-stack services'
+'全部实例（{0}）': 'All instances ({0})'
+'全部实例': 'All instances'
+'输入实例名称搜索': 'Search by instance name'
+'共 {0} 个实例，输入名称后再选择': '{0} instances in total. Enter a name to select instances'
+'仅展示前 100 个结果，请缩小搜索范围': 'Only the first 100 results are shown. Refine your search'
+'最多选择 50 个实例': 'Select up to 50 instances'
+'一次最多选择 50 个实例，请减少勾选数量，或清空选择后查看全部实例': 'Select up to 50 instances. Select fewer instances, or clear the selection to view all instances'
+'选择实例后展示全部已选实例': 'Show all selected instances after selecting instances'
+'所有图表按平均 CPU 使用量选取实例': 'All charts use instances ranked by average CPU usage'
+'请输入 0-50 的数字': 'Enter 0–50'
+'汇聚方法': 'Aggregation method'
+'COUNT 下使用率指标的分子、分母分别计数，结果恒为 100%': 'COUNT counts the numerator and denominator of usage ratios separately, so the result is always 100%'
+发布策略在空间内共享，应用部署时可选用。平台内置策略只读，可克隆后按需调整。: Release strategies are shared within the workspace and can be selected during application deployment. Built-in strategies are read-only and can be cloned for customization.
+发布策略加载失败，请稍后重试: Failed to load release strategies. Please try again later.
+查看策略: View Strategy
+克隆策略: Clone Strategy
+克隆为空间策略: Clone as Workspace Strategy
+策略说明: Description
+批次: Batches
+失败策略: Failure Strategy
+暂停方式: Pause Mode
+累计数: Accumulated Count
+批次配置: Batch Configuration
+更新到: Update To
+暂停时长（秒）: Pause Duration (s)
+不暂停: No Pause
+暂停指定时长: Pause for Duration
+永久暂停: Pause Permanently
+添加批次: Add Batch
+策略已创建: Strategy created
+策略已更新: Strategy updated
+策略已删除: Strategy deleted
+请输入策略名称，1 ~ 64 个字符: Enter a strategy name (1-64 characters)
+请输入策略说明，最多 200 个字符: Enter a description (up to 200 characters)
+正整数或百分比，如 1 或 25%: Positive integer or percentage, e.g. 1 or 25%
+30 ~ 86400 秒: 30-86400 seconds
+'{0} 批': '{0} batches'
+'累计 {0}': 'Accumulated {0}'
+'{0}（全量）': '{0} (all)'
+策略名称不能为空: Strategy name cannot be empty
+策略名称不能超过 64 个字符: Strategy name cannot exceed 64 characters
+策略说明不能超过 200 个字符: Description cannot exceed 200 characters
+请至少配置一个批次: Configure at least one batch
+请输入正整数或百分比（如 1 或 25%）: Enter a positive integer or percentage (e.g. 1 or 25%)
+百分比需为 1% ~ 100% 的整数: Percentage must be an integer between 1% and 100%
+请输入大于 0 的正整数: Enter a positive integer greater than 0
+暂停时长需为 30 ~ 86400 秒之间的整数: Pause duration must be an integer between 30 and 86400 seconds
+策略保存在当前空间，空间下所有应用都可以选用: Strategies are saved in the current workspace and available to all applications in it
+发布批次: Release Batches
+更新实例会换镜像；调整流量只改已更新实例的北极星权重: Updating instances replaces images; traffic adjustments only change the Polaris weight of updated instances
+目标资源: Target Resources
+累计更新副本数: Accumulated updated replicas
+填到本批结束时应更新的总量（按累计值推进），不是本批新增数。新实例上线时北极星权重为 1。: Enter the total to be updated by the end of this batch (accumulated), not the increment of this batch. New instances start with Polaris weight 1.
+暂停: Pause
+不停: No pause
+永久暂停，手动继续: Pause permanently, resume manually
+'%': '%'
+'{0} 个': '{0}'
+待填写: Not filled
+更新批次: Update Batch
+修改后点「预览策略」可查看整体效果: Click "Preview Strategy" after modification to see the overall effect
+预览策略: Preview Strategy
+'按 {0} 个实例换算': 'Calculated based on {0} instances'
+累计更新数需大于上一批: Accumulated updated replicas must be greater than the previous batch
+'累计更新数需大于上一批（{0}）': 'Accumulated updated replicas must be greater than the previous batch ({0})'
+请输入累计更新副本数: Enter the accumulated updated replicas
+请输入策略名称，1 ~ 32 个字符: Enter a strategy name (1-32 characters)
+例如：生产环境先放 1 个实例观察，再按 25% / 50% / 全量放量: e.g. Update 1 instance in production first, then roll out by 25% / 50% / all
+策略名称不能超过 32 个字符: Strategy name cannot exceed 32 characters
+策略说明不能超过 100 个字符: Description cannot exceed 100 characters
+策略名称在当前空间已存在: This strategy name already exists in the current space

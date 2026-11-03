@@ -32,6 +32,7 @@
 | ↳ `env/` 其余子页 | — | 环境详情/设置/泳道等 | 1~2 | 2 | 2 | 5~6 | ❌ 落选（低频可复评） |
 | `:space/env/:envId/health` | clusterHealthDiagnosis | 集群健康诊断 | 1 | 2 | 2 | **5** | ❌ 落选 |
 | `:space/env/:envId/port-pool` | clusterPortPool | 端口池管理 | 1 | 2 | 2 | **5** | ❌ 落选 |
+| `:space/basic`（release-strategies） | basicItem | 发布策略管理（列表 + 新建/编辑/查看/克隆/删除抽屉） | 2 | 3 | 3 | **8** | ✅ 入选（S20） |
 | `:space/basic`（app-default-config/deploy-config） | basicItem | 应用默认配置编辑 | 2 | 2 | 2 | **6** | ❌ 落选 |
 | `:space/basic`（base-info/operation-history） | basicItem | 基础信息/操作历史 | 2 | 1 | 1 | **4** | ❌ 落选 |
 | `:space/plugin/:menuName` | componentList | 插件配置 | 1 | 2 | 2 | **5** | ❌ 落选 |
@@ -75,6 +76,7 @@
 | S17 | 集群组件安装与配置 | 7 | `✅ 入选` |
 | S18 | 构建管理 | 7 | `✅ 入选` |
 | S19 | RepoRefSelect（Input 路径） | 8 | `✅ 入选` |
+| S20 | 发布策略管理 | 8 | `✅ 入选` |
 
 > S8 编号预留未使用（首版评审即保留空位，避免与既有讨论引用冲突）。场景卡模板：状态/评分/来源/目标/V → 用例 → 验收 → backlog → 打法。
 
@@ -248,6 +250,16 @@
 - 验收：连跑 3 稳定；变异 2/2；评审 90/100
 - backlog：P2 Select 下拉路径
 - 打法：PLAYBOOK「防抖 + VTU 契约」
+
+#### S20 发布策略管理
+
+- 状态：`✅ 入选` ｜ 评分：8 ｜ 来源：`src/pages/basic/release-strategies/`（index.vue + strategy-sideslider.vue + use-release-strategies.ts + utils.ts）
+- 用户目标：维护分批发布策略（新建/编辑/查看/克隆/删除），列表按名称搜索；批次列可视化（N 批 + 分段条 + 摘要）
+- V = 13：列表加载成功 / 加载失败保留旧数据并提示 / 搜索过滤与空态 / 新建提交 / 新建校验拦截 / 新增批次插入全量批之前 / 全量批不可删除 / 预览前置校验拦截 / 预览弹窗按实例数换算 / 编辑回显提交 / 查看只读 / 删除二次确认 / 删除取消 / 内置策略操作差异
+- 用例：`test/scenarios/release-strategies-management.test.ts`（14 全绿）+ `test/release-strategies-utils.test.ts`（纯函数：摘要文案 / 分段条占比 / 暂停方式 / 目标资源校验 / 全量末批与递增校验 / 预览行换算 / 排序 / 过滤 / 明细行文案）
+- 验收：连跑 3 稳定；变异 6/6 捕获（编辑回显失效 / 名称校验退化 / 提交 name 丢失 / 删除确认失效 / 排序反转 / 过滤失效）
+- backlog：批次明细 Popover hover 弹层 jsdom 不可稳定断言（布局改 grid 后仅覆盖默认插槽摘要，明细行文案由 `buildBatchDetailRows` 纯函数单测覆盖）；单位下拉（个/%）展开交互在 jsdom 不稳定，仅覆盖默认单位与数字输入；克隆预填交互；失败策略列待后端提供字段
+- 打法：PLAYBOOK「vxe 垫片 + 表格 stub」+ bkui 弹层 partial mock（Message/InfoBox stub、其余真实渲染）
 
 ## 3. 覆盖模型检查
 
