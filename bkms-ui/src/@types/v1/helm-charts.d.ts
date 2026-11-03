@@ -367,11 +367,19 @@ export interface AppHelmChartOutputObj {
 
 export interface DeployedEnvInfo {
   /**
+   * envDisplayName 环境展示名称
+   */
+  envDisplayName?: string;
+  /**
+   * envKind 环境类别（standard / feature）
+   */
+  envKind?: string;
+  /**
    * envName 环境名称
    */
   envName?: string;
   /**
-   * envType 环境类型
+   * envType 环境类型，特性环境为其继承的类型
    */
   envType?: string;
 }

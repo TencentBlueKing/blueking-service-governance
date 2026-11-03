@@ -6,7 +6,7 @@
 import type { Config } from '~/api/interceptors';
 import type { NoInfer } from '~/api/ts-helpers';
 import { v1Fetch } from '~/api/clients';
-import type { ListEventsRequest, PaginatedEventsOutputObj, ListAppInstancesRequest, PaginatedAppInstancesOutputObj, UpdateAppInstancesRequest, EmptyOutput, ListTrpcAdminCmdsRequest, ListTrpcAdminCmdsOutputObjs, ExecuteTrpcAdminCmdRequest, ExecuteTrpcAdminCmdOutputObjs, BatchDeleteAppInstancesRequest, UpdateAppInstancePolarisRequest, ScaleAppInstancesRequest, ExecuteTafAdminCmdRequest, ExecuteTafAdminCmdOutputObjs, WatchAppInstancesRequest, AppInstanceWatchStreamDoc, ListAppInstanceLogsRequest, LogEntryOutputObj, PortForwardRequest, CreateAppInstanceWebConsoleRequest, WebConsoleInfoOutputObj } from '~/@types/v1/instance';
+import type { ListEventsRequest, PaginatedEventsOutputObj, ListAppInstancesRequest, PaginatedAppInstancesOutputObj, UpdateAppInstancesRequest, EmptyOutput, ListTrpcAdminCmdsRequest, ListTrpcAdminCmdsOutputObjs, ExecuteTrpcAdminCmdRequest, ExecuteTrpcAdminCmdOutputObjs, BatchDeleteAppInstancesRequest, UpdateAppInstancePolarisRequest, ScaleAppInstancesRequest, ExecuteTafAdminCmdRequest, ExecuteTafAdminCmdOutputObjs, WatchAppInstancesRequest, AppInstanceWatchStreamDoc, ListAppInstanceLogsRequest, LogEntryOutputObj, PortForwardRequest, CreateAppInstanceWebConsoleRequest, WebConsoleInfoOutputObj, CreateAppInstanceWeTermRequest, WeTermInfoOutputObj } from '~/@types/v1/instance';
 
 export const InstanceService = {
   /**
@@ -243,4 +243,22 @@ export const InstanceService = {
     params?: NoInfer<Request>,
     config?: Config,
   ) => await v1Fetch.post<Request, ResponseData>('/apps/{appID}/envs/{envName}/instances/{instanceID}/web-console')(params, config),
+  /**
+   * 获取应用运行实例（Pod）WeTerm 登录链接
+   *
+   * 未配置 WeTerm 环境 ID 时返回 NOT_IMPLEMENTED。
+   *
+   * @method POST
+   * @path /apps/{appID}/envs/{envName}/instances/{instanceID}/weterm
+   * @tag instance
+   * @param appID path string required 应用 ID
+   * @param envName path string required 部署环境名称
+   * @param instanceID path string required 实例 ID
+   * @response 200 CreateAppInstanceWeTermOutput OK
+   * @response 400 GinErrorOutput Bad Request
+   */
+  createAppInstanceWeTerm: async <Request extends CreateAppInstanceWeTermRequest = CreateAppInstanceWeTermRequest, ResponseData = WeTermInfoOutputObj>(
+    params?: NoInfer<Request>,
+    config?: Config,
+  ) => await v1Fetch.post<Request, ResponseData>('/apps/{appID}/envs/{envName}/instances/{instanceID}/weterm')(params, config),
 };

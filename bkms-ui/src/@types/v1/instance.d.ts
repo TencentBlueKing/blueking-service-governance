@@ -238,6 +238,21 @@ export type CreateAppInstanceWebConsoleRequest = CreateAppInstanceWebConsoleInpu
   instanceID: string;
 };
 
+export interface CreateAppInstanceWeTermRequest {
+  /**
+   * 应用 ID
+   */
+  appID: string;
+  /**
+   * 部署环境名称
+   */
+  envName: string;
+  /**
+   * 实例 ID
+   */
+  instanceID: string;
+}
+
 export interface ListEventsOutput {
   /**
    * 分页查询结果
@@ -385,6 +400,17 @@ export interface CreateAppInstanceWebConsoleInput {
 
 export interface CreateAppInstanceWebConsoleOutput {
   data?: WebConsoleInfoOutputObj;
+}
+
+export interface CreateAppInstanceWeTermOutput {
+  data?: WeTermInfoOutputObj;
+}
+
+export interface WeTermInfoOutputObj {
+  /**
+   * WeTerm 登录链接（weterm:// 协议，由本地 WeTerm 客户端打开）
+   */
+  url?: string;
 }
 
 export interface WebConsoleInfoOutputObj {

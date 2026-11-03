@@ -140,6 +140,14 @@ export interface OperationDataOutputObj {
 
 export interface OperationGroupOutputObj {
   appID?: string;
+  /**
+   * 环境展示名称，环境已删除或记录未关联环境时为空
+   */
+  envDisplayName?: string;
+  /**
+   * 环境类别（standard/feature），环境已删除或记录未关联环境时为空
+   */
+  envKind?: string;
   envName?: string;
   workspaceID?: string;
 }

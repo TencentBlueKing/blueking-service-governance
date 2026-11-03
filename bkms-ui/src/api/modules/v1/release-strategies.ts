@@ -10,7 +10,7 @@ import type { ListReleaseStrategiesRequest, ReleaseStrategyOutputObj, CreateRele
 
 export const ReleaseStrategiesService = {
   /**
-   * 查询空间内全部发布策略
+   * 查询空间可用的全部发布策略
    *
    * @method GET
    * @path /workspaces/{workspaceID}/release-strategies
