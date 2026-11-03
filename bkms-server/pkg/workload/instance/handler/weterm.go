@@ -36,7 +36,7 @@ import (
 //
 //	@ID			CreateAppInstanceWeTerm
 //	@Summary	获取应用运行实例（Pod）WeTerm 登录链接
-//	@Description	未配置 WeTerm 环境 ID（如社区版）时返回 NOT_IMPLEMENTED。
+//	@Description	未配置 WeTerm 环境 ID 时返回 NOT_IMPLEMENTED。
 //	@Tags		instance
 //	@Produce	json
 //	@Security	BkUserInfo
@@ -65,15 +65,7 @@ func (h *Handler) CreateAppInstanceWeTerm(c *gin.Context) {
 		bkerrs.AbortWithErr(c, err)
 		return
 	}
-	weTermURL := buildWeTermURL(weTermParams{
-		EnvID:         envID,
-		ProjectID:     target.workspace.BkSystems.BkBCSProjectID,
-		ProjectCode:   target.workspace.BkSystems.BkBCSProjectCode,
-		ClusterID:     target.env.Cluster.ClusterID,
-		Namespace:     target.env.Cluster.Namespace,
-		PodName:       uriInput.InstanceID,
-		ContainerName: target.containerName,
-	})
+	weTermURL := buildWeTermURL(envID, target, uriInput.InstanceID)
 
 	// 创建 WeTerm 操作记录
 	go audit.AddOperationRecordAsync(
@@ -91,40 +83,16 @@ func (h *Handler) CreateAppInstanceWeTerm(c *gin.Context) {
 	})
 }
 
-// weTermParams 生成 WeTerm 登录容器链接所需的参数
-type weTermParams struct {
-	// EnvID BCS 侧分配的环境 ID（bkBcsEnvID）
-	EnvID string
-	// ProjectID BCS 项目 ID
-	ProjectID string
-	// ProjectCode BCS 项目 Code
-	ProjectCode string
-	// ClusterID 集群 ID
-	ClusterID string
-	// Namespace 命名空间
-	Namespace string
-	// PodName Pod 名称
-	PodName string
-	// ContainerName 容器名称
-	ContainerName string
-}
-
-// buildWeTermURL 生成 WeTerm 登录容器的链接，由用户本地安装的 WeTerm 客户端打开，格式由 BCS 侧约定：
-//
-//	weterm://session/open/bcs?ns={namespace}&pod={podName}&container={containerName}&type=login
-//	&clusterId={clusterId}&envId={bkBcsEnvID}&projectID={projectID}&projectCode={projectCode}
-//
-// 不使用 url.Values.Encode，因为它会按 key 排序，打乱 BCS 约定的参数顺序。
-func buildWeTermURL(p weTermParams) string {
+func buildWeTermURL(envID string, target *consoleTarget, podName string) string {
 	query := []struct{ key, value string }{
-		{"ns", p.Namespace},
-		{"pod", p.PodName},
-		{"container", p.ContainerName},
+		{"ns", target.env.Cluster.Namespace},
+		{"pod", podName},
+		{"container", target.containerName},
 		{"type", "login"},
-		{"clusterId", p.ClusterID},
-		{"envId", p.EnvID},
-		{"projectID", p.ProjectID},
-		{"projectCode", p.ProjectCode},
+		{"clusterId", target.env.Cluster.ClusterID},
+		{"envId", envID},
+		{"projectID", target.workspace.BkSystems.BkBCSProjectID},
+		{"projectCode", target.workspace.BkSystems.BkBCSProjectCode},
 	}
 	pairs := make([]string, 0, len(query))
 	for _, q := range query {

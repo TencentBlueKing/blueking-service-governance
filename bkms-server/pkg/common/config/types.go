@@ -108,7 +108,7 @@ type BCSConfig struct {
 	// 创建/更新环境时，用户提交的 clusterID 命中此列表则视为联邦集群。
 	FederationClusterIDs []string
 	// WeTermEnvID BCS 侧为当前部署环境分配的 WeTerm 环境 ID（bkBcsEnvID），用于生成 WeTerm 登录容器链接。
-	// 为空表示不支持 WeTerm（如社区版）。
+	// 为空表示不启用 WeTerm。
 	WeTermEnvID string
 }
 

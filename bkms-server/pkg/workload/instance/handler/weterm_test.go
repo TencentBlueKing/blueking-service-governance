@@ -21,27 +21,40 @@ package handler
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+
+	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
+	bkmsworkspace "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 )
 
 var _ = Describe("buildWeTermURL", func() {
+	var target *consoleTarget
+
+	BeforeEach(func() {
+		target = &consoleTarget{
+			workspace: &bkmsworkspace.Workspace{
+				BkSystems: bkmsworkspace.BkSystems{
+					BkBCSProjectID:   "project-id",
+					BkBCSProjectCode: "project-code",
+				},
+			},
+			env: &envmodel.Environment{
+				Cluster: envmodel.BizCluster{
+					ClusterID: "BCS-K8S-00000",
+					Namespace: "ns",
+				},
+			},
+			containerName: "main",
+		}
+	})
+
 	It("builds url in the order agreed with BCS", func() {
-		url := buildWeTermURL(weTermParams{
-			EnvID:         "env-id",
-			ProjectID:     "project-id",
-			ProjectCode:   "project-code",
-			ClusterID:     "BCS-K8S-00000",
-			Namespace:     "ns",
-			PodName:       "pod-0",
-			ContainerName: "main",
-		})
-		Expect(url).To(Equal(
+		Expect(buildWeTermURL("env-id", target, "pod-0")).To(Equal(
 			"weterm://session/open/bcs?ns=ns&pod=pod-0&container=main&type=login" +
 				"&clusterId=BCS-K8S-00000&envId=env-id&projectID=project-id&projectCode=project-code",
 		))
 	})
 
 	It("escapes query values", func() {
-		url := buildWeTermURL(weTermParams{PodName: "a&b=c"})
-		Expect(url).To(ContainSubstring("pod=a%26b%3Dc&"))
+		Expect(buildWeTermURL("env-id", target, "a&b=c")).To(ContainSubstring("pod=a%26b%3Dc&"))
 	})
 })

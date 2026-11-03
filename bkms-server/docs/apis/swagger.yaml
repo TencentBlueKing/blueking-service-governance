@@ -8336,7 +8336,7 @@ definitions:
           $ref: '#/definitions/serializer.BatchOutputObj'
         type: array
       createdAt:
-        description: 创建时间
+        description: 创建时间, 对内置策略可能返回为空
         type: string
       creator:
         description: 创建人
@@ -16631,7 +16631,7 @@ paths:
       - instance
   /apps/{appID}/envs/{envName}/instances/{instanceID}/weterm:
     post:
-      description: 未配置 WeTerm 环境 ID（如社区版）时返回 NOT_IMPLEMENTED。
+      description: 未配置 WeTerm 环境 ID 时返回 NOT_IMPLEMENTED。
       operationId: CreateAppInstanceWeTerm
       parameters:
       - description: 应用 ID

@@ -10258,7 +10258,7 @@ const docTemplate = `{
                         "BkUserCredential": []
                     }
                 ],
-                "description": "未配置 WeTerm 环境 ID（如社区版）时返回 NOT_IMPLEMENTED。",
+                "description": "未配置 WeTerm 环境 ID 时返回 NOT_IMPLEMENTED。",
                 "produces": [
                     "application/json"
                 ],
@@ -32698,7 +32698,7 @@ const docTemplate = `{
                     }
                 },
                 "createdAt": {
-                    "description": "创建时间",
+                    "description": "创建时间, 对内置策略可能返回为空",
                     "type": "string"
                 },
                 "creator": {
