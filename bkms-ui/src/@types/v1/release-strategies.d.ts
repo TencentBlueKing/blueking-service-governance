@@ -79,8 +79,7 @@ export interface ReleaseStrategyOutput {
   data?: ReleaseStrategyOutputObj;
 }
 
-export interface EmptyOutput {
-}
+export interface EmptyOutput {}
 
 export interface ReleaseStrategyOutputObj {
   /**
@@ -144,7 +143,7 @@ export interface BatchInput {
   /**
    * 本批完成后的暂停方式：none 不暂停 / duration 定时暂停 / permanent 永久暂停（需人工继续）
    */
-  pauseMode: "none" | "duration" | "permanent";
+  pauseMode: 'none' | 'duration' | 'permanent';
   /**
    * 定时暂停时长（秒），仅 pauseMode 为 duration 时必填且只能在此时填写，至少 1 秒，不设上限
    */

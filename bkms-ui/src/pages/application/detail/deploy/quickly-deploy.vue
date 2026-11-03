@@ -73,6 +73,7 @@
         :effective-replicas="targetEffectiveReplicas"
         :env-name="targetEnv?.name"
         :env-type="targetEnv?.type"
+        :is-federation-env="isFederationEnv(targetEnv)"
         :is-prod-env="targetIsProdEnv"
         :precheck-before-submit="hasTargetSelector"
         :use-provided-env="hasTargetSelector"
@@ -103,6 +104,7 @@
   import { Button, Form, Message, Sideslider } from 'bkui-vue';
   import { useI18n } from 'vue-i18n';
   import EnvSelectPanel from '~/components/env-select-panel/env-select-panel.vue';
+  import { isFederationEnv } from '~/composables/use-is-federation-env';
   import { useAppDetail } from '~/stores/app-detail';
   import { useTrpcDeployStore } from '~/stores/trpc-deploy';
 
