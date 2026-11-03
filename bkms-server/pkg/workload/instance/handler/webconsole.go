@@ -24,6 +24,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
+	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	bkmsworkspace "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
@@ -38,6 +39,48 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/workload/defaults"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/instance/serializer"
 )
+
+// consoleTarget 登录容器终端（WebConsole / WeTerm）的目标信息
+type consoleTarget struct {
+	app           *bkmsapp.Application
+	workspace     *bkmsworkspace.Workspace
+	env           *envmodel.Environment
+	containerName string
+}
+
+// resolveConsoleTarget 校验应用编辑权限，并解析登录实例终端所需的空间、环境与容器名称。
+//
+// 涉及模型：App、Workspace、Environment。
+func (h *Handler) resolveConsoleTarget(
+	ctx context.Context, uriInput serializer.AppInstanceURIInput,
+) (*consoleTarget, error) {
+	// 校验 App 编辑权限
+	app, err := perm.ValidateAppByID(ctx, h.registry, uriInput.AppID, perm.TypeEdit)
+	if err != nil {
+		return nil, err
+	}
+	workspace, err := store.Of(h.registry.DB, bkmsworkspace.Meta).
+		Get(ctx, bkmsworkspace.ByWorkspaceID(app.WorkspaceID))
+	if err != nil {
+		return nil, bkerrs.Wrap(err, bkerrs.ErrCodeNotFound, "get workspace failed")
+	}
+	// 获取当前部署对应的集群环境
+	env, err := h.envs().Get(ctx, envmodel.AppEnvByName(app.WorkspaceID, app.ID, uriInput.EnvName))
+	if err != nil {
+		return nil, bkerrs.Wrap(err, bkerrs.ErrCodeNotFound, "get env by name")
+	}
+
+	containerName := defaults.WorkloadMainContainerName
+	// 非 AppModel 类应用主容器名称不一定是 main
+	if !appruntime.IsAppModelType(app.Type) {
+		podClient := k8sclient.NewPodClient(cluster.NewConfig(env.Cluster.ClusterID))
+		containerName, err = podClient.GetFirstContainerName(ctx, env.Cluster.Namespace, uriInput.InstanceID)
+		if err != nil {
+			return nil, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get first container name")
+		}
+	}
+	return &consoleTarget{app: app, workspace: workspace, env: env, containerName: containerName}, nil
+}
 
 // CreateAppInstanceWebConsole 创建应用运行实例（Pod）WebConsole。
 //
@@ -72,16 +115,9 @@ func (h *Handler) CreateAppInstanceWebConsole(c *gin.Context) {
 	_ = input.TrafficLaneName
 
 	ctx := c.Request.Context()
-	// 校验 App 编辑权限
-	app, err := perm.ValidateAppByID(ctx, h.registry, uriInput.AppID, perm.TypeEdit)
+	target, err := h.resolveConsoleTarget(ctx, uriInput)
 	if err != nil {
 		bkerrs.AbortWithErr(c, err)
-		return
-	}
-	workspace, err := store.Of(h.registry.DB, bkmsworkspace.Meta).
-		Get(ctx, bkmsworkspace.ByWorkspaceID(app.WorkspaceID))
-	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeNotFound, "get workspace failed"))
 		return
 	}
 	client, err := bcs.New(auth.MustGetUser(ctx))
@@ -89,30 +125,13 @@ func (h *Handler) CreateAppInstanceWebConsole(c *gin.Context) {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "initial bcs client"))
 		return
 	}
-	// 获取当前部署对应的集群环境
-	env, err := h.envs().Get(ctx, envmodel.AppEnvByName(app.WorkspaceID, app.ID, uriInput.EnvName))
-	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeNotFound, "get env by name"))
-		return
-	}
-
-	containerName := defaults.WorkloadMainContainerName
-	// 非 AppModel 类应用主容器名称不一定是 main
-	if !appruntime.IsAppModelType(app.Type) {
-		podClient := k8sclient.NewPodClient(cluster.NewConfig(env.Cluster.ClusterID))
-		containerName, err = podClient.GetFirstContainerName(ctx, env.Cluster.Namespace, uriInput.InstanceID)
-		if err != nil {
-			bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get first container name"))
-			return
-		}
-	}
 	webConsoleURL, err := client.CreateWebConsole(
 		ctx,
-		workspace.BkSystems.BkBCSProjectCode,
-		env.Cluster.ClusterID,
-		env.Cluster.Namespace,
+		target.workspace.BkSystems.BkBCSProjectCode,
+		target.env.Cluster.ClusterID,
+		target.env.Cluster.Namespace,
 		uriInput.InstanceID,
-		containerName,
+		target.containerName,
 		// 目前固定使用 sh 作为 web console 命令
 		"/bin/sh",
 	)
@@ -128,8 +147,8 @@ func (h *Handler) CreateAppInstanceWebConsole(c *gin.Context) {
 		audit.ResourceTypeInstance,
 		uriInput.InstanceID,
 		audit.WithAttribute(audit.AttributeWebConsole),
-		audit.WithWorkspaceID(app.WorkspaceID),
-		audit.WithAppID(app.ID),
+		audit.WithWorkspaceID(target.app.WorkspaceID),
+		audit.WithAppID(target.app.ID),
 		audit.WithEnvName(uriInput.EnvName),
 	)
 	ginutils.OK(c, serializer.CreateAppInstanceWebConsoleOutput{
