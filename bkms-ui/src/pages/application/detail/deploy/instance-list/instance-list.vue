@@ -20,6 +20,7 @@
   <Skeleton
     :full-height="false"
     :loading="isLoading || !isFederationResolved"
+    :once="false"
   >
     <template #loading>
       <div class="flex items-center justify-between mb-[12px]">
