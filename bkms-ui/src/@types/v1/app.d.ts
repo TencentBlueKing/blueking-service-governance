@@ -3,6 +3,9 @@
 // 来源：apps/bkms-server/docs/apis/swagger.json
 // 模块：app
 
+export interface GetAppRuntimeDefinitionsRequest {
+}
+
 export interface GetAppIDAutoSuffixRequest {
 }
 
@@ -42,6 +45,20 @@ export type UpdateAppDisplayNameRequest = UpdateAppDisplayNameInput & {
 };
 
 export type UpdateHelmSpecRequest = UpdateHelmSpecInput & {
+  /**
+   * 应用 ID
+   */
+  appID: string;
+};
+
+export interface GetAppRuntimeModsRequest {
+  /**
+   * 应用 ID
+   */
+  appID: string;
+}
+
+export type UpdateAppStartupConfigRequest = UpdateAppStartupConfigInput & {
   /**
    * 应用 ID
    */
@@ -98,6 +115,17 @@ export interface ResolveAppRequest {
   app: string;
 }
 
+export type CreateBKMSAppRequest = CreateBKMSAppInput & {
+  /**
+   * 工作空间 ID
+   */
+  workspaceID: string;
+};
+
+export interface GetAppRuntimeDefinitionsOutput {
+  data?: AppRuntimeDefinitionsOutputObj;
+}
+
 export interface GetAppIDAutoSuffixOutput {
   /**
    * 后缀字符串
@@ -138,6 +166,29 @@ export interface UpdateHelmSpecInput {
    * 待更新的 Helm Chart 配置
    */
   helmSpec: HelmSpecInput;
+}
+
+export interface GetAppRuntimeModsOutput {
+  data?: PublicView;
+}
+
+export interface UpdateAppStartupConfigInput {
+  /**
+   * 容器启动参数，整体替换
+   */
+  args?: string[];
+  /**
+   * 容器启动命令，整体替换
+   */
+  command?: string[];
+  /**
+   * 框架扩展配置：缺省不修改，null 拒绝，对象（含 {}）整体替换并重新校验
+   */
+  frameworkConfig?: Record<string, unknown>;
+  /**
+   * 容器启动脚本，整体替换；与 command、args 互斥，不能为纯空白
+   */
+  shCommand?: string;
 }
 
 export interface UpdateAppModelSpecInput {
@@ -194,6 +245,223 @@ export interface ResolveAppOutput {
   data?: ResolveAppOutputObj;
 }
 
+export interface CreateBKMSAppInput {
+  /**
+   * 应用模型规范
+   */
+  appModelSpec: BKMSAppModelSpecInput;
+  /**
+   * 构建配置
+   */
+  buildConfig: BuildConfigInput;
+  /**
+   * 框架：trpc、taf、blank，可选值见 /app-runtime-definitions
+   */
+  framework: string;
+  /**
+   * 框架配置文件。框架支持框架配置文件时必填，blank 不能传
+   */
+  frameworkConfigFile?: FrameworkConfigFileInput;
+  /**
+   * 应用 ID. 应用在全局范围内的唯一标识，默认情况下基于 name 自动生成，在 name 后追加后缀。
+   * 长度范围 1~63 个字符，以小写字母开头，可包含小写字母、数字、中划线，不能以中划线结尾
+   */
+  id: string;
+  /**
+   * 语言：go、cpp、nodejs、python，须为框架支持的语言（nodejs、python 仅 blank 支持）
+   */
+  language: string;
+  /**
+   * 应用名称. 长度范围 1~63 个字符，以小写字母开头，可包含小写字母、数字、中划线，不能以中划线结尾
+   */
+  name: string;
+}
+
+export interface BKMSAppModelSpecInput {
+  /**
+   * 容器启动参数
+   */
+  args?: string[];
+  /**
+   * 容器启动命令
+   */
+  command?: string[];
+  /**
+   * 容器环境变量
+   */
+  envVars?: VariableInput[];
+  /**
+   * 框架扩展配置，按框架严格校验；缺省为空对象
+   */
+  frameworkConfig?: Record<string, unknown>;
+  /**
+   * 容器启动脚本，以 /bin/sh 执行，与 command、args 互斥，不能为纯空白
+   */
+  shCommand?: string;
+}
+
+export interface BuildConfigInput {
+  /**
+   * 镜像仓库配置
+   */
+  imageBuildConfig?: ImageBuildConfigInput;
+  /**
+   * 流水线配置
+   */
+  pipelineBuildConfig?: PipelineBuildConfigInput;
+  /**
+   * 代码仓库配置
+   */
+  repoBuildConfig?: RepoBuildConfigInput;
+  /**
+   * 来源类型
+   */
+  sourceType: "imageRegistry" | "codeRepository" | "pipeline";
+}
+
+export interface FrameworkConfigFileInput {
+  /**
+   * 文件内容
+   */
+  content?: string;
+  /**
+   * 挂载目录
+   */
+  mountDir: string;
+  /**
+   * 文件名
+   */
+  name: string;
+}
+
+export interface ImageBuildConfigInput {
+  /**
+   * 镜像名称，不包含 Tag
+   */
+  name: string;
+  /**
+   * 镜像仓库密码
+   */
+  password?: string;
+  /**
+   * 镜像仓库用户名
+   */
+  username?: string;
+}
+
+export interface PipelineBuildConfigInput {
+  /**
+   * 流水线额外参数
+   */
+  params?: Record<string, string>;
+  /**
+   * 蓝盾流水线 ID
+   */
+  pipelineID: string;
+}
+
+export interface RepoBuildConfigInput {
+  /**
+   * 默认构建分支
+   */
+  defaultBranch: string;
+  /**
+   * DockerBuildArgs Docker 构建参数
+   */
+  dockerBuildArgs?: Record<string, string>;
+  /**
+   * Dockerfile 路径，空表示默认路径。仅 imageBuildMode=repositoryDockerfile 时有效
+   */
+  dockerfile?: string;
+  /**
+   * ImageBuildMode 镜像构建方式：repositoryDockerfile 表示使用仓库 Dockerfile，platform 表示平台通用构建
+   */
+  imageBuildMode?: "platform" | "repositoryDockerfile";
+  /**
+   * PlatformBuildConfig 平台通用构建配置，仅 imageBuildMode=platform 时有效；Dockerfile 是流水线内部中间产物
+   */
+  platformBuildConfig?: PlatformBuildConfigInput;
+  /**
+   * 蓝盾侧仓库别名
+   */
+  repoAlias: string;
+  /**
+   * 代码仓库地址
+   */
+  repoURL: string;
+  /**
+   * 构建目录，空表示仓库根目录；非空时必须是仓库内相对路径，不能以 / 开头，也不能包含 .. 路径段
+   */
+  sourceDir?: string;
+  /**
+   * 代码仓库类型：TGit 或 GitHub
+   */
+  type: "TGit" | "GitHub";
+}
+
+export interface PlatformBuildConfigInput {
+  /**
+   * 构建产物目录，可选；为空时 go / cpp 默认 /out。构建阶段命令可通过 ${BKMS_ARTIFACT_DIR} 引用，
+   * 目录内全部内容会拷贝到运行镜像的 /app。必须是绝对路径、不能是根目录、不能包含 .. 路径段，
+   * 只允许字母、数字和 . _ - /，最长 128；保存时会去掉末尾 / 等冗余写法
+   */
+  artifactDir?: string;
+  /**
+   * 构建阶段基础镜像
+   */
+  builderImage?: string;
+  /**
+   * 命令配置
+   */
+  commands?: BuildCommandsInput;
+  /**
+   * 打包额外文件路径，相对构建目录；空列表表示不额外拷贝
+   */
+  extraFiles?: string[];
+  /**
+   * 运行阶段基础镜像
+   */
+  runnerImage?: string;
+}
+
+export interface BuildCommandsInput {
+  /**
+   * 编译命令列表
+   */
+  build?: string[];
+  /**
+   * 编译前置命令列表
+   */
+  preBuild?: string[];
+  /**
+   * 运行环境命令列表
+   */
+  runtimeEnv?: string[];
+  /**
+   * 启动命令。留空时镜像入口为 /app/<镜像名>；填写后入口为 shell 形式
+   */
+  start?: string;
+}
+
+export interface VariableInput {
+  /**
+   * 变量描述
+   */
+  description?: string;
+  /**
+   * 是否敏感
+   */
+  isSensitive?: boolean;
+  /**
+   * 变量名
+   */
+  key: string;
+  /**
+   * 变量值
+   */
+  value?: string;
+}
+
 export interface ResolveAppOutputObj {
   id?: string;
   name?: string;
@@ -247,25 +515,6 @@ export interface AppModelSpecInput {
    * tRPC 框架配置
    */
   trpcSpec?: TrpcSpecInput;
-}
-
-export interface BuildConfigInput {
-  /**
-   * 镜像仓库配置
-   */
-  imageBuildConfig?: ImageBuildConfigInput;
-  /**
-   * 流水线配置
-   */
-  pipelineBuildConfig?: PipelineBuildConfigInput;
-  /**
-   * 代码仓库配置
-   */
-  repoBuildConfig?: RepoBuildConfigInput;
-  /**
-   * 来源类型
-   */
-  sourceType: "imageRegistry" | "codeRepository" | "pipeline";
 }
 
 export interface HelmSpecInput {
@@ -353,128 +602,6 @@ export interface HelmRepoConfigInput {
    * 用户名（可选）
    */
   username?: string;
-}
-
-export interface ImageBuildConfigInput {
-  /**
-   * 镜像名称，不包含 Tag
-   */
-  name: string;
-  /**
-   * 镜像仓库密码
-   */
-  password?: string;
-  /**
-   * 镜像仓库用户名
-   */
-  username?: string;
-}
-
-export interface PipelineBuildConfigInput {
-  /**
-   * 流水线额外参数
-   */
-  params?: Record<string, string>;
-  /**
-   * 蓝盾流水线 ID
-   */
-  pipelineID: string;
-}
-
-export interface RepoBuildConfigInput {
-  /**
-   * 默认构建分支
-   */
-  defaultBranch: string;
-  /**
-   * DockerBuildArgs Docker 构建参数
-   */
-  dockerBuildArgs?: Record<string, string>;
-  /**
-   * Dockerfile 路径，空表示默认路径。仅 imageBuildMode=repositoryDockerfile 时有效
-   */
-  dockerfile?: string;
-  /**
-   * ImageBuildMode 镜像构建方式：repositoryDockerfile 表示使用仓库 Dockerfile，platform 表示平台通用构建
-   */
-  imageBuildMode?: "platform" | "repositoryDockerfile";
-  /**
-   * PlatformBuildConfig 平台通用构建配置，仅 imageBuildMode=platform 时有效；Dockerfile 是流水线内部中间产物
-   */
-  platformBuildConfig?: PlatformBuildConfigInput;
-  /**
-   * 蓝盾侧仓库别名
-   */
-  repoAlias: string;
-  /**
-   * 代码仓库地址
-   */
-  repoURL: string;
-  /**
-   * 构建目录，空表示仓库根目录；非空时必须是仓库内相对路径，不能以 / 开头，也不能包含 .. 路径段
-   */
-  sourceDir?: string;
-  /**
-   * 代码仓库类型：TGit 或 GitHub
-   */
-  type: "TGit" | "GitHub";
-}
-
-export interface PlatformBuildConfigInput {
-  /**
-   * 构建阶段基础镜像
-   */
-  builderImage?: string;
-  /**
-   * 命令配置
-   */
-  commands?: BuildCommandsInput;
-  /**
-   * 打包额外文件路径，相对构建目录；空列表表示不额外拷贝
-   */
-  extraFiles?: string[];
-  /**
-   * 运行阶段基础镜像
-   */
-  runnerImage?: string;
-}
-
-export interface BuildCommandsInput {
-  /**
-   * 编译命令列表
-   */
-  build?: string[];
-  /**
-   * 编译前置命令列表
-   */
-  preBuild?: string[];
-  /**
-   * 运行环境命令列表
-   */
-  runtimeEnv?: string[];
-  /**
-   * 启动命令
-   */
-  start?: string;
-}
-
-export interface VariableInput {
-  /**
-   * 变量描述
-   */
-  description?: string;
-  /**
-   * 是否敏感
-   */
-  isSensitive?: boolean;
-  /**
-   * 变量名
-   */
-  key: string;
-  /**
-   * 变量值
-   */
-  value?: string;
 }
 
 export interface TafSpecInput {
@@ -600,6 +727,46 @@ export interface AppDeployedEnvOutputObj {
    */
   type?: string;
 }
+
+export interface PublicView {
+  /**
+   * Framework 框架，helm、agones 应用为空。
+   */
+  framework?: string;
+  /**
+   * Language 语言，未记录时为空。
+   */
+  language?: string;
+  /**
+   * Mods 能力 ID 到能力的映射，包含全部能力；新增能力只会增加 key。
+   */
+  mods?: Record<string, PublicModView>;
+  /**
+   * SchemaVersion 结构版本号。
+   */
+  schemaVersion?: number;
+  /**
+   * Type 应用类型，如 bkmsApp、helm。
+   */
+  type?: string;
+}
+
+export interface PublicModView {
+  /**
+   * Props 对外参数，没有时省略。
+   */
+  props?: unknown;
+  /**
+   * ReasonCode 不支持的原因，支持时省略。
+   */
+  reasonCode?: ReasonCode;
+  /**
+   * Supported 是否支持。
+   */
+  supported?: boolean;
+}
+
+export type ReasonCode = "unsupported_app_type" | "unsupported_stack" | "invalid_stack" | "incomplete_language";
 
 export interface AppDeployOverviewEnvObj {
   /**
@@ -839,6 +1006,10 @@ export interface AppModelSpecOutputObj {
    */
   envVars?: VariableOutputObj[];
   /**
+   * 框架扩展配置，仅 bkmsApp 应用返回
+   */
+  frameworkConfig?: Record<string, unknown>;
+  /**
    * 容器启动脚本，以 /bin/sh 执行
    */
   shCommand?: string;
@@ -1047,6 +1218,10 @@ export interface CustomTagOptsOutputObj {
 
 export interface PlatformBuildConfigOutputObj {
   /**
+   * 构建产物目录，原样返回存储值；未配置时为空串，生效值为语言默认值
+   */
+  artifactDir?: string;
+  /**
    * 构建阶段基础镜像
    */
   builderImage?: string;
@@ -1169,4 +1344,30 @@ export interface TrpcSpecOutputObj {
    * 编程语言
    */
   language?: string;
+}
+
+export interface AppRuntimeDefinitionsOutputObj {
+  /**
+   * 框架目录
+   */
+  frameworks?: FrameworkDefOutputObj[];
+  /**
+   * 每个合法技术栈组合的能力集合
+   */
+  matrix?: PublicView[];
+}
+
+export interface FrameworkDefOutputObj {
+  /**
+   * frameworkConfig 的 schema 版本
+   */
+  configVersion?: number;
+  /**
+   * 框架名
+   */
+  name?: string;
+  /**
+   * 支持的语言
+   */
+  supportedLanguages?: string[];
 }

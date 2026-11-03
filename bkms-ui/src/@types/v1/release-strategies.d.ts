@@ -104,6 +104,10 @@ export interface ReleaseStrategyOutputObj {
    */
   id?: string;
   /**
+   * 是否为平台内置策略（内置策略只可查看/克隆，不可编辑、删除）
+   */
+  isBuiltin?: boolean;
+  /**
    * 策略名称
    */
   name?: string;

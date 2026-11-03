@@ -218,7 +218,7 @@
               filter-multiple
               :filters="filterOptions.deployStatus"
               :label="$t('部署状态')"
-              min-width="130"
+              min-width="200"
             >
               <template #header>
                 <CustomFilter
@@ -231,10 +231,10 @@
               <template #default="{ row }: { row: DeployOverviewRow }">
                 <div class="flex w-fit items-center">
                   <StatusDotIcon
-                    :icon="getStatusInfo(row.deployStatus).icon"
+                    :icon="getRowStatusDisplay(row).icon"
                     :size="12"
                   />
-                  <span class="text-[#4D4F56]">{{ getStatusInfo(row.deployStatus).text || '--' }}</span>
+                  <span class="text-[#4D4F56]">{{ getRowStatusDisplay(row).text || '--' }}</span>
                 </div>
               </template>
             </TableColumn>
@@ -412,9 +412,9 @@
     deployTargets,
     envTypeOptions,
     filterOptions,
+    getRowStatusDisplay,
     getResourceText,
     getResourceTips,
-    getStatusInfo,
     globalTypeFilter,
     handleFilterChange,
     handlePageLimitChange,

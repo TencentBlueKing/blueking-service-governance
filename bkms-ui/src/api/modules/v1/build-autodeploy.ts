@@ -6,9 +6,27 @@
 import type { Config } from '~/api/interceptors';
 import type { NoInfer } from '~/api/ts-helpers';
 import { v1Fetch } from '~/api/clients';
-import type { CreateTafBuildDeployRequest, BuildRecordOutputObj, CreateTrpcBuildDeployRequest } from '~/@types/v1/build-autodeploy';
+import type { CreateBuildDeployRequest, BuildRecordOutputObj, CreateTafBuildDeployRequest, CreateTrpcBuildDeployRequest } from '~/@types/v1/build-autodeploy';
 
 export const BuildAutodeployService = {
+  /**
+   * 触发 bkmsApp 应用构建并自动部署
+   *
+   * @method POST
+   * @path /apps/{appID}/envs/{envName}/build-deploys
+   * @tag build-autodeploy
+   * @param appID path string required 应用 ID
+   * @param envName path string required 环境名称
+   * @param body body CreateAppModelBuildDeployInput required 构建自动部署请求
+   * @response 200 CreateBuildOutput OK
+   * @response 400 GinErrorOutput Bad Request
+   * @response 404 GinErrorOutput Not Found
+   * @response 500 GinErrorOutput Internal Server Error
+   */
+  createBuildDeploy: async <Request extends CreateBuildDeployRequest = CreateBuildDeployRequest, ResponseData = BuildRecordOutputObj>(
+    params?: NoInfer<Request>,
+    config?: Config,
+  ) => await v1Fetch.post<Request, ResponseData>('/apps/{appID}/envs/{envName}/build-deploys')(params, config),
   /**
    * 触发 TAF 应用构建并自动部署
    *

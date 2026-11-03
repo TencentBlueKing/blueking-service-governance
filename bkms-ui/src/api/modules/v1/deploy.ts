@@ -6,7 +6,7 @@
 import type { Config } from '~/api/interceptors';
 import type { NoInfer } from '~/api/ts-helpers';
 import { v1Fetch } from '~/api/clients';
-import type { GetBatchReleaseProgressRequest, BatchReleaseProgressOutputObj, ListHelmDeployRecordsRequest, PaginatedHelmDeployRecordOutputObjs, CreateHelmDeployRequest, PreviewHelmDeployRequest, PreviewHelmDeployOutput, RollbackHelmDeployRequest, EmptyOutput, DeleteHelmDeployRequest, PreviewRollbackHelmDeployRequest, ListTafDeployRecordsRequest, PaginatedAppModelDeployRecordsOutputObjs, CreateTafDeployRequest, DeleteTafDeployRequest, GetLatestTafDeployStatusRequest, LatestDeployStatus, PreCheckTafDeployRequest, DeployPreCheckOutput, ListTafResourceSnapshotsRequest, PaginatedAppModelResourceSnapshotsOutputObjs, GetTafResourceSnapshotRequest, GetAppModelResourceSnapshotOutput, ListTrpcDeployRecordsRequest, CreateTrpcDeployRequest, DeleteTrpcDeployRequest, GetLatestTrpcDeployStatusRequest, PreCheckTrpcDeployRequest, ListTrpcResourceSnapshotsRequest, GetTrpcResourceSnapshotRequest } from '~/@types/v1/deploy';
+import type { GetBatchReleaseProgressRequest, BatchReleaseProgressOutputObj, OperateBatchReleaseRequest, EmptyOutput, ListBKMSAppDeployRecordsRequest, PaginatedAppModelDeployRecordsOutputObjs, CreateBKMSAppDeployRequest, DeleteBKMSAppDeployRequest, GetLatestBKMSAppDeployStatusRequest, LatestDeployStatus, PreCheckBKMSAppDeployRequest, DeployPreCheckOutput, ListBKMSAppResourceSnapshotsRequest, PaginatedAppModelResourceSnapshotsOutputObjs, GetBKMSAppResourceSnapshotRequest, GetAppModelResourceSnapshotOutput, ListHelmDeployRecordsRequest, PaginatedHelmDeployRecordOutputObjs, CreateHelmDeployRequest, PreviewHelmDeployRequest, PreviewHelmDeployOutput, RollbackHelmDeployRequest, DeleteHelmDeployRequest, PreviewRollbackHelmDeployRequest, ListTafDeployRecordsRequest, CreateTafDeployRequest, DeleteTafDeployRequest, GetLatestTafDeployStatusRequest, PreCheckTafDeployRequest, ListTafResourceSnapshotsRequest, GetTafResourceSnapshotRequest, ListTrpcDeployRecordsRequest, CreateTrpcDeployRequest, DeleteTrpcDeployRequest, GetLatestTrpcDeployStatusRequest, PreCheckTrpcDeployRequest, ListTrpcResourceSnapshotsRequest, GetTrpcResourceSnapshotRequest } from '~/@types/v1/deploy';
 
 export const DeployService = {
   /**
@@ -28,6 +28,145 @@ export const DeployService = {
     params?: NoInfer<Request>,
     config?: Config,
   ) => await v1Fetch.get<Request, ResponseData>('/apps/{appID}/envs/{envName}/batch-release')(params, config),
+  /**
+   * 分批发布手动操作
+   *
+   * 对环境 / 泳道最新部署记录对应的进行中分批发布执行继续、暂停、回退上一批、跳过剩余批次或回滚，
+   * 权限同部署。前置条件按集群中 Rollout 的实时状态校验；不满足前置条件、或没有进行中的分批发布时返回 400；
+   * 再次部署正在切换 Rollout（集群中的 Rollout 不属于最新部署记录）、或读取 Rollout 后它又被修改时返回 409，
+   * 刷新状态后重试即可
+   *
+   * @method POST
+   * @path /apps/{appID}/envs/{envName}/batch-release/operations
+   * @tag deploy
+   * @param appID path string required 应用 ID
+   * @param envName path string required 部署环境名称
+   * @param body body OperateBatchReleaseInput required 分批发布手动操作请求
+   * @response 200 EmptyOutput OK
+   * @response 400 GinErrorOutput Bad Request
+   */
+  operateBatchRelease: async <Request extends OperateBatchReleaseRequest = OperateBatchReleaseRequest, ResponseData = EmptyOutput>(
+    params?: NoInfer<Request>,
+    config?: Config,
+  ) => await v1Fetch.post<Request, ResponseData>('/apps/{appID}/envs/{envName}/batch-release/operations')(params, config),
+  /**
+   * 获取 bkmsApp 应用部署记录列表
+   *
+   * @method GET
+   * @path /apps/{appID}/envs/{envName}/bkmsapp-deploys
+   * @tag deploy
+   * @param appID path string required 应用 ID
+   * @param envName path string required 部署环境名称
+   * @param trafficLaneName query string 部署的泳道名称（空字符串表示不使用泳道）
+   * @param keyword query string 搜索关键字
+   * @param page query number required 分页页码（从 1 开始）
+   * @param pageSize query number required 分页大小
+   * @response 200 ListAppModelDeployRecordsOutput OK
+   * @response 400 GinErrorOutput Bad Request
+   */
+  listBKMSAppDeployRecords: async <Request extends ListBKMSAppDeployRecordsRequest = ListBKMSAppDeployRecordsRequest, ResponseData = PaginatedAppModelDeployRecordsOutputObjs>(
+    params?: NoInfer<Request>,
+    config?: Config,
+  ) => await v1Fetch.get<Request, ResponseData>('/apps/{appID}/envs/{envName}/bkmsapp-deploys')(params, config),
+  /**
+   * 创建 bkmsApp 应用部署
+   *
+   * @method POST
+   * @path /apps/{appID}/envs/{envName}/bkmsapp-deploys
+   * @tag deploy
+   * @param appID path string required 应用 ID
+   * @param envName path string required 部署环境名称
+   * @param body body CreateAppModelDeployInput required 创建部署请求
+   * @response 200 EmptyOutput OK
+   * @response 400 GinErrorOutput Bad Request
+   */
+  createBKMSAppDeploy: async <Request extends CreateBKMSAppDeployRequest = CreateBKMSAppDeployRequest, ResponseData = EmptyOutput>(
+    params?: NoInfer<Request>,
+    config?: Config,
+  ) => await v1Fetch.post<Request, ResponseData>('/apps/{appID}/envs/{envName}/bkmsapp-deploys')(params, config),
+  /**
+   * 删除 bkmsApp 应用部署（下架当前环境最新版本）
+   *
+   * @method DELETE
+   * @path /apps/{appID}/envs/{envName}/bkmsapp-deploys
+   * @tag deploy
+   * @param appID path string required 应用 ID
+   * @param envName path string required 部署环境名称
+   * @param trafficLaneName query string 部署的泳道名称（空字符串表示不使用泳道）
+   * @response 200 EmptyOutput OK
+   * @response 400 GinErrorOutput Bad Request
+   */
+  deleteBKMSAppDeploy: async <Request extends DeleteBKMSAppDeployRequest = DeleteBKMSAppDeployRequest, ResponseData = EmptyOutput>(
+    params?: NoInfer<Request>,
+    config?: Config,
+  ) => await v1Fetch.delete<Request, ResponseData>('/apps/{appID}/envs/{envName}/bkmsapp-deploys')(params, config),
+  /**
+   * 获取 bkmsApp 应用最新一次部署的状态
+   *
+   * @method GET
+   * @path /apps/{appID}/envs/{envName}/bkmsapp-deploys/latest-status
+   * @tag deploy
+   * @param appID path string required 应用 ID
+   * @param envName path string required 部署环境名称
+   * @param trafficLaneName query string 部署的泳道名称（空字符串表示不使用泳道）
+   * @response 200 GetLatestAppModelDeployStatusOutput OK
+   * @response 400 GinErrorOutput Bad Request
+   */
+  getLatestBKMSAppDeployStatus: async <Request extends GetLatestBKMSAppDeployStatusRequest = GetLatestBKMSAppDeployStatusRequest, ResponseData = LatestDeployStatus>(
+    params?: NoInfer<Request>,
+    config?: Config,
+  ) => await v1Fetch.get<Request, ResponseData>('/apps/{appID}/envs/{envName}/bkmsapp-deploys/latest-status')(params, config),
+  /**
+   * bkmsApp 应用部署前检查
+   *
+   * @method GET
+   * @path /apps/{appID}/envs/{envName}/bkmsapp-deploys/precheck
+   * @tag deploy
+   * @param appID path string required 应用 ID
+   * @param envName path string required 部署环境名称
+   * @response 200 DeployPreCheckOutput OK
+   * @response 400 GinErrorOutput Bad Request
+   * @response 404 GinErrorOutput Not Found
+   */
+  preCheckBKMSAppDeploy: async <Request extends PreCheckBKMSAppDeployRequest = PreCheckBKMSAppDeployRequest, ResponseData = DeployPreCheckOutput>(
+    params?: NoInfer<Request>,
+    config?: Config,
+  ) => await v1Fetch.get<Request, ResponseData>('/apps/{appID}/envs/{envName}/bkmsapp-deploys/precheck')(params, config),
+  /**
+   * 获取 bkmsApp 应用资源快照列表
+   *
+   * @method GET
+   * @path /apps/{appID}/envs/{envName}/bkmsapp-deploys/{deployID}/resource-snapshots
+   * @tag deploy
+   * @param appID path string required 应用 ID
+   * @param envName path string required 部署环境名称
+   * @param deployID path string required 部署记录 ID
+   * @param page query number required 分页页码（从 1 开始）
+   * @param pageSize query number required 分页大小
+   * @response 200 ListAppModelResourceSnapshotsOutput OK
+   * @response 400 GinErrorOutput Bad Request
+   */
+  listBKMSAppResourceSnapshots: async <Request extends ListBKMSAppResourceSnapshotsRequest = ListBKMSAppResourceSnapshotsRequest, ResponseData = PaginatedAppModelResourceSnapshotsOutputObjs>(
+    params?: NoInfer<Request>,
+    config?: Config,
+  ) => await v1Fetch.get<Request, ResponseData>('/apps/{appID}/envs/{envName}/bkmsapp-deploys/{deployID}/resource-snapshots')(params, config),
+  /**
+   * 获取 bkmsApp 应用部署记录下某个资源的快照详情（具体 k8s 资源的 Manifest 等）
+   *
+   * @method GET
+   * @path /apps/{appID}/envs/{envName}/bkmsapp-deploys/{deployID}/resource-snapshots/{snapshotID}
+   * @tag deploy
+   * @param appID path string required 应用 ID
+   * @param envName path string required 部署环境名称
+   * @param deployID path string required 部署记录 ID
+   * @param snapshotID path string required 资源清单快照 ID
+   * @response 200 GetAppModelResourceSnapshotOutput OK
+   * @response 400 GinErrorOutput Bad Request
+   */
+  getBKMSAppResourceSnapshot: async <Request extends GetBKMSAppResourceSnapshotRequest = GetBKMSAppResourceSnapshotRequest, ResponseData = GetAppModelResourceSnapshotOutput>(
+    params?: NoInfer<Request>,
+    config?: Config,
+  ) => await v1Fetch.get<Request, ResponseData>('/apps/{appID}/envs/{envName}/bkmsapp-deploys/{deployID}/resource-snapshots/{snapshotID}')(params, config),
   /**
    * 获取 Helm 应用部署记录列表
    *

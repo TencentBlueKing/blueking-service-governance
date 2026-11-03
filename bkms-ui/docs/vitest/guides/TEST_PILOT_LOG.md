@@ -27,6 +27,8 @@
 | 全局 `restoreMocks: true` 会红 2 条（height-chain） | mock 工厂里一次性 `mockResolvedValue`、beforeEach 不重设的 vi.fn 被 mockRestore 清空实现，await 后 `undefined.then` | 禁开全局 restoreMocks；spyOn 泄漏目前仅 router-guards 一处且被每文件 jsdom 隔离兜住，新写 spyOn 请文件内自行 restore | height-chain.test.ts:43-52 |
 | 告警逐条打印曾把单次日志刷到 5300+ 行（Vue warn 携带组件堆栈），真信号被淹没 | worker 内逐条 console 输出无汇总 | setup.ts 全部告警按签名聚合计数、文件结束输出摘要；非预期未处理错误在 afterAll 一次性给出次数+用例名+堆栈 | setup.ts |
 | 组件内 `onBeforeRouteUpdate/Leave` 守卫要求 router-view 子组件上下文 | detail.vue 直挂 mount 无该上下文，vue-router mock 未导出守卫 → setup 抛错 | vue-router mock 补守卫导出：适配场景用 no-op；要验证守卫逻辑用捕获回调（`onBeforeRouteUpdate: cb => guards.push(cb)`）直接调用 | height-chain / app-detail-shell |
+| 模板用 `v-bk-tooltips` 时报「Failed to resolve directive」 | bkui-vue 插件 install 只注册组件（preset.js），指令须显式注册 | render 时 `global.directives: { 'bk-tooltips': bkTooltips }`（对齐 src/modules/global.ts） | quickly-deploy-release-strategy.test.ts |
+| bkui Input type=number 填值：clear 触发「不能为空」校验 Message、tripleClick 全选失效、逐字输入会拼成「120」 | 组件库 number 输入交互与 jsdom 选择行为不一致 | 直接 `fireEvent.update(input, '20')` 赋值 | quickly-deploy-release-strategy.test.ts |
 
 ## 环境事实（前置）
 

@@ -18,6 +18,138 @@ export interface GetBatchReleaseProgressRequest {
   trafficLaneName?: string;
 }
 
+export type OperateBatchReleaseRequest = OperateBatchReleaseInput & {
+  /**
+   * 应用 ID
+   */
+  appID: string;
+  /**
+   * 部署环境名称
+   */
+  envName: string;
+};
+
+export interface ListBKMSAppDeployRecordsRequest {
+  /**
+   * 应用 ID
+   */
+  appID: string;
+  /**
+   * 部署环境名称
+   */
+  envName: string;
+  /**
+   * 部署的泳道名称（空字符串表示不使用泳道）
+   */
+  trafficLaneName?: string;
+  /**
+   * 搜索关键字
+   */
+  keyword?: string;
+  /**
+   * 分页页码（从 1 开始）
+   */
+  page: number;
+  /**
+   * 分页大小
+   */
+  pageSize: number;
+}
+
+export type CreateBKMSAppDeployRequest = CreateAppModelDeployInput & {
+  /**
+   * 应用 ID
+   */
+  appID: string;
+  /**
+   * 部署环境名称
+   */
+  envName: string;
+};
+
+export interface DeleteBKMSAppDeployRequest {
+  /**
+   * 应用 ID
+   */
+  appID: string;
+  /**
+   * 部署环境名称
+   */
+  envName: string;
+  /**
+   * 部署的泳道名称（空字符串表示不使用泳道）
+   */
+  trafficLaneName?: string;
+}
+
+export interface GetLatestBKMSAppDeployStatusRequest {
+  /**
+   * 应用 ID
+   */
+  appID: string;
+  /**
+   * 部署环境名称
+   */
+  envName: string;
+  /**
+   * 部署的泳道名称（空字符串表示不使用泳道）
+   */
+  trafficLaneName?: string;
+}
+
+export interface PreCheckBKMSAppDeployRequest {
+  /**
+   * 应用 ID
+   */
+  appID: string;
+  /**
+   * 部署环境名称
+   */
+  envName: string;
+}
+
+export interface ListBKMSAppResourceSnapshotsRequest {
+  /**
+   * 应用 ID
+   */
+  appID: string;
+  /**
+   * 部署环境名称
+   */
+  envName: string;
+  /**
+   * 部署记录 ID
+   */
+  deployID: string;
+  /**
+   * 分页页码（从 1 开始）
+   */
+  page: number;
+  /**
+   * 分页大小
+   */
+  pageSize: number;
+}
+
+export interface GetBKMSAppResourceSnapshotRequest {
+  /**
+   * 应用 ID
+   */
+  appID: string;
+  /**
+   * 部署环境名称
+   */
+  envName: string;
+  /**
+   * 部署记录 ID
+   */
+  deployID: string;
+  /**
+   * 资源清单快照 ID
+   */
+  snapshotID: string;
+}
+
 export interface ListHelmDeployRecordsRequest {
   /**
    * 应用 ID
@@ -385,6 +517,63 @@ export interface GetBatchReleaseProgressOutput {
   data?: BatchReleaseProgressOutputObj;
 }
 
+export interface OperateBatchReleaseInput {
+  /**
+   * 手动操作：continue 继续发布 / pause 暂停 / backward 回退上一批 / skip 跳过剩余批次 / rollback 回滚
+   */
+  action: Action;
+  /**
+   * 部署的泳道名称（空字符串表示不使用泳道）
+   */
+  trafficLaneName?: string;
+}
+
+export interface EmptyOutput {
+}
+
+export interface ListAppModelDeployRecordsOutput {
+  data?: PaginatedAppModelDeployRecordsOutputObjs;
+}
+
+export interface CreateAppModelDeployInput {
+  /**
+   * 部署的镜像版本
+   */
+  imageTag: string;
+  /**
+   * 发布策略 ID：指定时按该策略分批更新实例（仅支持非联邦集群），不指定时一次更新全部实例
+   */
+  releaseStrategyID?: string;
+  /**
+   * 副本数量
+   */
+  replicas: number;
+  /**
+   * 部署的泳道名称（空字符串表示不使用泳道）
+   */
+  trafficLaneName?: string;
+}
+
+export interface GetLatestAppModelDeployStatusOutput {
+  data?: LatestDeployStatus;
+}
+
+export interface DeployPreCheckOutput {
+  /**
+   * 缺失的必选集群组件标识及展示名
+   */
+  missingRequiredClusterAddons?: ClusterAddonReferenceOutput[];
+  undefinedVars?: UndefinedEnvVarOutput[];
+}
+
+export interface ListAppModelResourceSnapshotsOutput {
+  data?: PaginatedAppModelResourceSnapshotsOutputObjs;
+}
+
+export interface GetAppModelResourceSnapshotOutput {
+  snapshot?: AppModelResourceSnapshot;
+}
+
 export interface ListHelmDeployRecordsOutput {
   /**
    * 分页 Helm 部署记录列表
@@ -437,50 +626,86 @@ export interface RollbackHelmDeployInput {
   trafficLaneName?: string;
 }
 
-export interface EmptyOutput {
-}
-
-export interface ListAppModelDeployRecordsOutput {
-  data?: PaginatedAppModelDeployRecordsOutputObjs;
-}
-
-export interface CreateAppModelDeployInput {
+export interface PaginatedHelmDeployRecordOutputObjs {
   /**
-   * 部署的镜像版本
+   * 总记录数
    */
-  imageTag: string;
+  count?: string;
   /**
-   * 发布策略 ID：指定时按该策略分批更新实例（仅支持非联邦集群），不指定时一次更新全部实例
+   * 当前页 Helm 部署记录列表
    */
-  releaseStrategyID?: string;
-  /**
-   * 副本数量
-   */
-  replicas: number;
-  /**
-   * 部署的泳道名称（空字符串表示不使用泳道）
-   */
-  trafficLaneName?: string;
+  results?: HelmDeployRecordOutputObj[];
 }
 
-export interface GetLatestAppModelDeployStatusOutput {
-  data?: LatestDeployStatus;
-}
-
-export interface DeployPreCheckOutput {
+export interface HelmDeployRecordOutputObj {
   /**
-   * 缺失的必选集群组件标识及展示名
+   * Chart 名称
    */
-  missingRequiredClusterAddons?: ClusterAddonReferenceOutput[];
-  undefinedVars?: UndefinedEnvVarOutput[];
-}
-
-export interface ListAppModelResourceSnapshotsOutput {
-  data?: PaginatedAppModelResourceSnapshotsOutputObjs;
-}
-
-export interface GetAppModelResourceSnapshotOutput {
-  snapshot?: AppModelResourceSnapshot;
+  chartName?: string;
+  /**
+   * Chart 版本
+   */
+  chartVersion?: string;
+  /**
+   * 集群 ID
+   */
+  clusterID?: string;
+  /**
+   * 创建时间
+   */
+  createdAt?: string;
+  /**
+   * 部署环境名称
+   */
+  envName?: string;
+  /**
+   * 部署记录 ID
+   */
+  id?: string;
+  /**
+   * 镜像 TAG
+   */
+  imageTag?: string;
+  /**
+   * 部署消息
+   */
+  message?: string;
+  /**
+   * 命名空间
+   */
+  namespace?: string;
+  /**
+   * 操作人
+   */
+  operator?: string;
+  /**
+   * 蓝盾项目 ID
+   */
+  projectCode?: string;
+  /**
+   * Helm Release 名称
+   */
+  releaseName?: string;
+  /**
+   * Helm Revision
+   */
+  revision?: string;
+  /**
+   * 部署状态
+   */
+  status?: string;
+  /**
+   * 更新时间
+   */
+  updatedAt?: string;
+  /**
+   * Helm Release Values；受 Helm 历史存储限制，历史久远的数据可能为空
+   */
+  values?: string;
+  /**
+   * 部署使用的 ValuesFile ID
+   */
+  valuesFileID?: string;
 }
 
 export interface AppModelResourceSnapshot {
@@ -607,87 +832,7 @@ export interface AppModelDeployRecordOutputObj {
   workloadKind?: string;
 }
 
-export interface PaginatedHelmDeployRecordOutputObjs {
-  /**
-   * 总记录数
-   */
-  count?: string;
-  /**
-   * 当前页 Helm 部署记录列表
-   */
-  results?: HelmDeployRecordOutputObj[];
-}
-
-export interface HelmDeployRecordOutputObj {
-  /**
-   * Chart 名称
-   */
-  chartName?: string;
-  /**
-   * Chart 版本
-   */
-  chartVersion?: string;
-  /**
-   * 集群 ID
-   */
-  clusterID?: string;
-  /**
-   * 创建时间
-   */
-  createdAt?: string;
-  /**
-   * 部署环境名称
-   */
-  envName?: string;
-  /**
-   * 部署记录 ID
-   */
-  id?: string;
-  /**
-   * 镜像 TAG
-   */
-  imageTag?: string;
-  /**
-   * 部署消息
-   */
-  message?: string;
-  /**
-   * 命名空间
-   */
-  namespace?: string;
-  /**
-   * 操作人
-   */
-  operator?: string;
-  /**
-   * 蓝盾项目 ID
-   */
-  projectCode?: string;
-  /**
-   * Helm Release 名称
-   */
-  releaseName?: string;
-  /**
-   * Helm Revision
-   */
-  revision?: string;
-  /**
-   * 部署状态
-   */
-  status?: string;
-  /**
-   * 更新时间
-   */
-  updatedAt?: string;
-  /**
-   * Helm Release Values；受 Helm 历史存储限制，历史久远的数据可能为空
-   */
-  values?: string;
-  /**
-   * 部署使用的 ValuesFile ID
-   */
-  valuesFileID?: string;
-}
+export type Action = "continue" | "pause" | "backward" | "skip" | "rollback";
 
 export interface BatchReleaseProgressOutputObj {
   /**
