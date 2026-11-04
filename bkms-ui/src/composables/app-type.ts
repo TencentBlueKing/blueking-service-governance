@@ -63,7 +63,7 @@ export interface AppPresentationInput {
 export function getAppDisplayKind(app: AppPresentationInput): string {
   if (app.type !== APP_TYPES.BKMS_APP) return app.type || '';
   if (app.framework === 'trpc' || app.framework === 'taf') return app.framework;
-  if (app.framework === 'blank' && ['go', 'cpp', 'python', 'nodejs'].includes(app.language || '')) {
+  if (app.framework === 'blank' && ['go', 'cpp', 'python', 'nodejs', 'java'].includes(app.language || '')) {
     return app.language || APP_TYPES.BKMS_APP;
   }
   return APP_TYPES.BKMS_APP;
@@ -80,6 +80,7 @@ export function getAppDisplayLabel(kind: string): string {
     cpp: 'C++',
     python: 'Python',
     nodejs: 'Node.js',
+    java: 'Java',
     bkmsApp: '平台托管应用',
   };
   return labels[kind] || kind;

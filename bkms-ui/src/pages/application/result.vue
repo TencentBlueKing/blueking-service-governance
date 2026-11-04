@@ -20,7 +20,7 @@
   <div class="py-[16px] h-full w-full max-w-[1400px] overflow-auto">
     <div
       v-if="data.status === 'SUCCESS'"
-      class="bg-[#fff] min-w-[600px] p-[60px] flex flex-col items-center mt-[20px]"
+      class="bg-[#fff] min-w-[600px] p-[60px] flex flex-col items-center mt-[20px] shadow-[0_2px_4px_0_#1919290d]"
     >
       <Success
         class="mb-[36px]"

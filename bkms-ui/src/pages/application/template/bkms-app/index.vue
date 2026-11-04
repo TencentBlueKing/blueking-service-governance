@@ -65,18 +65,13 @@
           >
             <div class="flex items-center rounded-[2px] bg-[#F5F7FA] px-[16px] py-[12px]">
               <span class="template-summary-icon">
-                <component
-                  :is="selectedLogo"
-                  v-if="selectedLogo"
-                  class="size-[32px] rounded-[4px]"
+                <TypeIcon
+                  :framework="framework"
+                  :language="language"
+                  :show-label="false"
+                  :size="32"
+                  type="bkmsApp"
                 />
-                <i
-                  v-else
-                  :class="[
-                    'bkms-icon text-[#1B44C8]',
-                    framework === 'trpc' ? 'bkms-icon-trpc text-[14px]' : 'bkms-icon-taf text-[32px]',
-                  ]"
-                ></i>
               </span>
               <div class="ml-[12px] min-w-0 flex-1">
                 <div class="text-[14px] font-bold leading-[22px] text-[#313238]">{{ selectedLabel }}</div>
@@ -163,18 +158,15 @@
 </template>
 <script setup lang="ts">
   import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-  import type { Component } from 'vue';
 
   import { Alert, Button, Loading } from 'bkui-vue';
   import { useRoute, useRouter } from 'vue-router';
   import { AppService } from '~/api/modules/v1/app';
-  import GoLogo from '~/assets/lang-icons/go.svg';
-  import NodejsLogo from '~/assets/lang-icons/nodejs.svg';
-  import PythonLogo from '~/assets/lang-icons/python.svg';
   import { type IAppType, APP_TYPES } from '~/composables/app-type';
   import { getFrameworkFileFormat, isRuntimeModSupported } from '~/composables/use-app-runtime';
   import { useFocusOnErrorField } from '~/composables/use-focus-on-error-field';
   import useLeaveConfirm from '~/composables/use-leave-confirm';
+  import TypeIcon from '~/pages/application/components/type-icon.vue';
   import { useAppDetail } from '~/stores/app-detail';
 
   import Result, { type IResultData } from '../../result.vue';
@@ -224,8 +216,6 @@
       language.value;
     return framework.value === 'blank' ? name : `${framework.value === 'trpc' ? 'tRPC' : 'TAF'} · ${name}`;
   });
-  const languageLogos: Record<string, Component> = { go: GoLogo, python: PythonLogo, nodejs: NodejsLogo };
-  const selectedLogo = computed(() => (framework.value === 'blank' ? languageLogos[language.value] : undefined));
   const descriptions: Record<string, string> = {
     trpc: '适用于使用 tRPC 协议的服务',
     taf: '采用 TAF 框架实现的服务端应用',

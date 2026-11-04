@@ -25,20 +25,27 @@
       :class="['inline-flex shrink-0 items-center justify-center', classes]"
       :title="$t(curTypeIconData.label)"
     >
-      <component
-        :is="languageLogo"
-        v-if="languageLogo"
-        class="size-[20px]"
-      />
       <span
-        v-else-if="displayKind === 'cpp'"
+        v-if="displayKind === 'cpp'"
         class="text-[12px] font-bold"
         >C++</span
       >
-      <i
+      <!-- Helm 的遮罩在 sprite use 中会丢失，使用独立 SVG。 -->
+      <img
+        v-else-if="displayKind === 'helm'"
+        alt=""
+        class="shrink-0"
+        :height="size"
+        :src="helmIconUrl"
+        :width="size"
+      />
+      <ColorIcon
         v-else
-        :class="curTypeIconData.icon"
-      ></i>
+        class="shrink-0"
+        :fill="displayKind === 'bkmsApp' ? '#3A84FF' : undefined"
+        :icon="curTypeIconData.icon"
+        :size="size"
+      />
     </span>
     <span v-if="!$slots.label && showLabel">{{ $t(curTypeIconData.label) }}</span>
     <slot
@@ -54,11 +61,9 @@
 
 <script lang="ts" setup>
   import { computed } from 'vue';
-  import type { Component } from 'vue';
 
-  import GoLogo from '~/assets/lang-icons/go.svg';
-  import NodejsLogo from '~/assets/lang-icons/nodejs.svg';
-  import PythonLogo from '~/assets/lang-icons/python.svg';
+  import helmIconUrl from '~/assets/lang-icons/helm.svg?url';
+  import ColorIcon from '~/components/color-icon.vue';
   import { getAppDisplayKind, getAppDisplayLabel } from '~/composables/app-type';
 
   import type { AppType } from '~/composables/app-type';
@@ -74,51 +79,34 @@
     framework?: string;
     language?: string;
     showLabel?: boolean;
+    size?: number;
     type?: AppType | string;
   }
 
   const props = withDefaults(defineProps<IProps>(), {
     classes: '',
     showLabel: true,
+    size: 20,
     emptyPlaceholder: '--',
   });
 
-  const typeIconMap: Record<
-    string,
-    {
-      icon: string;
-      label: string;
-    }
-  > = {
-    trpc: {
-      icon: 'bkms-icon bkms-icon-trpc text-[#1B44C8] text-[8px]',
-      label: 'tRPC',
-    },
-    taf: {
-      icon: 'bkms-icon bkms-icon-taf text-[#1b44c8] text-[20px]',
-      label: 'TAF',
-    },
-    helm: {
-      icon: 'bkms-icon bkms-icon-HelmCharts text-[#0F1689] text-[16px]',
-      label: 'Helm Chart',
-    },
-    agones: {
-      icon: 'bkms-icon bkms-icon-agones text-[#0F1689] text-[16px]',
-      label: 'Agones',
-    },
-    bkmsApp: {
-      icon: 'bkms-icon bkms-icon-chuangjianyingyong text-[#3A84FF] text-[16px]',
-      label: '平台托管应用',
-    },
+  const typeIconMap: Record<string, string> = {
+    trpc: 'trpc',
+    taf: 'taf',
+    helm: 'helm',
+    agones: 'agones',
+    bkmsApp: 'chuangjianyingyong',
+    go: 'go',
+    python: 'python',
+    nodejs: 'node',
+    java: 'java',
   };
 
   const displayKind = computed(() => getAppDisplayKind(props));
-  const languageLogos: Record<string, Component> = { go: GoLogo, python: PythonLogo, nodejs: NodejsLogo };
-  const languageLogo = computed(() => languageLogos[displayKind.value]);
   const curTypeIconData = computed(() => {
-    if (['go', 'python', 'nodejs', 'cpp'].includes(displayKind.value)) {
-      return { icon: '', label: getAppDisplayLabel(displayKind.value) };
-    }
-    return typeIconMap[displayKind.value] || null;
+    const kind = displayKind.value;
+    const icon = typeIconMap[kind];
+    if (!icon && kind !== 'cpp') return null;
+    return { icon: icon || '', label: getAppDisplayLabel(kind) };
   });
 </script>

@@ -45,10 +45,11 @@
               aria-hidden="true"
               class="template-icon"
             >
-              <i
-                :class="item.icon"
-                :style="{ color: item.color, fontSize: item.iconSize }"
-              ></i>
+              <TypeIcon
+                :show-label="false"
+                :size="32"
+                :type="item.id"
+              />
             </span>
             <div class="template-description">
               <div class="template-name">{{ item.name }}</div>
@@ -103,9 +104,12 @@
               aria-hidden="true"
               class="template-icon"
             >
-              <component
-                :is="item.logo"
-                class="block size-[40px] rounded-[4px]"
+              <TypeIcon
+                framework="blank"
+                :language="item.id"
+                :show-label="false"
+                :size="40"
+                type="bkmsApp"
               />
             </span>
             <div class="template-description">
@@ -153,9 +157,7 @@
 
   import { Alert, Button } from 'bkui-vue';
   import { useRouter } from 'vue-router';
-  import GoLogo from '~/assets/lang-icons/go.svg';
-  import NodejsLogo from '~/assets/lang-icons/nodejs.svg';
-  import PythonLogo from '~/assets/lang-icons/python.svg';
+  import TypeIcon from '~/pages/application/components/type-icon.vue';
   import { useAppStore } from '~/stores/apps';
 
   import { findRuntime, useRuntimeDefinitions } from './bkms-app/use-create-app';
@@ -169,43 +171,31 @@
       id: 'trpc',
       name: 'tRPC',
       managed: true,
-      icon: 'bkms-icon bkms-icon-trpc',
-      iconSize: '14px',
-      color: '#1B44C8',
       description: '适用于使用 tRPC 协议的服务',
     },
     {
       id: 'taf',
       name: 'TAF',
       managed: true,
-      icon: 'bkms-icon bkms-icon-taf',
-      iconSize: '32px',
-      color: '#1B44C8',
       description: '采用 TAF 框架实现的服务端应用',
     },
     {
       id: 'helm',
       name: 'Helm Chart',
       managed: false,
-      icon: 'bkms-icon bkms-icon-HelmCharts',
-      iconSize: '32px',
-      color: '#0F1689',
       description: '自定义应用编排，拥有灵活的可定制性',
     },
     {
       id: 'agones',
       name: 'Agones',
       managed: false,
-      icon: 'bkms-icon bkms-icon-agones',
-      iconSize: '32px',
-      color: '#0F1689',
       description: '适用于多人在线游戏的专用服务器编排',
     },
   ];
   const languages = [
-    { id: 'go', name: 'Go', logo: GoLogo, description: '适合 Gin、Echo 等 Web 服务' },
-    { id: 'python', name: 'Python', logo: PythonLogo, description: '适合数据服务与 AI 应用' },
-    { id: 'nodejs', name: 'Node.js', logo: NodejsLogo, description: '适合接口与前后端一体服务' },
+    { id: 'go', name: 'Go', description: '适合 Gin、Echo 等 Web 服务' },
+    { id: 'python', name: 'Python', description: '适合数据服务与 AI 应用' },
+    { id: 'nodejs', name: 'Node.js', description: '适合接口与前后端一体服务' },
   ];
   const legacySelections: Record<string, string> = {
     createTrpcTemplateApp: 'trpc:go',

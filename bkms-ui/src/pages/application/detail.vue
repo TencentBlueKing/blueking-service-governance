@@ -60,8 +60,10 @@
         :min-height="204"
         :placeholder="$t('请选择应用')"
         :popover-min-width="244"
-        :search-placeholder="$t('请输入应用名称')"
-        @toggle="isSpacePopoverShow = !isSpacePopoverShow"
+        :popover-options="{ extCls: 'application-selector-popover' }"
+        :scroll-height="7 * 36 + 8"
+        :search-placeholder="$t('搜索')"
+        @toggle="isSpacePopoverShow = $event"
       >
         <template #trigger>
           <div
@@ -75,10 +77,13 @@
                 :show-label="false"
                 :type="type"
               />
-              <span class="whitespace-nowrap">{{ currentApplicationName }}</span>
+              <span class="truncate">{{ currentApplicationName }}</span>
             </div>
             <AngleDownFill
-              :class="['mr-[5px] text-[#C4C6CC] group-hover:text-[#979BA5]', isSpacePopoverShow ? '' : 'rotate-180']"
+              :class="[
+                'mr-[5px] shrink-0 text-[#C4C6CC] group-hover:text-[#979BA5]',
+                { 'rotate-180': isSpacePopoverShow },
+              ]"
             />
           </div>
         </template>
@@ -107,9 +112,10 @@
           v-else
           :id="item.name"
           :key="item.name"
+          class="application-selector-option"
           :name="item.name"
         >
-          <div class="flex items-center gap-[5px]">
+          <div class="flex items-center gap-[8px] min-w-0">
             <TypeIcon
               classes="min-w-[20px] inline-block"
               :framework="item.framework"
@@ -117,7 +123,7 @@
               :show-label="false"
               :type="item.type"
             />
-            <span>{{ item.name }}</span>
+            <span class="truncate">{{ item.name }}</span>
           </div>
         </Select.Option>
       </Select>
@@ -378,5 +384,15 @@
 <style lang="postcss" scoped>
   :deep(.bk-select .bk-select-trigger) {
     height: 100%;
+  }
+
+  :global(.application-selector-popover.bk-popover.bk-pop2-content.bk-select-popover) {
+    overflow: hidden;
+    border-radius: 6px;
+  }
+
+  .application-selector-option {
+    height: 36px;
+    font-size: 14px;
   }
 </style>

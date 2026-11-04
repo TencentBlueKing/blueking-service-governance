@@ -174,6 +174,7 @@ values 文件: Values File
   "Next, you can modify the configuration again based on the
   reason for the failure."
 tRPC: tRPC
+Java: Java
 "tRPC 应用": "tRPC Application"
 采用 tRPC 框架实现的服务端应用: Server application implemented using the tRPC framework.
 Kubernetes 原生应用: Kubernetes-native Application
