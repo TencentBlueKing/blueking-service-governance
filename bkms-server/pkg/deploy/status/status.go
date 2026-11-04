@@ -610,39 +610,17 @@ func selectLatestStatus(
 	if buildRecord == nil && deployRecord == nil {
 		return nil
 	}
-	if deployRecord == nil {
+	// 关联同一次部署时取构建部署状态；否则按创建时间取新的一条，避免两类记录不一致时返回过时状态
+	if isBuildRecordLatest(buildRecord, deployRecord) {
 		return &LatestDeployStatus{
 			Status:    buildRecord.Status,
 			ImageTag:  buildRecord.ImageTag,
 			StartedAt: buildRecord.StartedAt,
-		}
-	}
-	if buildRecord == nil {
-		return &LatestDeployStatus{
-			Status:    string(deployRecord.Status),
-			ImageTag:  deployRecord.ImageTag,
-			StartedAt: deployRecord.StartedAt,
-		}
-	}
-	// 如果构建部署记录的 DeployID 与应用模型部署记录的 ID 关联，说明该构建部署对应的就是这条应用模型部署，直接返回构建部署状态。
-	if buildRecord.DeployID != "" && buildRecord.DeployID == deployRecord.ID.Hex() {
-		return &LatestDeployStatus{
-			Status:    buildRecord.Status,
-			ImageTag:  buildRecord.ImageTag,
-			StartedAt: buildRecord.StartedAt,
-		}
-	}
-	// 否则根据创建时间选择最新的状态，避免构建部署记录和应用模型部署记录不一致时返回过时的状态。
-	if buildRecord.CreatedAt.Before(deployRecord.CreatedAt) {
-		return &LatestDeployStatus{
-			Status:    string(deployRecord.Status),
-			ImageTag:  deployRecord.ImageTag,
-			StartedAt: deployRecord.StartedAt,
 		}
 	}
 	return &LatestDeployStatus{
-		Status:    buildRecord.Status,
-		ImageTag:  buildRecord.ImageTag,
-		StartedAt: buildRecord.StartedAt,
+		Status:    string(deployRecord.Status),
+		ImageTag:  deployRecord.ImageTag,
+		StartedAt: deployRecord.StartedAt,
 	}
 }
