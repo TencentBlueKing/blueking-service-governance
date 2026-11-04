@@ -28,6 +28,8 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
+	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
@@ -275,6 +277,50 @@ patches:
 			equal, err := testutil.YAMLEqual(result, expectedYAML)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(equal).To(BeTrue())
+		})
+
+		Context("when choosing the merge strategy", func() {
+			compile := func() string {
+				GinkgoHelper()
+				normalAcf.Content = lo.ToPtr("a: 1\nb:\n")
+				overlayAcf.OverlayContent = lo.ToPtr("a:\nc: 2\n")
+				overlayAcf.BaseAppConfigFileID = &normalAcf.ID
+				Expect(files.Replace(ctx, normalAcf, store.ByID(normalAcf.ID))).To(Succeed())
+				Expect(files.Replace(ctx, overlayAcf, store.ByID(overlayAcf.ID))).To(Succeed())
+
+				result, err := newLocalAppConfigFileEditor(db, overlayAcf).GetCompiledContent(ctx)
+				Expect(err).ToNot(HaveOccurred())
+				return result
+			}
+
+			DescribeTable("should pick the strategy by the framework of the app",
+				func(appType, framework, expected string) {
+					app := &bkmsapp.Application{
+						ID:          appID,
+						Name:        appID,
+						WorkspaceID: "test-ws",
+						Type:        appType,
+						Framework:   framework,
+					}
+					Expect(testutil.NewStore(GinkgoT(), bkmsapp.AppMeta).Create(ctx, app)).To(Succeed())
+
+					expectYAMLEqual(compile(), expected)
+				},
+				Entry("legacy trpc app", appruntime.AppTypeTRPC, "", "a: null\nb: null\nc: 2"),
+				Entry("legacy taf app", appruntime.AppTypeTAF, "", "a: null\nb: null\nc: 2"),
+				Entry("bkmsApp with trpc framework",
+					appruntime.AppTypeBKMSApp, appruntime.FrameworkTRPC, "a: null\nb: null\nc: 2"),
+				Entry("bkmsApp with taf framework",
+					appruntime.AppTypeBKMSApp, appruntime.FrameworkTAF, "a: null\nb: null\nc: 2"),
+				Entry("bkmsApp with blank framework", appruntime.AppTypeBKMSApp, appruntime.FrameworkBlank, "c: 2"),
+				Entry("helm app", appruntime.AppTypeHelm, "", "c: 2"),
+				Entry("agones app", appruntime.AppTypeAgones, "", "c: 2"),
+				Entry("app with a conflicting stack", appruntime.AppTypeTRPC, appruntime.FrameworkTAF, "c: 2"),
+			)
+
+			It("should use the strategic merge when the app does not exist", func() {
+				expectYAMLEqual(compile(), "c: 2")
+			})
 		})
 
 		It("should return error when Content is nil", func() {

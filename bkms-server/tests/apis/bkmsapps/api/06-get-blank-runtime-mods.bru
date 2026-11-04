@@ -16,12 +16,12 @@ assert {
 }
 
 tests {
-  test("should not support any framework capability", () => {
+  test("should support only configFileMerge", () => {
     const data = res.body.data;
     expect(data.type).to.equal("bkmsApp");
     expect(data.framework).to.equal("blank");
     Object.entries(data.mods).forEach(([id, mod]) => {
-      expect(mod.supported, id).to.equal(false);
+      expect(mod.supported, id).to.equal(id === "configFileMerge");
     });
   });
 }

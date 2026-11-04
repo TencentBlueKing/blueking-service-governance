@@ -30,7 +30,9 @@ tests {
     ["go", "cpp", "nodejs", "python"].forEach((language) => {
       const blank = matrix.find((v) => v.framework === "blank" && v.language === language);
       expect(blank, `blank+${language}`).to.be.an("object");
-      Object.entries(blank.mods).forEach(([id, mod]) => expect(mod.supported, id).to.equal(false));
+      Object.entries(blank.mods).forEach(([id, mod]) => {
+        expect(mod.supported, id).to.equal(id === "configFileMerge");
+      });
     });
     const trpcGo = matrix.find((v) => v.framework === "trpc" && v.language === "go");
     expect(trpcGo.mods.platformBuild.supported).to.equal(true);

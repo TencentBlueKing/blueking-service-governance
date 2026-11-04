@@ -19,8 +19,11 @@
 package appcfg
 
 import (
+	"github.com/MakeNowJust/heredoc"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 )
 
 var _ = Describe("mergeYAMLContent", func() {
@@ -52,7 +55,7 @@ resources:
     cpu: 100m
     memory: 128Mi
 `
-				result, err := mergeYAMLContent(baseValues, &overlayValues)
+				result, err := mergeYAMLContent(baseValues, &overlayValues, MergeStrategyStrategicMerge)
 
 				Expect(err).NotTo(HaveOccurred())
 				Expect(result).To(ContainSubstring("replicaCount: 3"))
@@ -90,7 +93,7 @@ ingress:
       hosts:
         - chart-example.local
 `
-				result, err := mergeYAMLContent(baseValues, &overlayValues)
+				result, err := mergeYAMLContent(baseValues, &overlayValues, MergeStrategyStrategicMerge)
 
 				Expect(err).NotTo(HaveOccurred())
 				Expect(result).To(ContainSubstring("enabled: true"))
@@ -132,7 +135,7 @@ env:
   - name: TIMEOUT
     value: "30"
 `
-				result, err := mergeYAMLContent(baseValues, &overlayValues)
+				result, err := mergeYAMLContent(baseValues, &overlayValues, MergeStrategyStrategicMerge)
 
 				Expect(err).NotTo(HaveOccurred())
 				// preserved
@@ -176,7 +179,7 @@ patches:
         requests:
           cpu: 100m
 `
-				result, err := mergeYAMLContent(baseValues, &overlayValues)
+				result, err := mergeYAMLContent(baseValues, &overlayValues, MergeStrategyStrategicMerge)
 
 				Expect(err).NotTo(HaveOccurred())
 				Expect(result).To(ContainSubstring("replicas: 3"))
@@ -193,7 +196,7 @@ key: value
 overlayVersion: "2"
 patches: []
 `
-				result, err := mergeYAMLContent(baseValues, &overlayValues)
+				result, err := mergeYAMLContent(baseValues, &overlayValues, MergeStrategyStrategicMerge)
 
 				Expect(err).NotTo(HaveOccurred())
 				Expect(result).To(Equal(baseValues))
@@ -206,7 +209,7 @@ patches: []
 key: value
 replicaCount: 2
 `
-				result, err := mergeYAMLContent(baseValues, nil)
+				result, err := mergeYAMLContent(baseValues, nil, MergeStrategyStrategicMerge)
 
 				Expect(err).NotTo(HaveOccurred())
 				Expect(result).To(Equal(baseValues))
@@ -217,7 +220,7 @@ replicaCount: 2
 key: value
 `
 				overlayValues := ""
-				result, err := mergeYAMLContent(baseValues, &overlayValues)
+				result, err := mergeYAMLContent(baseValues, &overlayValues, MergeStrategyStrategicMerge)
 
 				Expect(err).NotTo(HaveOccurred())
 				Expect(result).To(Equal(baseValues))
@@ -231,7 +234,7 @@ key: value
 overlayVersion: "3"
 key: newvalue
 `
-				_, err := mergeYAMLContent(baseValues, &overlayValues)
+				_, err := mergeYAMLContent(baseValues, &overlayValues, MergeStrategyStrategicMerge)
 
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(ContainSubstring("unsupported overlayVersion"))
@@ -245,7 +248,7 @@ key: value
 invalid: yaml: content:
   - unclosed
 `
-				_, err := mergeYAMLContent(baseValues, &overlayValues)
+				_, err := mergeYAMLContent(baseValues, &overlayValues, MergeStrategyStrategicMerge)
 
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(ContainSubstring("parsing the overlay YAML"))
@@ -259,7 +262,7 @@ key: value
 overlayVersion: "2"
 someOtherField: data
 `
-				result, err := mergeYAMLContent(baseValues, &overlayValues)
+				result, err := mergeYAMLContent(baseValues, &overlayValues, MergeStrategyStrategicMerge)
 
 				Expect(err).NotTo(HaveOccurred())
 				Expect(result).To(Equal(baseValues))
@@ -273,7 +276,7 @@ key: value
 overlayVersion: "2"
 patches: "not-an-array"
 `
-				result, err := mergeYAMLContent(baseValues, &overlayValues)
+				result, err := mergeYAMLContent(baseValues, &overlayValues, MergeStrategyStrategicMerge)
 
 				Expect(err).NotTo(HaveOccurred())
 				Expect(result).To(Equal(baseValues))
@@ -308,7 +311,7 @@ service:
   type: LoadBalancer
 `
 
-				result, err := mergeYAMLContent(baseValues, &overlayValues)
+				result, err := mergeYAMLContent(baseValues, &overlayValues, MergeStrategyStrategicMerge)
 
 				Expect(err).NotTo(HaveOccurred())
 				Expect(result).To(ContainSubstring("username: admin"))
@@ -347,7 +350,7 @@ alertmanager:
     enabled: true
     size: 5Gi
 `
-				result, err := mergeYAMLContent(baseValues, &overlayValues)
+				result, err := mergeYAMLContent(baseValues, &overlayValues, MergeStrategyStrategicMerge)
 
 				Expect(err).NotTo(HaveOccurred())
 				Expect(result).To(ContainSubstring("scrapeInterval: 30s"))
@@ -363,23 +366,388 @@ alertmanager:
 			})
 		})
 	})
+
+	Context("with the strategic merge strategy", func() {
+		DescribeTable("should result in an empty content when base is an empty document",
+			func(base string) {
+				overlay := "a: 1"
+				result, err := mergeYAMLContent(base, &overlay, MergeStrategyStrategicMerge)
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result).To(BeEmpty())
+			},
+			Entry("empty string", ""),
+			Entry("blank", "   \n"),
+			Entry("comment only", "# comment\n"),
+			Entry("document separator only", "---\n"),
+			Entry("null", "null\n"),
+		)
+
+		It("should drop the null fields of base without value", func() {
+			base := heredoc.Doc(`
+				a:
+				b: 1
+				d: null
+				x:
+				  a:
+				  b: 1
+			`)
+			overlay := "c: 2"
+			result, err := mergeYAMLContent(base, &overlay, MergeStrategyStrategicMerge)
+
+			Expect(err).NotTo(HaveOccurred())
+			expectYAMLEqual(result, heredoc.Doc(`
+				b: 1
+				d: null
+				x:
+				  b: 1
+				c: 2
+			`))
+		})
+
+		It("should delete the field when overlay sets it to null", func() {
+			base := heredoc.Doc(`
+				a:
+				  b: 1
+				c: 2
+				d: 1
+			`)
+			overlay := heredoc.Doc(`
+				a:
+				d:
+			`)
+			result, err := mergeYAMLContent(base, &overlay, MergeStrategyStrategicMerge)
+
+			Expect(err).NotTo(HaveOccurred())
+			expectYAMLEqual(result, "c: 2")
+		})
+	})
+
+	DescribeTable("should merge non-null fields the same with both strategies",
+		func(base, overlay string) {
+			strategicMerged, err := mergeYAMLContent(base, &overlay, MergeStrategyStrategicMerge)
+			Expect(err).NotTo(HaveOccurred())
+			nullPreserved, err := mergeYAMLContent(base, &overlay, MergeStrategyNullPreserving)
+			Expect(err).NotTo(HaveOccurred())
+
+			expectYAMLEqual(nullPreserved, strategicMerged)
+		},
+		Entry("nested maps",
+			heredoc.Doc(`
+				a:
+				  b: 1
+				  c:
+				    d: 2
+				e: 3
+			`),
+			heredoc.Doc(`
+				a:
+				  c:
+				    d: 4
+				    f: 5
+				g: 6
+			`),
+		),
+		Entry("lists",
+			heredoc.Doc(`
+				features:
+				  - a
+				  - b
+				env:
+				  - name: A
+				    value: "1"
+			`),
+			heredoc.Doc(`
+				features:
+				  - c
+				env:
+				  - name: B
+				    value: "2"
+			`),
+		),
+		Entry("version 2 patches",
+			heredoc.Doc(`
+				a: 1
+				b: 2
+			`),
+			heredoc.Doc(`
+				overlayVersion: "2"
+				patches:
+				  - a: 3
+				  - c: 4
+			`),
+		),
+		Entry("multiple documents",
+			heredoc.Doc(`
+				a: 1
+				---
+				b: 2
+			`),
+			"c: 3",
+		),
+	)
+
+	Context("with the null preserving strategy", func() {
+		Context("when base is an empty document", func() {
+			DescribeTable("should apply the overlay as if base were an empty map",
+				func(base string) {
+					overlay := heredoc.Doc(`
+						a:
+						  b: 1
+						c: 2
+					`)
+					result, err := mergeYAMLContent(base, &overlay, MergeStrategyNullPreserving)
+
+					Expect(err).NotTo(HaveOccurred())
+					// 精确比对：确保输出为 block 风格，而不是 {a: {b: 1}, c: 2}
+					Expect(result).To(Equal(overlay))
+				},
+				Entry("empty string", ""),
+				Entry("newline only", "\n"),
+				Entry("blank", "   \n"),
+				Entry("comment only", "# comment\n"),
+				Entry("document separator only", "---\n"),
+				Entry("null", "null\n"),
+				Entry("tilde", "~\n"),
+				Entry("empty flow map", "{}\n"),
+			)
+
+			It("should apply version 2 patches in sequence", func() {
+				overlay := heredoc.Doc(`
+					overlayVersion: "2"
+					patches:
+					  - a: 1
+					  - b: 2
+				`)
+				result, err := mergeYAMLContent("", &overlay, MergeStrategyNullPreserving)
+
+				Expect(err).NotTo(HaveOccurred())
+				expectYAMLEqual(result, heredoc.Doc(`
+					a: 1
+					b: 2
+				`))
+			})
+
+			It("should return base when overlay is empty", func() {
+				overlay := ""
+				result, err := mergeYAMLContent("", &overlay, MergeStrategyNullPreserving)
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result).To(BeEmpty())
+			})
+		})
+
+		Context("when base root is not a map", func() {
+			It("should return an error for a scalar base", func() {
+				overlay := "a: 1"
+				_, err := mergeYAMLContent("abc", &overlay, MergeStrategyNullPreserving)
+
+				Expect(err).To(HaveOccurred())
+			})
+		})
+
+		Context("when there are null fields", func() {
+			It("should keep null fields of base untouched by overlay", func() {
+				base := heredoc.Doc(`
+					a:
+					b: 1
+					d: null
+					e: ~
+				`)
+				overlay := "c: 2"
+				result, err := mergeYAMLContent(base, &overlay, MergeStrategyNullPreserving)
+
+				Expect(err).NotTo(HaveOccurred())
+				// 精确比对：null 字段保留原始写法与位置
+				Expect(result).To(Equal(heredoc.Doc(`
+					a:
+					b: 1
+					d: null
+					e: ~
+					c: 2
+				`)))
+			})
+
+			It("should keep nested null fields of base", func() {
+				base := heredoc.Doc(`
+					x:
+					  a:
+					  b: 1
+				`)
+				overlay := heredoc.Doc(`
+					x:
+					  b: 2
+				`)
+				result, err := mergeYAMLContent(base, &overlay, MergeStrategyNullPreserving)
+
+				Expect(err).NotTo(HaveOccurred())
+				// 精确比对：null 字段保留原始写法与位置
+				Expect(result).To(Equal(heredoc.Doc(`
+					x:
+					  a:
+					  b: 2
+				`)))
+			})
+
+			It("should override null fields of base with overlay values", func() {
+				base := heredoc.Doc(`
+					a:
+					c: 0
+				`)
+				overlay := heredoc.Doc(`
+					a:
+					  b: 1
+				`)
+				result, err := mergeYAMLContent(base, &overlay, MergeStrategyNullPreserving)
+
+				Expect(err).NotTo(HaveOccurred())
+				expectYAMLEqual(result, heredoc.Doc(`
+					a:
+					  b: 1
+					c: 0
+				`))
+			})
+
+			DescribeTable("should set the field to null when overlay sets it to null",
+				func(base, overlay, expected string) {
+					result, err := mergeYAMLContent(base, &overlay, MergeStrategyNullPreserving)
+
+					Expect(err).NotTo(HaveOccurred())
+					expectYAMLEqual(result, expected)
+				},
+				Entry("map value",
+					heredoc.Doc(`
+						a:
+						  b: 1
+						c: 2
+					`),
+					"a:",
+					heredoc.Doc(`
+						a: null
+						c: 2
+					`),
+				),
+				Entry("scalar value",
+					heredoc.Doc(`
+						a: 1
+						c: 2
+					`),
+					"a:",
+					heredoc.Doc(`
+						a: null
+						c: 2
+					`),
+				),
+				Entry("list value",
+					heredoc.Doc(`
+						a:
+						  - 1
+						c: 2
+					`),
+					"a:",
+					heredoc.Doc(`
+						a: null
+						c: 2
+					`),
+				),
+				Entry("list of maps value",
+					heredoc.Doc(`
+						env:
+						  - name: A
+						    value: "1"
+						c: 2
+					`),
+					"env:",
+					heredoc.Doc(`
+						env: null
+						c: 2
+					`),
+				),
+				Entry("nested value",
+					heredoc.Doc(`
+						x:
+						  a: 1
+						  b: 2
+					`),
+					heredoc.Doc(`
+						x:
+						  a:
+					`),
+					heredoc.Doc(`
+						x:
+						  a: null
+						  b: 2
+					`),
+				),
+				Entry("missing field",
+					"c: 2",
+					heredoc.Doc(`
+						x:
+						  a:
+					`),
+					heredoc.Doc(`
+						c: 2
+						x:
+						  a: null
+					`),
+				),
+			)
+
+			It("should delete a map field with the $patch: delete directive", func() {
+				base := heredoc.Doc(`
+					a:
+					  b: 1
+					c: 2
+				`)
+				overlay := heredoc.Doc(`
+					a:
+					  $patch: delete
+				`)
+				result, err := mergeYAMLContent(base, &overlay, MergeStrategyNullPreserving)
+
+				Expect(err).NotTo(HaveOccurred())
+				expectYAMLEqual(result, "c: 2")
+			})
+		})
+	})
 })
+
+// expectYAMLEqual asserts that two YAML documents are semantically equal, a null field
+// and a missing field are considered different.
+func expectYAMLEqual(actual, expected string) {
+	GinkgoHelper()
+	equal, err := testutil.YAMLEqual(actual, expected)
+	Expect(err).NotTo(HaveOccurred())
+	Expect(equal).To(BeTrue(), "actual:\n%s\nexpected:\n%s", actual, expected)
+}
 
 var _ = Describe("mergeContent", func() {
 	Context("when selecting merge function by format", func() {
 		It("should use YAML merge for yaml format", func() {
 			baseContent := `key: value`
 			overlayContent := `key: newvalue`
-			result, err := mergeContent(baseContent, &overlayContent, FileFormatYAML)
+			result, err := mergeContent(baseContent, &overlayContent, FileFormatYAML, MergeStrategyStrategicMerge)
 
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result).To(ContainSubstring("key: newvalue"))
 		})
 
+		DescribeTable("should use the given strategy for yaml format",
+			func(strategy MergeStrategy, expected string) {
+				overlayContent := "a:"
+				result, err := mergeContent("a: 1\nb: 2", &overlayContent, FileFormatYAML, strategy)
+
+				Expect(err).NotTo(HaveOccurred())
+				expectYAMLEqual(result, expected)
+			},
+			Entry("strategic merge", MergeStrategyStrategicMerge, "b: 2"),
+			Entry("null preserving", MergeStrategyNullPreserving, "a: null\nb: 2"),
+		)
+
 		It("should use TAF merge for taf format", func() {
 			baseContent := `<tars><app>key=value</app></tars>`
 			overlayContent := `<tars><app>key=newvalue</app></tars>`
-			result, err := mergeContent(baseContent, &overlayContent, FileFormatTAF)
+			result, err := mergeContent(baseContent, &overlayContent, FileFormatTAF, MergeStrategyStrategicMerge)
 
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result).To(ContainSubstring("key=newvalue"))

@@ -25,23 +25,42 @@ import (
 	"github.com/samber/lo"
 	"sigs.k8s.io/kustomize/api/filters/patchstrategicmerge"
 	"sigs.k8s.io/kustomize/kyaml/kio"
+	"sigs.k8s.io/kustomize/kyaml/openapi"
 	"sigs.k8s.io/kustomize/kyaml/yaml"
+	"sigs.k8s.io/kustomize/kyaml/yaml/merge2"
+	"sigs.k8s.io/kustomize/kyaml/yaml/walk"
+)
+
+// MergeStrategy is the strategy for merging YAML config contents.
+type MergeStrategy string
+
+const (
+	// MergeStrategyStrategicMerge is the vanilla kubernetes strategic merge patch: a null field in
+	// overlay deletes the field, and an empty base document results in an empty content.
+	MergeStrategyStrategicMerge MergeStrategy = "strategicMerge"
+	// MergeStrategyNullPreserving is the strategic merge patch which preserves null fields on both
+	// sides: a null field in base stays null, and a null field in overlay sets the field to null
+	// instead of deleting it. Use the `$patch: delete` directive to delete a map field. An empty
+	// base document (empty, blank, comment-only, `---` or `null`) is treated as an empty map.
+	MergeStrategyNullPreserving MergeStrategy = "nullPreserving"
 )
 
 // mergeContent merges two config contents based on the specified format.
 // This is a convenience function that selects the appropriate merge function.
-func mergeContent(base string, overlay *string, format FileFormat) (string, error) {
+// The strategy only applies to the YAML format.
+func mergeContent(base string, overlay *string, format FileFormat, strategy MergeStrategy) (string, error) {
 	switch format {
 	case FileFormatTAF:
 		return mergeTAFContent(base, overlay)
 	default:
 		// Default to YAML format
-		return mergeYAMLContent(base, overlay)
+		return mergeYAMLContent(base, overlay, strategy)
 	}
 }
 
 // mergeYAMLContent merges two YAML contents, with overlay taking precedence over base.
-// This function shares the implementation with kustomize's strategic merge patch.
+// This function shares the implementation with kustomize's strategic merge patch, see
+// MergeStrategy for how each strategy handles null fields and empty base documents.
 //
 // The function supports two overlay formats:
 //  1. Version 2 format (when overlayVersion: "2" is present):
@@ -56,7 +75,7 @@ func mergeContent(base string, overlay *string, format FileFormat) (string, erro
 //     replicas: 5
 //     image: myapp:v2.0
 //     ```
-func mergeYAMLContent(base string, overlay *string) (string, error) {
+func mergeYAMLContent(base string, overlay *string, strategy MergeStrategy) (string, error) {
 	if lo.FromPtr(overlay) == "" {
 		return base, nil
 	}
@@ -100,16 +119,113 @@ func mergeYAMLContent(base string, overlay *string) (string, error) {
 			return "", errors.Wrap(err, "parsing the overlay YAML")
 		}
 
-		var retBuf bytes.Buffer
-		err = kio.Pipeline{
-			Inputs:  []kio.Reader{&kio.ByteReader{Reader: bytes.NewBufferString(currentResult)}},
-			Filters: []kio.Filter{patchstrategicmerge.Filter{Patch: overlayNode}},
-			Outputs: []kio.Writer{kio.ByteWriter{Writer: &retBuf}},
-		}.Execute()
+		switch strategy {
+		case MergeStrategyNullPreserving:
+			currentResult, err = applyNullPreservingPatch(currentResult, overlayNode)
+		default:
+			currentResult, err = applyStrategicMergePatch(currentResult, overlayNode)
+		}
 		if err != nil {
 			return "", errors.Wrap(err, "merging the YAML contents")
 		}
-		currentResult = retBuf.String()
 	}
 	return currentResult, nil
+}
+
+// applyStrategicMergePatch applies a vanilla strategic merge patch to every document in base.
+func applyStrategicMergePatch(base string, patch *yaml.RNode) (string, error) {
+	var buf bytes.Buffer
+	err := kio.Pipeline{
+		Inputs:  []kio.Reader{&kio.ByteReader{Reader: bytes.NewBufferString(base)}},
+		Filters: []kio.Filter{patchstrategicmerge.Filter{Patch: patch}},
+		Outputs: []kio.Writer{kio.ByteWriter{Writer: &buf}},
+	}.Execute()
+	if err != nil {
+		return "", err
+	}
+	return buf.String(), nil
+}
+
+// applyNullPreservingPatch applies a null preserving strategic merge patch to every document in base.
+func applyNullPreservingPatch(base string, patch *yaml.RNode) (string, error) {
+	docs, err := (&kio.ByteReader{
+		Reader:                bytes.NewBufferString(base),
+		OmitReaderAnnotations: true,
+	}).Read()
+	if err != nil {
+		return "", errors.Wrap(err, "parsing the base YAML")
+	}
+	if len(docs) == 0 {
+		docs = []*yaml.RNode{yaml.NewMapRNode(nil)}
+	}
+
+	var merged []*yaml.RNode
+	for _, doc := range docs {
+		result, err := walk.Walker{
+			Sources: []*yaml.RNode{doc, patch},
+			Visitor: nullPreservingMerger{},
+			MergeOptions: yaml.MergeOptions{
+				ListIncreaseDirection: yaml.MergeOptionsListPrepend,
+			},
+		}.Walk()
+		if err != nil {
+			return "", errors.Wrap(err, "applying the patch")
+		}
+		if result != nil {
+			merged = append(merged, result)
+		}
+	}
+
+	var buf bytes.Buffer
+	if err := (kio.ByteWriter{Writer: &buf}).Write(merged); err != nil {
+		return "", errors.Wrap(err, "writing the merged YAML")
+	}
+	return buf.String(), nil
+}
+
+// nullPreservingMerger is a strategic merge visitor which keeps null fields rather than clearing them.
+type nullPreservingMerger struct {
+	merge2.Merger
+}
+
+var _ walk.Visitor = nullPreservingMerger{}
+
+func (m nullPreservingMerger) VisitMap(nodes walk.Sources, s *openapi.ResourceSchema) (*yaml.RNode, error) {
+	if n := keptNullNode(nodes); n != nil {
+		return n, nil
+	}
+	return m.Merger.VisitMap(nodes, s)
+}
+
+func (m nullPreservingMerger) VisitScalar(nodes walk.Sources, s *openapi.ResourceSchema) (*yaml.RNode, error) {
+	if n := keptNullNode(nodes); n != nil {
+		return n, nil
+	}
+	return m.Merger.VisitScalar(nodes, s)
+}
+
+func (m nullPreservingMerger) VisitList(
+	nodes walk.Sources, s *openapi.ResourceSchema, kind walk.ListKind,
+) (*yaml.RNode, error) {
+	if n := keptNullNode(nodes); n != nil {
+		return n, nil
+	}
+	return m.Merger.VisitList(nodes, s, kind)
+}
+
+// keptNullNode returns a null node that survives the merge when the patch sets the field to
+// null, or when the patch leaves the field untouched and it is null in base. Otherwise, it
+// returns nil.
+func keptNullNode(nodes walk.Sources) *yaml.RNode {
+	var kept *yaml.RNode
+	switch origin, dest := nodes.Origin(), nodes.Dest(); {
+	case origin.IsTaggedNull():
+		kept = yaml.NewRNode(origin.YNode())
+	case origin.IsNil() && dest.IsTaggedNull():
+		kept = yaml.NewRNode(dest.YNode())
+	default:
+		return nil
+	}
+	kept.ShouldKeep = true
+	return kept
 }

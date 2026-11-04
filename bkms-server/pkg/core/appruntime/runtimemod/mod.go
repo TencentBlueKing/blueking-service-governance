@@ -48,6 +48,8 @@ const (
 	ModPolarisFrameworkPatch ModID = "polarisFrameworkPatch"
 	// ModBSCPWorkloadMeta BSCP 元信息自动填充。
 	ModBSCPWorkloadMeta ModID = "bscpWorkloadMeta" //nolint:gosec // 能力标识，不是凭据
+	// ModConfigFileMerge 配置文件合并。
+	ModConfigFileMerge ModID = "configFileMerge"
 )
 
 // ReasonCode 能力不支持的原因。

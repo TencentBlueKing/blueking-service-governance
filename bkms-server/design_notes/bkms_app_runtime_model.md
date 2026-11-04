@@ -208,6 +208,7 @@ flowchart LR
 | `polarisServiceCheck` | trpc | 无参数；仅指基于 tRPC 配置的服务名校验 |
 | `polarisFrameworkPatch` | trpc | 无参数；仅指配置注入，不等于 Polaris 注册本身 |
 | `bscpWorkloadMeta` | trpc | 无参数；工作负载类型取实际渲染结果；TAF 尚未接入 |
+| `configFileMerge` | trpc、taf、blank | 合并策略：trpc、taf 保留空值字段并支持空默认文件，blank 按 k8s 默认 strategic merge；helm / agones values 属独立链路 |
 
 完整定义与对外契约见 [能力集合方案](./bkms_app_runtime_model_phase1.md) §3，此处不再维护第二份清单。判定标准：**支持与否或参数因技术栈不同而变化**才建 Mod。对所有技术栈一致的功能（plain 配置文件、一键构建部署、构建、监控等）、管理方式相关（部署、渲染、实例、AppSpec、组件）、环境/集群相关（GPA、HostPort、端口池、集群 addon）都不建 Mod。
 
