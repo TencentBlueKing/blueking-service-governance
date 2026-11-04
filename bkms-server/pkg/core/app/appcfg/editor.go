@@ -259,7 +259,7 @@ func mergeAppContent(
 }
 
 // resolveMergeStrategy returns the YAML merge strategy for the config files of the app, which is
-// given by the ConfigMerge runtime mod. Apps without the mod (helm, agones, invalid stack) and
+// given by the ConfigFileMerge runtime mod. Apps without the mod (helm, agones, invalid stack) and
 // missing apps use the vanilla strategic merge.
 func resolveMergeStrategy(ctx context.Context, db *mongo.Database, appID string) (MergeStrategy, error) {
 	app, err := store.Of(db, bkmsapp.AppMeta).Get(ctx, bkmsapp.ByID(appID))
@@ -269,9 +269,9 @@ func resolveMergeStrategy(ctx context.Context, db *mongo.Database, appID string)
 	if err != nil {
 		return "", errors.Wrap(err, "get app for merge strategy")
 	}
-	configMerge := mods.Of(app).ConfigMerge
-	if !configMerge.Supported {
+	configFileMerge := mods.Of(app).ConfigFileMerge
+	if !configFileMerge.Supported {
 		return MergeStrategyStrategicMerge, nil
 	}
-	return MergeStrategy(configMerge.Props.Strategy), nil
+	return MergeStrategy(configFileMerge.Props.Strategy), nil
 }

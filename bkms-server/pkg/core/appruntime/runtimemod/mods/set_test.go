@@ -28,7 +28,7 @@ import (
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime/capability/admincommand"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime/capability/configmerge"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime/capability/configfilemerge"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime/capability/devmode"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime/runtimemod"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime/runtimemod/mods"
@@ -163,7 +163,7 @@ var _ = Describe("Resolve", func() {
 	DescribeTable("treats blank as a framework without framework capabilities",
 		func(language string) {
 			for id, mod := range mustResolve(appruntime.FrameworkBlank, language).Public().Mods {
-				if id == runtimemod.ModConfigMerge {
+				if id == runtimemod.ModConfigFileMerge {
 					// 配置文件合并是基座功能，只是策略随框架变化
 					continue
 				}
@@ -177,14 +177,14 @@ var _ = Describe("Resolve", func() {
 	)
 
 	DescribeTable("selects the config merge strategy per framework",
-		func(framework, language string, expected configmerge.Strategy) {
-			props, err := mustResolve(framework, language).ConfigMerge.Require()
+		func(framework, language string, expected configfilemerge.Strategy) {
+			props, err := mustResolve(framework, language).ConfigFileMerge.Require()
 			Expect(err).NotTo(HaveOccurred())
 			Expect(props.Strategy).To(Equal(expected))
 		},
-		Entry("trpc", appruntime.FrameworkTRPC, appruntime.LanguageGo, configmerge.StrategyNullPreserving),
-		Entry("taf", appruntime.FrameworkTAF, "", configmerge.StrategyNullPreserving),
-		Entry("blank", appruntime.FrameworkBlank, appruntime.LanguageGo, configmerge.StrategyStrategicMerge),
+		Entry("trpc", appruntime.FrameworkTRPC, appruntime.LanguageGo, configfilemerge.StrategyNullPreserving),
+		Entry("taf", appruntime.FrameworkTAF, "", configfilemerge.StrategyNullPreserving),
+		Entry("blank", appruntime.FrameworkBlank, appruntime.LanguageGo, configfilemerge.StrategyStrategicMerge),
 	)
 
 	It("does not let a caller mutate later results through returned props", func() {
@@ -216,7 +216,7 @@ var _ = Describe("Public", func() {
 					"polarisServiceCheck":   {"supported": true},
 					"polarisFrameworkPatch": {"supported": true},
 					"bscpWorkloadMeta":      {"supported": true},
-					"configMerge":           {"supported": true}
+					"configFileMerge":       {"supported": true}
 				}
 			}`))
 	})
@@ -240,7 +240,7 @@ var _ = Describe("Public", func() {
 					"polarisServiceCheck":   {"supported": true},
 					"polarisFrameworkPatch": {"supported": true},
 					"bscpWorkloadMeta":      {"supported": true},
-					"configMerge":           {"supported": true}
+					"configFileMerge":       {"supported": true}
 				}
 			}`))
 	})
@@ -263,12 +263,12 @@ var _ = Describe("Public", func() {
 					"polarisServiceCheck":   {"supported": false, "reasonCode": "unsupported_stack"},
 					"polarisFrameworkPatch": {"supported": false, "reasonCode": "unsupported_stack"},
 					"bscpWorkloadMeta":      {"supported": false, "reasonCode": "unsupported_stack"},
-					"configMerge":           {"supported": true}
+					"configFileMerge":       {"supported": true}
 				}
 			}`))
 	})
 
-	It("renders blank with only configMerge supported", func() {
+	It("renders blank with only configFileMerge supported", func() {
 		Expect(toJSON(mustResolve(appruntime.FrameworkBlank, appruntime.LanguageGo).Public())).
 			To(MatchJSON(`{
 				"schemaVersion": 1,
@@ -284,7 +284,7 @@ var _ = Describe("Public", func() {
 					"polarisServiceCheck":   {"supported": false, "reasonCode": "unsupported_stack"},
 					"polarisFrameworkPatch": {"supported": false, "reasonCode": "unsupported_stack"},
 					"bscpWorkloadMeta":      {"supported": false, "reasonCode": "unsupported_stack"},
-					"configMerge":           {"supported": true}
+					"configFileMerge":       {"supported": true}
 				}
 			}`))
 	})
@@ -304,7 +304,7 @@ var _ = Describe("Public", func() {
 				"polarisServiceCheck":   {"supported": false, "reasonCode": "unsupported_app_type"},
 				"polarisFrameworkPatch": {"supported": false, "reasonCode": "unsupported_app_type"},
 				"bscpWorkloadMeta":      {"supported": false, "reasonCode": "unsupported_app_type"},
-				"configMerge":           {"supported": false, "reasonCode": "unsupported_app_type"}
+				"configFileMerge":       {"supported": false, "reasonCode": "unsupported_app_type"}
 			}
 		}`))
 	})

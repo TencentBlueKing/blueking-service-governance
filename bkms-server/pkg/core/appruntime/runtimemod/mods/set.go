@@ -27,7 +27,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime/capability/admincommand"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime/capability/apmservicename"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime/capability/bscpworkloadmeta"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime/capability/configmerge"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime/capability/configfilemerge"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime/capability/devmode"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime/capability/frameworkfile"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime/capability/platformbuild"
@@ -58,8 +58,8 @@ type Set struct {
 	PolarisFrameworkPatch runtimemod.Mod[polaris.FrameworkPatchProps]
 	// BSCPWorkloadMeta BSCP 元信息自动填充。
 	BSCPWorkloadMeta runtimemod.Mod[bscpworkloadmeta.Props]
-	// ConfigMerge 配置文件合并。
-	ConfigMerge runtimemod.Mod[configmerge.Props]
+	// ConfigFileMerge 配置文件合并。
+	ConfigFileMerge runtimemod.Mod[configfilemerge.Props]
 }
 
 // Of 解析应用的技术栈，得出全部能力。
@@ -94,7 +94,7 @@ func resolve(stack appruntime.Stack) Set {
 		PolarisServiceCheck:   polaris.ServiceCheck.ResolveStack(stack),
 		PolarisFrameworkPatch: polaris.FrameworkPatch.ResolveStack(stack),
 		BSCPWorkloadMeta:      bscpworkloadmeta.Spec.ResolveStack(stack),
-		ConfigMerge:           configmerge.Spec.ResolveStack(stack),
+		ConfigFileMerge:       configfilemerge.Spec.ResolveStack(stack),
 	}
 }
 
@@ -110,7 +110,7 @@ func invalid(stack appruntime.Stack) Set {
 		PolarisServiceCheck:   polaris.ServiceCheck.Invalid(),
 		PolarisFrameworkPatch: polaris.FrameworkPatch.Invalid(),
 		BSCPWorkloadMeta:      bscpworkloadmeta.Spec.Invalid(),
-		ConfigMerge:           configmerge.Spec.Invalid(),
+		ConfigFileMerge:       configfilemerge.Spec.Invalid(),
 	}
 }
 
@@ -125,7 +125,7 @@ func (s Set) all() map[runtimemod.ModID]runtimemod.View {
 		s.PolarisServiceCheck.ID:   s.PolarisServiceCheck,
 		s.PolarisFrameworkPatch.ID: s.PolarisFrameworkPatch,
 		s.BSCPWorkloadMeta.ID:      s.BSCPWorkloadMeta,
-		s.ConfigMerge.ID:           s.ConfigMerge,
+		s.ConfigFileMerge.ID:       s.ConfigFileMerge,
 	}
 }
 

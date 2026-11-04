@@ -16,8 +16,8 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
-// Package configmerge 声明配置文件合并能力：叠加配置与默认文件按哪种策略合并。
-package configmerge
+// Package configfilemerge 声明配置文件合并能力：叠加配置与默认文件按哪种策略合并。
+package configfilemerge
 
 import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime"
@@ -49,7 +49,7 @@ func (p Props) Public() any { return nil }
 // 合并由 core/app/appcfg 执行，作用于应用的全部配置文件；helm / agones 的 values 属独立链路，
 // 不经过本能力，按 k8s 默认的 strategic merge 合并。
 var Spec = runtimemod.Spec[Props]{
-	ID: runtimemod.ModConfigMerge,
+	ID: runtimemod.ModConfigFileMerge,
 	Resolve: runtimemod.ByFramework(map[string]Props{
 		appruntime.FrameworkTRPC:  {Strategy: StrategyNullPreserving},
 		appruntime.FrameworkTAF:   {Strategy: StrategyNullPreserving},

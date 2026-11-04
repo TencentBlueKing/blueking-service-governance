@@ -86,7 +86,7 @@ stack, err := appruntime.CapabilityStack(app.RuntimeSnapshot())
 | `polarisServiceCheck` | trpc | — |
 | `polarisFrameworkPatch` | trpc | — |
 | `bscpWorkloadMeta` | trpc | —（工作负载类型取实际渲染结果） |
-| `configMerge` | trpc、taf（nullPreserving）、blank（strategicMerge） | strategy（作用于应用全部 YAML 配置文件；不支持时按 k8s 默认 strategic merge） |
+| `configFileMerge` | trpc、taf（nullPreserving）、blank（strategicMerge） | strategy（作用于应用全部 YAML 配置文件；不支持时按 k8s 默认 strategic merge） |
 
 `adminCommand` 登记 go / cpp / java / nodejs / python 五种布局：go、python 读 `server.admin.ip`，cpp、nodejs 读 `server.admin_ip`，java 读 `server.admin.admin_ip`。java、nodejs、python 不在框架目录中，暂不可达，纳入目录后自动生效。
 
@@ -136,7 +136,7 @@ stack, err := appruntime.CapabilityStack(app.RuntimeSnapshot())
     "polarisServiceCheck":   { "supported": true },
     "polarisFrameworkPatch": { "supported": true },
     "bscpWorkloadMeta":      { "supported": true },
-    "configMerge":           { "supported": true }
+    "configFileMerge":       { "supported": true }
   }
 }
 ```
@@ -198,6 +198,6 @@ M2 的两个已知行为点：
 ## 8. 验收
 
 - 8 个能力均有声明，`Matrix()` 覆盖 catalog 全部合法组合，5 份 golden JSON 通过。
-- `trpc+cpp` 支持 devMode、不支持 platformBuild；`blank+go` 除 configMerge（基座功能，仅策略随框架变化）外全部能力不支持；helm 全部 `unsupported_app_type`。
+- `trpc+cpp` 支持 devMode、不支持 platformBuild；`blank+go` 除 configFileMerge（基座功能，仅策略随框架变化）外全部能力不支持；helm 全部 `unsupported_app_type`。
 - M2 完成后，能力判断不再读取 `AppType` / `Workload.Type` / `TrpcSpec.Language`。
 - `make lint`、相关包测试通过。
