@@ -64,6 +64,8 @@ import (
 	polarishandler "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris/handler"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/bscpcfg"
 	bscpcfghandler "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/bscpcfg/handler"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/cfgswitch"
+	cfgswitchhandler "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/cfgswitch/handler"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component"
 	devmodeapi "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component/devmode"
 	devmodehandler "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component/devmode/handler"
@@ -95,6 +97,8 @@ import (
 	platmgtworkspace "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/platmgt/workspace"
 	platworkspaceadmin "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/platmgt/workspace/admin"
 	platworkspaceadminhandler "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/platmgt/workspace/admin/handler"
+	platworkspacecfgswitch "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/platmgt/workspace/cfgswitch"
+	platworkspacecfgswitchh "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/platmgt/workspace/cfgswitch/handler"
 	platmgtworkspacehandler "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/platmgt/workspace/handler"
 	platworkspaceimagereg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/platmgt/workspace/imageregistry"
 	platworkspaceimageregh "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/platmgt/workspace/imageregistry/handler"
@@ -239,6 +243,7 @@ func RegisterRouter(ctx context.Context, cfg config.Config, serverRole string) (
 	portpool.Register(v1, portpoolhandler.New(storereg.G()))
 	devmodeapi.RegisterRoutes(v1, devmodehandler.New(storereg.G()))
 	bscpcfg.Register(v1, bscpcfghandler.New(storereg.G()))
+	cfgswitch.Register(v1, cfgswitchhandler.New(storereg.G()))
 	user.Register(v1, user.New(storereg.G()))
 	admin.Register(
 		v1,
@@ -258,6 +263,11 @@ func RegisterRouter(ctx context.Context, cfg config.Config, serverRole string) (
 	platworkspaceimagereg.Register(
 		v1,
 		platworkspaceimageregh.New(storereg.G()),
+		platmgt.RequirePlatformRole(storereg.G().DB, admin.RoleCodeAdmin),
+	)
+	platworkspacecfgswitch.Register(
+		v1,
+		platworkspacecfgswitchh.New(storereg.G()),
 		platmgt.RequirePlatformRole(storereg.G().DB, admin.RoleCodeAdmin),
 	)
 

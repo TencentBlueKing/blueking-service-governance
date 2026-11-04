@@ -151,7 +151,6 @@ type MetadataOutput struct {
 	MountPath    string    `json:"mountPath"`
 	WorkloadName string    `json:"workloadName"`
 	WorkloadKind string    `json:"workloadKind"`
-	Enable       bool      `json:"enable"`
 	Operator     string    `json:"operator"`
 	CreatedAt    time.Time `json:"createdAt"`
 	UpdatedAt    time.Time `json:"updatedAt"`
@@ -205,7 +204,6 @@ func (o *MetadataOutput) FromModel(m *model.Metadata) *MetadataOutput {
 		return o
 	}
 	o.AppID = m.AppID
-	o.Enable = m.Enable
 	o.MountPath = m.MountPath
 	o.WorkloadName = m.WorkloadName
 	o.WorkloadKind = m.WorkloadKind

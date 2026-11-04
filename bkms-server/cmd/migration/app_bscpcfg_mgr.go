@@ -32,7 +32,6 @@ import (
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime/runtimemod/mods"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/bscpcfg/model"
 	svc "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/bscpcfg/service"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
@@ -41,7 +40,9 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
-// NewAppBscpCfgMgrCmd 创建 app-bscpcfg-mgr 命令，用于启用或停用应用的 bscp 配置。
+// NewAppBscpCfgMgrCmd 创建 app-bscpcfg-mgr 命令，用于初始化应用的 bscp 配置。
+//
+// 配置管理是否可用由空间级开关决定（平台管理员在平台管理中设置），本命令不再负责开关。
 func NewAppBscpCfgMgrCmd() *cobra.Command {
 	var srvCfg string
 	var operator string
@@ -50,9 +51,9 @@ func NewAppBscpCfgMgrCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "app-bscpcfg-mgr",
 		Short: "Manage app bscp config",
-		Long: "Enable or disable BSCP config management for apps. " +
-			"enable initializes credential/hook/metadata and turns on the capability, " +
-			"disable only turns off the capability flag (keeps created resources, stops future injection).",
+		Long: "Initialize BSCP config management for apps (post hook and metadata). " +
+			"Whether config management takes effect is controlled by the workspace feature flag, " +
+			"which is set by platform administrators.",
 	}
 	cmd.PersistentFlags().StringVar(&srvCfg, "srvCfg", "", "server config file")
 	cmd.PersistentFlags().StringVar(&operator, "operator", "", "operator username (bk_username)")
@@ -61,7 +62,6 @@ func NewAppBscpCfgMgrCmd() *cobra.Command {
 	_ = cmd.MarkPersistentFlagRequired("operator")
 
 	cmd.AddCommand(newEnableAppBscpCfgCmd(&srvCfg, &operator, &execute))
-	cmd.AddCommand(newDisableAppBscpCfgCmd(&srvCfg, &operator, &execute))
 	return cmd
 }
 
@@ -69,9 +69,9 @@ func newEnableAppBscpCfgCmd(srvCfg, operator *string, execute *bool) *cobra.Comm
 	var app string
 	cmd := &cobra.Command{
 		Use:   "enable",
-		Short: "Enable bscp config for app(s)",
+		Short: "Initialize bscp config for app(s)",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runAppBscpCfg(cmd.Context(), *srvCfg, *operator, *execute, app, true)
+			return runAppBscpCfg(cmd.Context(), *srvCfg, *operator, *execute, app)
 		},
 	}
 	cmd.Flags().StringVar(&app, "app", "", "app ID(s), comma-separated")
@@ -79,27 +79,12 @@ func newEnableAppBscpCfgCmd(srvCfg, operator *string, execute *bool) *cobra.Comm
 	return cmd
 }
 
-func newDisableAppBscpCfgCmd(srvCfg, operator *string, execute *bool) *cobra.Command {
-	var app string
-	cmd := &cobra.Command{
-		Use:   "disable",
-		Short: "Disable bscp config for app(s)",
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runAppBscpCfg(cmd.Context(), *srvCfg, *operator, *execute, app, false)
-		},
-	}
-	cmd.Flags().StringVar(&app, "app", "", "app ID(s), comma-separated")
-	_ = cmd.MarkFlagRequired("app")
-	return cmd
-}
-
-// runAppBscpCfg 启用或停用指定应用的 bscp 配置。
+// runAppBscpCfg 初始化指定应用的 bscp 配置。
 func runAppBscpCfg(
 	ctx context.Context,
 	srvCfg, operator string,
 	execute bool,
 	app string,
-	enable bool,
 ) error {
 	cfg, err := config.Load(ctx, srvCfg)
 	if err != nil {
@@ -129,21 +114,17 @@ func runAppBscpCfg(
 		return errors.New("--app must contain at least one app ID")
 	}
 
-	action := "disable"
-	if enable {
-		action = "enable"
-	}
 	if !execute {
-		log.Infof(ctx, "[DRY-RUN] would %s bscp config for app(s): %v", action, appIDs)
+		log.Infof(ctx, "[DRY-RUN] would initialize bscp config for app(s): %v", appIDs)
 		return nil
 	}
 
 	user := auth.MustGetUser(ctx)
 	for _, id := range appIDs {
-		if err := setBscpCfgForApp(ctx, reg, user, id, enable); err != nil {
-			return errors.Wrapf(err, "%s bscp config for app %s", action, id)
+		if err := initBscpCfgForApp(ctx, reg, user, id); err != nil {
+			return errors.Wrapf(err, "initialize bscp config for app %s", id)
 		}
-		log.Infof(ctx, "bscp config %sd for app %s", action, id)
+		log.Infof(ctx, "bscp config initialized for app %s", id)
 	}
 	return nil
 }
@@ -155,13 +136,12 @@ func parseAppIDs(raw string) []string {
 	})
 }
 
-// setBscpCfgForApp 启用或停用指定 appID 的 bscp 配置。
-func setBscpCfgForApp(
+// initBscpCfgForApp 初始化指定应用的 bscp 配置：初始化 PostHook 与 Metadata（幂等）。
+func initBscpCfgForApp(
 	ctx context.Context,
 	reg *storereg.Registry,
 	user auth.User,
 	appID string,
-	enable bool,
 ) error {
 	app, err := store.Of(reg.DB, bkmsapp.AppMeta).Get(ctx, bkmsapp.ByID(appID), store.TenantAll())
 	if err != nil {
@@ -169,26 +149,6 @@ func setBscpCfgForApp(
 	}
 	ctx = store.ScopeToTenant(ctx, app.TenantID)
 
-	if enable {
-		return enableBscpCfgForApp(ctx, reg, user, app)
-	}
-
-	update := map[string]any{"enable": false}
-	if err := store.Of(reg.DB, model.MetadataMeta).Update(ctx, update, model.ByApp(appID)); err != nil {
-		return errors.Wrapf(err, "disable bscp config for app %s", appID)
-	}
-	return nil
-}
-
-// enableBscpCfgForApp 启用指定应用的 bscp 配置：初始化 PostHook 与 Metadata，并置 enable 为 true。
-// ctx 须已切换到应用所属租户
-func enableBscpCfgForApp(
-	ctx context.Context,
-	reg *storereg.Registry,
-	user auth.User,
-	app *bkmsapp.Application,
-) error {
-	appID := app.ID
 	ws, err := store.Of(reg.DB, workspace.Meta).Get(ctx, workspace.ByWorkspaceID(app.WorkspaceID))
 	if err != nil {
 		return errors.Wrapf(err, "get workspace %s", app.WorkspaceID)
@@ -223,12 +183,5 @@ func enableBscpCfgForApp(
 	}); initErr != nil {
 		return errors.Wrapf(initErr, "init metadata for app %s", appID)
 	}
-
-	// 已存在的 Metadata 幂等返回时 enable 可能仍为 false，这里显式置为 true
-	update := map[string]any{"enable": true}
-	if err := store.Of(reg.DB, model.MetadataMeta).Update(ctx, update, model.ByApp(appID)); err != nil {
-		return errors.Wrapf(err, "enable bscp config for app %s", appID)
-	}
-
 	return nil
 }

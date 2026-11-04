@@ -3006,6 +3006,20 @@ definitions:
       trafficLaneEnabled:
         type: boolean
     type: object
+  serializer.CfgSwitchesOutput:
+    properties:
+      bscp:
+        description: 是否开启配置管理（BSCP）
+        type: boolean
+      rainbowTConf:
+        description: 是否展示七彩石
+        type: boolean
+    type: object
+  serializer.CfgSwitchesResponse:
+    properties:
+      data:
+        $ref: '#/definitions/serializer.CfgSwitchesOutput'
+    type: object
   serializer.ChartVersionOutputObj:
     properties:
       createdAt:
@@ -6880,8 +6894,6 @@ definitions:
         type: string
       createdAt:
         type: string
-      enable:
-        type: boolean
       mountPath:
         type: string
       operator:
@@ -7473,6 +7485,36 @@ definitions:
       key:
         description: 占位符变量的 key, 如 IMAGE, IMAGE_TAG 等
         type: string
+    type: object
+  serializer.PlatCfgSwitchListResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/serializer.PlatCfgSwitchOutput'
+        type: array
+    type: object
+  serializer.PlatCfgSwitchOutput:
+    properties:
+      enabled:
+        description: 是否开启
+        type: boolean
+      key:
+        description: 开关标识：bscp / rainbowTConf
+        type: string
+      name:
+        description: 展示名称
+        type: string
+      updatedAt:
+        description: 最近修改时间，从未设置过时为 null
+        type: string
+      updater:
+        description: 最近修改人，从未设置过时为空
+        type: string
+    type: object
+  serializer.PlatCfgSwitchResponse:
+    properties:
+      data:
+        $ref: '#/definitions/serializer.PlatCfgSwitchOutput'
     type: object
   serializer.PolarisConfigOutputObj:
     properties:
@@ -10044,6 +10086,14 @@ definitions:
     - polarisName
     - polarisNamespace
     - polarisToken
+    type: object
+  serializer.UpdatePlatCfgSwitchInput:
+    properties:
+      enabled:
+        description: 是否开启；使用指针以区分字段缺失与显式传 false
+        type: boolean
+    required:
+    - enabled
     type: object
   serializer.UpdatePortPoolInput:
     properties:
@@ -20457,6 +20507,72 @@ paths:
       summary: 为当前用户授予目标空间管理员身份
       tags:
       - platmgt
+  /plat-mgt/workspaces/{workspaceID}/cfg-switches:
+    get:
+      operationId: ListPlatCfgSwitches
+      parameters:
+      - description: 工作空间 ID
+        in: path
+        name: workspaceID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.PlatCfgSwitchListResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 查询空间的配置开关列表（配置管理 BSCP、七彩石），从未设置过的开关为关闭状态
+      tags:
+      - platmgt
+  /plat-mgt/workspaces/{workspaceID}/cfg-switches/{key}:
+    put:
+      consumes:
+      - application/json
+      description: 关闭配置管理（BSCP）后，该空间下应用的配置管理接口全部不可用，且之后的部署不再注入 BSCP 容器
+      operationId: UpdatePlatCfgSwitch
+      parameters:
+      - description: 工作空间 ID
+        in: path
+        name: workspaceID
+        required: true
+        type: string
+      - description: 开关标识：bscp / rainbowTConf
+        in: path
+        name: key
+        required: true
+        type: string
+      - description: 开关取值
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/serializer.UpdatePlatCfgSwitchInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.PlatCfgSwitchResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 设置空间的一项配置开关
+      tags:
+      - platmgt
   /plat-mgt/workspaces/{workspaceID}/image-registry:
     get:
       operationId: GetPlatWorkspaceImageRegistry
@@ -22333,6 +22449,33 @@ paths:
       summary: 创建 bkmsApp 应用
       tags:
       - app
+  /workspaces/{workspaceID}/cfg-switches:
+    get:
+      description: 开关由平台管理员在平台管理中设置，前端据此决定是否展示配置管理（BSCP）、七彩石等 tab；未设置时为 false
+      operationId: GetCfgSwitches
+      parameters:
+      - description: 工作空间 ID
+        in: path
+        name: workspaceID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.CfgSwitchesResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 获取空间的配置开关
+      tags:
+      - cfgswitch
   /workspaces/{workspaceID}/components:
     get:
       operationId: ListWorkspaceComponents

@@ -8,7 +8,8 @@
 
 | 概念 | 说明 |
 |------|------|
-| **Metadata** | 应用级元信息（enable、postHookID、mountPath、workload 等），是所有环境绑定的前置条件，一个 app 一条记录 |
+| **空间配置开关** | `workspace_cfg_switches` 中 `key = bscp` 的记录，由平台管理员按空间设置，决定该空间能否使用配置管理，见第 6 节 |
+| **Metadata** | 应用级元信息（postHookID、mountPath、workload 等），是所有环境绑定的前置条件，一个 app 一条记录 |
 | **EnvBinding** | 某个环境到 BSCP 的绑定关系（BscpEnvID / BscpAppID），一个 app+env 一条记录 |
 | **Snapshot** | Metadata + EnvBinding 的聚合视图，运行时使用，不持久化 |
 | **PodFragment** | sidecar 注入产出的 pod 片段（initContainer、sidecar、volume、volumeMount），由 `bscpcfg.Build` 产出 |
@@ -51,7 +52,6 @@ graph TD
 | 字段 | 说明 |
 |------|------|
 | `appID` | bkms 应用 ID（唯一键） |
-| `enable` | 是否启用配置管理（查询不到 Metadata 或为 false 视为未启用） |
 | `postHookID` | 后置脚本 ID，用于把配置文件同步到共享卷 |
 | `workloadKind` / `workloadName` | 目标工作负载类型与名称 |
 | `mountPath` | 配置在业务容器内的挂载路径 |
@@ -112,5 +112,11 @@ graph TD
 
 - **一对一绑定**：一个 app+env 只绑定一个 BSCP App，不支持一个 app 绑定多个 BSCP 服务。
 - **环境名称对齐**：bkms 环境名与 BSCP 环境名保持一致，创建绑定时按名称匹配，未命中则自动创建。
-- **激活方式**：配置管理能力由 `app-bscpcfg-mgr enable` / `disable` 命令按 appID 操作 `Metadata.enable`；前端只负责环境绑定。
+- **激活方式**：配置管理是否可用由空间级配置开关决定（`pkg/extension/cfgswitch`）。平台管理员在空间详情中通过
+  `GET /plat-mgt/workspaces/{workspaceID}/cfg-switches` 查看、`PUT /plat-mgt/workspaces/{workspaceID}/cfg-switches/bscp` 设置；
+  前端通过 `GET /workspaces/{workspaceID}/cfg-switches` 读取以决定是否展示对应 tab。开关没有记录时视为关闭。
+  开关关闭时：
+  - `/apps/{appID}/bscpcfg/**` 全部接口（含读取与删除）返回 `NO_PERMISSION`；
+  - 部署渲染（`workload/bscpcfg.BuildFromStore`）不再注入 BSCP 容器，已绑定的应用再次部署后也会移除。
+  `app-bscpcfg-mgr enable` 命令只负责初始化 PostHook 与 Metadata，不再控制开关。
 - **workspace 绑定前置**：使用前必须通过 `bind-bscp-project` 命令（或创建 workspace 时自动）绑定 workspace 与 BSCP 项目，写入 `BkSystems.BkBSCPProjectID / Key` 并创建 credential。

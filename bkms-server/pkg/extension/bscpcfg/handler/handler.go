@@ -20,11 +20,17 @@
 package handler
 
 import (
+	"context"
+
 	"github.com/gin-gonic/gin"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
+	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
+	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	svc "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/bscpcfg/service"
+	cfgswitchmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/cfgswitch/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/perm"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
 )
 
@@ -47,4 +53,49 @@ func (h *Handler) newManager(c *gin.Context) (*svc.Manager, error) {
 		return nil, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "create bscp cfg service manager")
 	}
 	return mgr, nil
+}
+
+// validateApp 校验应用权限，并要求应用所在空间已开启配置管理（BSCP）。
+// 本包所有接口都须经过它或 validateAppEnv，开关关闭时读写接口一律不可用
+func (h *Handler) validateApp(
+	ctx context.Context, appID string, permType perm.Type,
+) (*bkmsapp.Application, error) {
+	app, err := perm.ValidateAppByID(ctx, h.registry, appID, permType)
+	if err != nil {
+		return nil, err
+	}
+	if err = h.requireBscpEnabled(ctx, app.WorkspaceID); err != nil {
+		return nil, err
+	}
+	return app, nil
+}
+
+// validateAppEnv 校验应用与环境权限，并要求应用所在空间已开启配置管理（BSCP）
+func (h *Handler) validateAppEnv(
+	ctx context.Context, appID, envName string, permType perm.Type,
+) (*bkmsapp.Application, *envmodel.Environment, error) {
+	app, env, err := perm.ValidateAppEnvByName(ctx, h.registry, appID, envName, permType)
+	if err != nil {
+		return nil, nil, err
+	}
+	if err = h.requireBscpEnabled(ctx, app.WorkspaceID); err != nil {
+		return nil, nil, err
+	}
+	return app, env, nil
+}
+
+// requireBscpEnabled 空间未开启配置管理（BSCP）时返回无权限错误。开关由平台管理员在平台管理中设置
+func (h *Handler) requireBscpEnabled(ctx context.Context, workspaceID string) error {
+	enabled, err := cfgswitchmodel.IsEnabled(ctx, h.registry.DB, workspaceID, cfgswitchmodel.SwitchBscp)
+	if err != nil {
+		return bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "check workspace bscp feature")
+	}
+	if !enabled {
+		return bkerrs.Errorf(
+			bkerrs.ErrCodeNoPermission,
+			"config management (bscp) is not enabled for workspace %s, contact the platform administrator",
+			workspaceID,
+		)
+	}
+	return nil
 }

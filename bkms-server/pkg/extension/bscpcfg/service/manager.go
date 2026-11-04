@@ -92,7 +92,6 @@ func (m *Manager) InitMetadata(
 
 	meta := &model.Metadata{
 		AppID:        params.AppID,
-		Enable:       true,
 		WorkloadName: params.WorkloadName,
 		WorkloadKind: params.WorkloadKind,
 		PostHookID:   fmt.Sprintf("%d", hookID),
@@ -122,16 +121,13 @@ func (m *Manager) CreateEnvBinding(
 	ctx context.Context,
 	params *CreateEnvBindingParams,
 ) (*model.Snapshot, error) {
-	// 1. 检查 Metadata 是否存在且启用
+	// 1. 检查 Metadata 是否存在（空间是否开启配置管理由接口层校验）
 	meta, err := m.metadata.Get(ctx, model.ByApp(params.AppID))
 	if err != nil {
 		if errors.Is(err, model.ErrMetadataNotFound) {
 			return nil, errors.New("bscpcfg metadata is not initialized")
 		}
 		return nil, errors.Wrap(err, "get metadata")
-	}
-	if !meta.Enable {
-		return nil, errors.New("bscpcfg is disabled")
 	}
 
 	bizID, projectID, err := bscpProject(params.Workspace)
