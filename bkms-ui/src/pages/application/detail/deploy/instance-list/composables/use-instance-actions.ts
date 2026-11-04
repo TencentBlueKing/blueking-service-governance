@@ -41,6 +41,8 @@ export interface UseInstanceActionsOptions extends InstanceActionContext {
   selectedCount: ComputedRef<number> | Ref<number>;
   /** 管理命令侧栏环境展示名 */
   commandEnvDisplayName?: () => string;
+  /** 监控入口保留各环境的实例选择，避免同名实例丢失归属 */
+  getMonitorSelection?: () => Record<string, string[]>;
   /** 灰度弹窗环境展示名（单环境） */
   grayEnvDisplayName?: () => string;
   /** 计算灰度提交的 instanceIds（单环境跨页全选） */
@@ -51,6 +53,7 @@ export function useInstanceActions(
   options: UseInstanceActionsOptions,
   actionsHostRef: Ref<InstanceType<typeof InstanceActionsHost> | null>,
 ) {
+  const { t } = useI18n();
   const appDetailStore = useAppDetail();
   const { login } = useLoginInstance();
   const { showDeleteDialog } = useDeleteInstances(options);
@@ -113,14 +116,24 @@ export function useInstanceActions(
 
   function openMonitor(initialInstances?: string[], envName?: string, envNames?: string[]) {
     const resolvedEnvName = envName || options.getEnvName();
-    const instanceIds = initialInstances
-      ? initialInstances
-      : options
-          .getSelectedInstances()
-          .map(item => item.id)
-          .filter((id): id is string => !!id);
-    const selection = instanceIds.length > 0 ? { [resolvedEnvName]: instanceIds } : undefined;
-    actionsHostRef.value?.openMonitor(selection, resolvedEnvName, envNames);
+    // 行入口聚焦当前实例；顶部入口保留分环境勾选，避免扁平化后丢失同名实例的归属。
+    const selection = initialInstances
+      ? { [resolvedEnvName]: initialInstances }
+      : (options.getMonitorSelection?.() ?? {
+          [resolvedEnvName]: options
+            .getSelectedInstances()
+            .map(item => item.id)
+            .filter((id): id is string => !!id),
+        });
+    const instanceCount = Object.values(selection).reduce((total, instances) => total + instances.length, 0);
+    if (instanceCount > 50) {
+      Message({
+        theme: 'warning',
+        message: t('一次最多选择 50 个实例，请减少勾选数量，或清空选择后查看全部实例'),
+      });
+      return;
+    }
+    actionsHostRef.value?.openMonitor(instanceCount > 0 ? selection : undefined, resolvedEnvName, envNames);
   }
 
   function openDelete() {

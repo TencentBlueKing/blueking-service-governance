@@ -18,31 +18,69 @@
 
 import type { App } from 'vue';
 
-import { i18n } from '~/modules/i18n';
 import { BkintegrationsBkmonitorService } from '~/api/modules/v1';
+import { i18n } from '~/modules/i18n';
 
 import type { MetricTimeSeries, TimeSeriesItem } from '~/@types/v1/bkintegrations-bkmonitor';
+
+export type MonitorAggregationMethod = 'avg' | 'count' | 'max' | 'min' | 'sum';
 
 export interface MonitorChartApiResult {
   metrics: [];
   query_config?: undefined;
   series: SeriesItemLike[];
 }
+/** 实例名称只在所属环境内唯一。 */
+export interface MonitorInstance {
+  envName: string;
+  instance: string;
+}
+
+export type MonitorLimitType = 'bottom' | 'top';
+
+export interface MonitorMetricQuery {
+  all?: boolean;
+  appID: string;
+  endTime: number;
+  envName?: string;
+  envNames?: string[];
+  instances?: MonitorInstance[];
+  interval?: number;
+  limit?: number;
+  limitType?: MonitorLimitType;
+  method?: MonitorAggregationMethod;
+  metricKey: string;
+  startTime: number;
+}
+
+export interface MonitorMetricTimeSeries extends MetricTimeSeries {
+  series?: MonitorTimeSeriesItem[];
+}
+
+/** 保留环境归属用于合并、补查和匹配；请求按环境拆分，实例名称单独进入请求体。 */
+export interface MonitorTimeSeriesItem extends TimeSeriesItem {
+  _color?: string;
+  envName?: string;
+}
 
 /** useEcharts 注入的入参：{ start_time, end_time, ...target.data, ...params } */
 interface MonitorChartApiParams {
   [key: string]: unknown;
+  all?: boolean;
   appID?: string;
-  end_time?: number;
-  envName?: string;
-  /** 实例 ID → 环境名称 映射（多环境模式），桥接层据此按环境分组并行请求 */
-  instanceEnvMap?: Record<string, string>;
-  instances?: string[];
-  interval?: number;
-  metricKey?: string;
-  start_time?: number;
   /** 时间对比偏移量列表（秒），空数组 / 不传 = 关闭 */
   compareOffsets?: number[];
+  end_time?: number;
+  envName?: string;
+  envNames?: string[];
+  instances?: MonitorInstance[];
+  interval?: number;
+  limit?: number;
+  limitType?: MonitorLimitType;
+  method?: MonitorAggregationMethod;
+  metricKey?: string;
+  queryId?: number;
+  start_time?: number;
 }
 
 /** 包内 SeriesItem 的最小结构（datapoints 为 [值, 时间戳]） */
@@ -57,17 +95,20 @@ interface SeriesItemLike {
   unit?: string;
 }
 
-/** TimeSeriesItem 内部扩展：携带颜色元信息供图例同步使用 */
-interface TimeSeriesItemWithColor extends TimeSeriesItem {
-  _color?: string;
-}
-
 /** 当前时间范围（秒级 Unix），由 monitor-sideslider 注入 */
 let currentStartTime = 0;
 let currentEndTime = 0;
 
-/** 各 metricKey 最新时序缓存，供 chart-card-item 在 duration-change 时回传给父组件表格 */
-const metricCache = new Map<string, MetricTimeSeries>();
+/** 每个指标仅保留最新查询；当前期与图表对比数据分开，避免汇总表混入对比实例。 */
+const metricCache = new Map<
+  string,
+  {
+    chart: MonitorMetricTimeSeries;
+    current: MonitorMetricTimeSeries;
+    queryId?: number;
+  }
+>();
+const activeQueries = new Map<string, string>();
 
 /** 进行中的请求缓存，避免 ExploreChart 与 useEcharts 同参并发时重复拉取监控数据 */
 const inFlightRequests = new Map<string, Promise<MonitorChartApiResult>>();
@@ -75,35 +116,67 @@ const inFlightRequests = new Map<string, Promise<MonitorChartApiResult>>();
 const COMPARE_INSTANCE_PREFIX = '__CMP__';
 
 const COMPARE_PALETTE: string[] = [
-  '#EA3636', '#FF9C01', '#3A84FF', '#2DCB56',
-  '#A855F7', '#EC4899', '#14B8A6', '#6366F1',
+  '#EA3636',
+  '#FF9C01',
+  '#3A84FF',
+  '#2DCB56',
+  '#A855F7',
+  '#EC4899',
+  '#14B8A6',
+  '#6366F1',
 ];
 
 // ─── 导出函数（按字母序） ───────────────────────────────────────
 
-export function getCachedMetric(metricKey: string): MetricTimeSeries | undefined {
-  return metricCache.get(metricKey);
-}
+/** 按环境查询一段指标，不写图表缓存；汇总表补查也使用此入口。 */
+export async function fetchMonitorMetric(query: MonitorMetricQuery): Promise<MonitorMetricTimeSeries | undefined> {
+  const { appID, metricKey, startTime, endTime, interval } = query;
+  const envToInstances = new Map<string, string[]>();
+  if (query.all) {
+    for (const env of query.envNames?.length ? query.envNames : [query.envName]) {
+      if (env) envToInstances.set(env, []);
+    }
+  } else {
+    // 同名 Pod 可以属于不同环境，必须先按环境分组，再向 SDK 传原始实例名。
+    for (const { envName, instance } of query.instances ?? []) {
+      if (!envName || !instance) continue;
+      const names = envToInstances.get(envName) ?? [];
+      if (!names.includes(instance)) names.push(instance);
+      envToInstances.set(envName, names);
+    }
+  }
+  if (!appID || !metricKey || !envToInstances.size) return undefined;
 
-/** 判断指标单位是否为百分比（如 "percent" / "%"），此类数据需 ×100 还原为百分值 */
-export function isPercentUnit(unit?: string): boolean {
-  if (!unit) return false;
-  const u = unit.toLowerCase();
-  return u === 'percent' || u === '%' || u.includes('percent') || u.includes('%');
-}
-
-/** 在应用入口注册全局 $api，供 ExploreChart 内部 useEcharts 调用 */
-export function registerMonitorChartApi(app: App): void {
-  (app.config.globalProperties as Record<string, unknown>).$api = {
-    bkmonitor: {
-      getInstanceTimeSeries,
-    },
-  };
-}
-
-export function setChartTimeRange(start: number, end: number): void {
-  currentStartTime = start;
-  currentEndTime = end;
+  const results = await Promise.all(
+    [...envToInstances].map(async ([envName, instances]) => {
+      // 显式实例查询不合并排名默认值，避免手选与补查结果被 top10 截断。
+      const scope = query.all
+        ? { all: true, limit: query.limit ?? 10, limitType: query.limitType ?? 'top' }
+        : { instances };
+      const data = await BkintegrationsBkmonitorService.getInstanceTimeSeries({
+        appID,
+        envName,
+        metricKey,
+        startTime,
+        endTime,
+        interval,
+        method: query.method ?? 'sum',
+        ...scope,
+      }).catch(() => undefined);
+      const metric = data?.[metricKey];
+      return metric ? { ...metric, series: (metric.series ?? []).map(series => ({ ...series, envName })) } : undefined;
+    }),
+  );
+  const first = results.find(result => result !== undefined);
+  if (!first) return undefined;
+  let series = results.flatMap(result => result?.series ?? []);
+  if (query.all && envToInstances.size > 1) {
+    const direction = query.limitType === 'bottom' ? 1 : -1;
+    series = series
+      .sort((a, b) => direction * ((a.stat?.avg?.[1] ?? 0) - (b.stat?.avg?.[1] ?? 0)))
+      .slice(0, query.limit ?? 10);
+  }
+  return { ...first, series };
 }
 
 /** 时间对比偏移量格式化为可读标签 */
@@ -128,16 +201,26 @@ export function formatOffsetLabel(seconds: number): string {
   return years === 1 ? t('一年前') : t('{0} 年前', [years]);
 }
 
+export function getCachedMetric(
+  metricKey: string,
+  queryId?: number,
+  currentOnly = false,
+): MonitorMetricTimeSeries | undefined {
+  const cached = metricCache.get(metricKey);
+  if (!cached || cached.queryId !== queryId) return undefined;
+  return currentOnly ? cached.current : cached.chart;
+}
+
 /** 按偏移量值返回色板颜色 */
 export function getColorByOffset(offset: number): string {
   const known: Record<number, number> = {
-    60: 0,          // 1 分钟  → 蓝
-    300: 1,         // 5 分钟  → 红
-    3600: 2,        // 1 小时  → 绿
-    86400: 3,       // 1 天    → 黄
-    604800: 4,      // 7 天    → 浅蓝
-    2592000: 5,     // 30 天   → 橙
-    31536000: 6,    // 1 年    → 紫
+    60: 0, // 1 分钟  → 蓝
+    300: 1, // 5 分钟  → 红
+    3600: 2, // 1 小时  → 绿
+    86400: 3, // 1 天    → 黄
+    604800: 4, // 7 天    → 浅蓝
+    2592000: 5, // 30 天   → 橙
+    31536000: 6, // 1 年    → 紫
   };
   if (offset in known) return COMPARE_PALETTE[known[offset]];
   const str = String(offset);
@@ -148,155 +231,111 @@ export function getColorByOffset(offset: number): string {
   return COMPARE_PALETTE[Math.abs(hash) % COMPARE_PALETTE.length];
 }
 
+/** 选择器与汇总表共用组合键；数组编码避免仅按名称匹配或拼接分隔符产生冲突。 */
+export function getMonitorInstanceKey(instance: { envName?: string; instance?: string }): string {
+  return JSON.stringify([instance.envName || '', instance.instance || '']);
+}
+
+/** 单环境保留实例名，多环境同时显示环境，确保图例名称及联动标识唯一。 */
+export function getMonitorInstanceLabel(
+  instance: { envName?: string; instance?: string },
+  showEnvName = false,
+): string {
+  const name = instance.instance ?? '';
+  const label = name.startsWith(COMPARE_INSTANCE_PREFIX) ? name.slice(COMPARE_INSTANCE_PREFIX.length) : name;
+  return showEnvName && instance.envName ? `${instance.envName}/${label}` : label;
+}
+
+/** 判断指标单位是否为百分比（如 "percent" / "%"），此类数据需 ×100 还原为百分值 */
+export function isPercentUnit(unit?: string): boolean {
+  if (!unit) return false;
+  const u = unit.toLowerCase();
+  return u === 'percent' || u === '%' || u.includes('percent') || u.includes('%');
+}
+
+/** 在应用入口注册全局 $api，供 ExploreChart 内部 useEcharts 调用 */
+export function registerMonitorChartApi(app: App): void {
+  (app.config.globalProperties as Record<string, unknown>).$api = {
+    bkmonitor: {
+      getInstanceTimeSeries,
+    },
+  };
+}
+
+export function setChartTimeRange(start: number, end: number): void {
+  currentStartTime = start;
+  currentEndTime = end;
+}
+
 // ─── 内部函数（按字母序） ───────────────────────────────────────
 
-/** 拉取单段指标时序（不缓存），供基础查询和时间对比共用 */
-async function fetchMetricSegment(
-  appID: string, envName: string, instances: string[], metricKey: string,
-  interval: number | undefined, startTime: number, endTime: number,
-): Promise<MetricTimeSeries | undefined> {
-  const data = await BkintegrationsBkmonitorService.getInstanceTimeSeries({
-    appID, envName, instances, metricKey, startTime, endTime, interval,
-  }).catch(() => undefined);
-  if (!data || typeof data !== 'object') return undefined;
-  return (data[metricKey] ?? Object.values(data)[0]) as MetricTimeSeries | undefined;
-}
-
-/** 将对比时段数据包装为独立时序段：偏移时间戳、添加 __CMP__ 前缀、注入颜色 */
-function transformCompareSegment(
-  compare: MetricTimeSeries | undefined, offsetSeconds: number, timeLabel: string,
-): MetricTimeSeries {
-  const result: MetricTimeSeries = { series: [] };
-  if (!compare?.series?.length) return result;
-  const color = getColorByOffset(offsetSeconds);
-  for (const s of compare.series) {
-    const newInstance = s.instance
-      ? `${COMPARE_INSTANCE_PREFIX}${timeLabel}-${s.instance}`
-      : s.instance;
-    result.series!.push({
-      ...s,
-      instance: newInstance,
-      dataPoints: (s.dataPoints ?? []).map(
-        p => [p?.[0], (p?.[1] ?? 0) - offsetSeconds * 1000] as number[],
-      ),
-      _color: color,
-    } as TimeSeriesItemWithColor);
-  }
-  return result;
-}
-
-/** 全局 $api.bkmonitor.getInstanceTimeSeries：被 ExploreChart 内部 useEcharts 调用 */
-async function getInstanceTimeSeries(resultParams: MonitorChartApiParams): Promise<MonitorChartApiResult> {
-  const { appID, compareOffsets, envName, instanceEnvMap, instances, metricKey, interval, start_time, end_time } = resultParams;
-  // 规范化对比偏移：过滤非数字 / <=0 / 重复
-  const normalizedCompareOffsets = Array.isArray(compareOffsets)
-    ? Array.from(new Set(compareOffsets.filter((v): v is number => typeof v === 'number' && v > 0)))
-    : [];
-  if (!appID || !metricKey || !instances?.length) {
+/** 全局 $api.bkmonitor.getInstanceTimeSeries：被 ExploreChart 内部 useEcharts 调用。 */
+async function getInstanceTimeSeries(params: MonitorChartApiParams): Promise<MonitorChartApiResult> {
+  const { appID, metricKey, queryId } = params;
+  if (!appID || !metricKey || (!params.all && !params.instances?.length)) {
     return { series: [], metrics: [] };
   }
-  // 优先使用包内 useEcharts 从 timeRange 解析出的时间戳（确保与图表 X 轴一致），
-  // 回退到 setChartTimeRange 注入的模块级变量
   const startTime =
-    (typeof start_time === 'number' ? start_time : currentStartTime) ||
+    (typeof params.start_time === 'number' ? params.start_time : currentStartTime) ||
     Math.floor(Date.now() / 1000) - 2 * 24 * 60 * 60;
-  const endTime = (typeof end_time === 'number' ? end_time : currentEndTime) || Math.floor(Date.now() / 1000);
-
-  // 判断是否为多环境模式：instanceEnvMap 按实例映射到多个不同环境
-  const envToInstances = new Map<string, string[]>();
-  if (instanceEnvMap) {
-    for (const inst of instances) {
-      const env = instanceEnvMap[inst];
-      if (env) {
-        const existing = envToInstances.get(env);
-        if (existing) {
-          existing.push(inst);
-        } else {
-          envToInstances.set(env, [inst]);
-        }
-      }
-    }
-  }
-  const isMultiEnv = envToInstances.size > 1;
-
-  // 同参并发去重：ExploreChart 与同组件内并行调用的 useEcharts 共享同一次请求
-  const dedupKey =
-    isMultiEnv && instanceEnvMap
-      ? JSON.stringify({
-          appID,
-          __multi: [...instances].sort().map(i => `${i}@${instanceEnvMap[i] ?? envName}`),
-          compareOffsets: normalizedCompareOffsets,
-          metricKey,
-          interval,
-          startTime,
-          endTime,
-        })
-      : JSON.stringify({ appID, compareOffsets: normalizedCompareOffsets, envName, instances, metricKey, interval, startTime, endTime });
+  const endTime =
+    (typeof params.end_time === 'number' ? params.end_time : currentEndTime) || Math.floor(Date.now() / 1000);
+  const query: MonitorMetricQuery = {
+    appID,
+    metricKey,
+    startTime,
+    endTime,
+    envName: params.envName,
+    envNames: params.envNames,
+    instances: params.instances,
+    interval: params.interval,
+    all: params.all,
+    limit: params.limit,
+    limitType: params.limitType,
+    method: params.method,
+  };
+  const envNames = params.envNames?.length ? params.envNames : [params.envName].filter(Boolean);
+  const compareOffsets =
+    envNames.length > 1
+      ? []
+      : Array.from(new Set((params.compareOffsets ?? []).filter(offset => typeof offset === 'number' && offset > 0)));
+  const dedupKey = JSON.stringify({ ...query, queryId, compareOffsets });
+  activeQueries.set(metricKey, dedupKey);
   const pending = inFlightRequests.get(dedupKey);
   if (pending) return pending;
+  metricCache.delete(metricKey);
 
   const request = (async (): Promise<MonitorChartApiResult> => {
-    // 多环境模式：并行请求各环境，合并 series
-    if (isMultiEnv) {
-      const reqs = [...envToInstances.entries()].map(([env, envInsts]) =>
-        BkintegrationsBkmonitorService.getInstanceTimeSeries({
-          appID,
-          envName: env,
-          instances: envInsts,
-          metricKey,
-          startTime,
-          endTime,
-          interval,
-        }).catch(() => undefined),
-      );
-      const results = await Promise.all(reqs);
-
-      const mergedSeries: TimeSeriesItem[] = [];
-      let mergedUnit: string | undefined;
-
-      for (const data of results) {
-        if (!data) continue;
-        const metric = typeof data === 'object' ? (data[metricKey] ?? Object.values(data)[0]) : undefined;
-        if (metric) {
-          if (metric.series) mergedSeries.push(...metric.series);
-          if (!mergedUnit) mergedUnit = metric.unit;
-        }
-      }
-      
-      const mergedMetric: MetricTimeSeries = { series: mergedSeries, unit: mergedUnit };
-      metricCache.set(metricKey, mergedMetric);
-      return { series: toSeriesItems(mergedMetric, metricKey), metrics: [] };
-    }
-
-    // 单环境模式
-    if (!envName) return { series: [], metrics: [] };
-    const currentMetric = await fetchMetricSegment(appID, envName, instances, metricKey, interval, startTime, endTime);
-    if (!currentMetric) return { series: [], metrics: [] };
-
-    // 时间对比：在基础时序上叠加过去时段数据
-    if (normalizedCompareOffsets.length > 0) {
+    const current = (await fetchMonitorMetric(query)) ?? { series: [] };
+    const chart: MonitorMetricTimeSeries = { ...current, series: [...(current.series ?? [])] };
+    const instances = (current.series ?? []).flatMap(series =>
+      series.instance ? [{ envName: series.envName || params.envName || '', instance: series.instance }] : [],
+    );
+    if (instances.length && compareOffsets.length) {
       const compareResults = await Promise.all(
-        normalizedCompareOffsets.map(async offset => {
-          const metric = await fetchMetricSegment(
-            appID, envName, instances, metricKey, interval,
-            startTime - offset, endTime - offset,
-          );
-          return transformCompareSegment(metric, offset, formatOffsetLabel(offset));
+        compareOffsets.map(async offset => {
+          const compare = await fetchMonitorMetric({
+            appID,
+            metricKey,
+            instances,
+            envName: current.series?.[0]?.envName || params.envName,
+            method: params.method,
+            interval: params.interval,
+            startTime: startTime - offset,
+            endTime: endTime - offset,
+          });
+          return transformCompareSegment(compare, offset, formatOffsetLabel(offset));
         }),
       );
-      const merged: MetricTimeSeries = { ...currentMetric, series: [...(currentMetric.series ?? [])] };
-      for (const cmp of compareResults) {
-        if (cmp.series?.length) merged.series!.push(...cmp.series);
-      }
-      metricCache.set(metricKey, merged);
-      return { series: toSeriesItems(merged, metricKey), metrics: [] };
+      chart.series!.push(...compareResults.flatMap(result => result.series ?? []));
     }
-
-    metricCache.set(metricKey, currentMetric);
-    return { series: toSeriesItems(currentMetric, metricKey), metrics: [] };
+    // 新筛选或刷新已经开始时，旧响应既不更新缓存，也不交给图表绘制。
+    if (activeQueries.get(metricKey) !== dedupKey) return { series: [], metrics: [] };
+    metricCache.set(metricKey, { current, chart, queryId });
+    return { series: toSeriesItems(chart, metricKey, envNames.length > 1), metrics: [] };
   })();
   inFlightRequests.set(dedupKey, request);
-  request.finally(() => inFlightRequests.delete(dedupKey));
+  void request.finally(() => inFlightRequests.delete(dedupKey));
   return request;
 }
 
@@ -312,17 +351,19 @@ function resolveDisplayUnit(metricKey: string, rawUnit: string): string {
   if (isNetwork) return 'Bps';
   return rawUnit;
 }
-
 /** 将自建接口的 MetricTimeSeries 转换为包所需的 SeriesItem[]（datapoints 已是 [值, 时间戳] 格式） */
-function toSeriesItems(metric: MetricTimeSeries | undefined, metricKey: string): SeriesItemLike[] {
+function toSeriesItems(
+  metric: MonitorMetricTimeSeries | undefined,
+  metricKey: string,
+  showEnvName: boolean,
+): SeriesItemLike[] {
   if (!metric?.series?.length) return [];
   const displayUnit = resolveDisplayUnit(metricKey, metric.unit ?? '');
   const percentScale = isPercentUnit(displayUnit) ? 100 : 1;
-  return metric.series.map((s: TimeSeriesItem) => {
+  return metric.series.map(s => {
     const instance = s.instance ?? '';
     const hasCmpPrefix = instance.startsWith(COMPARE_INSTANCE_PREFIX);
-    const displayName = hasCmpPrefix ? instance.slice(COMPARE_INSTANCE_PREFIX.length) : instance;
-    const ext = s as TimeSeriesItemWithColor;
+    const displayName = getMonitorInstanceLabel(s, showEnvName);
     // 全部展示字段统一使用 displayName（去前缀），避免 __CMP__ 透传到 UI；
     // 对比项的识别改为通过 isCompare 显式字段，下游不再依赖字符串前缀判断。
     const obj: SeriesItemLike = {
@@ -334,7 +375,24 @@ function toSeriesItems(metric: MetricTimeSeries | undefined, metricKey: string):
       datapoints: (s.dataPoints ?? []).map(p => [((p?.[0] ?? 0) * percentScale) as number, p?.[1]] as [number, number]),
     };
     if (hasCmpPrefix) (obj as unknown as Record<string, unknown>).isCompare = true;
-    if (ext._color) (obj as unknown as Record<string, unknown>).color = ext._color;
+    if (s._color) (obj as unknown as Record<string, unknown>).color = s._color;
     return obj;
   });
+}
+
+/** 将对比时段移回当前时间轴，并标记对比曲线与颜色。 */
+function transformCompareSegment(
+  compare: MonitorMetricTimeSeries | undefined,
+  offsetSeconds: number,
+  timeLabel: string,
+): MonitorMetricTimeSeries {
+  return {
+    ...compare,
+    series: (compare?.series ?? []).map(series => ({
+      ...series,
+      instance: `${COMPARE_INSTANCE_PREFIX}${timeLabel}-${series.instance ?? ''}`,
+      dataPoints: (series.dataPoints ?? []).map(point => [point?.[0], (point?.[1] ?? 0) + offsetSeconds * 1000]),
+      _color: getColorByOffset(offsetSeconds),
+    })),
+  };
 }
