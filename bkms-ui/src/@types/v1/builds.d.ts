@@ -338,6 +338,10 @@ export interface CustomTagOptsOutput {
 
 export interface PlatformBuildConfigOutputObj {
   /**
+   * 构建产物目录，原样返回存储值；未配置时为空串，生效值为语言默认值
+   */
+  artifactDir?: string;
+  /**
    * 构建阶段基础镜像
    */
   builderImage?: string;
@@ -467,6 +471,12 @@ export interface CustomTagOptsInput {
 
 export interface PlatformBuildConfigInput {
   /**
+   * 构建产物目录，可选；为空时 go / cpp 默认 /out。构建阶段命令可通过 ${BKMS_ARTIFACT_DIR} 引用，
+   * 目录内全部内容会拷贝到运行镜像的 /app。必须是绝对路径、不能是根目录、不能包含 .. 路径段，
+   * 只允许字母、数字和 . _ - /，最长 128；保存时会去掉末尾 / 等冗余写法
+   */
+  artifactDir?: string;
+  /**
    * 构建阶段基础镜像
    */
   builderImage?: string;
@@ -498,7 +508,7 @@ export interface BuildCommandsInput {
    */
   runtimeEnv?: string[];
   /**
-   * 启动命令
+   * 启动命令。留空时镜像入口为 /app/<镜像名>；填写后入口为 shell 形式
    */
   start?: string;
 }

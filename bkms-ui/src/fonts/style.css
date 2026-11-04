@@ -389,3 +389,21 @@ url("fonts/iconcool.eot?#iefix") format("embedded-opentype");
 .bkms-icon-daoru:before {
 	content: "\e1bc";
 }
+.bkms-icon-release-strategies:before {
+	content: "\e1c3";
+}
+.bkms-icon-go:before {
+	content: "\e1c4";
+}
+.bkms-icon-python:before {
+	content: "\e1c5";
+}
+.bkms-icon-node:before {
+	content: "\e1c6";
+}
+.bkms-icon-java:before {
+	content: "\e1c7";
+}
+.bkms-icon-js:before {
+	content: "\e1c8";
+}

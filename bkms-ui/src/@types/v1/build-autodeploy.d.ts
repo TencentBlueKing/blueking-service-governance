@@ -3,6 +3,17 @@
 // 来源：apps/bkms-server/docs/apis/swagger.json
 // 模块：build-autodeploy
 
+export type CreateBuildDeployRequest = CreateAppModelBuildDeployInput & {
+  /**
+   * 应用 ID
+   */
+  appID: string;
+  /**
+   * 环境名称
+   */
+  envName: string;
+};
+
 export type CreateTafBuildDeployRequest = CreateAppModelBuildDeployInput & {
   /**
    * 应用 ID

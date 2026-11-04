@@ -21,9 +21,10 @@ import type { Ref } from 'vue';
 
 import { Message } from 'bkui-vue';
 import { useI18n } from 'vue-i18n';
-import { AppService } from '~/api/modules/v1';
+import { AppService, DeployService } from '~/api/modules/v1';
 import { APP_DEPLOY_STATUS, DEPLOY_FAILED_STATUSES, HELM_DEPLOY_STATUS } from '~/common/enums/deploy';
-import { useDeployStatusMap } from '~/composables/use-deploy-status';
+import { isAppModelAppType } from '~/composables/app-type';
+import { type DeployStatusInfo, useDeployStatusMap } from '~/composables/use-deploy-status';
 import { envTypeMap } from '~/composables/use-env-manager';
 import { useResourceSpecDisplay } from '~/composables/use-resource-spec-display';
 import { type ISearchValue, type ISelectKey, useTableSearchSelect } from '~/composables/use-search';
@@ -32,6 +33,7 @@ import { useAppDetail } from '~/stores/app-detail';
 
 import type { VxeTableDefines } from '@blueking/vxe-table';
 import type { AppDeployOverviewEnvObj, DeployOverviewInstancesObj, GetAppDeployOverviewRequest } from '~/@types/v1/app';
+import type { BatchReleaseProgressOutputObj } from '~/@types/v1/deploy';
 import type { EnvOutput } from '~/@types/v1/env';
 import type { GPAConfigOutputObj, GPAStatusOutput } from '~/@types/v1/gpa';
 
@@ -72,6 +74,14 @@ export interface DeployOverviewAutoScale {
   tips: string[];
 }
 
+/** 分批发布进行中的批次进度摘要（设计稿：灰度发布中 · 第 N/M 批）。 */
+export interface DeployOverviewCanaryProgress {
+  /** 当前批次（从 1 开始，用于展示）；尚未进入批次或已回滚时为 null。 */
+  currentBatch: null | number;
+  /** 批次总数。 */
+  totalBatches: number;
+}
+
 export interface DeployOverviewDeployTarget {
   /** 总览接口返回的期望实例数，用作新增部署侧栏的默认副本数。 */
   effectiveReplicas?: number;
@@ -86,6 +96,8 @@ export interface DeployOverviewDeployTarget {
 export interface DeployOverviewRow {
   abnormalCount: null | number;
   autoScale: DeployOverviewAutoScale;
+  /** 分批发布进行中的批次进度；非分批发布或未查询时为 null。 */
+  canaryProgress: DeployOverviewCanaryProgress | null;
   clusterID: string;
   clusterName: string;
   cpuLimits: string;
@@ -135,6 +147,41 @@ type DeployOverviewAutoscaling = Pick<
 > & {
   status?: GPAStatusOutput | null;
 };
+
+/**
+ * 轮询会整体重建行对象，需沿用上一轮已查到的灰度进度，避免状态列在进度补查返回前闪烁回「部署中」。
+ * 仅当前仍为「部署中」的行可以沿用：环境一旦进入 deployed / failed / rolled-back，
+ * 上一轮的进度必须丢弃，否则状态列会一直停留在「灰度发布中 · 第 N/M 批」，
+ * 只能刷新页面才能恢复（enrichCanaryProgress 也只补查 deploying 行，不会覆盖旧值）。
+ */
+export function carryOverCanaryProgress(
+  previousRows: DeployOverviewRow[],
+  nextRows: DeployOverviewRow[],
+): DeployOverviewRow[] {
+  const previousCanary = new Map(previousRows.map(row => [row.name, row.canaryProgress]));
+  nextRows.forEach(row => {
+    if (row.deployStatus !== APP_DEPLOY_STATUS.DEPLOYING) return;
+    const previous = previousCanary.get(row.name);
+    if (previous) row.canaryProgress = previous;
+  });
+  return nextRows;
+}
+
+/**
+ * 将分批发布进度接口响应收敛为行级进度摘要；非「部署中」的进行中分批发布返回 null。
+ * 进度接口对最新部署记录返回终态（deployed / rolled-back 等）时，说明分批发布已结束，
+ * 即使总览行的 deploying 来自更新的构建记录，也不能再按灰度发布中展示。
+ */
+export function toCanaryProgress(progress: BatchReleaseProgressOutputObj | null): DeployOverviewCanaryProgress | null {
+  if (!progress || progress.status !== APP_DEPLOY_STATUS.DEPLOYING) return null;
+  const totalBatches = progress.batches?.length ?? 0;
+  if (!totalBatches) return null;
+  const { currentBatchIndex } = progress;
+  return {
+    currentBatch: typeof currentBatchIndex === 'number' && currentBatchIndex >= 0 ? currentBatchIndex + 1 : null,
+    totalBatches,
+  };
+}
 
 /**
  * 部署总览的数据层：负责接口请求、字段适配、筛选、排序和分页。
@@ -257,9 +304,17 @@ export function useDeployOverview(envList: Ref<EnvOutput[]>) {
     return deployStatusMaps.value.statusTextMap[status] || status || '--';
   }
 
+  /**
+   * 灰度进度补查会原地修改行对象的 canaryProgress，而 typeScopedRows 对行属性不敏感，
+   * computed 缓存不会失效。这里以版本号作为显式依赖，进度返回后立即刷新「灰度发布中」筛选项。
+   */
+  const canaryProgressVersion = ref(0);
+
   // 只展示当前环境类型范围内实际存在的部署状态，避免出现选择后必然为空的选项。
   const statusFilterOptions = computed(() => {
-    const presentTexts = new Set(typeScopedRows.value.map(row => getStatusText(row.deployStatus)));
+    // 显式依赖：行级灰度进度变化时重新求值
+    void canaryProgressVersion.value;
+    const presentTexts = new Set(typeScopedRows.value.map(row => getDeployStatusFilterText(row)));
     const options: { label: string; value: string }[] = [];
     const added = new Set<string>();
     // 仅追加当前数据中存在且尚未加入的状态文案。
@@ -268,7 +323,11 @@ export function useDeployOverview(envList: Ref<EnvOutput[]>) {
       added.add(text);
       options.push({ label: text, value: text });
     };
-    DEPLOY_STATUS_FILTER_ORDER.forEach(status => push(getStatusText(status)));
+    DEPLOY_STATUS_FILTER_ORDER.forEach(status => {
+      push(getStatusText(status));
+      // 灰度发布中是部署中环境的行级派生态，紧跟部署中展示，保持筛选顺序稳定。
+      if (status === APP_DEPLOY_STATUS.DEPLOYING) push(t('灰度发布中'));
+    });
     presentTexts.forEach(push);
     return options;
   });
@@ -288,7 +347,7 @@ export function useDeployOverview(envList: Ref<EnvOutput[]>) {
       field: 'deployStatus',
       multiple: true,
       children: [],
-      handleFilter: (row, values) => values.some(value => value.id === getStatusText(row.deployStatus)),
+      handleFilter: (row, values) => values.some(value => value.id === getDeployStatusFilterText(row)),
     },
     {
       id: 'resource',
@@ -305,8 +364,10 @@ export function useDeployOverview(envList: Ref<EnvOutput[]>) {
   watch(
     statusFilterOptions,
     options => {
-      const target = searchData.value.find(item => item.id === 'deployStatus');
-      if (target) target.children = options.map(option => ({ id: option.value, name: option.label }));
+      // bkui SearchSelect 仅在 props.data 数组引用变化时重建内部快照（watch(() => props.data) 浅监听），
+      // 原地改 children 不会刷新下拉，必须整体替换数组（与 feature-env.vue 同款模式）。
+      const children = options.map(option => ({ id: option.value, name: option.label }));
+      searchData.value = searchData.value.map(item => (item.id === 'deployStatus' ? { ...item, children } : item));
     },
     { immediate: true },
   );
@@ -354,6 +415,24 @@ export function useDeployOverview(envList: Ref<EnvOutput[]>) {
   /** 获取部署状态对应的文案、颜色和图标配置，供状态列统一渲染。 */
   function getStatusInfo(status: string) {
     return getDeployStatusInfo(appDetailStore.appType || null, status);
+  }
+
+  /** 部署状态列展示：分批发布进行中展示「灰度发布中 · 第 N/M 批」，其余按状态映射。 */
+  function getRowStatusDisplay(row: DeployOverviewRow): DeployStatusInfo {
+    const info = getStatusInfo(row.deployStatus);
+    if (row.canaryProgress) {
+      const { currentBatch, totalBatches } = row.canaryProgress;
+      return {
+        icon: 'loading',
+        text: currentBatch ? t('灰度发布中 · 第 {0}/{1} 批', [currentBatch, totalBatches]) : t('灰度发布中'),
+      };
+    }
+    return info;
+  }
+
+  /** 部署状态筛选文案：灰度发布中是部署中的行级派生态，作为独立筛选项。 */
+  function getDeployStatusFilterText(row: DeployOverviewRow) {
+    return row.canaryProgress ? t('灰度发布中') : getStatusText(row.deployStatus);
   }
 
   /** 清空指标卡、搜索及表头筛选，并将分页恢复到第一页。 */
@@ -451,8 +530,13 @@ export function useDeployOverview(envList: Ref<EnvOutput[]>) {
         { interceptorErr: false },
       );
       if (token !== loadToken) return;
-      rows.value = (list || []).map(buildRow);
+      const previousRows = rows.value;
+      rows.value = carryOverCanaryProgress(previousRows, (list || []).map(buildRow));
       isError.value = false;
+      // 分批发布进行中时部署状态保持 deploying，进度需按环境补充查询（仅应用模型应用）。
+      if (isAppModelAppType(appDetailStore.appType)) {
+        void enrichCanaryProgress(appID, token);
+      }
     } catch (error) {
       if (token !== loadToken) return;
       console.error(error);
@@ -472,6 +556,7 @@ export function useDeployOverview(envList: Ref<EnvOutput[]>) {
       // instances=null 表示后台无法提供实例数据，三个数量必须统一显示“--”。
       abnormalCount: item.instances ? (item.instances.abnormal ?? 0) : null,
       autoScale: createAutoScale(item.autoscaling),
+      canaryProgress: null,
       clusterID: item.cluster?.clusterID || '',
       clusterName: item.cluster?.clusterName || '',
       cpuLimits: resources.cpuLimits || '',
@@ -489,6 +574,29 @@ export function useDeployOverview(envList: Ref<EnvOutput[]>) {
       runningCount: item.instances ? (item.instances.running ?? 0) : null,
       type: item.envType || '',
     };
+  }
+
+  /**
+   * 为部署中的环境并发查询分批发布进度。
+   * 分批发布进行中时部署状态恒为 deploying，因此只需补查 deploying 行（通常 0~2 个）；
+   * 非分批发布返回 data null，失败静默，状态列退回「部署中」展示。
+   */
+  async function enrichCanaryProgress(appID: string, token: number) {
+    const deployingRows = rows.value.filter(row => row.deployStatus === APP_DEPLOY_STATUS.DEPLOYING && row.name);
+    if (!deployingRows.length) return;
+    await Promise.all(
+      deployingRows.map(async row => {
+        const progress = await DeployService.getBatchReleaseProgress(
+          { appID, envName: row.name },
+          { interceptorErr: false },
+        ).catch(() => null);
+        // 应用切换或新一轮加载开始后，丢弃过期响应。
+        if (token !== loadToken) return;
+        row.canaryProgress = toCanaryProgress(progress ?? null);
+      }),
+    );
+    // 进度补查完成后统一递增版本号，驱动状态筛选选项（含「灰度发布中」）立即刷新。
+    if (token === loadToken) canaryProgressVersion.value += 1;
   }
 
   /**
@@ -563,8 +671,10 @@ export function useDeployOverview(envList: Ref<EnvOutput[]>) {
     deployTargets,
     envTypeOptions,
     filterOptions,
+    getDeployStatusFilterText,
     getResourceText,
     getResourceTips,
+    getRowStatusDisplay,
     getStatusInfo,
     globalTypeFilter,
     handleFilterChange,

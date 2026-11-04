@@ -153,7 +153,23 @@ export default ({ mode }: { mode: string }) => {
       }),
 
       // https://github.com/jpkleemans/vite-svg-loader
-      SvgLoader({ defaultImport: 'component' }),
+      // 全站 svg 共享同一个 id 命名空间：`src/fonts/iconcool.js` 的 sprite 里有 Figma 直出的裸 id
+      // （id="a"/"b"/"c"/"d"），而 svgo 默认的 cleanupIds 会把本目录 svg 的内部 id 也压缩成 "a"，
+      // 两者撞车后 url(#a) 会解析到 sprite 里的 <mask>，取不到 paint server 的路径就会渲染成空白
+      // （coffee.svg 的渐变即因此失效）。
+      // 这里保留原 id 名字并统一加前缀，使资源 svg 的 id 永不可能与 sprite / 第三方组件冲突。
+      SvgLoader({
+        defaultImport: 'component',
+        svgoConfig: {
+          plugins: [
+            {
+              name: 'preset-default',
+              params: { overrides: { removeViewBox: false, cleanupIds: { minify: false } } },
+            },
+            { name: 'prefixIds', params: { prefix: 'bkms-ui' } },
+          ],
+        },
+      }),
 
       // 仅本地 dev server 启用，避免生产/镜像构建占用额外内存
       ...(isDev ? [VueDevTools()] : []),

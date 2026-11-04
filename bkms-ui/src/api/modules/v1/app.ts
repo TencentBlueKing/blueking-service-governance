@@ -6,9 +6,21 @@
 import type { Config } from '~/api/interceptors';
 import type { NoInfer } from '~/api/ts-helpers';
 import { v1Fetch } from '~/api/clients';
-import type { GetAppIDAutoSuffixRequest, GetAppIDAutoSuffixOutput, GetAppRequest, AppDetailOutputObj, DeleteAppRequest, EmptyOutput, GetAppDeployOverviewRequest, AppDeployOverviewEnvObj, GetAppDeployStatusesRequest, AppDeployedEnvOutputObj, UpdateAppDisplayNameRequest, UpdateHelmSpecRequest, UpdateAppTafSpecRequest, UpdateAppTrpcSpecRequest, UpdateAppVisibleEnvsRequest, ListAppsRequest, AppInfoOutputObj, CreateAppRequest, AppOutputObj, ResolveAppRequest, ResolveAppOutputObj } from '~/@types/v1/app';
+import type { GetAppRuntimeDefinitionsRequest, AppRuntimeDefinitionsOutputObj, GetAppIDAutoSuffixRequest, GetAppIDAutoSuffixOutput, GetAppRequest, AppDetailOutputObj, DeleteAppRequest, EmptyOutput, GetAppDeployOverviewRequest, AppDeployOverviewEnvObj, GetAppDeployStatusesRequest, AppDeployedEnvOutputObj, UpdateAppDisplayNameRequest, UpdateHelmSpecRequest, GetAppRuntimeModsRequest, PublicView, UpdateAppStartupConfigRequest, UpdateAppTafSpecRequest, UpdateAppTrpcSpecRequest, UpdateAppVisibleEnvsRequest, ListAppsRequest, AppInfoOutputObj, CreateAppRequest, AppOutputObj, ResolveAppRequest, ResolveAppOutputObj, CreateBKMSAppRequest } from '~/@types/v1/app';
 
 export const AppService = {
+  /**
+   * 查询框架目录与能力矩阵
+   *
+   * @method GET
+   * @path /app-runtime-definitions
+   * @tag app
+   * @response 200 GetAppRuntimeDefinitionsOutput OK
+   */
+  getAppRuntimeDefinitions: async <Request extends GetAppRuntimeDefinitionsRequest = GetAppRuntimeDefinitionsRequest, ResponseData = AppRuntimeDefinitionsOutputObj>(
+    params?: NoInfer<Request>,
+    config?: Config,
+  ) => await v1Fetch.get<Request, ResponseData>('/app-runtime-definitions')(params, config),
   /**
    * 获取创建应用时使用的自动 ID 后缀
    *
@@ -108,6 +120,35 @@ export const AppService = {
     config?: Config,
   ) => await v1Fetch.put<Request, ResponseData>('/apps/{appID}/helm-spec')(params, config),
   /**
+   * 查询应用的能力集合
+   *
+   * @method GET
+   * @path /apps/{appID}/runtime-mods
+   * @tag app
+   * @param appID path string required 应用 ID
+   * @response 200 GetAppRuntimeModsOutput OK
+   * @response 400 GinErrorOutput Bad Request
+   */
+  getAppRuntimeMods: async <Request extends GetAppRuntimeModsRequest = GetAppRuntimeModsRequest, ResponseData = PublicView>(
+    params?: NoInfer<Request>,
+    config?: Config,
+  ) => await v1Fetch.get<Request, ResponseData>('/apps/{appID}/runtime-mods')(params, config),
+  /**
+   * 修改 bkmsApp 应用的启动配置
+   *
+   * @method PUT
+   * @path /apps/{appID}/startup-config
+   * @tag app
+   * @param appID path string required 应用 ID
+   * @param body body UpdateAppStartupConfigInput required 修改请求
+   * @response 200 EmptyOutput OK
+   * @response 400 GinErrorOutput Bad Request
+   */
+  updateAppStartupConfig: async <Request extends UpdateAppStartupConfigRequest = UpdateAppStartupConfigRequest, ResponseData = EmptyOutput>(
+    params?: NoInfer<Request>,
+    config?: Config,
+  ) => await v1Fetch.put<Request, ResponseData>('/apps/{appID}/startup-config')(params, config),
+  /**
    * 更新应用 Taf 配置
    *
    * @method PUT
@@ -201,4 +242,19 @@ export const AppService = {
     params?: NoInfer<Request>,
     config?: Config,
   ) => await v1Fetch.get<Request, ResponseData>('/workspaces/{workspaceID}/apps/resolve/{app}')(params, config),
+  /**
+   * 创建 bkmsApp 应用
+   *
+   * @method POST
+   * @path /workspaces/{workspaceID}/bkmsapps
+   * @tag app
+   * @param workspaceID path string required 工作空间 ID
+   * @param body body CreateBKMSAppInput required 创建 bkmsApp 应用请求
+   * @response 200 CreateAppOutput OK
+   * @response 400 GinErrorOutput Bad Request
+   */
+  createBKMSApp: async <Request extends CreateBKMSAppRequest = CreateBKMSAppRequest, ResponseData = AppOutputObj>(
+    params?: NoInfer<Request>,
+    config?: Config,
+  ) => await v1Fetch.post<Request, ResponseData>('/workspaces/{workspaceID}/bkmsapps')(params, config),
 };
