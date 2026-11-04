@@ -6,7 +6,7 @@
 import type { Config } from '~/api/interceptors';
 import type { NoInfer } from '~/api/ts-helpers';
 import { v1Fetch } from '~/api/clients';
-import type { GetBatchReleaseProgressRequest, BatchReleaseProgressOutputObj, ListHelmDeployRecordsRequest, PaginatedHelmDeployRecordOutputObjs, CreateHelmDeployRequest, PreviewHelmDeployRequest, PreviewHelmDeployOutput, RollbackHelmDeployRequest, EmptyOutput, DeleteHelmDeployRequest, PreviewRollbackHelmDeployRequest, ListTafDeployRecordsRequest, PaginatedAppModelDeployRecordsOutputObjs, CreateTafDeployRequest, DeleteTafDeployRequest, GetLatestTafDeployStatusRequest, LatestDeployStatus, PreCheckTafDeployRequest, DeployPreCheckOutput, ListTafResourceSnapshotsRequest, PaginatedAppModelResourceSnapshotsOutputObjs, GetTafResourceSnapshotRequest, GetAppModelResourceSnapshotOutput, ListTrpcDeployRecordsRequest, CreateTrpcDeployRequest, DeleteTrpcDeployRequest, GetLatestTrpcDeployStatusRequest, PreCheckTrpcDeployRequest, ListTrpcResourceSnapshotsRequest, GetTrpcResourceSnapshotRequest } from '~/@types/v1/deploy';
+import type { GetBatchReleaseProgressRequest, BatchReleaseProgressOutputObj, OperateBatchReleaseRequest, EmptyOutput, ListHelmDeployRecordsRequest, PaginatedHelmDeployRecordOutputObjs, CreateHelmDeployRequest, PreviewHelmDeployRequest, PreviewHelmDeployOutput, RollbackHelmDeployRequest, DeleteHelmDeployRequest, PreviewRollbackHelmDeployRequest, ListTafDeployRecordsRequest, PaginatedAppModelDeployRecordsOutputObjs, CreateTafDeployRequest, DeleteTafDeployRequest, GetLatestTafDeployStatusRequest, LatestDeployStatus, PreCheckTafDeployRequest, DeployPreCheckOutput, ListTafResourceSnapshotsRequest, PaginatedAppModelResourceSnapshotsOutputObjs, GetTafResourceSnapshotRequest, GetAppModelResourceSnapshotOutput, ListTrpcDeployRecordsRequest, CreateTrpcDeployRequest, DeleteTrpcDeployRequest, GetLatestTrpcDeployStatusRequest, PreCheckTrpcDeployRequest, ListTrpcResourceSnapshotsRequest, GetTrpcResourceSnapshotRequest } from '~/@types/v1/deploy';
 
 export const DeployService = {
   /**
@@ -28,6 +28,27 @@ export const DeployService = {
     params?: NoInfer<Request>,
     config?: Config,
   ) => await v1Fetch.get<Request, ResponseData>('/apps/{appID}/envs/{envName}/batch-release')(params, config),
+  /**
+   * 分批发布手动操作
+   *
+   * 对环境 / 泳道最新部署记录对应的进行中分批发布执行继续、暂停、回退上一批、跳过剩余批次或回滚，
+   * 权限同部署。前置条件按集群中 Rollout 的实时状态校验；不满足前置条件、或没有进行中的分批发布时返回 400；
+   * 再次部署正在切换 Rollout（集群中的 Rollout 不属于最新部署记录）、或读取 Rollout 后它又被修改时返回 409，
+   * 刷新状态后重试即可
+   *
+   * @method POST
+   * @path /apps/{appID}/envs/{envName}/batch-release/operations
+   * @tag deploy
+   * @param appID path string required 应用 ID
+   * @param envName path string required 部署环境名称
+   * @param body body OperateBatchReleaseInput required 分批发布手动操作请求
+   * @response 200 EmptyOutput OK
+   * @response 400 GinErrorOutput Bad Request
+   */
+  operateBatchRelease: async <Request extends OperateBatchReleaseRequest = OperateBatchReleaseRequest, ResponseData = EmptyOutput>(
+    params?: NoInfer<Request>,
+    config?: Config,
+  ) => await v1Fetch.post<Request, ResponseData>('/apps/{appID}/envs/{envName}/batch-release/operations')(params, config),
   /**
    * 获取 Helm 应用部署记录列表
    *

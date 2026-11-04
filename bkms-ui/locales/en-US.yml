@@ -1515,7 +1515,13 @@ CLB 区域: CLB Region
 由小写字母、数字、- 组成，以字母开头且字母数字结尾，最多63字符: Composed of lowercase letters, numbers, and hyphens, starting with a letter and ending with a letter or number, up to 63 characters
 新增应用变量: Add App Variable
 版本对比: Version Compare
-内容无差异: No Difference
+内容无差异: No Content Differences
+无差异: No Differences
+配置差异: Configuration Differences
+仅展示发生变化的配置项: Only changed configuration items are shown
+文件名称: File Name
+覆盖层: Overlay
+配置变更 {0} 项: 'Configuration Changes: {0}'
 版本号自动生成规则: Version Number Auto-Generation Rules
 每次保存或回滚将自动递增生成新版本号，格式为: A new version number is automatically incremented on each save or rollback, in the format
 "示例：（ V1:V2:V3... ）": "Example: ( V1:V2:V3... )"
