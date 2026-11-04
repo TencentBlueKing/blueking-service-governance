@@ -28,16 +28,12 @@ export const BkintegrationsBkmonitorService = {
   /**
    * 查询实例监控指标时序数据
    *
-   * @method GET
+   * @method POST
    * @path /apps/{appID}/envs/{envName}/bkmonitor/instance-time-series
    * @tag bkintegrations-bkmonitor
    * @param appID path string required 应用 ID
    * @param envName path string required 环境名称
-   * @param instances query string[] required 实例名称列表
-   * @param metricKey query string required 指标标识
-   * @param startTime query number required 开始时间（Unix 时间戳）
-   * @param endTime query number required 结束时间（Unix 时间戳）
-   * @param interval query number 汇聚周期（秒），默认 60
+   * @param body body GetInstanceTimeSeriesQueryInput required 查询参数
    * @response 200 InstanceTimeSeriesResp OK
    * @response 400 GinErrorOutput Bad Request
    * @response 404 GinErrorOutput Not Found
@@ -45,7 +41,7 @@ export const BkintegrationsBkmonitorService = {
   getInstanceTimeSeries: async <Request extends GetInstanceTimeSeriesRequest = GetInstanceTimeSeriesRequest, ResponseData = Record<string, MetricTimeSeries>>(
     params?: NoInfer<Request>,
     config?: Config,
-  ) => await v1Fetch.get<Request, ResponseData>('/apps/{appID}/envs/{envName}/bkmonitor/instance-time-series')(params, config),
+  ) => await v1Fetch.post<Request, ResponseData>('/apps/{appID}/envs/{envName}/bkmonitor/instance-time-series')(params, config),
   /**
    * 查询环境绑定的 APM
    *
