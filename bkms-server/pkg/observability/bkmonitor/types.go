@@ -20,8 +20,6 @@
 package bkmonitor
 
 import (
-	"fmt"
-
 	bkmapi "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bkmonitor"
 )
 
@@ -74,39 +72,34 @@ var MetricDefinitions = []MetricDefinition{
 	{Key: MetricDiskUsage, DisplayName: "Disk Usage", Unit: "bytes"},
 }
 
-// promqlBuilders 指标标识到 PromQL 构建函数的映射
-var promqlBuilders = map[string]promqlBuilderFunc{
-	MetricCPUUsage: func(c, ns, pods string) string {
-		return fmt.Sprintf(promqlCPUUsage, c, ns, pods)
-	},
-	MetricCPURequestUsage: func(c, ns, pods string) string {
-		return fmt.Sprintf(promqlCPURequestUsage, c, ns, pods, c, ns, pods)
-	},
-	MetricCPULimitUsage: func(c, ns, pods string) string {
-		return fmt.Sprintf(promqlCPULimitUsage, c, ns, pods, c, ns, pods)
-	},
-	MetricMemoryUsage: func(c, ns, pods string) string {
-		return fmt.Sprintf(promqlMemoryUsage, c, ns, pods)
-	},
-	MetricMemoryRequestUsage: func(c, ns, pods string) string {
-		return fmt.Sprintf(promqlMemoryRequestUsage, c, ns, pods, c, ns, pods)
-	},
-	MetricMemoryLimitUsage: func(c, ns, pods string) string {
-		return fmt.Sprintf(promqlMemoryLimitUsage, c, ns, pods, c, ns, pods)
-	},
-	MetricNetworkReceive: func(c, ns, pods string) string {
-		return fmt.Sprintf(promqlNetworkReceive, c, ns, pods)
-	},
-	MetricNetworkTransmit: func(c, ns, pods string) string {
-		return fmt.Sprintf(promqlNetworkTransmit, c, ns, pods)
-	},
-	MetricDiskUsage: func(c, ns, pods string) string {
-		return fmt.Sprintf(promqlDiskUsage, c, ns, pods)
-	},
+// promqlTemplates 指标标识到 PromQL 模板的映射，模板占位说明见 promql_builder.go
+var promqlTemplates = map[string]string{
+	MetricCPUUsage:           promqlCPUUsage,
+	MetricCPURequestUsage:    promqlCPURequestUsage,
+	MetricCPULimitUsage:      promqlCPULimitUsage,
+	MetricMemoryUsage:        promqlMemoryUsage,
+	MetricMemoryRequestUsage: promqlMemoryRequestUsage,
+	MetricMemoryLimitUsage:   promqlMemoryLimitUsage,
+	MetricNetworkReceive:     promqlNetworkReceive,
+	MetricNetworkTransmit:    promqlNetworkTransmit,
+	MetricDiskUsage:          promqlDiskUsage,
 }
 
-// promqlBuilderFunc PromQL 构建函数类型，参数为 (clusterID, namespace, podsPattern)
-type promqlBuilderFunc func(clusterID, namespace, podsPattern string) string
+// AggMethod 汇聚方法，作用于 PromQL 外层按 Pod 的聚合（by(pod)），即同一 Pod 内多个容器的数据如何合并
+type AggMethod string
+
+const (
+	// AggMethodSum 求和（默认）
+	AggMethodSum AggMethod = "sum"
+	// AggMethodMax 最大值
+	AggMethodMax AggMethod = "max"
+	// AggMethodMin 最小值
+	AggMethodMin AggMethod = "min"
+	// AggMethodCount 计数
+	AggMethodCount AggMethod = "count"
+	// AggMethodAvg 平均值
+	AggMethodAvg AggMethod = "avg"
+)
 
 // MetricDefinition 指标定义信息
 type MetricDefinition struct {
@@ -134,6 +127,8 @@ type MetricsQuery struct {
 	Instances []string
 	// MetricKeys 指定要查询的指标标识列表，为空时查询全部指标
 	MetricKeys []string
+	// Method 汇聚方法，为空时使用 AggMethodSum
+	Method AggMethod
 	// StartTime 开始时间（Unix 时间戳）
 	StartTime int64
 	// EndTime 结束时间（Unix 时间戳）

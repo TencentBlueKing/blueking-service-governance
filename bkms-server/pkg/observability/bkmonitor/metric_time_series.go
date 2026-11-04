@@ -48,12 +48,6 @@ func NewMetricTimeSeriesService() *MetricTimeSeriesService {
 func (s *MetricTimeSeriesService) QueryTimeSeries(
 	ctx context.Context, query *MetricsQuery,
 ) (*MetricsResult, error) {
-	client, err := s.newClient(query.Username)
-	if err != nil {
-		return nil, errors.Wrap(err, "new bkmonitor client")
-	}
-	promQLs := NewPromQLBuilder(query).Build()
-
 	var targetDefs []MetricDefinition
 	if len(query.MetricKeys) > 0 {
 		targetDefs = lo.Filter(MetricDefinitions, func(def MetricDefinition, _ int) bool {
@@ -71,6 +65,17 @@ func (s *MetricTimeSeriesService) QueryTimeSeries(
 			}
 		}),
 	}
+
+	// 没有实例时直接返回各指标的空时序，不请求蓝鲸监控（空实例会拼出 pod_name=~"^()$" 的无效 PromQL）
+	if len(query.Instances) == 0 {
+		return result, nil
+	}
+
+	client, err := s.newClient(query.Username)
+	if err != nil {
+		return nil, errors.Wrap(err, "new bkmonitor client")
+	}
+	promQLs := NewPromQLBuilder(query).Build()
 
 	// 逐指标查询
 	for _, def := range targetDefs {

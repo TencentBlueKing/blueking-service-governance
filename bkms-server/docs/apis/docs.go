@@ -8145,7 +8145,7 @@ const docTemplate = `{
             }
         },
         "/apps/{appID}/envs/{envName}/bkmonitor/instance-time-series": {
-            "get": {
+            "post": {
                 "security": [
                     {
                         "BkUserInfo": []
@@ -8153,6 +8153,9 @@ const docTemplate = `{
                     {
                         "BkUserCredential": []
                     }
+                ],
+                "consumes": [
+                    "application/json"
                 ],
                 "produces": [
                     "application/json"
@@ -8178,42 +8181,13 @@ const docTemplate = `{
                         "required": true
                     },
                     {
-                        "type": "array",
-                        "items": {
-                            "type": "string"
-                        },
-                        "collectionFormat": "csv",
-                        "description": "实例名称列表",
-                        "name": "instances",
-                        "in": "query",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "指标标识",
-                        "name": "metricKey",
-                        "in": "query",
-                        "required": true
-                    },
-                    {
-                        "type": "integer",
-                        "description": "开始时间（Unix 时间戳）",
-                        "name": "startTime",
-                        "in": "query",
-                        "required": true
-                    },
-                    {
-                        "type": "integer",
-                        "description": "结束时间（Unix 时间戳）",
-                        "name": "endTime",
-                        "in": "query",
-                        "required": true
-                    },
-                    {
-                        "type": "integer",
-                        "description": "汇聚周期（秒），默认 60",
-                        "name": "interval",
-                        "in": "query"
+                        "description": "查询参数",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/serializer.GetInstanceTimeSeriesQueryInput"
+                        }
                     }
                 ],
                 "responses": {
@@ -28524,6 +28498,70 @@ const docTemplate = `{
                             "$ref": "#/definitions/serializer.ImportedPolarisServiceOutput"
                         }
                     ]
+                }
+            }
+        },
+        "serializer.GetInstanceTimeSeriesQueryInput": {
+            "type": "object",
+            "required": [
+                "endTime",
+                "metricKey",
+                "startTime"
+            ],
+            "properties": {
+                "all": {
+                    "description": "All 为 true 时查询该环境下的所有实例监控信息（按最新部署记录的 LabelSelector 枚举实例），忽略 instances",
+                    "type": "boolean"
+                },
+                "endTime": {
+                    "description": "EndTime 结束时间（Unix 时间戳，秒）",
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "instances": {
+                    "description": "Instances 实例（Pod）名称列表；all=true 时忽略，改为查询该环境部署的全部实例",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "interval": {
+                    "description": "Interval 汇聚周期（秒），最小为 60 秒",
+                    "type": "integer"
+                },
+                "limit": {
+                    "description": "Limit 每个指标只返回按曲线平均值排序后的前 Limit 条实例时序，取值 0~50，0 表示不截断",
+                    "type": "integer",
+                    "maximum": 50,
+                    "minimum": 0
+                },
+                "limitType": {
+                    "description": "LimitType 截断方向：top 按平均值降序、bottom 按平均值升序，默认 top；仅在 limit\u003e0 时生效",
+                    "type": "string",
+                    "enum": [
+                        "top",
+                        "bottom"
+                    ]
+                },
+                "method": {
+                    "description": "Method 汇聚方法，同一 Pod 内多个容器的数据如何合并，默认 sum；\n使用率类指标的分子与分母使用同一方法（count 时比值恒为 1）",
+                    "type": "string",
+                    "enum": [
+                        "sum",
+                        "max",
+                        "min",
+                        "count",
+                        "avg"
+                    ]
+                },
+                "metricKey": {
+                    "description": "MetricKey 指定要查询的指标标识，可用值：\n  - cpu_usage: CPU 使用量（核数）\n  - cpu_request_usage: CPU Request 使用率\n  - cpu_limit_usage: CPU Limit 使用率\n  - memory_usage: 内存使用量（Working Set）\n  - memory_request_usage: 内存 Request 使用率\n  - memory_limit_usage: 内存 Limit 使用率\n  - network_receive: 网络入带宽\n  - network_transmit: 网络出带宽\n  - disk_usage: 磁盘使用量",
+                    "type": "string"
+                },
+                "startTime": {
+                    "description": "StartTime 开始时间（Unix 时间戳，秒）",
+                    "type": "integer",
+                    "minimum": 1
                 }
             }
         },

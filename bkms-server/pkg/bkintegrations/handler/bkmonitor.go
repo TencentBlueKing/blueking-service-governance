@@ -29,10 +29,13 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/serializer"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
+	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime/capability/apmservicename"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
+	appmodeldeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/appmodel"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	bkmapi "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bkmonitor"
 	bkmmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/bkmonitor"
@@ -402,25 +405,22 @@ func (h *Handler) GetEnvApm(c *gin.Context) {
 //	@ID			GetInstanceTimeSeries
 //	@Summary	查询实例监控指标时序数据
 //	@Tags		bkintegrations-bkmonitor
+//	@Accept		json
 //	@Produce	json
 //	@Security	BkUserInfo
 //	@Security	BkUserCredential
-//	@Param		appID		path		string		true	"应用 ID"
-//	@Param		envName		path		string		true	"环境名称"
-//	@Param		instances	query		[]string	true	"实例名称列表"
-//	@Param		metricKey	query		string		true	"指标标识"
-//	@Param		startTime	query		int			true	"开始时间（Unix 时间戳）"
-//	@Param		endTime	    query		int			true	"结束时间（Unix 时间戳）"
-//	@Param		interval	query		int			false	"汇聚周期（秒），默认 60"
-//	@Success	200			{object}	serializer.InstanceTimeSeriesResp
-//	@Failure	400			{object}	bkerrs.GinErrorOutput
-//	@Failure	404			{object}	bkerrs.GinErrorOutput
-//	@Router		/apps/{appID}/envs/{envName}/bkmonitor/instance-time-series [get]
+//	@Param		appID	path		string										true	"应用 ID"
+//	@Param		envName	path		string										true	"环境名称"
+//	@Param		body	body		serializer.GetInstanceTimeSeriesQueryInput	true	"查询参数"
+//	@Success	200		{object}	serializer.InstanceTimeSeriesResp
+//	@Failure	400		{object}	bkerrs.GinErrorOutput
+//	@Failure	404		{object}	bkerrs.GinErrorOutput
+//	@Router		/apps/{appID}/envs/{envName}/bkmonitor/instance-time-series [post]
 func (h *Handler) GetInstanceTimeSeries(c *gin.Context) {
 	ctx := c.Request.Context()
 	var uriInput serializer.AppEnvURIInput
 	var queryInput serializer.GetInstanceTimeSeriesQueryInput
-	if err := ginutils.BindURIQuery(c, &uriInput, &queryInput); err != nil {
+	if err := ginutils.BindURIJSON(c, &uriInput, &queryInput); err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return
 	}
@@ -449,14 +449,30 @@ func (h *Handler) GetInstanceTimeSeries(c *gin.Context) {
 		)
 		return
 	}
+
+	// 默认按请求传入的实例列表查询，集群/命名空间取自环境绑定信息
+	clusterID := env.Cluster.ClusterID
+	namespace := env.Cluster.Namespace
+	instances := queryInput.Instances
+
+	// all=true 时，改为查询该环境最新部署记录匹配的全部实例，避免前端拼接超长实例列表
+	if queryInput.All {
+		clusterID, namespace, instances, err = h.resolveAllInstances(ctx, app, uriInput.EnvName)
+		if err != nil {
+			bkerrs.AbortWithErr(c, err)
+			return
+		}
+	}
+
 	metricSvc := bkmmodel.NewMetricTimeSeriesService()
 
 	result, err := metricSvc.QueryTimeSeries(ctx, &bkmmodel.MetricsQuery{
 		BkBizID:    cast.ToInt64(ws.BkSystems.BkMonitorProjectID),
-		ClusterID:  env.Cluster.ClusterID,
-		Namespace:  env.Cluster.Namespace,
-		Instances:  queryInput.Instances,
+		ClusterID:  clusterID,
+		Namespace:  namespace,
+		Instances:  instances,
 		MetricKeys: []string{queryInput.MetricKey},
+		Method:     bkmmodel.AggMethod(queryInput.Method),
 		StartTime:  queryInput.StartTime,
 		EndTime:    queryInput.EndTime,
 		Interval:   queryInput.Interval,
@@ -486,6 +502,7 @@ func (h *Handler) GetInstanceTimeSeries(c *gin.Context) {
 			}
 			series = append(series, item)
 		}
+		series = serializer.RankAndLimitTimeSeries(series, queryInput.Limit, queryInput.LimitType)
 		respData[key] = &serializer.MetricTimeSeries{
 			DisplayName: metric.DisplayName,
 			Unit:        metric.Unit,
@@ -494,6 +511,27 @@ func (h *Handler) GetInstanceTimeSeries(c *gin.Context) {
 	}
 
 	ginutils.OK(c, &serializer.InstanceTimeSeriesResp{Data: respData})
+}
+
+// resolveAllInstances 按该环境默认泳道的最新部署记录枚举全部实例，返回部署记录对应的集群、命名空间与实例列表。
+func (h *Handler) resolveAllInstances(
+	ctx context.Context, app *bkmsapp.Application, envName string,
+) (string, string, []string, error) {
+	// 仅 AppModel 类型应用存在部署记录，其他类型不支持按部署记录枚举实例
+	if !appruntime.IsAppModelType(app.Type) {
+		return "", "", nil, bkerrs.Errorf(
+			bkerrs.ErrCodeInvalidArgument, "all=true is not supported for app type %s", app.Type,
+		)
+	}
+	// 取默认泳道（空泳道名）的最新部署记录，与实例列表接口口径一致
+	record, podNames, err := appmodeldeploy.ListLatestPodNames(ctx, h.registry.DB, app.ID, envName, "")
+	if err != nil {
+		if errors.Is(err, appmodeldeploy.ErrDeployRecordNotFound) {
+			return "", "", nil, bkerrs.Wrap(err, bkerrs.ErrCodeNotFound, "deploy record not found")
+		}
+		return "", "", nil, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list deployed instances")
+	}
+	return record.ClusterID, record.Namespace, podNames, nil
 }
 
 // ListDashboardDirectoryTree 获取蓝鲸监控仪表盘数据

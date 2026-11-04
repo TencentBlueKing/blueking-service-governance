@@ -53,35 +53,31 @@ func init() {
 		if err := v.RegisterValidation("env_name", validateEnvName); err != nil {
 			panic("failed to register env_name validator: " + err.Error())
 		}
+		if err := v.RegisterValidation("metric_key", validateMetricKey); err != nil {
+			panic("failed to register metric_key validator: " + err.Error())
+		}
 		v.RegisterStructValidation(validateGetInstanceTimeSeriesQueryInput, GetInstanceTimeSeriesQueryInput{})
 	}
 }
 
-// validateGetInstanceTimeSeriesQueryInput 结构体级别校验：跨字段校验逻辑
+// validateGetInstanceTimeSeriesQueryInput 结构体级校验：binding 的 required / max 只看 slice 本身，
+// 无法识别空数组与空白实例，因此在这里按「过滤空白后」校验数量在 1~MaxInstances 之间；
+// all=true 时由后端枚举实例，忽略 instances，不做要求
 func validateGetInstanceTimeSeriesQueryInput(sl validator.StructLevel) {
 	input := sl.Current().Interface().(GetInstanceTimeSeriesQueryInput)
-
-	// StartTime 必须 <= EndTime
-	if input.StartTime > input.EndTime {
-		sl.ReportError(input.EndTime, "EndTime", "EndTime",
-			"start_time must be less than or equal to end_time", "")
+	if input.All {
+		return
 	}
-
-	// 校验指标标识是否合法
-	if input.MetricKey != "" && !lo.ContainsBy(bkmmodel.MetricDefinitions, func(def bkmmodel.MetricDefinition) bool {
-		return def.Key == input.MetricKey
-	}) {
-		sl.ReportError(input.MetricKey, "MetricKey", "MetricKey",
-			fmt.Sprintf("invalid metric key: %s", input.MetricKey), "")
-	}
-
-	// 过滤空白后，Instances 不能为空
-	hasNonEmpty := lo.ContainsBy(input.Instances, func(inst string) bool {
+	count := lo.CountBy(input.Instances, func(inst string) bool {
 		return strings.TrimSpace(inst) != ""
 	})
-	if !hasNonEmpty {
+	if count == 0 {
 		sl.ReportError(input.Instances, "Instances", "Instances",
-			"instances must contain at least one non-empty value", "")
+			"instances must contain at least one non-empty value when all is false", "")
+	}
+	if count > MaxInstances {
+		sl.ReportError(input.Instances, "Instances", "Instances",
+			fmt.Sprintf("instances must contain at most %d values", MaxInstances), "")
 	}
 }
 
@@ -95,6 +91,12 @@ func validateWorkspaceID(fl validator.FieldLevel) bool {
 
 func validateEnvName(fl validator.FieldLevel) bool {
 	return envNamePattern.MatchString(fl.Field().String())
+}
+
+func validateMetricKey(fl validator.FieldLevel) bool {
+	return lo.ContainsBy(bkmmodel.MetricDefinitions, func(def bkmmodel.MetricDefinition) bool {
+		return def.Key == fl.Field().String()
+	})
 }
 
 // -----------------------------------------------------------------------------
