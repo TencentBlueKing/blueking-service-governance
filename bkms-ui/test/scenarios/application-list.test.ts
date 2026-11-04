@@ -38,6 +38,7 @@ import { MockedApiError } from '../helpers/mocked-api-error';
 const mocks = vi.hoisted(() => ({
   listApps: vi.fn(),
   push: vi.fn(),
+  setNavigationApp: vi.fn(),
 }));
 
 vi.mock('~/api/modules/bkmsserver', () => ({
@@ -50,7 +51,7 @@ vi.mock('vue-router', async () => {
 });
 vi.mock('~/stores/space', () => ({ useSpaceStore: () => ({ currentSpace: 'ws-1' }) }));
 vi.mock('~/stores/app-detail', () => ({
-  useAppDetail: () => ({ updateAppName: vi.fn(), updateAppID: vi.fn() }),
+  useAppDetail: () => ({ updateAppName: vi.fn(), setNavigationApp: mocks.setNavigationApp }),
 }));
 vi.mock('vue-i18n', async () => (await import('../helpers/mock-i18n')).i18nMockFactory());
 
@@ -145,6 +146,7 @@ describe('应用列表：数据状态与导航', () => {
     await renderPage();
     await userEvent.click(await screen.findByRole('button', { name: 'app-a' }));
     expect(mocks.push).toHaveBeenCalled();
+    expect(mocks.setNavigationApp).toHaveBeenCalledWith('ws-1', app('app-a'));
   });
 
   it('新旧 tRPC 共用类型筛选，blank 按语言展示并使用真实类型跳转', async () => {
@@ -160,6 +162,10 @@ describe('应用列表：数据状态与导航', () => {
     expect(screen.getByRole('button', { name: 'new-trpc' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'blank-go' })).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'new-trpc' }));
+    expect(mocks.setNavigationApp).toHaveBeenLastCalledWith(
+      'ws-1',
+      expect.objectContaining({ name: 'new-trpc', type: 'bkmsApp', framework: 'trpc', language: 'go' }),
+    );
     expect(mocks.push).toHaveBeenLastCalledWith(
       expect.objectContaining({
         params: expect.objectContaining({ name: 'new-trpc', type: 'bkmsApp' }),

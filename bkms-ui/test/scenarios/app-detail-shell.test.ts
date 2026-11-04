@@ -34,11 +34,13 @@ import { ref } from 'vue';
 
 import { flushPromises, mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useRouter } from 'vue-router';
 import { appNavigationConfig } from '~/config/navigation/app';
 import AppDetailShell from '~/pages/application/detail.vue';
 import { useAppDetail } from '~/stores/app-detail';
+
+import { installVxeShims } from '../helpers/mock-table';
 
 import type { VueWrapper } from '@vue/test-utils';
 import type { NavigationGuard, RouteLocationNormalizedGeneric, Router } from 'vue-router';
@@ -52,6 +54,7 @@ const mocks = vi.hoisted(() => ({
   >,
   space: '',
   apps: vi.fn(),
+  listPageApps: vi.fn(),
   detail: vi.fn(),
   runtime: vi.fn(),
   push: vi.fn(),
@@ -97,19 +100,25 @@ function mountShell(): {
 // API mock 工厂见 helpers/mock-api.ts（§3.7 共享 helpers；同款 mock 亦用于 height-chain）
 vi.mock('~/api/modules/bkmsserver', async () => {
   const base = (await import('../helpers/mock-api')).bkmsserverShellMockFactory();
-  return { ApiServerService: { ...base.ApiServerService, GetApp: mocks.detail } };
+  return { ApiServerService: { ...base.ApiServerService, GetApp: mocks.detail, ListApps: mocks.listPageApps } };
 });
+vi.mock('@blueking/table', async () => (await import('../helpers/mock-table')).tableMockFactory());
 vi.mock('~/api/modules/v1', async () => (await import('../helpers/mock-api')).v1ProxyMockFactory());
 vi.mock('~/api/modules/v1/app', () => ({
   AppService: { listApps: mocks.apps, getAppRuntimeMods: mocks.runtime },
 }));
 vi.mock('~/stores/space', () => ({ useSpaceStore: () => ({ currentSpace: mocks.space }) }));
 
+beforeAll(() => {
+  installVxeShims();
+});
+
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.realRouter = null;
   mocks.space = '';
   mocks.apps.mockResolvedValue([]);
+  mocks.listPageApps.mockResolvedValue([]);
   mocks.detail.mockResolvedValue(undefined);
   mocks.runtime.mockResolvedValue(undefined);
   useRouter().currentRoute.value = loc({ name: '' });
@@ -182,7 +191,12 @@ function menuKeys(wrapper: VueWrapper): string[] {
 /** 挂载真实壳层和路由，仅隔离子页面；保留异步导航与前进/后退的历史语义。 */
 async function mountShellWithHistory(
   name: string,
-  { menuName = 'observation', type = 'bkmsApp' }: { menuName?: string; type?: string } = {},
+  {
+    menuName = 'observation',
+    type = 'bkmsApp',
+    fromList = false,
+    renderIcons = fromList,
+  }: { fromList?: boolean; menuName?: string; renderIcons?: boolean; type?: string } = {},
 ) {
   const {
     createRouter,
@@ -192,7 +206,12 @@ async function mountShellWithHistory(
   const router = createRouter({
     history: createMemoryHistory(),
     routes: [
-      { path: '/:space/app', name: 'app', component: { template: '<div />' } },
+      {
+        path: '/:space/app',
+        name: 'app',
+        component: fromList ? (await import('~/pages/application/application.vue')).default : { template: '<div />' },
+        props: { space: 'ws-1' },
+      },
       {
         path: '/:space/app/:name',
         component: AppDetailShell,
@@ -204,11 +223,13 @@ async function mountShellWithHistory(
   });
   mocks.realRouter = router;
   await router.push('/ws-1/app');
-  await router.push({
-    name: 'detail',
-    params: { space: 'ws-1', name, type, menuName },
-    query: { stale: 'observation-query' },
-  });
+  if (!fromList) {
+    await router.push({
+      name: 'detail',
+      params: { space: 'ws-1', name, type, menuName },
+      query: { stale: 'observation-query' },
+    });
+  }
   const pinia = createPinia();
   setActivePinia(pinia);
   const wrapper = mount(routerView, {
@@ -229,17 +250,96 @@ async function mountShellWithHistory(
         Alert: { template: '<div role="alert"><slot name="title" /><slot /></div>' },
         Button: { template: '<button><slot /></button>' },
         Loading: true,
-        TypeIcon: true,
+        TypeIcon: !renderIcons,
+        ColorIcon: true,
         AngleDownFill: true,
         Plus: true,
       },
       mocks: { $t: (text: string) => text },
-      directives: { bkloading: {} },
+      directives: { bkloading: {}, 'bk-tooltips': {} },
     },
   });
   await flushPromises();
   return { router, wrapper };
 }
+
+describe('应用详情壳层：首屏应用图标', () => {
+  it.each([
+    { type: 'bkmsApp', framework: 'blank', language: 'python', label: 'Python' },
+    { type: 'bkmsApp', framework: 'trpc', language: 'go', label: 'tRPC' },
+    { type: 'helm', framework: '', language: '', label: 'Helm Chart' },
+  ])('从应用列表进入时，列表接口返回前即展示已知的 $label 图标', async ({ label, ...presentation }) => {
+    mocks.space = 'ws-1';
+    const app = { id: 'app-id', name: 'known-app', ...presentation };
+    mocks.listPageApps.mockResolvedValue([app]);
+    let completeList!: (value: object[]) => void;
+    mocks.apps.mockReturnValue(new Promise(resolve => (completeList = resolve)));
+    mocks.detail.mockResolvedValue(app);
+    const { router, wrapper } = await mountShellWithHistory(app.name, { fromList: true });
+    try {
+      const applicationLink = wrapper.findAll('button').find(button => button.text() === app.name);
+      expect(applicationLink).toBeDefined();
+      await applicationLink!.trigger('click');
+      await flushPromises();
+      expect(router.currentRoute.value.name).toBe('detail');
+      expect(mocks.apps).toHaveBeenCalledWith({ workspaceID: 'ws-1' });
+      expect(mocks.detail).not.toHaveBeenCalled();
+      expect(wrapper.find(`[title="${label}"]`).exists()).toBe(true);
+      expect(wrapper.find('[title="平台托管应用"]').exists()).toBe(false);
+
+      const listedApp = app.language === 'python' ? { ...app, language: 'nodejs' } : app;
+      completeList([listedApp]);
+      await flushPromises();
+      const loadedLabel = listedApp.language === 'nodejs' ? 'Node.js' : label;
+      expect(wrapper.find(`[title="${loadedLabel}"]`).exists()).toBe(true);
+    } finally {
+      wrapper.unmount();
+    }
+  });
+
+  it.each([
+    { space: 'ws-2', name: 'known-app' },
+    { space: 'ws-1', name: 'another-app' },
+  ])('进入 $space/$name 时，不复用其他空间或应用的图标', async params => {
+    mocks.space = 'ws-1';
+    const app = { id: 'app-id', name: 'known-app', type: 'bkmsApp', framework: 'blank', language: 'python' };
+    mocks.listPageApps.mockResolvedValue([app]);
+    mocks.apps.mockReturnValue(new Promise(() => {}));
+    const { router, wrapper } = await mountShellWithHistory(app.name, { fromList: true });
+    try {
+      await wrapper
+        .findAll('button')
+        .find(button => button.text() === app.name)!
+        .trigger('click');
+      await flushPromises();
+      expect(wrapper.find('[title="Python"]').exists()).toBe(true);
+      await router.push({ name: 'detail', params: { ...params, type: 'bkmsApp', menuName: 'info' } });
+      await flushPromises();
+      expect(wrapper.find('[title="Python"]').exists()).toBe(false);
+      expect(wrapper.find('[title="平台托管应用"]').exists()).toBe(true);
+    } finally {
+      wrapper.unmount();
+    }
+  });
+
+  it('刷新或直接访问时，在无导航摘要的情况下按接口结果显示图标', async () => {
+    mocks.space = 'ws-1';
+    const app = { id: 'app-id', name: 'known-app', type: 'bkmsApp', framework: 'blank', language: 'nodejs' };
+    let completeList!: (value: object[]) => void;
+    mocks.apps.mockReturnValue(new Promise(resolve => (completeList = resolve)));
+    mocks.detail.mockResolvedValue(app);
+    const { wrapper } = await mountShellWithHistory(app.name, { menuName: 'info', renderIcons: true });
+    try {
+      expect(wrapper.find('[title="平台托管应用"]').exists()).toBe(true);
+      completeList([app]);
+      await flushPromises();
+      expect(wrapper.find('[title="Node.js"]').exists()).toBe(true);
+      expect(wrapper.find('[title="平台托管应用"]').exists()).toBe(false);
+    } finally {
+      wrapper.unmount();
+    }
+  });
+});
 
 function openObservation(name = 'a') {
   useRouter().currentRoute.value = loc({

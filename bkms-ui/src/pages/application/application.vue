@@ -588,6 +588,7 @@
 
   // 构建管理
   function handleGoBuild(row: AppInfoOutputObj) {
+    appDetailStore.setNavigationApp(props.space, row);
     router.push({
       name: 'detail',
       params: {
@@ -600,6 +601,7 @@
 
   // 部署管理
   function handleGoDeploy(row: AppInfoOutputObj) {
+    appDetailStore.setNavigationApp(props.space, row);
     router.push({
       name: 'detail',
       params: {
@@ -662,7 +664,7 @@
   }
   // 应用详情
   function handleShowAppDetail(row: AppInfoOutputObj) {
-    appDetailStore.updateAppID(row.id || '');
+    appDetailStore.setNavigationApp(props.space, row);
     router.push({
       name: 'detail',
       params: {

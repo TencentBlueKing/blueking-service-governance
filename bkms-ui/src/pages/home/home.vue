@@ -429,7 +429,7 @@
   // 进入应用详情
   function handleShowAppDetail(spaceId: string, app: AppInfoOutputObj) {
     spaceStore.updateCurrentSpace(spaceId);
-    appDetailStore.updateAppID(app.id || '');
+    appDetailStore.setNavigationApp(spaceId, app);
     router.push({
       name: 'detail',
       params: {

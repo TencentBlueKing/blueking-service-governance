@@ -72,8 +72,8 @@
             <div class="flex items-center min-w-[43px] overflow-hidden">
               <TypeIcon
                 classes="min-w-[43px] inline-block"
-                :framework="currentApplication?.framework"
-                :language="currentApplication?.language"
+                :framework="iconApplication?.framework"
+                :language="iconApplication?.language"
                 :show-label="false"
                 :type="type"
               />
@@ -189,6 +189,20 @@
   const currentApplication = computed(() =>
     applicationList.value.find(item => item.name === currentApplicationName.value),
   );
+  // 首屏图标复用站内跳转前已知的信息，列表返回后仍以接口数据为准。
+  const iconApplication = computed(() => {
+    if (currentApplication.value) return currentApplication.value;
+    const app = appDetailStore.navigationApp;
+    const workspaceID = getRouteParam(router.currentRoute.value.params.space, spaceStore.currentSpace);
+    if (
+      app?.workspaceID === workspaceID &&
+      app?.name === currentApplicationName.value &&
+      app?.id === appDetailStore.appID
+    ) {
+      return app;
+    }
+    return undefined;
+  });
   // 当前应用详情是真实类型来源；切换过程先使用列表中的类型。
   const type = computed(() => {
     const detail = appDetailStore.appDetail;

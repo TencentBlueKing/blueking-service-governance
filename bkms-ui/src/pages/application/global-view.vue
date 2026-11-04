@@ -144,6 +144,7 @@
   import { useDeployStatusMap } from '~/composables/use-deploy-status';
   import { useElementHeight } from '~/composables/use-element-height';
   import useTableEmpty from '~/composables/use-table-empty';
+  import { useAppDetail } from '~/stores/app-detail';
   import { useDeployEnvStore } from '~/stores/deploy-env';
   import { useSpaceStore } from '~/stores/space';
 
@@ -217,6 +218,7 @@
   const { t } = useI18n();
   const deployEnvStore = useDeployEnvStore();
   const spaceStore = useSpaceStore();
+  const appDetailStore = useAppDetail();
   const { getDeployStatusInfo } = useDeployStatusMap();
 
   /** 环境类型排序权重：确保表头按开发→测试→生产的顺序展示 */
@@ -522,6 +524,7 @@
    * @param row - 应用对象
    */
   function handleGoAppDetail(row: AppInfoOutputObj) {
+    appDetailStore.setNavigationApp(workspaceID.value, row);
     router.push({
       name: 'detail',
       params: {
@@ -534,6 +537,7 @@
 
   /** 跳转到应用指定环境的部署管理页 */
   function handleGoDeployment(row: AppInfoOutputObj, env: EnvOutput) {
+    appDetailStore.setNavigationApp(workspaceID.value, row);
     if (env.name) {
       deployEnvStore.updateCurrentEnv(env.name);
     }

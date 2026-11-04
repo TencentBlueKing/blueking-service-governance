@@ -23,7 +23,7 @@ import { ApiServerService } from '~/api/modules/bkmsserver';
 import { AppService } from '~/api/modules/v1/app';
 
 import type { AppDetailOutputObj } from '~/@types/app';
-import type { PublicView } from '~/@types/v1/app';
+import type { AppInfoOutputObj, PublicView } from '~/@types/v1/app';
 import type { IAppType } from '~/composables/app-type';
 
 // 保留 re-export，兼容已有引用
@@ -33,6 +33,8 @@ export const useAppDetail = defineStore('appDetail', () => {
   const app = ref('');
   const appType = ref<IAppType>('');
   const appID = ref('');
+  // 仅保留站内跳转时已知的展示信息，不作为完整应用详情使用。
+  const navigationApp = ref<AppInfoOutputObj | null>(null);
   // 应用详情
   const appDetail = ref<AppDetailOutputObj | null>(null);
   const loading = ref(false);
@@ -48,6 +50,7 @@ export const useAppDetail = defineStore('appDetail', () => {
     appID,
     () => {
       appRevision += 1;
+      if (navigationApp.value?.id !== appID.value) navigationApp.value = null;
       // 旧请求已失效，即使不再发起详情请求，也要释放其加载状态。
       loading.value = false;
       runtime.value = null;
@@ -77,6 +80,17 @@ export const useAppDetail = defineStore('appDetail', () => {
   // 更新当前 appID
   function updateAppID(id: string) {
     appID.value = id;
+  }
+
+  function setNavigationApp(workspaceID: string, app: AppInfoOutputObj) {
+    updateAppID(app.id || '');
+    navigationApp.value = {
+      id: app.id,
+      name: app.name,
+      framework: app.framework,
+      language: app.language,
+      workspaceID,
+    };
   }
 
   /** 能力请求独立于详情请求，失败不阻断通用功能。 */
@@ -219,6 +233,7 @@ export const useAppDetail = defineStore('appDetail', () => {
     appType.value = '';
     appID.value = '';
     appDetail.value = null;
+    navigationApp.value = null;
     runtime.value = null;
     runtimeLoading.value = false;
     runtimeError.value = false;
@@ -231,6 +246,7 @@ export const useAppDetail = defineStore('appDetail', () => {
     app,
     appType,
     appDetail,
+    navigationApp,
     loading,
     runtime,
     runtimeLoading,
@@ -241,6 +257,7 @@ export const useAppDetail = defineStore('appDetail', () => {
     updateVisibleEnvs,
     pendingBuilderSource,
     updateAppID,
+    setNavigationApp,
     updateAppName,
     updateAppType,
     fetchAppDetail,
