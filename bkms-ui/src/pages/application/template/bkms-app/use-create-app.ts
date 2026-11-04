@@ -20,6 +20,7 @@ import { ref } from 'vue';
 
 import { cloneDeep } from 'lodash-es';
 import { AppService } from '~/api/modules/v1/app';
+import { APP_FRAMEWORKS, BLANK_LANGUAGES } from '~/common/app-types';
 import { isRuntimeModSupported } from '~/composables/use-app-runtime';
 
 import type {
@@ -33,9 +34,6 @@ import type {
   PublicView,
   RepoBuildConfigInput,
 } from '~/@types/v1/app';
-
-// 首版创建入口仅开放这三种语言，详情仍兼容已有的 blank + C++ 应用。
-export const BLANK_LANGUAGES = ['go', 'python', 'nodejs'] as const;
 
 export interface BKMSAppForm {
   appModelSpec: BKMSAppModelSpecInput & { args: string[]; command: string[]; shCommand: string };
@@ -71,7 +69,7 @@ export function buildBKMSAppPayload(form: BKMSAppForm, runtime: PublicView): Cre
     }
   }
   const appModelSpec = cloneDeep(form.appModelSpec);
-  if (form.framework === 'blank') {
+  if (form.framework === APP_FRAMEWORKS.BLANK) {
     // 两种启动模式互斥；脚本保留原文，环境变量仍在创建后配置。
     appModelSpec.envVars = [];
     if (appModelSpec.shCommand) {
@@ -121,8 +119,8 @@ export function createBKMSAppForm(workspaceID: string, framework: string, langua
     },
     appModelSpec: { command: [], args: [], shCommand: '', envVars: [] },
     frameworkConfigFile: {
-      name: framework === 'taf' ? 'config.conf' : `trpc_${language}.yaml`,
-      mountDir: framework === 'taf' ? '/usr/local/taf/conf' : '/usr/local/trpc/bin/',
+      name: framework === APP_FRAMEWORKS.TAF ? 'config.conf' : `trpc_${language}.yaml`,
+      mountDir: framework === APP_FRAMEWORKS.TAF ? '/usr/local/taf/conf' : '/usr/local/trpc/bin/',
       content: '',
     },
   };
@@ -138,7 +136,7 @@ export function createPlatformBuildConfig() {
 }
 
 export function findRuntime(definitions: AppRuntimeDefinitionsOutputObj | null, framework: string, language: string) {
-  if (framework === 'blank' && !BLANK_LANGUAGES.some(item => item === language)) return undefined;
+  if (framework === APP_FRAMEWORKS.BLANK && !BLANK_LANGUAGES.some(item => item === language)) return undefined;
   const definition = definitions?.frameworks?.find(item => item.name === framework);
   if (!definition?.supportedLanguages?.includes(language)) return undefined;
   return definitions?.matrix?.find(item => item.framework === framework && item.language === language);

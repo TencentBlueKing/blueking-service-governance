@@ -126,6 +126,26 @@ describe('路由：智能返回', () => {
   // 本轮未构造，故不为其单独立用例。
 });
 
+describe('路由：旧创建入口兼容', () => {
+  it.each([
+    { path: 'trpc', framework: 'trpc', language: 'go' },
+    { path: 'taf', framework: 'taf', language: 'cpp' },
+  ])('$path 入口保留附加 query，并以入口对应的技术栈覆盖冲突参数', async ({ path, framework, language }) => {
+    const { router } = await setup(
+      `/ws-1/app/create/${path}?source=bookmark&tag=a&tag=b&preview&framework=blank&language=python`,
+    );
+    expect(router.currentRoute.value.name).toBe('createBKMSAppTemplateApp');
+    expect(router.currentRoute.value.params.space).toBe('ws-1');
+    expect(router.currentRoute.value.query).toEqual({
+      source: 'bookmark',
+      tag: ['a', 'b'],
+      preview: null,
+      framework,
+      language,
+    });
+  });
+});
+
 describe('路由：空间权限守卫', () => {
   it('当用户访问不含空间参数的路由时，应直接放行', async () => {
     const { router } = await setup();

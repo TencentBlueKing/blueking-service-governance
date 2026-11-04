@@ -138,7 +138,7 @@ describe('能力与技术栈展示', () => {
       expect(getAppDisplayKind({ type: framework })).toBe(framework);
       expect(getAppDisplayKind({ type: 'bkmsApp', framework })).toBe(framework);
     }
-    for (const language of ['go', 'python', 'nodejs', 'cpp']) {
+    for (const language of ['go', 'python', 'nodejs', 'cpp', 'java']) {
       expect(getAppDisplayKind({ type: 'bkmsApp', framework: 'blank', language })).toBe(language);
     }
     expect(getAppDisplayKind({ type: 'bkmsApp' })).toBe('bkmsApp');

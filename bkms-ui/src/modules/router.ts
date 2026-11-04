@@ -18,6 +18,7 @@
 
 import { setupLayouts } from 'virtual:generated-layouts';
 import { createRouter, createWebHashHistory } from 'vue-router';
+import { APP_FRAMEWORKS } from '~/common/app-types';
 import CustomRouterComponent from '~/components/custom-router-component.vue';
 import Forbidden from '~/pages/app/403.vue';
 import NotFound from '~/pages/app/404.vue';
@@ -121,7 +122,7 @@ const routes = setupLayouts([
             redirect: to => ({
               name: 'createBKMSAppTemplateApp',
               params: to.params,
-              query: { framework: 'trpc', language: 'go' },
+              query: { ...to.query, framework: APP_FRAMEWORKS.TRPC, language: 'go' },
             }),
             meta: {
               menuId: 'APP',
@@ -141,7 +142,7 @@ const routes = setupLayouts([
             redirect: to => ({
               name: 'createBKMSAppTemplateApp',
               params: to.params,
-              query: { framework: 'taf', language: 'cpp' },
+              query: { ...to.query, framework: APP_FRAMEWORKS.TAF, language: 'cpp' },
             }),
             meta: {
               menuId: 'APP',

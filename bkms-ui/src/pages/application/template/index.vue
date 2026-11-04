@@ -34,7 +34,7 @@
             ]"
           >
             <button
-              :aria-label="item.name"
+              :aria-label="item.label"
               :aria-pressed="selected.framework === item.id"
               class="template-card-select"
               :disabled="item.managed && !isFrameworkAvailable(item.id)"
@@ -52,7 +52,7 @@
               />
             </span>
             <div class="template-description">
-              <div class="template-name">{{ item.name }}</div>
+              <div class="template-name">{{ item.label }}</div>
               <div class="template-hint">{{ $t(item.description) }}</div>
               <div
                 v-if="getFrameworkLanguages(item.id).length"
@@ -74,13 +74,13 @@
                     type="button"
                     @click="selectFramework(item.id, language)"
                   >
-                    {{ languageLabel(language) }}
+                    {{ getAppDisplayLabel(language) }}
                   </button>
                 </div>
                 <span
                   v-else
                   class="text-[#313238]"
-                  >{{ languageLabel(getFrameworkLanguages(item.id)[0]) }}</span
+                  >{{ getAppDisplayLabel(getFrameworkLanguages(item.id)[0]) }}</span
                 >
               </div>
             </div>
@@ -94,9 +94,12 @@
           <button
             v-for="item in languages"
             :key="item.id"
-            :aria-pressed="selected.framework === 'blank' && selected.language === item.id"
-            :class="['template-card', { selected: selected.framework === 'blank' && selected.language === item.id }]"
-            :disabled="!findRuntime(definitions, 'blank', item.id)"
+            :aria-pressed="selected.framework === APP_FRAMEWORKS.BLANK && selected.language === item.id"
+            :class="[
+              'template-card',
+              { selected: selected.framework === APP_FRAMEWORKS.BLANK && selected.language === item.id },
+            ]"
+            :disabled="!findRuntime(definitions, APP_FRAMEWORKS.BLANK, item.id)"
             type="button"
             @click="selectLanguage(item.id)"
           >
@@ -105,15 +108,15 @@
               class="template-icon"
             >
               <TypeIcon
-                framework="blank"
+                :framework="APP_FRAMEWORKS.BLANK"
                 :language="item.id"
                 :show-label="false"
                 :size="40"
-                type="bkmsApp"
+                :type="APP_TYPES.BKMS_APP"
               />
             </span>
             <div class="template-description">
-              <div class="template-name">{{ item.name }}</div>
+              <div class="template-name">{{ item.label }}</div>
               <div class="template-hint">{{ $t(item.description) }}</div>
             </div>
           </button>
@@ -157,6 +160,8 @@
 
   import { Alert, Button } from 'bkui-vue';
   import { useRouter } from 'vue-router';
+  import { APP_FRAMEWORKS, APP_LANGUAGES, APP_TEMPLATES, APP_TYPES } from '~/common/app-types';
+  import { getAppDisplayLabel, isHelmLikeAppType } from '~/composables/app-type';
   import TypeIcon from '~/pages/application/components/type-icon.vue';
   import { useAppStore } from '~/stores/apps';
 
@@ -166,37 +171,8 @@
   const router = useRouter();
   const appStore = useAppStore();
   const { definitions, loading, error, load } = useRuntimeDefinitions();
-  const frameworks = [
-    {
-      id: 'trpc',
-      name: 'tRPC',
-      managed: true,
-      description: '适用于使用 tRPC 协议的服务',
-    },
-    {
-      id: 'taf',
-      name: 'TAF',
-      managed: true,
-      description: '采用 TAF 框架实现的服务端应用',
-    },
-    {
-      id: 'helm',
-      name: 'Helm Chart',
-      managed: false,
-      description: '自定义应用编排，拥有灵活的可定制性',
-    },
-    {
-      id: 'agones',
-      name: 'Agones',
-      managed: false,
-      description: '适用于多人在线游戏的专用服务器编排',
-    },
-  ];
-  const languages = [
-    { id: 'go', name: 'Go', description: '适合 Gin、Echo 等 Web 服务' },
-    { id: 'python', name: 'Python', description: '适合数据服务与 AI 应用' },
-    { id: 'nodejs', name: 'Node.js', description: '适合接口与前后端一体服务' },
-  ];
+  const frameworks = APP_TEMPLATES.map(item => ({ ...item, managed: !isHelmLikeAppType(item.id) }));
+  const languages = APP_LANGUAGES.filter(item => item.canCreateBlank);
   const legacySelections: Record<string, string> = {
     createTrpcTemplateApp: 'trpc:go',
     createTAFTemplateApp: 'taf:cpp',
@@ -215,7 +191,7 @@
         .sort((left, right) => (languageOrder[left] ?? 2) - (languageOrder[right] ?? 2)) || []
     );
   }
-  const isHelmLike = computed(() => ['helm', 'agones'].includes(selected.value.framework));
+  const isHelmLike = computed(() => isHelmLikeAppType(selected.value.framework));
   const canContinue = computed(
     () => isHelmLike.value || !!findRuntime(definitions.value, selected.value.framework, selected.value.language),
   );
@@ -226,18 +202,13 @@
   function isFrameworkAvailable(framework: string) {
     return getFrameworkLanguages(framework).length > 0;
   }
-  function languageLabel(language: string) {
-    return (
-      ({ go: 'Go', cpp: 'C++', python: 'Python', nodejs: 'Node.js' } as Record<string, string>)[language] || language
-    );
-  }
   function next() {
     if (!canContinue.value) return;
     remember();
     router.push(
       isHelmLike.value
         ? {
-            name: selected.value.framework === 'helm' ? 'createHelmTemplateApp' : 'createAgonesTemplateApp',
+            name: selected.value.framework === APP_TYPES.HELM ? 'createHelmTemplateApp' : 'createAgonesTemplateApp',
           }
         : {
             name: 'createBKMSAppTemplateApp',
@@ -249,7 +220,11 @@
   function remember() {
     appStore.lastAppTemplateID = `${selected.value.framework}:${selected.value.language}`;
     emit('update-text', {
-      type: isHelmLike.value ? selected.value.framework : selected.value.framework === 'blank' ? 'blank' : 'bkmsApp',
+      type: isHelmLike.value
+        ? selected.value.framework
+        : selected.value.framework === APP_FRAMEWORKS.BLANK
+          ? APP_FRAMEWORKS.BLANK
+          : APP_TYPES.BKMS_APP,
     });
   }
   function selectFramework(framework: string, language?: string) {
@@ -259,13 +234,13 @@
     remember();
   }
   function selectLanguage(language: string) {
-    selected.value = { framework: 'blank', language };
+    selected.value = { framework: APP_FRAMEWORKS.BLANK, language };
     remember();
   }
   onMounted(async () => {
     emit('update-step', 1);
     await load();
-    if (!canContinue.value && !error.value) selected.value = { framework: 'trpc', language: 'go' };
+    if (!canContinue.value && !error.value) selected.value = { framework: APP_FRAMEWORKS.TRPC, language: 'go' };
     remember();
   });
 </script>

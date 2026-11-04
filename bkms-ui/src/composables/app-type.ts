@@ -16,20 +16,9 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
-/**
- * 应用类型统一定义
- *
- * 新增应用类型只需修改此文件，其他地方自动同步。
- */
+import { APP_FRAMEWORKS, APP_LANGUAGES, APP_TEMPLATES, APP_TYPES } from '~/common/app-types';
 
-/** 应用类型常量 */
-export const APP_TYPES = {
-  HELM: 'helm',
-  AGONES: 'agones',
-  TRPC: 'trpc',
-  TAF: 'taf',
-  BKMS_APP: 'bkmsApp',
-} as const;
+export { APP_TYPES } from '~/common/app-types';
 
 /** 平台托管应用类型（包含存量 trpc / taf） */
 export type AppModelAppType = typeof APP_TYPES.BKMS_APP | typeof APP_TYPES.TAF | typeof APP_TYPES.TRPC;
@@ -62,8 +51,8 @@ export interface AppPresentationInput {
 /** 展示和筛选使用技术栈分类，路由、接口仍使用应用真实 type。 */
 export function getAppDisplayKind(app: AppPresentationInput): string {
   if (app.type !== APP_TYPES.BKMS_APP) return app.type || '';
-  if (app.framework === 'trpc' || app.framework === 'taf') return app.framework;
-  if (app.framework === 'blank' && ['go', 'cpp', 'python', 'nodejs', 'java'].includes(app.language || '')) {
+  if (app.framework === APP_FRAMEWORKS.TRPC || app.framework === APP_FRAMEWORKS.TAF) return app.framework;
+  if (app.framework === APP_FRAMEWORKS.BLANK && APP_LANGUAGES.some(item => item.id === app.language)) {
     return app.language || APP_TYPES.BKMS_APP;
   }
   return APP_TYPES.BKMS_APP;
@@ -71,19 +60,9 @@ export function getAppDisplayKind(app: AppPresentationInput): string {
 
 /** 返回展示文案；需要翻译的文案由调用组件翻译。 */
 export function getAppDisplayLabel(kind: string): string {
-  const labels: Record<string, string> = {
-    trpc: 'tRPC',
-    taf: 'TAF',
-    helm: 'Helm Chart',
-    agones: 'Agones',
-    go: 'Go',
-    cpp: 'C++',
-    python: 'Python',
-    nodejs: 'Node.js',
-    java: 'Java',
-    bkmsApp: '平台托管应用',
-  };
-  return labels[kind] || kind;
+  const label =
+    APP_LANGUAGES.find(item => item.id === kind)?.label || APP_TEMPLATES.find(item => item.id === kind)?.label;
+  return label || (kind === APP_TYPES.BKMS_APP ? '平台托管应用' : kind);
 }
 
 /** 判断是否为平台托管应用类型 */

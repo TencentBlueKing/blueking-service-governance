@@ -436,6 +436,7 @@
   } from '~/@types/v1/instance';
   import { type Config } from '~/api/interceptors';
   import { InstanceService } from '~/api/modules/v1';
+  import { APP_FRAMEWORKS } from '~/common/app-types';
   import ToggleCard from '~/components/toggle-card.vue';
   import { isRuntimeModSupported } from '~/composables/use-app-runtime';
   import { useAppDetail } from '~/stores/app-detail';
@@ -465,8 +466,8 @@
   const props = defineProps<IProps>();
 
   const appDetail = useAppDetail();
-  const isTrpcApp = computed(() => appDetail.runtime?.framework === 'trpc');
-  const isTafApp = computed(() => appDetail.runtime?.framework === 'taf');
+  const isTrpcApp = computed(() => appDetail.runtime?.framework === APP_FRAMEWORKS.TRPC);
+  const isTafApp = computed(() => appDetail.runtime?.framework === APP_FRAMEWORKS.TAF);
 
   const command = ref<string>('');
   const commandMethod = ref<'GET' | 'POST' | 'PUT'>('GET');

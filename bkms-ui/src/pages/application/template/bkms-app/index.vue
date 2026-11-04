@@ -70,7 +70,7 @@
                   :language="language"
                   :show-label="false"
                   :size="32"
-                  type="bkmsApp"
+                  :type="APP_TYPES.BKMS_APP"
                 />
               </span>
               <div class="ml-[12px] min-w-0 flex-1">
@@ -98,7 +98,7 @@
         />
       </div>
       <TrpcAppConfig
-        v-else-if="step === 3 && form.framework === 'trpc'"
+        v-else-if="step === 3 && form.framework === APP_FRAMEWORKS.TRPC"
         :key="`${framework}:${language}`"
         ref="trpcRef"
         :content="form.frameworkConfigFile.content"
@@ -107,7 +107,7 @@
         :value="{ appModelSpec: form.appModelSpec }"
       />
       <TafAppConfig
-        v-else-if="step === 3 && form.framework === 'taf'"
+        v-else-if="step === 3 && form.framework === APP_FRAMEWORKS.TAF"
         :key="`${framework}:${language}`"
         ref="tafRef"
         :editor-lang="editorLang"
@@ -162,7 +162,8 @@
   import { Alert, Button, Loading } from 'bkui-vue';
   import { useRoute, useRouter } from 'vue-router';
   import { AppService } from '~/api/modules/v1/app';
-  import { type IAppType, APP_TYPES } from '~/composables/app-type';
+  import { APP_FRAMEWORKS, APP_LANGUAGES, APP_TEMPLATES, APP_TYPES } from '~/common/app-types';
+  import { type IAppType, getAppDisplayLabel } from '~/composables/app-type';
   import { getFrameworkFileFormat, isRuntimeModSupported } from '~/composables/use-app-runtime';
   import { useFocusOnErrorField } from '~/composables/use-focus-on-error-field';
   import useLeaveConfirm from '~/composables/use-leave-confirm';
@@ -211,20 +212,14 @@
     getFrameworkFileFormat(runtime.value) === 'taf' ? 'xml' : getFrameworkFileFormat(runtime.value),
   );
   const selectedLabel = computed(() => {
-    const name =
-      ({ go: 'Go', cpp: 'C++', python: 'Python', nodejs: 'Node.js' } as Record<string, string>)[language.value] ||
-      language.value;
-    return framework.value === 'blank' ? name : `${framework.value === 'trpc' ? 'tRPC' : 'TAF'} · ${name}`;
+    const name = getAppDisplayLabel(language.value);
+    return framework.value === APP_FRAMEWORKS.BLANK ? name : `${getAppDisplayLabel(framework.value)} · ${name}`;
   });
-  const descriptions: Record<string, string> = {
-    trpc: '适用于使用 tRPC 协议的服务',
-    taf: '采用 TAF 框架实现的服务端应用',
-    go: '适合 Gin、Echo 等 Web 服务',
-    python: '适合数据服务与 AI 应用',
-    nodejs: '适合接口与前后端一体服务',
-  };
   const selectedDescription = computed(
-    () => descriptions[framework.value === 'blank' ? language.value : framework.value] || '',
+    () =>
+      (framework.value === APP_FRAMEWORKS.BLANK
+        ? APP_LANGUAGES.find(item => item.id === language.value)?.description
+        : APP_TEMPLATES.find(item => item.id === framework.value)?.description) || '',
   );
   // 适配已有 TAF 编辑器的数据结构，提交时仍转换为新创建接口的字段。
   const tafValue = computed(() => ({
@@ -251,8 +246,10 @@
     }
     if (form.value?.framework === framework.value && form.value.language === language.value) return;
     form.value = createBKMSAppForm(workspaceID.value, framework.value, language.value);
-    if (framework.value === 'trpc') form.value.frameworkConfigFile.content = trpcTemplate;
-    emit('update-text', { type: framework.value === 'blank' ? 'blank' : 'bkmsApp' });
+    if (framework.value === APP_FRAMEWORKS.TRPC) form.value.frameworkConfigFile.content = trpcTemplate;
+    emit('update-text', {
+      type: framework.value === APP_FRAMEWORKS.BLANK ? APP_FRAMEWORKS.BLANK : APP_TYPES.BKMS_APP,
+    });
     emit('update-step', 2);
     forceCleanDirtyTag();
   });
@@ -333,7 +330,7 @@
   function recreate() {
     if (result.value.status === 'SUCCESS') {
       form.value = createBKMSAppForm(workspaceID.value, framework.value, language.value);
-      if (framework.value === 'trpc') form.value.frameworkConfigFile.content = trpcTemplate;
+      if (framework.value === APP_FRAMEWORKS.TRPC) form.value.frameworkConfigFile.content = trpcTemplate;
       forceCleanDirtyTag();
     }
     emit('update-step', 2);
@@ -363,7 +360,7 @@
   }
   async function validateCurrentStep() {
     if (props.step === 2) return collectParameters();
-    const appConfig = form.value?.framework === 'trpc' ? trpcRef.value : tafRef.value;
+    const appConfig = form.value?.framework === APP_FRAMEWORKS.TRPC ? trpcRef.value : tafRef.value;
     const valid = await appConfig?.validate().catch(() => false);
     if (disposed || !valid) return false;
     collectAppConfig();
