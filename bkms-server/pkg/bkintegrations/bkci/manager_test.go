@@ -26,9 +26,12 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
+	cloudbkci "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bkci"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/tof"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/tenant"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
@@ -123,23 +126,27 @@ var _ = Describe("ProjectManager Initialize", func() {
 		ctx          context.Context
 		manager      *ProjectManager
 		projectStore *ProjectStore
+		// 多租户模式（测试可通过环境变量开启）下入库的是带租户前缀的蓝盾项目 Code
+		expectedCode string
 	)
 
 	BeforeEach(func() {
 		ctx = testutil.NewDefaultTenantContext()
 		manager = NewProjectManager(testutil.NewDB(GinkgoT()), managerTestWorkspaceID)
 		projectStore, _, _ = setupManagerTestStores()
+		expectedCode = bkciProjectCode(ctx, managerTestProjectCode)
 	})
 
 	Context("Success Scenarios", func() {
 		It("should return existing project when workspace already has it", func() {
 			existingProj := mockProject()
+			existingProj.Code = expectedCode
 			Expect(projectStore.Create(ctx, existingProj)).To(Succeed())
 
 			proj, err := manager.Initialize(ctx, managerTestProjectCode, "test-obs-id", "test-obs-name")
 
 			Expect(err).NotTo(HaveOccurred())
-			Expect(proj.Code).To(Equal(managerTestProjectCode))
+			Expect(proj.Code).To(Equal(expectedCode))
 		})
 
 		It("should create new project successfully", func() {
@@ -157,12 +164,12 @@ var _ = Describe("ProjectManager Initialize", func() {
 				proj, err := manager.Initialize(ctx, managerTestProjectCode, "test-obs-id", "test-obs-name")
 
 				Expect(err).NotTo(HaveOccurred())
-				Expect(proj.Code).To(Equal(managerTestProjectCode))
+				Expect(proj.Code).To(Equal(expectedCode))
 				Expect(proj.WorkspaceID).To(Equal(managerTestWorkspaceID))
 
 				stored, err := projectStore.Get(ctx, ByWorkspace(managerTestWorkspaceID))
 				Expect(err).NotTo(HaveOccurred())
-				Expect(stored.Code).To(Equal(managerTestProjectCode))
+				Expect(stored.Code).To(Equal(expectedCode))
 			})
 		})
 
@@ -174,12 +181,40 @@ var _ = Describe("ProjectManager Initialize", func() {
 				proj, err := manager.Initialize(ctx, "", "test-obs-id", "test-obs-name")
 
 				Expect(err).NotTo(HaveOccurred())
-				Expect(proj.Code).To(Equal("bkms-test-workspace"))
+				Expect(proj.Code).To(Equal(bkciProjectCode(ctx, "bkms-test-workspace")))
+			})
+		})
+
+		// stub 客户端的 GetProject 总是成功，Initialize 走不到创建分支，因此直接测 createBKCIProject
+		It("should create bkci project without querying tof when user organization is skipped", func() {
+			mockey.PatchConvey("test", GinkgoT(), func() {
+				mockey.Mock(auth.MustGetUser).Return(mockUser()).Build()
+				orgMocker := mockey.Mock(tof.GetUserOrganization).
+					Return(nil, errors.New("tof api not found")).Build()
+
+				proj, err := manager.SkipUserOrganization().createBKCIProject(ctx, expectedCode, "", "")
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(proj.Code).To(Equal(expectedCode))
+				Expect(orgMocker.Times()).To(BeZero())
 			})
 		})
 	})
 
 	Context("Error Scenarios", func() {
+		It("should fail creating bkci project when querying user organization fails by default", func() {
+			mockey.PatchConvey("test", GinkgoT(), func() {
+				mockey.Mock(auth.MustGetUser).Return(mockUser()).Build()
+				mockey.Mock(tof.GetUserOrganization).Return(nil, errors.New("tof api not found")).Build()
+
+				proj, err := manager.createBKCIProject(ctx, expectedCode, "", "")
+
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("organization"))
+				Expect(proj).To(BeNil())
+			})
+		})
+
 		It("should fail when workspace has different project", func() {
 			existingProj := mockProject()
 			existingProj.Code = "another-project"
@@ -194,6 +229,7 @@ var _ = Describe("ProjectManager Initialize", func() {
 
 		It("should fail when project code used by another workspace", func() {
 			existingProj := mockProject()
+			existingProj.Code = expectedCode
 			existingProj.WorkspaceID = "another-workspace"
 			Expect(projectStore.Create(ctx, existingProj)).To(Succeed())
 
@@ -208,6 +244,7 @@ var _ = Describe("ProjectManager Initialize", func() {
 		// ErrProjectCodeAlreadyUsed 拒绝（而不是撞唯一索引），且报错里不暴露对方的工作空间
 		It("should fail when project code used by a workspace of another tenant", func() {
 			existingProj := mockProject()
+			existingProj.Code = expectedCode
 			existingProj.WorkspaceID = "another-tenant-workspace"
 			Expect(projectStore.Create(ctx, existingProj, store.TenantOf("another-tenant"))).To(Succeed())
 
@@ -216,6 +253,58 @@ var _ = Describe("ProjectManager Initialize", func() {
 			Expect(errors.Is(err, ErrProjectCodeAlreadyUsed)).To(BeTrue())
 			Expect(err.Error()).NotTo(ContainSubstring("another-tenant-workspace"))
 			Expect(proj).To(BeNil())
+		})
+	})
+})
+
+var _ = Describe("bkci project code tenant prefix", func() {
+	var ctx context.Context
+
+	setMultiTenantMode := func(enabled bool) {
+		origin := config.G.Tenant.EnableMultiTenantMode
+		config.G.Tenant.EnableMultiTenantMode = enabled
+		DeferCleanup(func() { config.G.Tenant.EnableMultiTenantMode = origin })
+	}
+
+	BeforeEach(func() {
+		ctx = tenant.WithTenantID(context.Background(), "system")
+	})
+
+	It("adds tenant prefix in multi-tenant mode", func() {
+		setMultiTenantMode(true)
+		Expect(bkciProjectCode(ctx, "bkms-nicole-1")).To(Equal("system.bkms-nicole-1"))
+		Expect(trimBKCIProjectTenantPrefix(ctx, "system.bkms-nicole-1")).To(Equal("bkms-nicole-1"))
+	})
+
+	It("keeps code that already has tenant prefix", func() {
+		setMultiTenantMode(true)
+		Expect(bkciProjectCode(ctx, "system.bkms-nicole-1")).To(Equal("system.bkms-nicole-1"))
+	})
+
+	It("keeps code unchanged in single-tenant mode", func() {
+		setMultiTenantMode(false)
+		Expect(bkciProjectCode(ctx, "bkms-nicole-1")).To(Equal("bkms-nicole-1"))
+		Expect(trimBKCIProjectTenantPrefix(ctx, "bkms-nicole-1")).To(Equal("bkms-nicole-1"))
+	})
+
+	It("creates bkci project with code without tenant prefix", func() {
+		setMultiTenantMode(true)
+		mockey.PatchConvey("test", GinkgoT(), func() {
+			mockey.Mock(auth.MustGetUser).Return(mockUser()).Build()
+			var createdName string
+			mockey.Mock((*cloudbkci.StubApiClient).CreateProject).To(
+				func(_ *cloudbkci.StubApiClient, _ context.Context, code, _, _ string, _ *tof.Organization) error {
+					createdName = code
+					return nil
+				},
+			).Build()
+			manager := NewProjectManager(testutil.NewDB(GinkgoT()), managerTestWorkspaceID).SkipUserOrganization()
+
+			proj, err := manager.createBKCIProject(ctx, "system.bkms-nicole-1", "", "")
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(createdName).To(Equal("bkms-nicole-1"))
+			Expect(proj.Code).To(Equal("system.bkms-nicole-1"))
 		})
 	})
 })

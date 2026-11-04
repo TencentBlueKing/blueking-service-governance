@@ -175,7 +175,8 @@ func prepareIndependentBCSBinding(
 func initializeIndependentBKCIResources(
 	ctx context.Context, db *mongo.Database, workspaceID string,
 ) (*bkci.Project, error) {
-	bkciProjMgr := bkci.NewProjectManager(db, workspaceID)
+	// 独立 BCS 模式面向没有 TOF 的环境，创建蓝盾项目不查询用户组织
+	bkciProjMgr := bkci.NewProjectManager(db, workspaceID).SkipUserOrganization()
 	// 独立 BCS 模式下蓝盾项目始终新建，传空强制走创建逻辑。
 	createProjResp, err := bkciProjMgr.Initialize(ctx, "", "", "")
 	if err != nil {

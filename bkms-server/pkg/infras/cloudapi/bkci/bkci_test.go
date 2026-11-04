@@ -20,10 +20,14 @@ package bkci
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 )
 
@@ -311,5 +315,88 @@ var _ = Describe("parseBuildLog", func() {
 		Expect(buildLog).To(BeNil())
 		Expect(err).To(MatchError(BuildLogExpired))
 		Expect(err.Error()).To(Equal(BuildLogExpired.Error()))
+	})
+})
+
+var _ = Describe("ApiClient", func() {
+	newClientWithServer := func(handler http.HandlerFunc) Client {
+		server := httptest.NewServer(handler)
+		DeferCleanup(server.Close)
+
+		original := config.G
+		config.G = &config.Config{}
+		config.G.Development.UseStubBkCI = false
+		config.G.BkPlatUrls.BkApiUrlTmpl = server.URL
+		config.G.BkApiStages.BkCI = "prod"
+		DeferCleanup(func() { config.G = original })
+
+		client, err := New(auth.User{
+			ID:   "7bahiycwyprugcwn",
+			Cred: auth.UserCredential{BkToken: "token"},
+		})
+		Expect(err).NotTo(HaveOccurred())
+		return client
+	}
+
+	It("sends X-DEVOPS-UID with the authenticated user id", func() {
+		gotUID := make(chan string, 1)
+		client := newClientWithServer(func(w http.ResponseWriter, r *http.Request) {
+			gotUID <- r.Header.Get("X-DEVOPS-UID")
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"code":0,"status":0,"data":[]}`))
+		})
+
+		_, err := client.ListProjects(context.Background())
+		Expect(err).NotTo(HaveOccurred())
+		Expect(<-gotUID).To(Equal("7bahiycwyprugcwn"))
+	})
+
+	It("includes status code and raw body when the response is not json", func() {
+		client := newClientWithServer(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte("Client sent an HTTP request to an HTTPS server."))
+		})
+
+		_, err := client.CreatePipeline(context.Background(), "demo", "name", "desc", nil)
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("v4_user_pipeline_create"))
+		Expect(err.Error()).To(ContainSubstring("400"))
+		Expect(err.Error()).To(ContainSubstring("Client sent an HTTP request to an HTTPS server."))
+	})
+
+	It("truncates a long non-json body in the error", func() {
+		longBody := "C" + strings.Repeat("x", 2000)
+		client := newClientWithServer(func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = w.Write([]byte(longBody))
+		})
+
+		_, err := client.ListProjects(context.Background())
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("status code: 200"))
+		Expect(err.Error()).NotTo(ContainSubstring(longBody))
+		Expect(err.Error()).To(ContainSubstring(longBody[:maxErrorBodyLen]))
+	})
+
+	It("uses project code returned by bkci", func() {
+		client := newClientWithServer(func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = w.Write([]byte(`{"code":0,"data":{"projectId":"pid","projectCode":"system.demo"}}`))
+		})
+
+		proj, err := client.GetProject(context.Background(), "demo")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(proj.ID).To(Equal("pid"))
+		Expect(proj.Code).To(Equal("system.demo"))
+	})
+
+	It("keeps ObjectNotFound and includes raw body when the response is 404", func() {
+		client := newClientWithServer(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte(`{"status":404,"message":"project not found"}`))
+		})
+
+		_, err := client.GetProject(context.Background(), "demo")
+		Expect(err).To(MatchError(ObjectNotFound))
+		Expect(err.Error()).To(ContainSubstring("v4_user_project_get"))
+		Expect(err.Error()).To(ContainSubstring("project not found"))
 	})
 })
