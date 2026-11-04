@@ -373,7 +373,6 @@
           <chart-card-item
             v-for="item in group.items"
             :key="item.metricKey"
-            :ref="setChartCardRef"
             :all="chartParams.all"
             :area="item.area !== false"
             :compare-offsets="chartParams.compareOffsets"
@@ -385,9 +384,11 @@
             :limit-type="chartParams.limitType"
             :method="chartParams.method"
             :metric-key="item.metricKey"
+            :query-enabled="queryReady"
             :query-id="chartParams.queryId"
             :title="item.title"
             @metric-data="onMetricData"
+            @plot-width-change="handlePlotWidthChange"
           >
             <template #title>
               <div class="flex items-center">
@@ -403,17 +404,7 @@
 </template>
 
 <script lang="ts" setup>
-  import {
-    type ComponentPublicInstance,
-    computed,
-    defineAsyncComponent,
-    nextTick,
-    onBeforeUnmount,
-    onMounted,
-    provide,
-    ref,
-    watch,
-  } from 'vue';
+  import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, provide, ref, watch } from 'vue';
 
   import DatePicker from '@blueking/date-picker';
   import { Table, TableColumn } from '@blueking/table';
@@ -482,6 +473,7 @@
   const appDetailStore = useAppDetail();
   const envStore = useDeployEnvStore();
   const sliderWidth = ref<number | string>(1200);
+  const queryReady = ref(false);
 
   /** 监听窗口宽度变化，用于小屏适配 */
   const windowWidth = ref(window.innerWidth);
@@ -526,6 +518,8 @@
   });
   function handleClose() {
     isShow.value = false;
+    queryReady.value = false;
+    chartPlotWidth.value = 0;
     selectedInstance.value = [];
     selectedInstanceDetails.value = {};
     committedInstances.value = [];
@@ -688,18 +682,15 @@
   const autoRefreshInterval = ref<number>(-1);
   /** 汇聚周期（秒），默认 auto（按时间范围与图表宽度自动计算） */
   const interval = ref<number>(1);
-  /** 存储任意一个 chart-card-item 子组件实例，用于读取其暴露的 plotWidth */
-  const chartCardRef = ref<InstanceType<typeof ChartCardItem> | null>(null);
-  /** 函数 ref：v-for 中每次调用都会更新，最终持有最后一个实例（所有实例宽度相同） */
-  function setChartCardRef(el: ComponentPublicInstance | Element | null) {
-    if (el) chartCardRef.value = el as InstanceType<typeof ChartCardItem>;
+  /** 卡片先测量容器，再启用查询，避免用默认宽度请求后又按实际宽度重查。 */
+  const chartPlotWidth = ref(0);
+  function handlePlotWidthChange(width: number) {
+    if (isShow.value && width > 0) chartPlotWidth.value = width;
   }
-  /** 图表绘图区实际宽度（px），来自子组件 ResizeObserver 实时追踪；fallback 850 */
-  const chartPlotWidth = computed(() => chartCardRef.value?.plotWidth || 850);
 
   /** auto 模式下以图表实际可显示像素数为基准计算数据步长，确保每个像素约对应一个数据点 */
   const autoInterval = computed((): number => {
-    if (!startTime.value || !endTime.value || startTime.value >= endTime.value) return 60;
+    if (!chartPlotWidth.value || !startTime.value || !endTime.value || startTime.value >= endTime.value) return 60;
     const duration = endTime.value - startTime.value;
     const secondsPerPoint = Math.ceil(duration / chartPlotWidth.value);
     return Math.max(secondsPerPoint, 60); // 最小 60s
@@ -846,7 +837,7 @@
     showCustomInput.value = false;
   }
   function handleFiltersChange() {
-    if (!isShow.value) return;
+    if (!isShow.value || !chartPlotWidth.value) return;
     const all = !selectedInstance.value.length;
     // 提交时固定查询快照，列表的 SSE 更新只改变搜索候选，不触发图表重新请求。
     chartParams.value = {
@@ -867,6 +858,7 @@
       compareOffsets: timeCompareEnabled.value && !isMultiEnv.value ? effectiveCompareOffsets.value : [],
       queryId: chartParams.value.queryId + 1,
     };
+    queryReady.value = true;
     committedInstances.value = [...selectedInstance.value];
     metricData.value = {};
     summaryMetricData.value = {};
@@ -889,16 +881,18 @@
       compareOffsetSecondsList.value = [];
     }
   }
+  // 逐项比较查询条件，固定汇聚周期时，单纯尺寸变化不应再次请求。
   watch(
-    () => [
-      startTime.value,
-      endTime.value,
-      effectiveInterval.value,
-      limit.value,
-      limitType.value,
-      method.value,
-      JSON.stringify(queryEnvNames.value),
-      JSON.stringify(timeCompareEnabled.value ? effectiveCompareOffsets.value : []),
+    [
+      () => startTime.value,
+      () => endTime.value,
+      () => effectiveInterval.value,
+      () => chartPlotWidth.value > 0,
+      () => limit.value,
+      () => limitType.value,
+      () => method.value,
+      () => JSON.stringify(queryEnvNames.value),
+      () => JSON.stringify(timeCompareEnabled.value ? effectiveCompareOffsets.value : []),
     ],
     handleFiltersChange,
   );
@@ -979,6 +973,8 @@
     isShow,
     show => {
       if (!show) return;
+      queryReady.value = false;
+      chartPlotWidth.value = 0;
       const selection: Record<string, MonitorInstance> = {};
       for (const [envName, names] of Object.entries(props.initialSelection || {})) {
         for (const instance of names) {

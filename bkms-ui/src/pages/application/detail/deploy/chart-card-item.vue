@@ -38,6 +38,7 @@
         class="min-w-0 w-[50%] flex flex-col min-h-[130px]"
       >
         <ExploreChart
+          v-if="queryEnabled"
           :key="queryId"
           ref="exploreChartRef"
           class="min-h-0 flex-1"
@@ -156,6 +157,8 @@
     method?: MonitorAggregationMethod;
     /** 指标类型（同时作为接口入参与图表区分） */
     metricKey: string;
+    /** 容器测量与查询参数提交完成后，才挂载会立即请求的 ExploreChart。 */
+    queryEnabled?: boolean;
     /** 筛选或刷新代次，用于隔离旧请求与缓存 */
     queryId: number;
     /** 标题文字（无 title 插槽时生效） */
@@ -171,6 +174,7 @@
     limit: 10,
     limitType: 'top',
     method: 'sum',
+    queryEnabled: true,
   });
 
   const emits = defineEmits<{
@@ -179,6 +183,7 @@
       e: 'metric-data',
       payload: { data: MonitorMetricTimeSeries | undefined; metricKey: string; queryId: number },
     ): void;
+    (e: 'plot-width-change', width: number): void;
   }>();
 
   defineSlots<{
@@ -188,16 +193,13 @@
 
   /** 图表容器 DOM ref，用于 ResizeObserver 获取实际宽度以计算绘图区宽度 */
   const chartContainerRef = ref<HTMLElement | null>(null);
-  /** 图表绘图区实际宽度（px），已排除纵坐标标签区域（~55px）。
-   *  通过 ResizeObserver 实时追踪，供父组件用于 auto 汇聚周期计算。 */
-  const plotWidth = ref(0);
-
   let resizeObserver: ResizeObserver | undefined;
   onMounted(() => {
     if (chartContainerRef.value) {
       resizeObserver = new ResizeObserver(([entry]) => {
         // 图表容器宽度 − 纵坐标标签区域（~55px）≈ 绘图区宽度
-        plotWidth.value = Math.max(entry.contentRect.width - 55, 0);
+        const width = Math.max(entry.contentRect.width - 55, 0);
+        if (width > 0) emits('plot-width-change', width);
       });
       resizeObserver.observe(chartContainerRef.value);
     }
@@ -205,8 +207,6 @@
   onBeforeUnmount(() => {
     resizeObserver?.disconnect();
   });
-
-  defineExpose({ plotWidth });
 
   const appDetailStore = useAppDetail();
 

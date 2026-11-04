@@ -34,8 +34,10 @@ import type {
 /* eslint-disable vue/one-component-per-file */
 
 const mocks = vi.hoisted(() => ({
+  chartQuery: vi.fn(),
   fetchMonitorMetric: vi.fn(),
   getInstanceTimeSeries: vi.fn(),
+  lifecycleRequests: false,
   listAppInstances: vi.fn(),
   message: vi.fn(),
 }));
@@ -61,7 +63,13 @@ vi.mock('~/pages/application/detail/deploy/monitor-chart-bridge', () => ({
   isPercentUnit: (unit?: string) => unit === 'percent',
   setChartTimeRange: vi.fn(),
 }));
-vi.mock('@blueking/date-picker', () => ({ default: { render: () => null } }));
+vi.mock('@blueking/date-picker', () => ({
+  default: {
+    name: 'DatePickerStub',
+    emits: ['update:model-value'],
+    render: () => null,
+  },
+}));
 vi.mock('~/components/interval-selector.vue', () => ({
   default: {
     name: 'IntervalSelectorStub',
@@ -70,26 +78,59 @@ vi.mock('~/components/interval-selector.vue', () => ({
   },
 }));
 vi.mock('~/components/toggle-card.vue', () => ({ default: { template: '<div><slot /></div>' } }));
-vi.mock('~/pages/application/detail/deploy/chart-card-item.vue', () => ({
-  __esModule: true,
-  default: {
-    name: 'ChartCardStub',
-    props: [
-      'all',
-      'instances',
-      'limit',
-      'limitType',
-      'method',
-      'interval',
-      'metricKey',
-      'queryId',
-      'envNames',
-      'compareOffsets',
-    ],
-    emits: ['metric-data'],
-    render: () => null,
-  },
-}));
+vi.mock('~/pages/application/detail/deploy/chart-card-item.vue', async () => {
+  const { defineComponent, inject, ref, watch } = await import('vue');
+  const { default: date } = await import('dayjs');
+  return {
+    __esModule: true,
+    default: defineComponent({
+      name: 'ChartCardStub',
+      props: {
+        all: Boolean,
+        instances: { type: Array, default: () => [] },
+        limit: { type: Number, default: undefined },
+        limitType: { type: String, default: undefined },
+        method: { type: String, default: undefined },
+        interval: { type: Number, default: undefined },
+        metricKey: { type: String, required: true },
+        queryId: { type: Number, required: true },
+        queryEnabled: Boolean,
+        envName: { type: String, default: undefined },
+        envNames: { type: Array, default: undefined },
+        compareOffsets: { type: Array, default: () => [] },
+      },
+      emits: ['metric-data', 'plot-width-change'],
+      setup(props, { emit }) {
+        const timeRange = inject('timeRange', ref<string[]>([]));
+        watch(
+          () => ({ queryId: props.queryId, queryEnabled: props.queryEnabled }),
+          async ({ queryId, queryEnabled }) => {
+            if (!mocks.lifecycleRequests || !queryEnabled) return;
+            const query = {
+              all: props.all,
+              appID: 'demo-app',
+              envName: props.envName,
+              envNames: props.envNames,
+              instances: props.instances,
+              interval: props.interval,
+              limit: props.limit,
+              limitType: props.limitType,
+              method: props.method,
+              metricKey: props.metricKey,
+              startTime: date(timeRange.value[0]).unix(),
+              endTime: date(timeRange.value[1]).unix(),
+            };
+            mocks.chartQuery({ ...query, queryId });
+            const data = await mocks.fetchMonitorMetric(query);
+            emit('metric-data', { data, metricKey: props.metricKey, queryId });
+          },
+          { immediate: true },
+        );
+        return () => null;
+      },
+    }),
+  };
+});
 vi.mock('@blueking/table', async () => {
   const { defineComponent, h } = await import('vue');
   return {
@@ -238,10 +279,25 @@ const instanceKey = (instance: string, envName = 'prod') => JSON.stringify([envN
 const instances = (names: string[], envName = 'prod'): MonitorInstance[] =>
   names.map(instance => ({ envName, instance }));
 
-async function mountSlider(initialSelection?: Record<string, string[]>, instanceGroups?: MonitorInstanceGroup[]) {
+async function enableLifecycleRequests() {
+  const actualBridge = await vi.importActual<{ fetchMonitorMetric: typeof fetchMonitorMetric }>(
+    '~/pages/application/detail/deploy/monitor-chart-bridge',
+  );
+  mocks.fetchMonitorMetric.mockImplementation(actualBridge.fetchMonitorMetric);
+  mocks.lifecycleRequests = true;
+  mocks.getInstanceTimeSeries.mockImplementation((query: { instances?: string[]; metricKey: string }) =>
+    Promise.resolve({ [query.metricKey]: metric(query.instances ?? ['pod-1', 'pod-2']) }),
+  );
+}
+
+async function mountSlider(
+  initialSelection?: Record<string, string[]>,
+  instanceGroups?: MonitorInstanceGroup[],
+  isShow = true,
+) {
   const wrapper = mount(MonitorSideslider, {
     props: {
-      isShow: true,
+      isShow,
       envName: 'prod',
       envNames: instanceGroups?.map(group => group.envName),
       instanceGroups: instanceGroups ?? [
@@ -261,6 +317,10 @@ async function mountSlider(initialSelection?: Record<string, string[]>, instance
   const selects = () => wrapper.findAllComponents({ name: 'SelectStub' });
   const charts = () => wrapper.findAllComponents({ name: 'ChartCardStub' });
   const chart = (metricKey = 'cpu_limit_usage') => charts().find(item => item.props('metricKey') === metricKey)!;
+  if (isShow) {
+    charts()[0]?.vm.$emit('plot-width-change', 450);
+    await flushPromises();
+  }
   return {
     wrapper,
     selects,
@@ -275,12 +335,109 @@ async function mountSlider(initialSelection?: Record<string, string[]>, instance
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.lifecycleRequests = false;
   mocks.fetchMonitorMetric.mockImplementation((query: MonitorMetricQuery) =>
     Promise.resolve(metric(query.instances || [])),
   );
 });
 
 describe('实例监控侧栏', () => {
+  it('一次打开在图表宽度就绪后仅请求一轮八图三列', async () => {
+    vi.setSystemTime(new Date('2026-11-04T12:00:00+08:00'));
+    await enableLifecycleRequests();
+    const { wrapper, chart } = await mountSlider(undefined, undefined, false);
+    try {
+      await wrapper.setProps({ isShow: true });
+      await flushPromises();
+      expect(chart().props('queryEnabled')).toBe(false);
+      expect(mocks.getInstanceTimeSeries).not.toHaveBeenCalled();
+      chart().vm.$emit('plot-width-change', 450);
+      await flushPromises();
+      expect(chart().props('queryEnabled')).toBe(true);
+      expect(chart().props('interval')).toBe(384);
+      for (const card of wrapper.findAllComponents({ name: 'ChartCardStub' })) {
+        card.vm.$emit('plot-width-change', 450);
+      }
+      chart().vm.$emit('plot-width-change', 0);
+      await flushPromises();
+      expect(mocks.getInstanceTimeSeries).toHaveBeenCalledTimes(11);
+      expect(new Set(mocks.chartQuery.mock.calls.map(([query]) => query.queryId)).size).toBe(1);
+    } finally {
+      wrapper.unmount();
+      vi.useRealTimers();
+    }
+  });
+
+  it('手动固定汇聚周期后图表宽度就绪不额外请求', async () => {
+    await enableLifecycleRequests();
+    const { wrapper, selects, chart } = await mountSlider();
+    try {
+      selects()[2].vm.$emit('update:modelValue', 60);
+      await flushPromises();
+      const beforeWidth = mocks.getInstanceTimeSeries.mock.calls.length;
+      chart().vm.$emit('plot-width-change', 500);
+      await flushPromises();
+      expect(beforeWidth).toBe(22);
+      expect(mocks.getInstanceTimeSeries).toHaveBeenCalledTimes(beforeWidth);
+      expect(chart().props('interval')).toBe(60);
+    } finally {
+      wrapper.unmount();
+    }
+  });
+
+  it('auto 尺寸变化仅在实际步长改变时重拉一轮', async () => {
+    await enableLifecycleRequests();
+    const { wrapper, chart } = await mountSlider();
+    try {
+      expect(chart().props('interval')).toBe(384);
+      expect(mocks.getInstanceTimeSeries).toHaveBeenCalledTimes(11);
+      chart().vm.$emit('plot-width-change', 451);
+      await flushPromises();
+      expect(chart().props('interval')).toBe(384);
+      expect(mocks.getInstanceTimeSeries).toHaveBeenCalledTimes(11);
+      chart().vm.$emit('plot-width-change', 500);
+      await flushPromises();
+      expect(chart().props('interval')).toBe(346);
+      expect(mocks.getInstanceTimeSeries).toHaveBeenCalledTimes(22);
+      expect(new Set(mocks.chartQuery.mock.calls.map(([query]) => query.queryId)).size).toBe(2);
+    } finally {
+      wrapper.unmount();
+    }
+  });
+
+  it('关闭后再次打开等待新绘图区宽度再请求', async () => {
+    await enableLifecycleRequests();
+    const { wrapper, chart } = await mountSlider();
+    try {
+      expect(mocks.getInstanceTimeSeries).toHaveBeenCalledTimes(11);
+      await wrapper.setProps({ isShow: false });
+      await wrapper.setProps({ isShow: true });
+      await flushPromises();
+      expect(chart().props('queryEnabled')).toBe(false);
+      expect(mocks.getInstanceTimeSeries).toHaveBeenCalledTimes(11);
+      chart().vm.$emit('plot-width-change', 450);
+      await flushPromises();
+      expect(mocks.getInstanceTimeSeries).toHaveBeenCalledTimes(22);
+    } finally {
+      wrapper.unmount();
+    }
+  });
+
+  it('手动刷新在尺寸和查询条件相同时仍正常重拉一轮', async () => {
+    await enableLifecycleRequests();
+    const { wrapper } = await mountSlider();
+    try {
+      expect(mocks.getInstanceTimeSeries).toHaveBeenCalledTimes(11);
+      await wrapper.get('button').trigger('click');
+      await new Promise(resolve => setTimeout(resolve, 350));
+      await flushPromises();
+      expect(mocks.getInstanceTimeSeries).toHaveBeenCalledTimes(22);
+      expect(new Set(mocks.chartQuery.mock.calls.map(([query]) => query.queryId)).size).toBe(2);
+    } finally {
+      wrapper.unmount();
+    }
+  });
+
   it('初始打开复用 2000 个实例快照，不额外取实例列表且未搜索不渲染候选', async () => {
     const { wrapper, selects, chart } = await mountSlider();
     expect(mocks.listAppInstances).not.toHaveBeenCalled();

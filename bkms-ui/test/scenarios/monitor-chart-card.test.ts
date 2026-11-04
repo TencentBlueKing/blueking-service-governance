@@ -19,7 +19,7 @@
 import type { Ref } from 'vue';
 
 import { mount } from '@vue/test-utils';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ChartCardItem from '~/pages/application/detail/deploy/chart-card-item.vue';
 
 import type * as MonitorChartBridge from '~/pages/application/detail/deploy/monitor-chart-bridge';
@@ -44,6 +44,7 @@ vi.mock('@blueking/monitor-vue3-components', async () => {
   return {
     ExploreChart: defineComponent({
       name: 'ExploreChartStub',
+      props: { panel: { type: Object, required: true } },
       setup(_, { expose }) {
         expose({ legendData: ref(mocks.legends), handleSelectLegend: mocks.selectLegend });
         return () => h('div');
@@ -83,7 +84,7 @@ vi.mock('@blueking/table', async () => {
   };
 });
 
-function mountCard() {
+function mountCard(queryEnabled = true) {
   return mount(ChartCardItem, {
     props: {
       all: true,
@@ -92,6 +93,7 @@ function mountCard() {
       envNames: ['prod', 'test'],
       metricKey: 'cpu_usage',
       queryId: 1,
+      queryEnabled,
     },
     global: { mocks: { $t: (key: string) => key } },
   });
@@ -100,6 +102,63 @@ function mountCard() {
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.legends = [];
+});
+afterEach(() => vi.unstubAllGlobals());
+
+describe('实例监控图表首次查询', () => {
+  it('测量期间只保留容器，提交最新参数后才挂载立即查询的图表', async () => {
+    let reportWidth: ((width: number) => void) | undefined;
+    const observe = vi.fn();
+    class MeasuredResizeObserver implements ResizeObserver {
+      private callback: ResizeObserverCallback;
+
+      constructor(callback: ResizeObserverCallback) {
+        this.callback = callback;
+      }
+
+      disconnect() {}
+
+      observe(target: Element) {
+        observe(target);
+        reportWidth = width =>
+          this.callback(
+            [
+              {
+                target,
+                contentRect: new DOMRectReadOnly(0, 0, width, 130),
+                borderBoxSize: [],
+                contentBoxSize: [],
+                devicePixelContentBoxSize: [],
+              },
+            ],
+            this,
+          );
+      }
+
+      unobserve() {}
+    }
+    vi.stubGlobal('ResizeObserver', MeasuredResizeObserver);
+    const wrapper = mountCard(false);
+    expect(wrapper.findComponent({ name: 'ExploreChartStub' }).exists()).toBe(false);
+    expect(observe).toHaveBeenCalledWith(expect.any(HTMLElement));
+    reportWidth?.(555);
+    expect(wrapper.emitted('plot-width-change')).toEqual([[500]]);
+    expect(wrapper.findComponent({ name: 'ExploreChartStub' }).exists()).toBe(false);
+
+    await wrapper.setProps({ interval: 346, method: 'avg', limit: 20, queryId: 2 });
+    expect(wrapper.findComponent({ name: 'ExploreChartStub' }).exists()).toBe(false);
+    await wrapper.setProps({ queryEnabled: true });
+    expect(wrapper.getComponent({ name: 'ExploreChartStub' }).props('panel')).toEqual(
+      expect.objectContaining({
+        targets: [
+          expect.objectContaining({
+            data: expect.objectContaining({ interval: 346, method: 'avg', limit: 20, queryId: 2 }),
+          }),
+        ],
+      }),
+    );
+    wrapper.unmount();
+  });
 });
 
 describe('实例监控图例的环境归属', () => {
