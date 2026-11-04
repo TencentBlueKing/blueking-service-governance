@@ -270,6 +270,8 @@ svcConf:
       builderImageCode: "tlinux3_ci"
       # 流水线模板使用的构建机镜像版本，为空时由 bkci 模板加载逻辑决定默认值
       builderImageVersion: "2.*"
+      # 流水线模板使用的构建机类型（dispatchType.buildType），需为目标蓝盾支持的类型；为空时默认 PUBLIC_DEVCLOUD
+      builderDispatchType: "PUBLIC_DEVCLOUD"
   # 蓝盾制品库配置，用于项目 & 仓库初始化
   bkrepo:
     baseUrl: https://bkrepo.example.com

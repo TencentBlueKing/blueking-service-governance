@@ -51,7 +51,7 @@
           "containerHashId": "c-614413ffe6d744acbcef18aafa5af2a2",
           "containerId": "1",
           "dispatchType": {
-            "buildType": "PUBLIC_DEVCLOUD",
+            "buildType": "[[ .builderDispatchType ]]",
             "credentialId": "",
             "credentialProject": "",
             "dockerBuildVersion": "[[ .builderImageCode ]]",

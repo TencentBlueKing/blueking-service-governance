@@ -42,9 +42,12 @@ const (
 	defaultPipelineBuilderImageCode = "tlinux3_ci"
 	// 默认流水线构建镜像版本
 	defaultPipelineBuilderImageVersion = "2.*"
+	// 默认流水线构建机类型
+	defaultPipelineBuilderDispatchType = "PUBLIC_DEVCLOUD"
 
 	pipelineTmplCtxKeyImageCode    = "builderImageCode"
 	pipelineTmplCtxKeyImageVersion = "builderImageVersion"
+	pipelineTmplCtxKeyDispatchType = "builderDispatchType"
 	// 实例期字段 key；模板侧用 [[ `[[ .xxx ]]` ]] 自逃逸，Reload 不消费这些 key
 	pipelineTmplCtxKeyAppID        = "appID"
 	pipelineTmplCtxKeyCallbackURL  = "callbackURL"
@@ -98,13 +101,16 @@ func (r *PipelineTemplatesReloader) Reload(ctx context.Context) error {
 func (r *PipelineTemplatesReloader) buildRenderContext() map[string]any {
 	imageCode := defaultPipelineBuilderImageCode
 	imageVersion := defaultPipelineBuilderImageVersion
+	dispatchType := defaultPipelineBuilderDispatchType
 	if r.cfg != nil {
 		imageCode = cmp.Or(r.cfg.BKCI.PipelineTmpl.BuilderImageCode, defaultPipelineBuilderImageCode)
 		imageVersion = cmp.Or(r.cfg.BKCI.PipelineTmpl.BuilderImageVersion, defaultPipelineBuilderImageVersion)
+		dispatchType = cmp.Or(r.cfg.BKCI.PipelineTmpl.BuilderDispatchType, defaultPipelineBuilderDispatchType)
 	}
 	return map[string]any{
 		pipelineTmplCtxKeyImageCode:    imageCode,
 		pipelineTmplCtxKeyImageVersion: imageVersion,
+		pipelineTmplCtxKeyDispatchType: dispatchType,
 	}
 }
 

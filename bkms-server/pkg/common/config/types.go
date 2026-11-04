@@ -129,6 +129,9 @@ type BKCIPipelineTmplConfig struct {
 	BuilderImageCode string
 	// BuilderImageVersion 蓝盾流水线模板使用的构建机镜像版本，为空时由模板加载逻辑决定默认值
 	BuilderImageVersion string
+	// BuilderDispatchType 蓝盾流水线模板使用的构建机类型（dispatchType.buildType），为空时由模板加载逻辑决定默认值；
+	// 取值需为目标蓝盾支持的类型，如 PUBLIC_DEVCLOUD、DOCKER
+	BuilderDispatchType string
 }
 
 // BKCIConfig 蓝盾配置
