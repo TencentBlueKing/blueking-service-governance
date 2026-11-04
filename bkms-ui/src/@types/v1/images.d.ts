@@ -457,7 +457,7 @@ export interface ImageTagDeployRecordOutputObj {
 export interface PaginatedAppImagesOutputObjs {
   count?: string;
   /**
-   * 当前工作空间中所有生产类型环境的名称列表
+   * 应用可用的所有生产类型环境的名称列表（含继承生产类型的特性环境）
    */
   productionEnvNames?: string[];
   /**
@@ -515,11 +515,19 @@ export interface AppImageOutputObj {
 
 export interface DeployedEnvInfoOutputObj {
   /**
+   * 环境展示名称
+   */
+  envDisplayName?: string;
+  /**
+   * 环境类别（standard / feature）
+   */
+  envKind?: string;
+  /**
    * 环境名称
    */
   envName?: string;
   /**
-   * 环境类型（development/test/staging/production）
+   * 环境类型（development/test/staging/production），特性环境为其继承的类型
    */
   envType?: string;
 }

@@ -84,7 +84,9 @@
               class="h-full"
               scene="part"
               type="empty"
-            />
+            >
+              <template #description>{{ $t('暂无配置文件，可点击左侧新建') }}</template>
+            </Exception>
             <template v-else>
               <div class="mb-[16px] shrink-0">
                 <BkmsContent
@@ -595,8 +597,8 @@
   import { hasErrorCode, showApiErrorMessage } from '~/common/util';
   import MsEditor from '~/components/monaco-editor/ms-editor.vue';
   import Layout from '~/components/skeleton/skeleton-layout';
+  import { getFrameworkFileFormat } from '~/composables/use-app-runtime';
   import useLeaveConfirm from '~/composables/use-leave-confirm';
-  import useSpecField from '~/composables/use-spec-field';
   import ClearFileContentDialog from '~/pages/application/detail/app-config/components/clear-file-content-dialog.vue';
   import ConfigFileList from '~/pages/application/detail/app-config/components/config-file-list.vue';
   import CreateConfigFileSideslider from '~/pages/application/detail/app-config/components/create-config-file-sideslider.vue';
@@ -635,7 +637,6 @@
   const { t } = useI18n();
   const appDetailStore = useAppDetail();
   const { confirmBox } = useLeaveConfirm();
-  const { appType } = useSpecField();
   const mountPreviewVisible = inject(MOUNT_PREVIEW_VISIBLE_KEY, ref(false));
   const appID = computed(() => appDetailStore.appID);
   const {
@@ -701,15 +702,19 @@
   const frameworkMergesWithDefault = computed(
     () => isFrameworkFile.value && activeEnvContentStrategy.value === 'overlay',
   );
-  const isTafApp = computed(() => appType.value === 'taf');
-  const isTrpcApp = computed(() => appType.value === 'trpc');
+  const isTafApp = computed(() => appDetailStore.runtime?.framework === 'taf');
+  const isTrpcApp = computed(() => appDetailStore.runtime?.framework === 'trpc');
   const isFileNameEditable = computed(() => !isFrameworkFile.value || isTafApp.value); // 框架文件名仅 taf 应用可编辑
   // 是否开启按环境配置（false 为统一配置），优先取环境详情，回退到 def
   const isIndependentConfig = computed(
     () => !(detail.value?.isUnifiedConfig ?? activeDef.value?.isUnifiedConfig ?? true),
   );
   // 编辑器语言：框架文件 taf 用 xml、trpc 用 yaml，普通文件用 plaintext
-  const editorLang = computed(() => (isFrameworkFile.value ? (isTafApp.value ? 'xml' : 'yaml') : 'plaintext'));
+  const editorLang = computed(() => {
+    if (!isFrameworkFile.value) return 'plaintext';
+    const format = getFrameworkFileFormat(appDetailStore.runtime);
+    return format === 'taf' ? 'xml' : format || 'plaintext';
+  });
   // 框架文件和普通文件的名称、目录均以 def 为准。
   const activeDisplayName = computed(() => activeDef.value?.name || '');
   const activeDisplayPath = computed(() => activeDef.value?.mountDir || '');
@@ -921,7 +926,7 @@
 
   // 校验 trpc 框架配置中的 admin.ip，为 POD_IP 或不合法时生成告警
   function checkAdminIp(content: string) {
-    if (!isFrameworkFile.value || isTafApp.value) {
+    if (!isFrameworkFile.value || !isTrpcApp.value) {
       adminIpWarning.value = { message: '', type: '' };
       return;
     }
@@ -977,7 +982,7 @@
     try {
       const server = parseYaml(content)?.server;
       if (!server) return undefined;
-      const language = appDetailStore.appDetail?.appModelSpec?.trpcSpec?.language?.toLowerCase() || '';
+      const language = appDetailStore.appDetail?.language?.toLowerCase() || '';
       if (['cpp', 'nodejs', 'node'].includes(language)) return server.admin_ip;
       if (language === 'java') return server.admin?.admin_ip;
       return server.admin?.ip || server.admin_ip || server.admin?.admin_ip;

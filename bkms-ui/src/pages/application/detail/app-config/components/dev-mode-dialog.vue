@@ -134,7 +134,7 @@
       params: {
         name: appDetailStore.appID,
         menuName: 'deployment',
-        type: 'trpc',
+        type: appDetailStore.appType,
       },
     });
   }

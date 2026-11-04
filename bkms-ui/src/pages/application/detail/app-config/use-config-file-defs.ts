@@ -95,6 +95,7 @@ export const MOUNT_PREVIEW_VISIBLE_KEY: InjectionKey<Ref<boolean>> = Symbol('mou
 export function useConfigFileDefs(appID: MaybeRefOrGetter<string>) {
   /** 当前选中的定义 ID */
   const activeDefID = ref('');
+  // 文件列表以接口定义为准，避免能力加载中隐藏已有框架文件。
   const defs = ref<ConfigFileDefView[]>([]);
   const detail = ref<ConfigFileDefView | null>(null);
   const envInstances = ref<EnvInstanceObj[]>([]);

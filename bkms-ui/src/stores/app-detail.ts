@@ -23,6 +23,7 @@ import { ApiServerService } from '~/api/modules/bkmsserver';
 import { AppService } from '~/api/modules/v1/app';
 
 import type { AppDetailOutputObj } from '~/@types/app';
+import type { AppInfoOutputObj, PublicView } from '~/@types/v1/app';
 import type { IAppType } from '~/composables/app-type';
 
 // 保留 re-export，兼容已有引用
@@ -32,9 +33,14 @@ export const useAppDetail = defineStore('appDetail', () => {
   const app = ref('');
   const appType = ref<IAppType>('');
   const appID = ref('');
+  // 仅保留站内跳转时已知的展示信息，不作为完整应用详情使用。
+  const navigationApp = ref<AppInfoOutputObj | null>(null);
   // 应用详情
   const appDetail = ref<AppDetailOutputObj | null>(null);
   const loading = ref(false);
+  const runtime = ref<null | PublicView>(null);
+  const runtimeLoading = ref(false);
+  const runtimeError = ref(false);
   const savingVisibleEnvs = ref(false);
   /** 保存成功后递增，防止旧详情覆盖新名单，并通知选择器清理失效选择。 */
   const visibleEnvsVersion = ref(0);
@@ -44,14 +50,20 @@ export const useAppDetail = defineStore('appDetail', () => {
     appID,
     () => {
       appRevision += 1;
+      if (navigationApp.value?.id !== appID.value) navigationApp.value = null;
       // 旧请求已失效，即使不再发起详情请求，也要释放其加载状态。
       loading.value = false;
+      runtime.value = null;
+      runtimeLoading.value = false;
+      runtimeError.value = false;
       fetchPromiseCache.clear();
+      runtimePromiseCache.clear();
     },
     { flush: 'sync' },
   );
   // 缓存请求 Promise,key 为 appID
   const fetchPromiseCache = new Map<string, Promise<AppDetailOutputObj | null>>();
+  const runtimePromiseCache = new Map<string, Promise<null | PublicView>>();
   // 瞬态导航标记:用于跨路由跳转时,传递「去配置」的来源(source)
   const pendingBuilderSource = ref<null | string>(null);
 
@@ -68,6 +80,51 @@ export const useAppDetail = defineStore('appDetail', () => {
   // 更新当前 appID
   function updateAppID(id: string) {
     appID.value = id;
+  }
+
+  function setNavigationApp(workspaceID: string, app: AppInfoOutputObj) {
+    updateAppID(app.id || '');
+    navigationApp.value = {
+      id: app.id,
+      name: app.name,
+      framework: app.framework,
+      language: app.language,
+      workspaceID,
+    };
+  }
+
+  /** 能力请求独立于详情请求，失败不阻断通用功能。 */
+  async function fetchAppRuntimeMods(appId = appID.value): Promise<null | PublicView> {
+    if (!appId || appId !== appID.value) return null;
+    const cachedPromise = runtimePromiseCache.get(appId);
+    if (cachedPromise) return cachedPromise;
+    const revision = appRevision;
+    const isCurrent = () => appId === appID.value && revision === appRevision;
+    const promise = (async () => {
+      runtimeLoading.value = true;
+      runtimeError.value = false;
+      try {
+        const result = await AppService.getAppRuntimeMods({ appID: appId }, { interceptorErr: false });
+        if (!isCurrent()) return null;
+        if (!result) throw new Error('Missing application runtime');
+        // 存量 trpc/taf 的 runtime.type 也会返回 bkmsApp；真实 appType 仅由应用详情维护。
+        runtime.value = result;
+        return result;
+      } catch {
+        if (isCurrent()) {
+          runtime.value = null;
+          runtimeError.value = true;
+        }
+        return null;
+      } finally {
+        if (isCurrent()) {
+          runtimeLoading.value = false;
+          runtimePromiseCache.delete(appId);
+        }
+      }
+    })();
+    runtimePromiseCache.set(appId, promise);
+    return promise;
   }
 
   /** 保存后使用独立详情请求，避免复用保存之前发出的在途请求。 */
@@ -176,6 +233,10 @@ export const useAppDetail = defineStore('appDetail', () => {
     appType.value = '';
     appID.value = '';
     appDetail.value = null;
+    navigationApp.value = null;
+    runtime.value = null;
+    runtimeLoading.value = false;
+    runtimeError.value = false;
     // 重置时一并清空瞬态导航标记
     pendingBuilderSource.value = null;
   }
@@ -185,12 +246,18 @@ export const useAppDetail = defineStore('appDetail', () => {
     app,
     appType,
     appDetail,
+    navigationApp,
     loading,
+    runtime,
+    runtimeLoading,
+    runtimeError,
+    fetchAppRuntimeMods,
     savingVisibleEnvs,
     visibleEnvsVersion,
     updateVisibleEnvs,
     pendingBuilderSource,
     updateAppID,
+    setNavigationApp,
     updateAppName,
     updateAppType,
     fetchAppDetail,

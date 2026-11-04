@@ -61,7 +61,8 @@ function setHistory(back: null | string) {
 /** 挂一个空 app 安装真实 router 模块，取出 router 实例（install 内部自建 router，需经 app 获取） */
 async function setup(initial?: Record<string, unknown> | string) {
   const app = createApp({ render: () => null });
-  installRouter({ app } as never);
+  const context = { app };
+  installRouter(context as never);
   const router = app.config.globalProperties.$router as Router;
   if (initial) await router.push(initial as string);
   return { app, router };
@@ -112,7 +113,8 @@ describe('路由：智能返回', () => {
 
   it('当上级路由无名称时，应回退到它的默认子路由', async () => {
     const { router } = await setup('/ws-1/app/create/trpc');
-    expect(router.currentRoute.value.name).toBe('createTrpcTemplateApp');
+    expect(router.currentRoute.value.name).toBe('createBKMSAppTemplateApp');
+    expect(router.currentRoute.value.query).toEqual({ framework: 'trpc', language: 'go' });
     setHistory(null);
     (router.back as unknown as () => void)();
     await waitFor(() => expect(router.currentRoute.value.name).toBe('createApplication'));
@@ -122,6 +124,26 @@ describe('路由：智能返回', () => {
   // resolveParent 在 matched.length < 2（router.ts:303）或「父级记录无 name 且无默认子路由」
   // （router.ts:311-316）时返回 undefined 才会走到该分支；真实路由表下后者需专门构造，
   // 本轮未构造，故不为其单独立用例。
+});
+
+describe('路由：旧创建入口兼容', () => {
+  it.each([
+    { path: 'trpc', framework: 'trpc', language: 'go' },
+    { path: 'taf', framework: 'taf', language: 'cpp' },
+  ])('$path 入口保留附加 query，并以入口对应的技术栈覆盖冲突参数', async ({ path, framework, language }) => {
+    const { router } = await setup(
+      `/ws-1/app/create/${path}?source=bookmark&tag=a&tag=b&preview&framework=blank&language=python`,
+    );
+    expect(router.currentRoute.value.name).toBe('createBKMSAppTemplateApp');
+    expect(router.currentRoute.value.params.space).toBe('ws-1');
+    expect(router.currentRoute.value.query).toEqual({
+      source: 'bookmark',
+      tag: ['a', 'b'],
+      preview: null,
+      framework,
+      language,
+    });
+  });
 });
 
 describe('路由：空间权限守卫', () => {

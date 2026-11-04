@@ -80,6 +80,7 @@
   import { AppSpecProbeInput, AppSpecProbeOutput, EnvAppSpecProbeInput, ProbeOutput } from '~/@types/v1/app-spec';
   import { AppSpecService } from '~/api/modules/v1';
   import BkmsContent from '~/components/bkms-content.vue';
+  import { isAppModelAppType } from '~/composables/app-type';
   import { useAppDetail } from '~/stores/app-detail';
 
   import EnvScopeTag from './env-scope-tag.vue';
@@ -498,7 +499,7 @@
   watch(
     () => [props.currentEnv?.name, appDetailStore.appType],
     async () => {
-      if (!['trpc', 'taf'].includes(appDetailStore.appType)) {
+      if (!isAppModelAppType(appDetailStore.appType)) {
         stopProbeLoading();
         return;
       }
@@ -512,7 +513,7 @@
   watch(
     () => appDetailStore.appID,
     async newVal => {
-      if (newVal && ['trpc', 'taf'].includes(appDetailStore.appType)) {
+      if (newVal && isAppModelAppType(appDetailStore.appType)) {
         defaultCache = null;
         await fetchProbeData();
       } else {

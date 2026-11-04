@@ -43,7 +43,10 @@
       </div>
     </template>
     <template #default>
-      <ManagementCommand :data="instanceIds" />
+      <ManagementCommand
+        :data="instanceIds"
+        :env-name="envName"
+      />
     </template>
   </Sideslider>
 </template>
@@ -56,6 +59,7 @@
 
   defineProps<{
     envDisplayName?: string;
+    envName: string;
     instanceIds: string[];
   }>();
 

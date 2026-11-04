@@ -434,19 +434,20 @@
     InstanceExecuteTrpcAdminCmdResultOutputObj,
     ListTrpcAdminCmdsOutputObjs,
   } from '~/@types/v1/instance';
+  import { type Config } from '~/api/interceptors';
   import { InstanceService } from '~/api/modules/v1';
+  import { APP_FRAMEWORKS } from '~/common/app-types';
   import ToggleCard from '~/components/toggle-card.vue';
+  import { isRuntimeModSupported } from '~/composables/use-app-runtime';
   import { useAppDetail } from '~/stores/app-detail';
-  import { useTrpcDeployStore } from '~/stores/trpc-deploy';
-
-  import { DeployableAppType, useDeployAPIs } from '../../use-deploy';
 
   type InstanceExecuteAdminCmdResult =
-    | InstanceExecuteTafAdminCmdResultOutputObj
-    | InstanceExecuteTrpcAdminCmdResultOutputObj;
+    InstanceExecuteTafAdminCmdResultOutputObj | InstanceExecuteTrpcAdminCmdResultOutputObj;
 
   interface IProps {
     data: string[];
+    /** 打开侧栏时选定的实例环境，查询和执行都使用该快照。 */
+    envName: string;
   }
 
   interface RequestError {
@@ -465,9 +466,8 @@
   const props = defineProps<IProps>();
 
   const appDetail = useAppDetail();
-  const trpcDeployStore = useTrpcDeployStore();
-  const isTrpcApp = computed(() => appDetail?.appType === 'trpc');
-  const deployAPIs = useDeployAPIs(appDetail.appType as DeployableAppType);
+  const isTrpcApp = computed(() => appDetail.runtime?.framework === APP_FRAMEWORKS.TRPC);
+  const isTafApp = computed(() => appDetail.runtime?.framework === APP_FRAMEWORKS.TAF);
 
   const command = ref<string>('');
   const commandMethod = ref<'GET' | 'POST' | 'PUT'>('GET');
@@ -503,13 +503,14 @@
   };
 
   async function handleGetCommands() {
+    if (!isRuntimeModSupported(appDetail.runtime, 'adminCommand') || !isTrpcApp.value) return;
     loading.value = true;
     adminPrecheckFailed.value = false;
     try {
       const res = await InstanceService.listTrpcAdminCmds(
         {
           appID: appDetail.appID,
-          envName: trpcDeployStore.curEnvItem!.name ?? '',
+          envName: props.envName,
           instanceIDs: props.data,
         },
         { interceptorErr: false },
@@ -532,8 +533,25 @@
   const executeFullList = ref<InstanceExecuteAdminCmdResult[]>([]);
   const successNum = ref<number>(0);
   const failedNum = ref<number>(0);
+  function executeAdminCommand(params: Record<string, unknown>, config: Config) {
+    const common = {
+      appID: appDetail.appID,
+      envName: props.envName,
+      instanceIDs: props.data,
+    };
+    return isTrpcApp.value
+      ? InstanceService.executeTrpcAdminCmd(
+          { ...common, url: command.value, method: commandMethod.value, ...params },
+          config,
+        )
+      : InstanceService.executeTafAdminCmd({ ...common, command: command.value }, config);
+  }
   /** 执行命令 */
   async function handleExecuteCommand() {
+    // 侧栏打开期间能力可能刷新为不可用，发送请求前需重新检查。
+    if (!isRuntimeModSupported(appDetail.runtime, 'adminCommand')) return;
+    // 执行接口按框架区分，避免其他框架落入 TAF 分支
+    if (!isTrpcApp.value && !isTafApp.value) return;
     let params = {} as Record<string, unknown>;
     if (isTrpcApp.value) {
       const data = tableData.value.reduce(
@@ -564,15 +582,7 @@
     }
 
     executeLoading.value = true;
-    deployAPIs.executeAdminCmd!(
-      {
-        appID: appDetail.appID,
-        envName: trpcDeployStore.curEnvItem!.name,
-        instanceIDs: props.data,
-        ...params,
-      },
-      { originalResponse: true, needStatus: true, interceptorErr: false },
-    )
+    executeAdminCommand(params, { originalResponse: true, needStatus: true, interceptorErr: false })
       .then(response => {
         const result = response as unknown as Response;
         if (result.status < 200 || result.status >= 300) {

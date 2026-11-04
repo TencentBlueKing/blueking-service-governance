@@ -153,7 +153,13 @@ export default ({ mode }: { mode: string }) => {
       }),
 
       // https://github.com/jpkleemans/vite-svg-loader
-      SvgLoader({ defaultImport: 'component' }),
+      SvgLoader({
+        defaultImport: 'component',
+        // 隔离 SVG 内部 ID，避免优化后的渐变/遮罩引用与全局 iconcool sprite 冲突。
+        svgoConfig: {
+          plugins: ['preset-default', 'prefixIds'],
+        },
+      }),
 
       // 仅本地 dev server 启用，避免生产/镜像构建占用额外内存
       ...(isDev ? [VueDevTools()] : []),

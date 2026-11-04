@@ -40,6 +40,7 @@
   <ManagementCommandSideslider
     v-model:visible="commandVisible"
     :env-display-name="commandEnvDisplayName"
+    :env-name="commandEnvName"
     :instance-ids="commandInstanceIds"
   />
   <MonitorSideSlider
@@ -79,6 +80,7 @@
   const logInstance = ref<AppInstanceOutputObj | null>(null);
 
   const commandVisible = ref(false);
+  const commandEnvName = ref('');
   const commandEnvDisplayName = ref('');
   const commandInstanceIds = ref<string[]>([]);
 
@@ -87,9 +89,10 @@
   const monitorEnvName = ref<string>();
   const monitorEnvNames = ref<string[]>();
 
-  function openCommand(instanceIds: string[], envDisplayName?: string) {
-    commandInstanceIds.value = [...instanceIds];
-    commandEnvDisplayName.value = envDisplayName || '';
+  function openCommand(options: { envDisplayName?: string; envName: string; instanceIds: string[] }) {
+    commandEnvName.value = options.envName;
+    commandInstanceIds.value = [...options.instanceIds];
+    commandEnvDisplayName.value = options.envDisplayName || '';
     commandVisible.value = true;
   }
 
@@ -140,6 +143,7 @@
   watch(commandVisible, visible => {
     if (!visible) {
       commandInstanceIds.value = [];
+      commandEnvName.value = '';
       commandEnvDisplayName.value = '';
     }
   });

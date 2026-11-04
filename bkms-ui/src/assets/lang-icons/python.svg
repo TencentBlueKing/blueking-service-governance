@@ -1,0 +1,31 @@
+<!--
+ - TencentBlueKing is pleased to support the open source community by making
+ - 蓝鲸智云 - 服务治理 (BlueKing Service Governance) available.
+ - Copyright (C) Tencent. All rights reserved.
+ - Licensed under the MIT License (the "License"); you may not use this file except
+ - in compliance with the License. You may obtain a copy of the License at
+ -
+ -  http://opensource.org/licenses/MIT
+ -
+ - Unless required by applicable law or agreed to in writing, software distributed under
+ - the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
+ - either express or implied. See the License for the specific language governing permissions and
+ - limitations under the License.
+ -
+ - We undertake not to change the open source license (MIT license) applicable
+ - to the current version of the project delivered to anyone in the future.
+-->
+
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <rect width="64" height="64" rx="8" fill="#1A1A1A"/>
+  <g transform="translate(32 32) scale(0.148) translate(-128 -127.5)">
+    <path
+      fill="#3776AB"
+      d="M126.916.072c-64.499 0-60.436 28.115-60.436 28.115l.072 29.128h61.52v8.745H39.816s-39.315-4.45-39.315 57.978 34.434 59.84 34.434 59.84h20.47V155.37s-1.113-33.682 33.018-33.682h64.156s31.926.546 31.926-30.864V33.453S194.668.072 126.916.072zM92.802 19.66a11.12 11.12 0 0 1 11.13 11.13 11.12 11.12 0 0 1-11.13 11.13 11.12 11.12 0 0 1-11.13-11.13 11.12 11.12 0 0 1 11.13-11.13z"
+    />
+    <path
+      fill="#FFD43B"
+      d="M128.757 254.126c64.499 0 60.437-28.115 60.437-28.115l-.073-29.128H127.6v-8.745h88.255s39.315 4.45 39.315-57.978-34.434-59.84-34.434-59.84h-20.469v29.151s1.113 33.682-33.017 33.682H103.12s-31.926-.546-31.926 30.864v57.184s-4.141 33.021 57.563 33.021zM162.87 234.538a11.12 11.12 0 0 1-11.13-11.13 11.12 11.12 0 0 1 11.13-11.13 11.12 11.12 0 0 1 11.13 11.13 11.12 11.12 0 0 1-11.13 11.13z"
+    />
+  </g>
+</svg>

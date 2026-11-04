@@ -298,7 +298,7 @@
       v-model:builder-data="builderData"
       v-model:is-show="showBuilderSideslider"
       :app-name="appDetailStore.appDetail?.name"
-      :language="appDetailStore.appDetail?.appModelSpec?.trpcSpec?.language"
+      :language="appDetailStore.appDetail?.language"
       :type="builderType"
       @confirm="handleUpdateBuildConfig(builderData)"
     />

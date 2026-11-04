@@ -82,6 +82,8 @@ export const DOC_LINKS = {
   APM_GUIDE_TRPC_CPP: '/p/4015427850',
   // APM 观测配置指引 - TAF
   APM_GUIDE_TAF: '/p/4013675229',
+  // APM 观测配置指引 - 通用语言
+  APM_GUIDE_BLANK: '/p/4013675210',
   // 扩缩容稳定性
   SCALE_STABILITY: '/p/1015455438#%E6%89%A9%E7%BC%A9%E5%AE%B9%E7%A8%B3%E5%AE%9A%E6%80%A7',
   // 北极星心跳上报

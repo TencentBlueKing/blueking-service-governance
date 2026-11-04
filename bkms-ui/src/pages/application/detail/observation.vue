@@ -58,7 +58,13 @@
         <template #description>
           <div class="text-[#313238] text-[24px]">{{ $t('尚未开启观测功能') }}</div>
           <div class="text-[#4D4F56] text-[14px] leading-[22px] mt-[16px]">
-            {{ $t('应用框架配置文件中未配置可观测') }}
+            {{
+              $t(
+                appDetailStore.appDetail?.framework === 'blank'
+                  ? '应用尚未接入可观测'
+                  : '应用框架配置文件中未配置可观测',
+              )
+            }}
           </div>
         </template>
         <Button
@@ -209,10 +215,14 @@
 
   // APM 配置指引文档链接
   const apmGuideUrl = computed(() => {
-    if (appDetailStore.appType === 'taf') {
+    const framework = appDetailStore.appDetail?.framework;
+    if (framework === 'blank') {
+      return `${import.meta.env.BK_DOC_URL}${DOC_LINKS.APM_GUIDE_BLANK}`;
+    }
+    if (framework === 'taf') {
       return `${import.meta.env.BK_DOC_URL}${DOC_LINKS.APM_GUIDE_TAF}`;
     }
-    const language = appDetailStore.appDetail?.appModelSpec?.trpcSpec?.language;
+    const language = appDetailStore.appDetail?.language;
     const docPath = language === 'cpp' ? DOC_LINKS.APM_GUIDE_TRPC_CPP : DOC_LINKS.APM_GUIDE_TRPC_GO;
     return `${import.meta.env.BK_DOC_URL}${docPath}`;
   });

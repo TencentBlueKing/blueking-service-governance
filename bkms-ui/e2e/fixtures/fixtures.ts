@@ -48,27 +48,31 @@ export type BkmsFixtures = {
 };
 
 type AppInfo = {
+  framework?: string;
+  id?: string;
   name?: string;
   type?: string;
 };
 
-type AppType = 'helm' | 'taf' | 'trpc';
+type AppType = 'agones' | 'bkmsApp' | 'helm' | 'taf' | 'trpc';
 
-const APP_TYPES = new Set<AppType>(['helm', 'taf', 'trpc']);
+const APP_TYPES = new Set<AppType>(['agones', 'bkmsApp', 'helm', 'taf', 'trpc']);
 const E2E_APP_PREFIX = 'e2e-';
 
 async function discoverE2eAppName({
   appType,
+  configuredAppName,
   request,
   space,
   token,
 }: {
   appType: AppType;
+  configuredAppName?: string;
   request: APIRequestContext;
   space: string;
   token: string;
 }) {
-  if (!space) return '';
+  if (!space) return { app: '', appType };
 
   const response = await request.get(joinUrl(getApiV1Prefix(), `/workspaces/${encodeURIComponent(space)}/apps`), {
     headers: token ? { Authorization: `Bearer ${token}` } : undefined,
@@ -80,7 +84,12 @@ async function discoverE2eAppName({
 
   const apps = extractAppList(await response.json());
   const candidates = apps
-    .filter(app => app.name?.startsWith(E2E_APP_PREFIX) && app.type === appType)
+    .filter(app =>
+      configuredAppName
+        ? app.name === configuredAppName || app.id === configuredAppName
+        : app.name?.startsWith(E2E_APP_PREFIX) &&
+          (app.type === appType || (app.type === 'bkmsApp' && app.framework === appType)),
+    )
     .sort((a, b) => {
       const preferredName = `${E2E_APP_PREFIX}${appType}`;
       if (a.name === preferredName) return -1;
@@ -88,7 +97,11 @@ async function discoverE2eAppName({
       return (a.name || '').localeCompare(b.name || '');
     });
 
-  return candidates[0]?.name || '';
+  const selected = candidates[0];
+  if (configuredAppName && !selected) throw new Error('配置的测试应用不在当前空间应用列表中');
+  const actualType = selected?.type;
+  if (actualType && !APP_TYPES.has(actualType as AppType)) throw new Error('测试应用类型不受支持');
+  return { app: selected?.name || '', appType: (actualType || appType) as AppType };
 }
 
 function extractAppList(payload: unknown): AppInfo[] {
@@ -151,15 +164,14 @@ async function resolveAppName({
   token: string;
 }) {
   const configuredAppName = getConfiguredAppName(tag, appType);
-  if (configuredAppName) return configuredAppName;
-  if (!tag && !appTypeTag) return '';
+  if (!configuredAppName && !tag && !appTypeTag) return { app: '', appType };
 
-  return discoverE2eAppName({ appType, request, space, token });
+  return discoverE2eAppName({ appType, configuredAppName, request, space, token });
 }
 
 function resolveAppType(tag: string | undefined): AppType {
-  if (tag === 'helm' || tag === 'taf' || tag === 'trpc') {
-    return tag;
+  if (tag && APP_TYPES.has(tag as AppType)) {
+    return tag as AppType;
   }
 
   return 'trpc';
@@ -240,20 +252,21 @@ export const test = base.extend<BkmsFixtures>({
       const space = resolve('space', 'BKMS_TEST_DEFAULT_SPACE');
       const token = process.env.BKMS_TEST_ACCESS_TOKEN || '';
 
+      const selectedApp = await resolveAppName({
+        appType,
+        appTypeTag,
+        request,
+        space,
+        tag: appTag,
+        token,
+      });
+
       await use({
         reportDir: process.env.BKMS_TEST_REPORT_DIR || 'test-reports/default',
         token,
         space,
         env: resolve('env', 'BKMS_TEST_DEFAULT_ENV'),
-        app: await resolveAppName({
-          appType,
-          appTypeTag,
-          request,
-          space,
-          tag: appTag,
-          token,
-        }),
-        appType,
+        ...selectedApp,
       });
     },
     { scope: 'test' },

@@ -24,6 +24,8 @@
  * 采用「共享垫片 installVxeShims + 表格 stub」方案（见 test/helpers/mock-table.ts），
  * 垫片仅在本文件 beforeAll 安装，不改全局 setup，避免影响既有测试。
  */
+import { defineComponent } from 'vue';
+
 import userEvent from '@testing-library/user-event';
 import { render, screen, waitFor } from '@testing-library/vue';
 import { createPinia } from 'pinia';
@@ -36,6 +38,7 @@ import { MockedApiError } from '../helpers/mocked-api-error';
 const mocks = vi.hoisted(() => ({
   listApps: vi.fn(),
   push: vi.fn(),
+  setNavigationApp: vi.fn(),
 }));
 
 vi.mock('~/api/modules/bkmsserver', () => ({
@@ -48,7 +51,7 @@ vi.mock('vue-router', async () => {
 });
 vi.mock('~/stores/space', () => ({ useSpaceStore: () => ({ currentSpace: 'ws-1' }) }));
 vi.mock('~/stores/app-detail', () => ({
-  useAppDetail: () => ({ updateAppName: vi.fn(), updateAppID: vi.fn() }),
+  useAppDetail: () => ({ updateAppName: vi.fn(), setNavigationApp: mocks.setNavigationApp }),
 }));
 vi.mock('vue-i18n', async () => (await import('../helpers/mock-i18n')).i18nMockFactory());
 
@@ -72,7 +75,18 @@ beforeEach(() => {
   mocks.listApps.mockResolvedValue([app('app-a')]);
 });
 
-async function renderPage() {
+const SearchSelectStub = defineComponent({
+  props: { data: { type: Array, required: true } },
+  emits: ['update:modelValue'],
+  template: `<div><template v-for="item in data" :key="item.id">
+    <button v-for="option in item.children" :key="option.id"
+      @click="$emit('update:modelValue', [{ id: item.id, values: [option] }])">
+      filter-{{ option.name }}
+    </button>
+  </template></div>`,
+});
+
+async function renderPage(stubs = {}) {
   const { default: Application } = await import('~/pages/application/application.vue');
   // useTableSettings 内部使用 ui store（pinia），需激活 pinia 实例；
   // 空态/异常态文案由 <i18n-t> 插值组件渲染，直译为 keypath 供断言
@@ -82,6 +96,7 @@ async function renderPage() {
       mocks: i18nGlobalMocks,
       plugins: [createPinia()],
       components: { 'i18n-t': I18nTStub },
+      stubs,
     },
   };
   return render(Application as never, options as never);
@@ -131,5 +146,33 @@ describe('应用列表：数据状态与导航', () => {
     await renderPage();
     await userEvent.click(await screen.findByRole('button', { name: 'app-a' }));
     expect(mocks.push).toHaveBeenCalled();
+    expect(mocks.setNavigationApp).toHaveBeenCalledWith('ws-1', app('app-a'));
+  });
+
+  it('新旧 tRPC 共用类型筛选，blank 按语言展示并使用真实类型跳转', async () => {
+    mocks.listApps.mockResolvedValue([
+      { ...app('legacy'), type: 'trpc', framework: 'trpc' },
+      { ...app('new-trpc'), type: 'bkmsApp', framework: 'trpc' },
+      { ...app('blank-go'), type: 'bkmsApp', framework: 'blank' },
+    ]);
+    await renderPage({ SearchSelect: SearchSelectStub });
+    expect(await screen.findByTitle('Go')).toBeInTheDocument();
+    await userEvent.click(await screen.findByRole('button', { name: 'filter-tRPC' }));
+    expect(screen.getByRole('button', { name: 'legacy' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'new-trpc' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'blank-go' })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'new-trpc' }));
+    expect(mocks.setNavigationApp).toHaveBeenLastCalledWith(
+      'ws-1',
+      expect.objectContaining({ name: 'new-trpc', type: 'bkmsApp', framework: 'trpc', language: 'go' }),
+    );
+    expect(mocks.push).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        params: expect.objectContaining({ name: 'new-trpc', type: 'bkmsApp' }),
+      }),
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'filter-Go' }));
+    expect(screen.getByRole('button', { name: 'blank-go' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'legacy' })).not.toBeInTheDocument();
   });
 });

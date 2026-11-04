@@ -174,6 +174,7 @@ values 文件: Values File
   "Next, you can modify the configuration again based on the
   reason for the failure."
 tRPC: tRPC
+Java: Java
 "tRPC 应用": "tRPC Application"
 采用 tRPC 框架实现的服务端应用: Server application implemented using the tRPC framework.
 Kubernetes 原生应用: Kubernetes-native Application
@@ -2247,3 +2248,22 @@ HostPort 目前仅对绑定联邦集群的环境生效: HostPort currently only 
 "请输入镜像仓库地址，如：{0}": "Please enter the registry address, e.g. {0}"
 填写到命名空间即可，不带协议前缀，不含镜像名与 tag: Fill in up to the namespace, without protocol prefix, image name or tag
 留空则沿用该空间已有外部仓库的密码: Leave blank to keep the password of this workspace's existing external registry
+
+"平台托管应用": "Platform-managed application"
+"当前应用不支持平台通用构建": "This application does not support platform builds"
+"应用能力加载失败，部分功能暂不可用": "Failed to load application capabilities. Some features are temporarily unavailable."
+"应用尚未接入可观测": "Observability has not been configured for this application"
+"暂无配置文件，可点击新建": "No configuration files. Click Create to add one."
+"暂无配置文件，可点击左侧新建": "No configuration files. Click Create on the left to add one."
+
+"应用运行时目录加载失败，请重试": "Failed to load application runtimes. Please retry"
+"请选择一个应用模板": "Select an application template"
+"框架应用": "Framework applications"
+"通用应用": "General-purpose applications"
+"不限框架，平台提供构建、部署、配置等通用能力": "Use any framework with platform capabilities for building, deployment, and configuration"
+"更换": "Change"
+"添加启动命令": "Add startup command"
+"添加命令参数": "Add command argument"
+"适合 Gin、Echo 等 Web 服务": "For web services using Gin, Echo, and similar frameworks"
+"适合数据服务与 AI 应用": "For data services and AI applications"
+"适合接口与前后端一体服务": "For APIs and full-stack services"

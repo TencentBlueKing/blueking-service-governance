@@ -25,6 +25,24 @@
       v-bkloading="{ loading: detailLoading }"
       class="h-full min-h-full"
     >
+      <Alert
+        v-if="isAppModelAppType(type) && appDetailStore.runtimeError"
+        class="mx-[24px] mt-[16px]"
+        theme="warning"
+      >
+        <template #title>
+          <div class="flex items-center gap-[12px]">
+            <span>{{ $t('应用能力加载失败，部分功能暂不可用') }}</span>
+            <Button
+              :loading="appDetailStore.runtimeLoading"
+              text
+              theme="primary"
+              @click="appDetailStore.fetchAppRuntimeMods()"
+              >{{ $t('重试') }}</Button
+            >
+          </div>
+        </template>
+      </Alert>
       <RouterView
         v-if="!detailLoading"
         :key="routerViewKey"
@@ -42,8 +60,10 @@
         :min-height="204"
         :placeholder="$t('请选择应用')"
         :popover-min-width="244"
-        :search-placeholder="$t('请输入应用名称')"
-        @toggle="isSpacePopoverShow = !isSpacePopoverShow"
+        :popover-options="{ extCls: 'application-selector-popover' }"
+        :scroll-height="7 * 36 + 8"
+        :search-placeholder="$t('搜索')"
+        @toggle="isSpacePopoverShow = $event"
       >
         <template #trigger>
           <div
@@ -52,13 +72,18 @@
             <div class="flex items-center min-w-[43px] overflow-hidden">
               <TypeIcon
                 classes="min-w-[43px] inline-block"
+                :framework="iconApplication?.framework"
+                :language="iconApplication?.language"
                 :show-label="false"
                 :type="type"
               />
-              <span class="whitespace-nowrap">{{ currentApplicationName }}</span>
+              <span class="truncate">{{ currentApplicationName }}</span>
             </div>
             <AngleDownFill
-              :class="['mr-[5px] text-[#C4C6CC] group-hover:text-[#979BA5]', isSpacePopoverShow ? '' : 'rotate-180']"
+              :class="[
+                'mr-[5px] shrink-0 text-[#C4C6CC] group-hover:text-[#979BA5]',
+                { 'rotate-180': isSpacePopoverShow },
+              ]"
             />
           </div>
         </template>
@@ -87,15 +112,18 @@
           v-else
           :id="item.name"
           :key="item.name"
+          class="application-selector-option"
           :name="item.name"
         >
-          <div class="flex items-center gap-[5px]">
+          <div class="flex items-center gap-[8px] min-w-0">
             <TypeIcon
-              :classes="`min-w-[20px] inline-block ${item.type === 'trpc' ? 'text-[6px]' : 'text-[19px]'}`"
+              classes="min-w-[20px] inline-block"
+              :framework="item.framework"
+              :language="item.language"
               :show-label="false"
               :type="item.type"
             />
-            <span>{{ item.name }}</span>
+            <span class="truncate">{{ item.name }}</span>
           </div>
         </Select.Option>
       </Select>
@@ -106,11 +134,11 @@
 <script setup lang="ts">
   import { computed, onMounted, ref, watch } from 'vue';
 
-  import { Button, Loading, Select } from 'bkui-vue';
+  import { Alert, Button, Loading, Select } from 'bkui-vue';
   import { AngleDownFill, Plus } from 'bkui-vue/lib/icon';
   import { onBeforeRouteUpdate, useRoute, useRouter } from 'vue-router';
   import { AppService } from '~/api/modules/v1/app';
-  import { isHelmLikeAppType } from '~/composables/app-type';
+  import { isAppModelAppType } from '~/composables/app-type';
   import { getMenuList } from '~/composables/use-router-menu';
   import { useAppDetail } from '~/stores/app-detail';
   import { useSpaceStore } from '~/stores/space';
@@ -153,12 +181,6 @@
   const currentApplicationName = ref(getRouteParam(route.params.name));
   const applicationList = ref<AppInfoOutputObj[]>([]);
   const applicationListLoading = ref(false);
-  // 'overview' | 'build' | 'repo' | 'deploy' | 'info' | 'orchestrate' | 'history' | 'module'
-  // trpc没有的子菜单
-  const TrpcSpecNotHas = ['orchestrate'];
-  // helm没有的子菜单
-  const HelmSpecNotHas = ['module', 'observation', 'polaris', 'appConfig'];
-
   const activeKey = ref<string>(getRouteParam(router.currentRoute.value.params.menuName, 'info'));
   const isSpacePopoverShow = ref(false);
   // 应用列表与应用详情加载完成前，不挂载子页面，避免子页面读取到空 appID/appDetail
@@ -167,10 +189,25 @@
   const currentApplication = computed(() =>
     applicationList.value.find(item => item.name === currentApplicationName.value),
   );
-  // 优先使用当前应用的 type，确保切换应用时能立即响应
-  // 只有在应用信息还未加载时才使用路由参数中的 type
+  // 首屏图标复用站内跳转前已知的信息，列表返回后仍以接口数据为准。
+  const iconApplication = computed(() => {
+    if (currentApplication.value) return currentApplication.value;
+    const app = appDetailStore.navigationApp;
+    const workspaceID = getRouteParam(router.currentRoute.value.params.space, spaceStore.currentSpace);
+    if (
+      app?.workspaceID === workspaceID &&
+      app?.name === currentApplicationName.value &&
+      app?.id === appDetailStore.appID
+    ) {
+      return app;
+    }
+    return undefined;
+  });
+  // 当前应用详情是真实类型来源；切换过程先使用列表中的类型。
   const type = computed(() => {
-    const appType = currentApplication.value?.type;
+    const detail = appDetailStore.appDetail;
+    const appType =
+      detail?.id && detail.id === currentApplication.value?.id ? detail.type : currentApplication.value?.type;
     const routeType = router.currentRoute.value.params.type as string;
     return (appType || routeType || '') as AppNavigationType;
   });
@@ -270,44 +307,45 @@
   let appSwitchGeneration = 0;
 
   watch(
-    [activeKey, type, currentApplicationName],
-    ([key, type, name], [oldKey]) => {
+    [activeKey, type, currentApplicationName, () => appDetailStore.runtime, currentApplication],
+    ([key, type, name], [oldKey, oldType, oldName]) => {
       if (name) {
         appDetailStore.updateAppName(name);
         appDetailStore.updateAppType(type);
       }
-      // 如果是trpc或者helm，且key在notHas中，跳转到基本信息
-      if (type === 'trpc' && TrpcSpecNotHas.includes(key as string)) {
-        activeKey.value = 'info';
-      } else if (isHelmLikeAppType(type) && HelmSpecNotHas.includes(key as string)) {
-        activeKey.value = 'info';
-      } else if (key && type && name) {
-        const current = router.currentRoute.value;
-        // URL 已是目标（如浏览器后退触发的反向同步）时跳过 push，避免污染历史栈
-        const alreadyOnTarget =
-          current.name === 'detail' &&
-          getRouteParam(current.params.name) === name &&
-          getRouteParam(current.params.type) === type &&
-          getRouteParam(current.params.menuName) === key;
-        if (alreadyOnTarget) {
-          return;
-        }
-        // 同菜单切换应用沿用 query；特性环境子页面的切换由路由守卫统一处理。
-        const isMenuSwitch = oldKey && oldKey !== key;
-        // 快照当前 query 供新页 hook（useUrlQuerySync）接管。
-        const snapshotQuery = router.currentRoute.value.query;
-        pendingRouteSync = router
-          .push({
-            name: 'detail',
-            params: {
-              type,
-              name,
-              menuName: key as string,
-            },
-            query: isMenuSwitch ? undefined : snapshotQuery,
-          })
-          .catch(() => undefined);
-      }
+      if (!key || !type || !name) return;
+      const current = router.currentRoute.value;
+      const isSwitchingApp = getRouteParam(current.params.name) !== name;
+      // 观测入口依赖异步能力，目标应用的能力未确认前保留当前菜单。
+      const waitingForObservationRuntime =
+        key === 'observation' &&
+        isAppModelAppType(type) &&
+        (appDetailStore.appID !== currentApplication.value?.id || !appDetailStore.runtime);
+      const hasMenu = menuList.value.some(item =>
+        'children' in item ? item.children.some(child => child.key === key) : item.key === key,
+      );
+      const shouldFallback = !!currentApplication.value && !waitingForObservationRuntime && !hasMenu;
+      const menuName = shouldFallback ? 'info' : key;
+
+      // 仅能力变化时不重复导航，也不取消尚未完成的应用切换。
+      if (key === oldKey && type === oldType && name === oldName && (isSwitchingApp || !shouldFallback)) return;
+      const alreadyOnTarget =
+        current.name === 'detail' &&
+        !isSwitchingApp &&
+        getRouteParam(current.params.type) === type &&
+        getRouteParam(current.params.menuName) === menuName;
+      if (alreadyOnTarget) return;
+
+      const isMenuSwitch = oldKey && oldKey !== key;
+      const target = {
+        name: 'detail',
+        params: { type, name, menuName },
+        query: shouldFallback ? {} : isMenuSwitch ? undefined : current.query,
+      };
+      // 切应用直接进入目标有效菜单；纠正当前应用的无效链接时替换历史项。
+      pendingRouteSync = (shouldFallback && !isSwitchingApp ? router.replace(target) : router.push(target)).catch(
+        () => undefined,
+      );
     },
     {
       immediate: true,
@@ -322,6 +360,8 @@
     // 先置 loading 卸载子页：若等 push 完成后再 loading，routerViewKey 会先变并挂载一次，
     // 随后 loading 再卸/挂，网络访问等页接口会打两次。
     detailLoading.value = true;
+    // 路由同步也可能等待；先切换应用作用域，立即失效旧详情请求与能力。
+    appDetailStore.updateAppID(currentAppId);
     // 捕获本轮看到的 sync Promise；不清空他人的最新 pending，避免快速连切时抢清空
     const routeSync = pendingRouteSync;
     if (routeSync) {
@@ -331,12 +371,12 @@
         pendingRouteSync = null;
       }
     }
-    // 快速连切 A→B→C：过期回调在此退出，避免 updateAppID 把已切到 C 的 store 写回 B
+    // 快速连切 A→B→C：过期回调在此退出，避免为旧应用再次发起请求。
     if (generation !== appSwitchGeneration) {
       return;
     }
-    appDetailStore.updateAppID(currentAppId);
     try {
+      if (isAppModelAppType(app?.type)) void appDetailStore.fetchAppRuntimeMods(currentAppId);
       await appDetailStore.fetchAppDetail(currentAppId);
     } finally {
       // 仅最新一轮且 appID 仍匹配时解锁；过期请求的覆盖由 store 层 appID 校验丢弃
@@ -358,5 +398,15 @@
 <style lang="postcss" scoped>
   :deep(.bk-select .bk-select-trigger) {
     height: 100%;
+  }
+
+  :global(.application-selector-popover.bk-popover.bk-pop2-content.bk-select-popover) {
+    overflow: hidden;
+    border-radius: 6px;
+  }
+
+  .application-selector-option {
+    height: 36px;
+    font-size: 14px;
   }
 </style>

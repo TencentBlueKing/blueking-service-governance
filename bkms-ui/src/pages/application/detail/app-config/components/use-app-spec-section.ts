@@ -21,6 +21,7 @@ import type { Ref } from 'vue';
 
 import { Message } from 'bkui-vue';
 import { useI18n } from 'vue-i18n';
+import { isAppModelAppType } from '~/composables/app-type';
 import useLeaveConfirm from '~/composables/use-leave-confirm';
 import { useAppDetail } from '~/stores/app-detail';
 
@@ -386,7 +387,7 @@ export function useAppSpecSection<
   watch(
     () => appDetailStore.appID,
     newVal => {
-      if (newVal && ['trpc', 'taf'].includes(appDetailStore.appType)) {
+      if (newVal && isAppModelAppType(appDetailStore.appType)) {
         defaultCache = null;
         fetchDefault();
       }

@@ -59,6 +59,18 @@ beforeEach(() => {
 });
 
 describe('配置文件元信息保存', () => {
+  it('保留接口返回的全部文件并优先选择框架文件', async () => {
+    mocks.list.mockResolvedValue({
+      items: [{ ...file, id: 'plain-id', configKind: 'plain', name: 'extra.yaml' }, file],
+    });
+    const state = useConfigFileDefs('app-id');
+    await state.fetchDefs();
+    expect(state.defs.value.map(item => item.id)).toEqual(['plain-id', 'def-id']);
+    expect(state.activeDefID.value).toBe('def-id');
+    expect(state.activeDef.value?.configKind).toBe('framework');
+    expect(mocks.list).toHaveBeenCalledTimes(1);
+  });
+
   it('使用 def ID 保存并返回服务端元信息，不合并或刷新列表与详情', async () => {
     const state = useConfigFileDefs('app-id');
     await state.fetchDefs();

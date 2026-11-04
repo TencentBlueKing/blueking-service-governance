@@ -141,7 +141,6 @@
   import { computed, ref } from 'vue';
 
   import { Button, Message, OverflowTitle, Tag } from 'bkui-vue';
-  import { cloneDeep } from 'lodash-es';
   import { useI18n } from 'vue-i18n';
   import BkmsContent from '~/components/bkms-content.vue';
   import FieldItem from '~/components/field-item.vue';
@@ -150,7 +149,6 @@
   import { useAppDetail } from '~/stores/app-detail';
 
   import type { ExtendedEnv } from './types';
-  import type { AppModelSpecInput } from '~/@types/v1/app';
 
   interface Props {
     currentEnv: ExtendedEnv | null;
@@ -160,7 +158,7 @@
 
   const { t } = useI18n();
   const appDetailStore = useAppDetail();
-  const { updateSpecApi } = useSpecField();
+  const { updateStartupConfig } = useSpecField();
 
   // 从 store 获取 appModelSpec
   const appModelSpec = computed(() => appDetailStore.appDetail?.appModelSpec);
@@ -188,15 +186,8 @@
     if (!(await startupCommandRef.value.validate())) return;
 
     saving.value = true;
-    const updatedAppModelSpec = cloneDeep(appDetail.appModelSpec || {}) as AppModelSpecInput;
-    Object.assign(updatedAppModelSpec, startupCommandRef.value.getValue());
-
     try {
-      const result = await updateSpecApi
-        .value({
-          appID: appDetailStore.appID,
-          appModelSpec: updatedAppModelSpec,
-        })
+      const result = await updateStartupConfig(startupCommandRef.value.getValue())
         .then(() => true)
         .catch(() => false);
 

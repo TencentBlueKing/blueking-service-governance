@@ -71,6 +71,7 @@
   import { AppSpecService } from '~/api/modules/v1';
   import { DOC_LINKS } from '~/common/const';
   import BkmsContent from '~/components/bkms-content.vue';
+  import { isRuntimeModSupported } from '~/composables/use-app-runtime';
   import { useAppDetail } from '~/stores/app-detail';
 
   import DevModeDialog from './dev-mode-dialog.vue';
@@ -98,13 +99,14 @@
   const pendingDevModeValue = ref(false);
 
   const isProductionEnv = computed(() => props.currentEnv?.type === 'production');
+  const devModeSupported = computed(() => isRuntimeModSupported(appDetailStore.runtime, 'devMode'));
 
   function goToTrpcDevModeDoc() {
     window.open(`${import.meta.env.BK_DOC_URL}${DOC_LINKS.TRPC_DEV_MODE}`, '_blank');
   }
 
   async function handleConfirmDevMode() {
-    if (!props.currentEnv) {
+    if (!props.currentEnv || !devModeSupported.value || isProductionEnv.value) {
       showDevModeDialog.value = false;
       return;
     }
@@ -136,34 +138,45 @@
   }
 
   function handleDevModeChange(value: boolean) {
-    if (isProductionEnv.value) return;
+    if (!devModeSupported.value || isProductionEnv.value) return;
     pendingDevModeValue.value = value;
     showDevModeDialog.value = true;
   }
 
   /** 环境切换：加载目标环境的开发模式配置 */
+  let loadRevision = 0;
   async function handleEnvChange(env: ExtendedEnv) {
+    const revision = ++loadRevision;
+    const appID = appDetailStore.appID;
     loading.value = true;
 
     try {
-      if (env.isDefault) {
+      if (env.isDefault || !devModeSupported.value) {
         isDevMode.value = false;
         return true;
       }
       const envSpec = await AppSpecService.getEnvEffectiveAppSpecDevMode({
-        appID: appDetailStore.appID,
+        appID,
         envName: env.name,
       });
-      isDevMode.value = envSpec?.enabled ?? false;
+      if (revision === loadRevision && appID === appDetailStore.appID) isDevMode.value = envSpec?.enabled ?? false;
     } catch {
-      isDevMode.value = false;
+      if (revision === loadRevision) isDevMode.value = false;
     } finally {
-      loading.value = false;
+      if (revision === loadRevision) loading.value = false;
     }
     return true;
   }
 
   watch(loading, val => emit('loading-change', val), { immediate: true });
+  watch(
+    [() => appDetailStore.appID, () => props.currentEnv, devModeSupported],
+    () => {
+      showDevModeDialog.value = false;
+      if (props.currentEnv) void handleEnvChange(props.currentEnv);
+    },
+    { immediate: true },
+  );
 
   defineExpose({
     handleEnvChange,

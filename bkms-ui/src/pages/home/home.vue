@@ -177,6 +177,8 @@
                         <div class="flex items-center leading-[22px]">
                           <TypeIcon
                             classes="min-w-[40px] inline-block"
+                            :framework="row.framework"
+                            :language="row.language"
                             :show-label="false"
                             :type="row.type"
                           />
@@ -427,7 +429,7 @@
   // 进入应用详情
   function handleShowAppDetail(spaceId: string, app: AppInfoOutputObj) {
     spaceStore.updateCurrentSpace(spaceId);
-    appDetailStore.updateAppID(app.id || '');
+    appDetailStore.setNavigationApp(spaceId, app);
     router.push({
       name: 'detail',
       params: {

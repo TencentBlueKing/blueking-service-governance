@@ -16,45 +16,31 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
+import { type BuildRecordOutputObj, type CreateBuildDeployRequest } from '~/@types/v1/build-autodeploy';
 import {
-  type BuildRecordOutputObj,
-  type CreateTafBuildDeployRequest,
-  type CreateTrpcBuildDeployRequest,
-} from '~/@types/v1/build-autodeploy';
-import {
-  type CreateTafDeployRequest,
-  type CreateTrpcDeployRequest,
+  type CreateBKMSAppDeployRequest,
+  type DeleteBKMSAppDeployRequest,
   type DeleteHelmDeployRequest,
-  type DeleteTafDeployRequest,
-  type DeleteTrpcDeployRequest,
   type DeployPreCheckOutput,
   type GetLatestAppModelDeployStatusOutput,
-  type GetLatestTafDeployStatusRequest,
-  type GetLatestTrpcDeployStatusRequest,
+  type GetLatestBKMSAppDeployStatusRequest,
   type ListAppModelDeployRecordsOutput,
+  type ListBKMSAppDeployRecordsRequest,
   type ListHelmDeployRecordsRequest,
-  type ListTafDeployRecordsRequest,
-  type ListTrpcDeployRecordsRequest,
-  type PreCheckTafDeployRequest,
-  type PreCheckTrpcDeployRequest,
+  type PreCheckBKMSAppDeployRequest,
 } from '~/@types/v1/deploy';
-import {
-  type ExecuteTafAdminCmdOutput,
-  type ExecuteTafAdminCmdRequest,
-  type ExecuteTrpcAdminCmdOutput,
-  type ExecuteTrpcAdminCmdRequest,
-} from '~/@types/v1/instance';
 import { v1Prefix } from '~/api/clients';
 import { type Config } from '~/api/interceptors';
-import { BuildAutodeployService, DeployService, InstanceService } from '~/api/modules/v1';
+import { BuildAutodeployService, DeployService } from '~/api/modules/v1';
 import { downloadByLink } from '~/common/util';
+import { type AppType, isHelmLikeAppType } from '~/composables/app-type';
 
 import type { ExtractData } from '~/@types/api';
 
 /**
  * 支持部署的应用类型
  */
-export type DeployableAppType = 'helm' | 'taf' | 'trpc';
+export type DeployableAppType = AppType;
 
 /**
  * 最近一次重启日志
@@ -68,56 +54,39 @@ export interface DeployParams {
   appID: string;
   /** 构建分支（构建部署时必填，直接部署时忽略） */
   branch?: string;
+  envName: string;
+  imageTag: string;
+  replicas: number;
   /** 代码修订：分支名、Tag 名或 CommitID */
   revision?: string;
   /** 代码来源类型 */
   revisionType?: 'branch' | 'commit' | 'tag';
-  envName: string;
-  imageTag: string;
-  replicas: number;
 }
 
 interface DeployAPIs {
   /**
    * 构建并部署（从源码构建）
    */
-  buildAndCreateDeploy?: (
-    params?: CreateTafBuildDeployRequest | CreateTrpcBuildDeployRequest,
-    config?: Config,
-  ) => Promise<BuildRecordOutputObj>;
+  buildAndCreateDeploy?: (params?: CreateBuildDeployRequest, config?: Config) => Promise<BuildRecordOutputObj>;
 
   /**
    * 直接部署（已构建镜像）
    */
-  createDeployDirectly?: (
-    params?: CreateTafDeployRequest | CreateTrpcDeployRequest,
-    config?: Config,
-  ) => Promise<ExtractData<null>>;
+  createDeployDirectly?: (params?: CreateBKMSAppDeployRequest, config?: Config) => Promise<ExtractData<null>>;
 
   /**
    * 删除部署（下架当前环境最新版本）
    */
   deleteDeploy: (
-    params?: DeleteHelmDeployRequest | DeleteTafDeployRequest | DeleteTrpcDeployRequest,
+    params?: DeleteBKMSAppDeployRequest | DeleteHelmDeployRequest,
     config?: Config,
   ) => Promise<ExtractData<object>>;
-
-  /**
-   * 执行管理命令（helm 类型无此能力）
-   */
-  executeAdminCmd?: <
-    Request = ExecuteTafAdminCmdRequest | ExecuteTrpcAdminCmdRequest,
-    ResponseData = ExtractData<ExecuteTafAdminCmdOutput | ExecuteTrpcAdminCmdOutput>,
-  >(
-    params?: Request,
-    config?: Config,
-  ) => Promise<ResponseData>;
 
   /**
    * 获取部署记录列表
    */
   listDeployRecords: (
-    params?: ListHelmDeployRecordsRequest | ListTafDeployRecordsRequest | ListTrpcDeployRecordsRequest,
+    params?: ListBKMSAppDeployRecordsRequest | ListHelmDeployRecordsRequest,
     config?: Config,
   ) => Promise<ExtractData<ListAppModelDeployRecordsOutput>>;
 
@@ -125,17 +94,14 @@ interface DeployAPIs {
    * 获取最新部署状态
    */
   listLatestDeployRecords?: (
-    params?: GetLatestTafDeployStatusRequest | GetLatestTrpcDeployStatusRequest,
+    params?: GetLatestBKMSAppDeployStatusRequest,
     config?: Config,
   ) => Promise<ExtractData<GetLatestAppModelDeployStatusOutput>>;
 
   /**
    * 部署前检查目标环境的环境变量和必选集群组件
    */
-  preCheckDeploy?: (
-    params?: PreCheckTafDeployRequest | PreCheckTrpcDeployRequest,
-    config?: Config,
-  ) => Promise<DeployPreCheckOutput>;
+  preCheckDeploy?: (params?: PreCheckBKMSAppDeployRequest, config?: Config) => Promise<DeployPreCheckOutput>;
 }
 
 /**
@@ -171,7 +137,8 @@ export async function downloadInstanceLog(params: {
 
 /**
  * 根据应用类型获取对应的部署 API
- * @param appType - 应用类型 ('trpc' | 'taf' | 'helm')
+ * 实例管理命令由管理命令侧栏按当前 framework 选择接口，并单独校验 adminCommand 能力。
+ * @param appType - 应用详情中的真实类型
  * @returns 部署相关的 API 方法集合
  *
  * @example
@@ -180,30 +147,20 @@ export async function downloadInstanceLog(params: {
  * ```
  */
 export function useDeployAPIs(appType: DeployableAppType): DeployAPIs {
-  const apiMapping: Record<DeployableAppType, DeployAPIs> = {
-    trpc: {
-      preCheckDeploy: DeployService.preCheckTrpcDeploy,
-      listDeployRecords: DeployService.listTrpcDeployRecords,
-      listLatestDeployRecords: DeployService.getLatestTrpcDeployStatus,
-      createDeployDirectly: DeployService.createTrpcDeploy,
-      buildAndCreateDeploy: BuildAutodeployService.createTrpcBuildDeploy,
-      deleteDeploy: DeployService.deleteTrpcDeploy,
-      executeAdminCmd: InstanceService.executeTrpcAdminCmd as DeployAPIs['executeAdminCmd'],
-    },
-    taf: {
-      preCheckDeploy: DeployService.preCheckTafDeploy,
-      listDeployRecords: DeployService.listTafDeployRecords,
-      listLatestDeployRecords: DeployService.getLatestTafDeployStatus,
-      createDeployDirectly: DeployService.createTafDeploy,
-      buildAndCreateDeploy: BuildAutodeployService.createTafBuildDeploy,
-      deleteDeploy: DeployService.deleteTafDeploy,
-      executeAdminCmd: InstanceService.executeTafAdminCmd as DeployAPIs['executeAdminCmd'],
-    },
-    helm: {
+  if (isHelmLikeAppType(appType)) {
+    return {
       listDeployRecords: DeployService.listHelmDeployRecords,
       deleteDeploy: DeployService.deleteHelmDeploy as DeployAPIs['deleteDeploy'],
-    },
-  };
+    };
+  }
 
-  return apiMapping[appType];
+  // 统一部署接口兼容存量 trpc/taf 与新 bkmsApp（含 blank），无需按框架分流。
+  return {
+    preCheckDeploy: DeployService.preCheckBKMSAppDeploy,
+    listDeployRecords: DeployService.listBKMSAppDeployRecords,
+    listLatestDeployRecords: DeployService.getLatestBKMSAppDeployStatus,
+    createDeployDirectly: DeployService.createBKMSAppDeploy,
+    buildAndCreateDeploy: BuildAutodeployService.createBuildDeploy,
+    deleteDeploy: DeployService.deleteBKMSAppDeploy,
+  };
 }

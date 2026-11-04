@@ -17,165 +17,340 @@
 -->
 
 <template>
-  <div class="flex flex-col items-center justify-start">
-    <div class="w-full max-w-[1112px] my-[16px]">
-      <Input
-        v-model.trim="searchTemplateValue"
-        class="w-[360px]"
-        clearable
-        :placeholder="
-          createPlaceholder({
-            labels: ['模板名称'],
-          })
-        "
-        type="search"
-      />
-    </div>
-    <template v-if="templateList.length">
-      <div class="flex items-center flex-wrap gap-[16px] max-w-[1112px]">
-        <div
-          v-for="item in templateList"
-          :key="item.id"
-          :class="[
-            'flex flex-col items-center justify-center',
-            'h-[180px] w-[360px] bg-[#fff] shadow cursor-pointer',
-            'rounded-sm border-[1px]',
-            activeCard?.id === item.id ? 'border-[#3A84FF]' : '',
-            item.disabled ? 'opacity-50 cursor-not-allowed' : 'hover:border-[#3A84FF]',
-          ]"
-          @click="handleClick(item)"
+  <div class="template-page">
+    <div class="template-panel">
+      <div class="template-header">{{ $t('请选择一个应用模板') }}</div>
+      <div class="template-content">
+        <div class="section-heading">
+          <h3>{{ $t('框架应用') }}</h3>
+        </div>
+        <div class="grid grid-cols-4 gap-[16px]">
+          <div
+            v-for="item in frameworks"
+            :key="item.id"
+            :class="[
+              'template-card',
+              { selected: selected.framework === item.id, disabled: item.managed && !isFrameworkAvailable(item.id) },
+            ]"
+          >
+            <button
+              :aria-label="item.label"
+              :aria-pressed="selected.framework === item.id"
+              class="template-card-select"
+              :disabled="item.managed && !isFrameworkAvailable(item.id)"
+              type="button"
+              @click="selectFramework(item.id)"
+            ></button>
+            <span
+              aria-hidden="true"
+              class="template-icon"
+            >
+              <TypeIcon
+                :show-label="false"
+                :size="32"
+                :type="item.id"
+              />
+            </span>
+            <div class="template-description">
+              <div class="template-name">{{ item.label }}</div>
+              <div class="template-hint">{{ $t(item.description) }}</div>
+              <div
+                v-if="getFrameworkLanguages(item.id).length"
+                class="framework-languages"
+              >
+                <span>{{ $t('语言') }}</span>
+                <div
+                  v-if="getFrameworkLanguages(item.id).length > 1"
+                  class="framework-language-options"
+                >
+                  <button
+                    v-for="language in getFrameworkLanguages(item.id)"
+                    :key="language"
+                    :aria-pressed="selected.framework === item.id && selected.language === language"
+                    :class="[
+                      'framework-language-option',
+                      { selected: selected.framework === item.id && selected.language === language },
+                    ]"
+                    type="button"
+                    @click="selectFramework(item.id, language)"
+                  >
+                    {{ getAppDisplayLabel(language) }}
+                  </button>
+                </div>
+                <span
+                  v-else
+                  class="text-[#313238]"
+                  >{{ getAppDisplayLabel(getFrameworkLanguages(item.id)[0]) }}</span
+                >
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="section-heading mt-[28px]">
+          <h3>{{ $t('通用应用') }}</h3>
+          <span>{{ $t('不限框架，平台提供构建、部署、配置等通用能力') }}</span>
+        </div>
+        <div class="grid grid-cols-4 gap-[16px]">
+          <button
+            v-for="item in languages"
+            :key="item.id"
+            :aria-pressed="selected.framework === APP_FRAMEWORKS.BLANK && selected.language === item.id"
+            :class="[
+              'template-card',
+              { selected: selected.framework === APP_FRAMEWORKS.BLANK && selected.language === item.id },
+            ]"
+            :disabled="!findRuntime(definitions, APP_FRAMEWORKS.BLANK, item.id)"
+            type="button"
+            @click="selectLanguage(item.id)"
+          >
+            <span
+              aria-hidden="true"
+              class="template-icon"
+            >
+              <TypeIcon
+                :framework="APP_FRAMEWORKS.BLANK"
+                :language="item.id"
+                :show-label="false"
+                :size="40"
+                :type="APP_TYPES.BKMS_APP"
+              />
+            </span>
+            <div class="template-description">
+              <div class="template-name">{{ item.label }}</div>
+              <div class="template-hint">{{ $t(item.description) }}</div>
+            </div>
+          </button>
+        </div>
+        <Alert
+          v-if="error"
+          class="mt-[20px]"
+          theme="warning"
         >
-          <span
-            v-if="item.icon"
-            :class="[item.icon, 'size-[50px] leading-[50px]', item.disabled ? 'grayscale' : '']"
-            :style="{ color: item.iconColor, fontSize: item.iconFontSize }"
-          ></span>
-          <span class="text-[#313238] leading-[24px] text-[16px] mt-[10px] font-bold">{{ item.title }}</span>
-          <span class="mt-[12px] text-[#4D4F56] text-[12px]">{{ item.desc }}</span>
+          <template #title>
+            {{ $t('应用运行时目录加载失败，请重试') }}
+            <Button
+              text
+              theme="primary"
+              @click="load"
+              >{{ $t('重试') }}</Button
+            >
+          </template>
+        </Alert>
+        <div class="mt-[20px] flex justify-center gap-[8px]">
+          <Button
+            class="min-w-[88px]"
+            :disabled="!canContinue"
+            :loading="loading && !isHelmLike"
+            theme="primary"
+            @click="next"
+            >{{ $t('下一步') }}</Button
+          >
+          <Button
+            class="min-w-[88px]"
+            @click="cancel"
+            >{{ $t('取消') }}</Button
+          >
         </div>
       </div>
-      <div class="mt-[32px]">
-        <Button
-          class="min-w-[88px]"
-          theme="primary"
-          @click="handleCreateApp"
-          >{{ $t('下一步') }}</Button
-        >
-        <Button
-          class="min-w-[88px] ml-[8px] bg-[#fff]"
-          @click="cancel"
-          >{{ $t('取消') }}</Button
-        >
-      </div>
-    </template>
-    <Exception
-      v-else
-      :description="$t('搜索为空')"
-      type="search-empty"
-    />
+    </div>
   </div>
 </template>
-<script lang="ts" setup>
+<script setup lang="ts">
   import { computed, onMounted, ref } from 'vue';
 
-  import { Button, Exception, Input } from 'bkui-vue';
-  import { useI18n } from 'vue-i18n';
-  import { useRoute, useRouter } from 'vue-router';
-  import { useSearchPlaceholder } from '~/composables/use-search-placeholder';
+  import { Alert, Button } from 'bkui-vue';
+  import { useRouter } from 'vue-router';
+  import { APP_FRAMEWORKS, APP_LANGUAGES, APP_TEMPLATES, APP_TYPES } from '~/common/app-types';
+  import { getAppDisplayLabel, isHelmLikeAppType } from '~/composables/app-type';
+  import TypeIcon from '~/pages/application/components/type-icon.vue';
   import { useAppStore } from '~/stores/apps';
 
-  interface ICard {
-    desc?: string;
-    disabled?: boolean;
-    icon?: string;
-    iconColor?: string;
-    iconFontSize?: string;
-    id?: string;
-    title?: string;
-    type?: string;
-  }
+  import { findRuntime, useRuntimeDefinitions } from './bkms-app/use-create-app';
 
-  const emits = defineEmits(['next', 'cancel', 'update-step', 'update-text']);
-
+  const emit = defineEmits(['update-step', 'update-text', 'next', 'cancel']);
   const router = useRouter();
-  const route = useRoute();
-  const { t } = useI18n();
-  const { createPlaceholder } = useSearchPlaceholder();
   const appStore = useAppStore();
-
-  const searchTemplateValue = ref('');
-  const activeCard = ref<ICard | null>({
-    id: appStore.lastAppTemplateID || 'createTrpcTemplateApp',
-  });
-  const templateList = computed<ICard[]>(() => {
-    const data = [
-      {
-        id: 'createTrpcTemplateApp',
-        type: 'trpc',
-        title: t('tRPC 应用'),
-        desc: t('适用于使用 tRPC 协议的服务'),
-        disabled: false,
-        icon: 'bkms-icon bkms-icon-trpc',
-        iconColor: '#1B44C8',
-      },
-      {
-        id: 'createHelmTemplateApp',
-        type: 'helm',
-        title: t('Helm 应用'),
-        desc: t('自定义应用编排，拥有灵活的可定制性'),
-        disabled: false,
-        icon: 'bkms-icon bkms-icon-HelmCharts',
-        iconColor: '#0F1689',
-        iconFontSize: '40px',
-      },
-      {
-        id: 'createTAFTemplateApp',
-        type: 'taf',
-        title: 'TAF',
-        desc: t('采用 TAF 框架实现的服务端应用'),
-        disabled: false,
-        icon: 'bkms-icon bkms-icon-taf',
-        iconColor: '#1b44c8',
-        iconFontSize: '40px',
-      },
-      {
-        id: 'createAgonesTemplateApp',
-        type: 'agones',
-        title: t('Agones 应用'),
-        desc: t('适用于多人在线游戏的专用服务器编排'),
-        disabled: false,
-        icon: 'bkms-icon bkms-icon-agones',
-        iconColor: '#0F1689',
-        iconFontSize: '40px',
-      },
-    ];
-    return data.filter(
-      item => item.title.toLocaleLowerCase().indexOf(searchTemplateValue.value?.toLocaleLowerCase()) > -1,
+  const { definitions, loading, error, load } = useRuntimeDefinitions();
+  const frameworks = APP_TEMPLATES.map(item => ({ ...item, managed: !isHelmLikeAppType(item.id) }));
+  const languages = APP_LANGUAGES.filter(item => item.canCreateBlank);
+  const legacySelections: Record<string, string> = {
+    createTrpcTemplateApp: 'trpc:go',
+    createTAFTemplateApp: 'taf:cpp',
+    createHelmTemplateApp: 'helm:',
+    createAgonesTemplateApp: 'agones:',
+  };
+  const remembered = legacySelections[appStore.lastAppTemplateID] || appStore.lastAppTemplateID || 'trpc:go';
+  const [framework, initialLanguage] = remembered.split(':');
+  const selected = ref({ framework, language: initialLanguage || '' });
+  const languageOrder: Record<string, number> = { go: 0, cpp: 1 };
+  function getFrameworkLanguages(framework: string) {
+    return (
+      definitions.value?.frameworks
+        ?.find(item => item.name === framework)
+        ?.supportedLanguages?.filter(language => findRuntime(definitions.value, framework, language))
+        .sort((left, right) => (languageOrder[left] ?? 2) - (languageOrder[right] ?? 2)) || []
     );
-  });
+  }
+  const isHelmLike = computed(() => isHelmLikeAppType(selected.value.framework));
+  const canContinue = computed(
+    () => isHelmLike.value || !!findRuntime(definitions.value, selected.value.framework, selected.value.language),
+  );
 
   function cancel() {
-    emits('cancel');
-    // 显式指定 fallback：resolveParent 推导到应用创建页(app/create)，但业务上应返回应用列表页(app)
-    router.back({ name: 'app', params: { space: route.params.space } });
+    router.push({ name: 'app' });
   }
-
-  function handleClick(item: ICard) {
-    if (item.disabled) return;
-    activeCard.value = item;
-    appStore.lastAppTemplateID = item.id || '';
-    emits('update-text', item);
+  function isFrameworkAvailable(framework: string) {
+    return getFrameworkLanguages(framework).length > 0;
   }
-
-  function handleCreateApp() {
-    if (!activeCard.value?.id) return;
-    router.push({
-      name: activeCard.value?.id,
+  function next() {
+    if (!canContinue.value) return;
+    remember();
+    router.push(
+      isHelmLike.value
+        ? {
+            name: selected.value.framework === APP_TYPES.HELM ? 'createHelmTemplateApp' : 'createAgonesTemplateApp',
+          }
+        : {
+            name: 'createBKMSAppTemplateApp',
+            query: { framework: selected.value.framework, language: selected.value.language },
+          },
+    );
+    emit('next');
+  }
+  function remember() {
+    appStore.lastAppTemplateID = `${selected.value.framework}:${selected.value.language}`;
+    emit('update-text', {
+      type: isHelmLike.value
+        ? selected.value.framework
+        : selected.value.framework === APP_FRAMEWORKS.BLANK
+          ? APP_FRAMEWORKS.BLANK
+          : APP_TYPES.BKMS_APP,
     });
-    emits('next');
   }
-
-  onMounted(() => {
-    emits('update-step', 1);
+  function selectFramework(framework: string, language?: string) {
+    if (!language && selected.value.framework === framework) return;
+    const supported = getFrameworkLanguages(framework);
+    selected.value = { framework, language: language || supported[0] || '' };
+    remember();
+  }
+  function selectLanguage(language: string) {
+    selected.value = { framework: APP_FRAMEWORKS.BLANK, language };
+    remember();
+  }
+  onMounted(async () => {
+    emit('update-step', 1);
+    await load();
+    if (!canContinue.value && !error.value) selected.value = { framework: APP_FRAMEWORKS.TRPC, language: 'go' };
+    remember();
   });
 </script>
+
+<style lang="postcss" scoped>
+  .template-page {
+    @apply mx-auto flex min-h-full w-full max-w-[1400px] justify-center bg-[#F5F7FA] p-[20px];
+  }
+
+  .template-panel {
+    @apply w-full max-w-[1400px] self-start overflow-hidden rounded-[2px] bg-white shadow-[0_2px_4px_0_#1919290d];
+  }
+
+  .template-header {
+    @apply select-none pt-[32px] text-center text-[24px] leading-[32px] text-[#313238];
+  }
+
+  .template-content {
+    @apply px-[40px] pb-[20px] pt-[24px];
+  }
+
+  .section-heading {
+    @apply mb-[12px] flex flex-wrap items-center gap-x-[12px] gap-y-[4px];
+  }
+
+  .section-heading h3 {
+    @apply m-0 text-[14px] font-bold leading-[22px] text-[#313238];
+  }
+
+  .section-heading > span {
+    @apply text-[12px] leading-[20px] text-[#979BA5];
+  }
+
+  .template-card {
+    @apply relative flex min-h-[92px] items-center gap-[12px] rounded-[2px] border border-[#DCDEE5] bg-white p-[16px] text-[#313238];
+  }
+
+  .template-card-select {
+    @apply absolute inset-0 cursor-pointer rounded-[2px] border-0 bg-transparent;
+  }
+
+  .template-card-select:focus-visible {
+    outline: 2px solid #3a84ff;
+    outline-offset: 2px;
+  }
+
+  .template-card-select ~ .template-icon,
+  .template-card-select ~ .template-description {
+    pointer-events: none;
+  }
+
+  .template-icon {
+    @apply inline-flex size-[40px] shrink-0 items-center justify-center overflow-hidden leading-none;
+  }
+
+  .template-description {
+    @apply min-w-0 flex-1 text-left;
+  }
+
+  .template-name {
+    @apply text-[14px] font-bold leading-[22px];
+  }
+
+  .template-hint {
+    @apply mt-[2px] text-[12px] leading-[18px] text-[#979BA5];
+  }
+
+  .framework-languages {
+    @apply mt-[8px] flex items-center gap-[8px] text-[12px] leading-[22px] text-[#63656E];
+  }
+
+  .framework-language-options {
+    @apply relative inline-flex pointer-events-auto;
+  }
+
+  .framework-language-option {
+    @apply relative h-[24px] min-w-[40px] cursor-pointer whitespace-nowrap border border-[#C4C6CC] bg-white px-[10px] text-[12px] text-[#63656E];
+  }
+
+  .framework-language-option + .framework-language-option {
+    margin-left: -1px;
+  }
+
+  .framework-language-option:first-child {
+    @apply rounded-l-[2px];
+  }
+
+  .framework-language-option:last-child {
+    @apply rounded-r-[2px];
+  }
+
+  .framework-language-option:hover {
+    @apply text-[#3A84FF];
+  }
+
+  .framework-language-option.selected {
+    @apply z-[1] border-[#3A84FF] bg-[#E1ECFF] text-[#3A84FF];
+  }
+
+  .template-card:hover,
+  .template-card.selected {
+    @apply border-[#3A84FF] bg-[#F0F5FF];
+  }
+
+  .template-card:disabled,
+  .template-card.disabled {
+    @apply cursor-not-allowed opacity-50;
+  }
+
+  .template-card-select:disabled {
+    cursor: not-allowed;
+  }
+</style>

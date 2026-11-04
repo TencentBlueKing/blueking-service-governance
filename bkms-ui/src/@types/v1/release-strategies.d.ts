@@ -52,7 +52,7 @@ export interface DeleteReleaseStrategyRequest {
 
 export interface ListReleaseStrategiesOutput {
   /**
-   * 空间内全部发布策略，按创建时间升序，不分页
+   * 空间可用的全部发布策略，不分页：先是平台内置策略（按批次数升序），再是空间自定义策略（按创建时间升序）
    */
   data?: ReleaseStrategyOutputObj[];
 }
@@ -88,7 +88,7 @@ export interface ReleaseStrategyOutputObj {
    */
   batches?: BatchOutputObj[];
   /**
-   * 创建时间
+   * 创建时间, 对内置策略可能返回为空
    */
   createdAt?: string;
   /**
@@ -103,6 +103,10 @@ export interface ReleaseStrategyOutputObj {
    * 策略 ID
    */
   id?: string;
+  /**
+   * 是否为平台内置策略：内置策略所有空间可见且不可修改、删除
+   */
+  isBuiltin?: boolean;
   /**
    * 策略名称
    */
@@ -142,7 +146,7 @@ export interface BatchInput {
    */
   pauseMode: "none" | "duration" | "permanent";
   /**
-   * 定时暂停时长（秒），仅 pauseMode 为 duration 时必填且只能在此时填写，范围 60 ~ 86400
+   * 定时暂停时长（秒），仅 pauseMode 为 duration 时必填且只能在此时填写，至少 1 秒，不设上限
    */
   pauseSeconds?: number;
   /**

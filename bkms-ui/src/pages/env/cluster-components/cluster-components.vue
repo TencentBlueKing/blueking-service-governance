@@ -193,6 +193,7 @@
   import { useRouter } from 'vue-router';
   import { ClusterAddonInfoOutput, ListClusterAddonsOutput } from '~/@types/v1/cluster-addon';
   import { ClusterAddonService, PortPoolService } from '~/api/modules/v1';
+  import { isAppModelAppType } from '~/composables/app-type';
 
   import InstallSideslider from './install-sideslider.vue';
 
@@ -237,6 +238,7 @@
     helm: t('Helm 应用'),
     taf: t('TAF 应用'),
     trpc: t('tRPC 应用'),
+    bkmsApp: t('平台托管应用'),
     agones: t('Agones 应用'),
   };
 
@@ -299,8 +301,8 @@
   // 展开的应用类型分组集合
   const expandedGroups = ref<Set<string>>(new Set());
 
-  // 组件定义同时登记了旧值 trpc / taf 与 bkmsApp，暂时只按旧值分组展示，开放 bkmsApp 应用后再切换
-  const hiddenAppTypes = new Set(['bkmsApp']);
+  // 平台托管应用统一展示 bkmsApp 分组，旧登记值不再重复展示。
+  const hiddenAppTypes = new Set(['trpc', 'taf']);
 
   // 按应用类型分组的计算属性
   const appTypeGroups = computed<AppTypeGroup[]>(() => {
@@ -358,7 +360,7 @@
   });
 
   function autoExpandTargetGroup() {
-    const appType = props.autoExpandAppType;
+    const appType = isAppModelAppType(props.autoExpandAppType) ? 'bkmsApp' : props.autoExpandAppType;
     if (!appType || autoExpandedAppType.value === appType) {
       return;
     }
