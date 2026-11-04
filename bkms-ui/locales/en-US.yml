@@ -1461,6 +1461,9 @@ CLB 区域: CLB Region
 联邦集群环境暂不支持分批发布: Federation cluster environments do not support batch release yet
 仅应用模型应用支持分批发布: Batch release is only supported for app model applications (tRPC / TAF)
 仅主工作负载为 GameDeployment 的应用支持分批发布: Batch release is only supported when the main workload is GameDeployment
+原地重启暂不支持分批发布: In-place restart does not support batch release yet
+正在检查分批发布资格，请稍候: Checking batch release eligibility, please wait
+当前环境不支持分批发布，已重置为一次更新全部实例: 'Batch release is not supported in the current environment, reset to updating all instances at once'
 发布预览: Release Preview
 灰度发布中: Grayscale releasing
 '灰度发布中 · 第 {0}/{1} 批': 'Grayscale releasing · batch {0}/{1}'
