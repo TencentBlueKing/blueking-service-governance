@@ -139,6 +139,27 @@ func GetLatest(
 	return record, nil
 }
 
+// GetLatestWorkload 取应用在指定环境、泳道下最新部署记录的主工作负载类型与名称（只查部署记录，不访问集群）。
+// 部署记录不存在时返回 ErrDeployRecordNotFound；记录中缺少工作负载信息时返回错误。
+func GetLatestWorkload(
+	ctx context.Context, db *mongo.Database, appID, envName, trafficLaneName string,
+) (kind, name string, err error) {
+	record, err := GetLatest(ctx, db, appID, envName, trafficLaneName)
+	if err != nil {
+		// GetLatest 已带上 app / env 信息，这里不再重复包装
+		return "", "", err
+	}
+	kind = record.WorkloadKind
+	name = record.ResourceKeys.NameByKind(kind)
+	if kind == "" || name == "" {
+		return "", "", errors.Errorf(
+			"deploy record %s of app %s env %s has no workload (kind: %q, name: %q)",
+			record.ID.Hex(), appID, envName, kind, name,
+		)
+	}
+	return kind, name, nil
+}
+
 // ListLatestByApps 返回一批应用在指定泳道下各环境最新的一条部署记录。
 // 外层 key 为 appID，内层 key 为 envName；无记录的应用或环境不出现在结果中。
 func ListLatestByApps(

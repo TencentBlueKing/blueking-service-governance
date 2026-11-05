@@ -19,7 +19,6 @@
 package serializer
 
 import (
-	"sort"
 	"strings"
 	"time"
 
@@ -30,14 +29,17 @@ import (
 // DefaultInterval 默认汇聚周期（秒）
 const DefaultInterval int64 = 60
 
-// MaxInstances 手动指定实例时一次最多查询的实例数
+// MaxInstances 一次最多查询的实例数
 const MaxInstances = 50
 
-// Limit 截断方向
+// DefaultTopInstancesLimit 实例排名默认取前 N 个
+const DefaultTopInstancesLimit = 10
+
+// 实例排名方向
 const (
-	// LimitTypeTop 按曲线平均值降序取前 N 条（默认）
+	// LimitTypeTop 按平均 CPU 使用量从高到低取前 N 个（默认）
 	LimitTypeTop = "top"
-	// LimitTypeBottom 按曲线平均值升序取前 N 条
+	// LimitTypeBottom 按平均 CPU 使用量从低到高取前 N 个
 	LimitTypeBottom = "bottom"
 )
 
@@ -158,10 +160,8 @@ type CreateEnvApmResp struct {
 // GetInstanceTimeSeriesQueryInput 实例时序指标查询的请求参数
 // 返回实例 内存、cpu、io、network 数据
 type GetInstanceTimeSeriesQueryInput struct {
-	// Instances 实例（Pod）名称列表；all=true 时忽略，改为查询该环境部署的全部实例
+	// Instances 实例（Pod）名称列表，过滤空白后需有 1~50 个；不校验实例是否属于该环境
 	Instances []string `json:"instances"`
-	// All 为 true 时查询该环境下的所有实例监控信息（按最新部署记录的 LabelSelector 枚举实例），忽略 instances
-	All bool `json:"all"`
 	// MetricKey 指定要查询的指标标识，可用值：
 	//   - cpu_usage: CPU 使用量（核数）
 	//   - cpu_request_usage: CPU Request 使用率
@@ -179,16 +179,12 @@ type GetInstanceTimeSeriesQueryInput struct {
 	StartTime int64 `json:"startTime" binding:"required,min=1,ltefield=EndTime"`
 	// EndTime 结束时间（Unix 时间戳，秒）
 	EndTime int64 `json:"endTime" binding:"required,min=1"`
-	// Limit 每个指标只返回按曲线平均值排序后的前 Limit 条实例时序，取值 0~50，0 表示不截断
-	Limit int `json:"limit" binding:"min=0,max=50"`
-	// LimitType 截断方向：top 按平均值降序、bottom 按平均值升序，默认 top；仅在 limit>0 时生效
-	LimitType string `json:"limitType" binding:"omitempty,oneof=top bottom" enums:"top,bottom"`
 	// Method 汇聚方法，同一 Pod 内多个容器的数据如何合并，默认 sum；
 	// 使用率类指标的分子与分母使用同一方法（count 时比值恒为 1）
 	Method string `json:"method" binding:"omitempty,oneof=sum max min count avg" enums:"sum,max,min,count,avg"`
 }
 
-// Normalize 对输入进行值修正（过滤空白实例名称、设置默认汇聚周期、截断方向与汇聚方法）
+// Normalize 对输入进行值修正（过滤空白实例名称、设置默认汇聚周期与汇聚方法）
 func (r *GetInstanceTimeSeriesQueryInput) Normalize() {
 	// 过滤空白实例名称
 	instances := make([]string, 0, len(r.Instances))
@@ -202,12 +198,56 @@ func (r *GetInstanceTimeSeriesQueryInput) Normalize() {
 	if r.Interval < DefaultInterval {
 		r.Interval = DefaultInterval
 	}
+	if r.Method == "" {
+		r.Method = string(bkmmodel.AggMethodSum)
+	}
+}
+
+// --- 实例排名 ---
+
+// ListTopInstancesQueryInput 实例排名的 Query 参数
+type ListTopInstancesQueryInput struct {
+	// Limit 取前 N 个实例，取值 1~50，默认 10
+	Limit int `form:"limit" binding:"omitempty,min=1,max=50"`
+	// LimitType 排名方向：top 按平均 CPU 使用量从高到低、bottom 从低到高，默认 top
+	LimitType string `form:"limitType" binding:"omitempty,oneof=top bottom" enums:"top,bottom"`
+	// StartTime 排名时间范围的开始时间（Unix 时间戳，秒）
+	StartTime int64 `form:"startTime" binding:"required,min=1,ltefield=EndTime"`
+	// EndTime 排名时间范围的结束时间（Unix 时间戳，秒）
+	EndTime int64 `form:"endTime" binding:"required,min=1"`
+	// Interval 子查询步长（秒），最小为 60 秒，建议与图表汇聚周期一致
+	Interval int64 `form:"interval"`
+	// Method 同一 Pod 内多个容器的数据如何合并，默认 sum，建议与图表汇聚方法一致
+	Method string `form:"method" binding:"omitempty,oneof=sum max min count avg" enums:"sum,max,min,count,avg"`
+}
+
+// Normalize 设置默认的排名数量、方向、子查询步长与汇聚方法
+func (r *ListTopInstancesQueryInput) Normalize() {
+	if r.Limit <= 0 {
+		r.Limit = DefaultTopInstancesLimit
+	}
 	if r.LimitType == "" {
 		r.LimitType = LimitTypeTop
+	}
+	if r.Interval < DefaultInterval {
+		r.Interval = DefaultInterval
 	}
 	if r.Method == "" {
 		r.Method = string(bkmmodel.AggMethodSum)
 	}
+}
+
+// TopInstanceOutput 实例排名结果
+type TopInstanceOutput struct {
+	// Instance 实例（Pod）名称
+	Instance string `json:"instance"`
+	// Value 时间范围内的平均 CPU 使用量（核数）
+	Value float64 `json:"value"`
+}
+
+// ListTopInstancesResp 实例排名的响应，已按 limitType 排好序
+type ListTopInstancesResp struct {
+	Data []*TopInstanceOutput `json:"data"`
 }
 
 // TimeSeriesItemStat 时序数据统计信息
@@ -255,33 +295,6 @@ type MetricTimeSeries struct {
 type InstanceTimeSeriesResp struct {
 	// Data 指标名称 -> 时序数据的映射
 	Data map[string]*MetricTimeSeries `json:"data"`
-}
-
-// RankAndLimitTimeSeries 按曲线平均值（stat.avg）对实例时序排序并截断前 limit 条：
-// top 降序、bottom 升序，平均值相同时保持原顺序。limit<=0 时不排序、原样返回；Stat 为 nil 的项按 0 参与排序。
-func RankAndLimitTimeSeries(items []*TimeSeriesItem, limit int, limitType string) []*TimeSeriesItem {
-	if limit <= 0 {
-		return items
-	}
-
-	avgOf := func(s *TimeSeriesItem) float64 {
-		if s.Stat == nil {
-			return 0
-		}
-		return s.Stat.Avg[1]
-	}
-	bottom := limitType == LimitTypeBottom
-	sort.SliceStable(items, func(i, j int) bool {
-		if bottom {
-			return avgOf(items[i]) < avgOf(items[j])
-		}
-		return avgOf(items[i]) > avgOf(items[j])
-	})
-
-	if limit >= len(items) {
-		return items
-	}
-	return items[:limit]
 }
 
 // DashboardOutput 仪表盘

@@ -5511,32 +5511,18 @@ definitions:
     type: object
   serializer.GetInstanceTimeSeriesQueryInput:
     properties:
-      all:
-        description: All 为 true 时查询该环境下的所有实例监控信息（按最新部署记录的 LabelSelector 枚举实例），忽略 instances
-        type: boolean
       endTime:
         description: EndTime 结束时间（Unix 时间戳，秒）
         minimum: 1
         type: integer
       instances:
-        description: Instances 实例（Pod）名称列表；all=true 时忽略，改为查询该环境部署的全部实例
+        description: Instances 实例（Pod）名称列表，过滤空白后需有 1~50 个；不校验实例是否属于该环境
         items:
           type: string
         type: array
       interval:
         description: Interval 汇聚周期（秒），最小为 60 秒
         type: integer
-      limit:
-        description: Limit 每个指标只返回按曲线平均值排序后的前 Limit 条实例时序，取值 0~50，0 表示不截断
-        maximum: 50
-        minimum: 0
-        type: integer
-      limitType:
-        description: LimitType 截断方向：top 按平均值降序、bottom 按平均值升序，默认 top；仅在 limit>0 时生效
-        enum:
-        - top
-        - bottom
-        type: string
       method:
         description: |-
           Method 汇聚方法，同一 Pod 内多个容器的数据如何合并，默认 sum；
@@ -6762,6 +6748,13 @@ definitions:
     properties:
       data:
         $ref: '#/definitions/serializer.RuntimeImagesOutputObjs'
+    type: object
+  serializer.ListTopInstancesResp:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/serializer.TopInstanceOutput'
+        type: array
     type: object
   serializer.ListTopologyNodeEventsOutput:
     properties:
@@ -9381,6 +9374,15 @@ definitions:
       enabled:
         description: 是否启用 GPA。true 时下发 CR，false 时删除 CR
         type: boolean
+    type: object
+  serializer.TopInstanceOutput:
+    properties:
+      instance:
+        description: Instance 实例（Pod）名称
+        type: string
+      value:
+        description: Value 时间范围内的平均 CPU 使用量（核数）
+        type: number
     type: object
   serializer.TopologyEdgeOutputObj:
     properties:
@@ -15664,6 +15666,66 @@ paths:
       - BkUserInfo: []
       - BkUserCredential: []
       summary: 查询实例监控指标时序数据
+      tags:
+      - bkintegrations-bkmonitor
+  /apps/{appID}/envs/{envName}/bkmonitor/top-instances:
+    get:
+      operationId: ListTopInstances
+      parameters:
+      - description: 应用 ID
+        in: path
+        name: appID
+        required: true
+        type: string
+      - description: 环境名称
+        in: path
+        name: envName
+        required: true
+        type: string
+      - description: 取前 N 个实例，1~50，默认 10
+        in: query
+        name: limit
+        type: integer
+      - description: 排名方向，默认 top
+        enum:
+        - top
+        - bottom
+        in: query
+        name: limitType
+        type: string
+      - description: 排名时间范围的开始时间（Unix 时间戳，秒）
+        in: query
+        name: startTime
+        required: true
+        type: integer
+      - description: 排名时间范围的结束时间（Unix 时间戳，秒）
+        in: query
+        name: endTime
+        required: true
+        type: integer
+      - description: 子查询步长（秒），最小 60，默认 60
+        in: query
+        name: interval
+        type: integer
+      - description: 同一 Pod 内多个容器的汇聚方法，默认 sum
+        in: query
+        name: method
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.ListTopInstancesResp'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 按平均 CPU 使用量查询环境实例的 Top / Bottom N
       tags:
       - bkintegrations-bkmonitor
   /apps/{appID}/envs/{envName}/bkmsapp-deploys:
