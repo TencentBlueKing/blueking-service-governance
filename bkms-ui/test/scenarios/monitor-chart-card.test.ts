@@ -87,13 +87,16 @@ vi.mock('@blueking/table', async () => {
 function mountCard(queryEnabled = true) {
   return mount(ChartCardItem, {
     props: {
-      all: true,
-      instances: [],
-      envName: 'prod',
       envNames: ['prod', 'test'],
+      instances: [
+        { envName: 'prod', instance: 'same-pod' },
+        { envName: 'test', instance: 'same-pod' },
+      ],
       metricKey: 'cpu_usage',
       queryId: 1,
       queryEnabled,
+      startTime: 100,
+      endTime: 200,
     },
     global: { mocks: { $t: (key: string) => key } },
   });
@@ -101,12 +104,13 @@ function mountCard(queryEnabled = true) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.getCachedMetric.mockReset();
   mocks.legends = [];
 });
 afterEach(() => vi.unstubAllGlobals());
 
 describe('实例监控图表首次查询', () => {
-  it('测量期间只保留容器，提交最新参数后才挂载立即查询的图表', async () => {
+  it('等容器测量与实例名单就绪后，才用同一查询快照挂载图表', async () => {
     let reportWidth: ((width: number) => void) | undefined;
     const observe = vi.fn();
     class MeasuredResizeObserver implements ResizeObserver {
@@ -145,18 +149,48 @@ describe('实例监控图表首次查询', () => {
     expect(wrapper.emitted('plot-width-change')).toEqual([[500]]);
     expect(wrapper.findComponent({ name: 'ExploreChartStub' }).exists()).toBe(false);
 
-    await wrapper.setProps({ interval: 346, method: 'avg', limit: 20, queryId: 2 });
+    await wrapper.setProps({ endTime: 400, instances: [], interval: 346, method: 'avg', queryId: 2, startTime: 300 });
     expect(wrapper.findComponent({ name: 'ExploreChartStub' }).exists()).toBe(false);
     await wrapper.setProps({ queryEnabled: true });
+    expect(wrapper.findComponent({ name: 'ExploreChartStub' }).exists()).toBe(false);
+
+    const instances = [{ envName: 'prod', instance: 'ranked-pod' }];
+    await wrapper.setProps({ instances });
     expect(wrapper.getComponent({ name: 'ExploreChartStub' }).props('panel')).toEqual(
       expect.objectContaining({
         targets: [
           expect.objectContaining({
-            data: expect.objectContaining({ interval: 346, method: 'avg', limit: 20, queryId: 2 }),
+            data: {
+              appID: 'demo-app',
+              endTime: 400,
+              envNames: ['prod', 'test'],
+              instances,
+              interval: 346,
+              method: 'avg',
+              metricKey: 'cpu_usage',
+              queryId: 2,
+              startTime: 300,
+            },
           }),
         ],
       }),
     );
+    wrapper.unmount();
+  });
+
+  it('当前期缺少曲线时仍按实例名单补齐对比期的空图例', async () => {
+    mocks.getCachedMetric.mockReturnValue({ unit: 'cores', series: [] });
+    const wrapper = mountCard(false);
+    await wrapper.setProps({
+      compareOffsets: [86400],
+      envNames: ['prod'],
+      instances: [{ envName: 'prod', instance: 'ranked-pod' }],
+      queryEnabled: true,
+      queryId: 2,
+    });
+    expect(wrapper.getComponent({ name: 'LegendTableStub' }).props('data')).toEqual([
+      expect.objectContaining({ name: '昨天-ranked-pod', min: '--', max: '--', avg: '--', isCompare: true }),
+    ]);
     wrapper.unmount();
   });
 });

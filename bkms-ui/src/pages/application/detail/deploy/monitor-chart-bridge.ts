@@ -36,51 +36,51 @@ export interface MonitorInstance {
   instance: string;
 }
 
-export type MonitorLimitType = 'bottom' | 'top';
-
-export interface MonitorMetricQuery {
-  all?: boolean;
-  appID: string;
-  endTime: number;
-  envName?: string;
-  envNames?: string[];
-  instances?: MonitorInstance[];
-  interval?: number;
-  limit?: number;
-  limitType?: MonitorLimitType;
-  method?: MonitorAggregationMethod;
+export interface MonitorMetricQuery extends MonitorQueryTime {
+  instances: MonitorInstance[];
   metricKey: string;
-  startTime: number;
 }
 
 export interface MonitorMetricTimeSeries extends MetricTimeSeries {
   series?: MonitorTimeSeriesItem[];
 }
 
-/** 保留环境归属用于合并、补查和匹配；请求按环境拆分，实例名称单独进入请求体。 */
+export type MonitorRankType = 'bottom' | 'top';
+
+/** 请求按环境拆分，结果保留环境归属，用于图例和汇总表匹配。 */
 export interface MonitorTimeSeriesItem extends TimeSeriesItem {
   _color?: string;
   envName?: string;
 }
 
-/** useEcharts 注入的入参：{ start_time, end_time, ...target.data, ...params } */
+/** 以 target.data 中的时间快照为准，与本轮排名请求保持一致。 */
 interface MonitorChartApiParams {
   [key: string]: unknown;
-  all?: boolean;
   appID?: string;
   /** 时间对比偏移量列表（秒），空数组 / 不传 = 关闭 */
   compareOffsets?: number[];
-  end_time?: number;
-  envName?: string;
+  endTime?: number;
   envNames?: string[];
   instances?: MonitorInstance[];
   interval?: number;
-  limit?: number;
-  limitType?: MonitorLimitType;
   method?: MonitorAggregationMethod;
   metricKey?: string;
   queryId?: number;
-  start_time?: number;
+  startTime?: number;
+}
+
+interface MonitorQueryTime {
+  appID: string;
+  endTime: number;
+  interval?: number;
+  method?: MonitorAggregationMethod;
+  startTime: number;
+}
+
+interface MonitorRankingQuery extends MonitorQueryTime {
+  envNames: string[];
+  limit?: number;
+  rankType?: MonitorRankType;
 }
 
 /** 包内 SeriesItem 的最小结构（datapoints 为 [值, 时间戳]） */
@@ -94,10 +94,6 @@ interface SeriesItemLike {
   type: string;
   unit?: string;
 }
-
-/** 当前时间范围（秒级 Unix），由 monitor-sideslider 注入 */
-let currentStartTime = 0;
-let currentEndTime = 0;
 
 /** 每个指标仅保留最新查询；当前期与图表对比数据分开，避免汇总表混入对比实例。 */
 const metricCache = new Map<
@@ -128,40 +124,31 @@ const COMPARE_PALETTE: string[] = [
 
 // ─── 导出函数（按字母序） ───────────────────────────────────────
 
-/** 按环境查询一段指标，不写图表缓存；汇总表补查也使用此入口。 */
+/** 按环境查指标时序，只传已解析的实例名单。 */
 export async function fetchMonitorMetric(query: MonitorMetricQuery): Promise<MonitorMetricTimeSeries | undefined> {
   const { appID, metricKey, startTime, endTime, interval } = query;
   const envToInstances = new Map<string, string[]>();
-  if (query.all) {
-    for (const env of query.envNames?.length ? query.envNames : [query.envName]) {
-      if (env) envToInstances.set(env, []);
-    }
-  } else {
-    // 同名 Pod 可以属于不同环境，必须先按环境分组，再向 SDK 传原始实例名。
-    for (const { envName, instance } of query.instances ?? []) {
-      if (!envName || !instance) continue;
-      const names = envToInstances.get(envName) ?? [];
-      if (!names.includes(instance)) names.push(instance);
-      envToInstances.set(envName, names);
-    }
+  // 同名 Pod 可以属于不同环境，按环境分组后再传原始实例名。
+  for (const { envName, instance } of query.instances) {
+    const name = instance.trim();
+    if (!envName || !name) continue;
+    const names = envToInstances.get(envName) ?? [];
+    if (!names.includes(name)) names.push(name);
+    envToInstances.set(envName, names);
   }
   if (!appID || !metricKey || !envToInstances.size) return undefined;
 
   const results = await Promise.all(
     [...envToInstances].map(async ([envName, instances]) => {
-      // 显式实例查询不合并排名默认值，避免手选与补查结果被 top10 截断。
-      const scope = query.all
-        ? { all: true, limit: query.limit ?? 10, limitType: query.limitType ?? 'top' }
-        : { instances };
       const data = await BkintegrationsBkmonitorService.getInstanceTimeSeries({
         appID,
         envName,
+        instances,
         metricKey,
         startTime,
         endTime,
         interval,
         method: query.method ?? 'sum',
-        ...scope,
       }).catch(() => undefined);
       const metric = data?.[metricKey];
       return metric ? { ...metric, series: (metric.series ?? []).map(series => ({ ...series, envName })) } : undefined;
@@ -169,14 +156,40 @@ export async function fetchMonitorMetric(query: MonitorMetricQuery): Promise<Mon
   );
   const first = results.find(result => result !== undefined);
   if (!first) return undefined;
-  let series = results.flatMap(result => result?.series ?? []);
-  if (query.all && envToInstances.size > 1) {
-    const direction = query.limitType === 'bottom' ? 1 : -1;
-    series = series
-      .sort((a, b) => direction * ((a.stat?.avg?.[1] ?? 0) - (b.stat?.avg?.[1] ?? 0)))
-      .slice(0, query.limit ?? 10);
+  return { ...first, series: results.flatMap(result => result?.series ?? []) };
+}
+
+/** 每个环境只查一次 CPU 排名，所有图表共用合并后的实例名单。 */
+export async function fetchRankedMonitorInstances(query: MonitorRankingQuery): Promise<MonitorInstance[]> {
+  const { appID, startTime, endTime, interval, limit = 10, rankType = 'top', method = 'sum' } = query;
+  if (!appID) return [];
+  const envNames = [...new Set(query.envNames.filter(Boolean))];
+  const results = await Promise.all(
+    envNames.map(async envName => {
+      const ranked = await BkintegrationsBkmonitorService.rankInstances({
+        appID,
+        envName,
+        startTime,
+        endTime,
+        interval,
+        limit,
+        rankType,
+        method,
+      }).catch(() => undefined);
+      return (ranked ?? []).flatMap(item => {
+        const instance = item.instance?.trim();
+        return instance ? [{ envName, instance, value: item.value ?? 0 }] : [];
+      });
+    }),
+  );
+
+  // 单环境以接口顺序为准，多环境按 CPU 平均用量重排后截取全局 N。
+  const ranked = results.flat();
+  if (envNames.length > 1) {
+    const direction = rankType === 'bottom' ? 1 : -1;
+    ranked.sort((a, b) => direction * (a.value - b.value));
   }
-  return { ...first, series };
+  return ranked.slice(0, limit).map(({ envName, instance }) => ({ envName, instance }));
 }
 
 /** 时间对比偏移量格式化为可读标签 */
@@ -246,6 +259,11 @@ export function getMonitorInstanceLabel(
   return showEnvName && instance.envName ? `${instance.envName}/${label}` : label;
 }
 
+/** 等待新排名或关闭侧栏时，旧的时序响应不应再触发对比请求。 */
+export function invalidateMonitorChartQueries(): void {
+  activeQueries.clear();
+}
+
 /** 判断指标单位是否为百分比（如 "percent" / "%"），此类数据需 ×100 还原为百分值 */
 export function isPercentUnit(unit?: string): boolean {
   if (!unit) return false;
@@ -262,44 +280,28 @@ export function registerMonitorChartApi(app: App): void {
   };
 }
 
-export function setChartTimeRange(start: number, end: number): void {
-  currentStartTime = start;
-  currentEndTime = end;
-}
-
 // ─── 内部函数（按字母序） ───────────────────────────────────────
 
 /** 全局 $api.bkmonitor.getInstanceTimeSeries：被 ExploreChart 内部 useEcharts 调用。 */
 async function getInstanceTimeSeries(params: MonitorChartApiParams): Promise<MonitorChartApiResult> {
-  const { appID, metricKey, queryId } = params;
-  if (!appID || !metricKey || (!params.all && !params.instances?.length)) {
+  const { appID, metricKey, queryId, instances, startTime, endTime, interval, method = 'sum' } = params;
+  if (!appID || !metricKey || !instances?.length || startTime === undefined || endTime === undefined) {
     return { series: [], metrics: [] };
   }
-  const startTime =
-    (typeof params.start_time === 'number' ? params.start_time : currentStartTime) ||
-    Math.floor(Date.now() / 1000) - 2 * 24 * 60 * 60;
-  const endTime =
-    (typeof params.end_time === 'number' ? params.end_time : currentEndTime) || Math.floor(Date.now() / 1000);
   const query: MonitorMetricQuery = {
     appID,
     metricKey,
     startTime,
     endTime,
-    envName: params.envName,
-    envNames: params.envNames,
-    instances: params.instances,
-    interval: params.interval,
-    all: params.all,
-    limit: params.limit,
-    limitType: params.limitType,
-    method: params.method,
+    instances,
+    interval,
+    method,
   };
-  const envNames = params.envNames?.length ? params.envNames : [params.envName].filter(Boolean);
-  const compareOffsets =
-    envNames.length > 1
-      ? []
-      : Array.from(new Set((params.compareOffsets ?? []).filter(offset => typeof offset === 'number' && offset > 0)));
-  const dedupKey = JSON.stringify({ ...query, queryId, compareOffsets });
+  const showEnvName = (params.envNames?.length ?? 0) > 1;
+  const compareOffsets = showEnvName
+    ? []
+    : Array.from(new Set((params.compareOffsets ?? []).filter(offset => typeof offset === 'number' && offset > 0)));
+  const dedupKey = JSON.stringify({ ...query, queryId, compareOffsets, showEnvName });
   activeQueries.set(metricKey, dedupKey);
   const pending = inFlightRequests.get(dedupKey);
   if (pending) return pending;
@@ -307,20 +309,14 @@ async function getInstanceTimeSeries(params: MonitorChartApiParams): Promise<Mon
 
   const request = (async (): Promise<MonitorChartApiResult> => {
     const current = (await fetchMonitorMetric(query)) ?? { series: [] };
+    if (activeQueries.get(metricKey) !== dedupKey) return { series: [], metrics: [] };
     const chart: MonitorMetricTimeSeries = { ...current, series: [...(current.series ?? [])] };
-    const instances = (current.series ?? []).flatMap(series =>
-      series.instance ? [{ envName: series.envName || params.envName || '', instance: series.instance }] : [],
-    );
-    if (instances.length && compareOffsets.length) {
+    if (compareOffsets.length) {
+      // 对比时段复用当前查询的名单，避免某个指标缺少曲线时缩小对比范围。
       const compareResults = await Promise.all(
         compareOffsets.map(async offset => {
           const compare = await fetchMonitorMetric({
-            appID,
-            metricKey,
-            instances,
-            envName: current.series?.[0]?.envName || params.envName,
-            method: params.method,
-            interval: params.interval,
+            ...query,
             startTime: startTime - offset,
             endTime: endTime - offset,
           });
@@ -332,10 +328,9 @@ async function getInstanceTimeSeries(params: MonitorChartApiParams): Promise<Mon
     // 新筛选或刷新已经开始时，旧响应既不更新缓存，也不交给图表绘制。
     if (activeQueries.get(metricKey) !== dedupKey) return { series: [], metrics: [] };
     metricCache.set(metricKey, { current, chart, queryId });
-    return { series: toSeriesItems(chart, metricKey, envNames.length > 1), metrics: [] };
-  })();
+    return { series: toSeriesItems(chart, metricKey, showEnvName), metrics: [] };
+  })().finally(() => inFlightRequests.delete(dedupKey));
   inFlightRequests.set(dedupKey, request);
-  void request.finally(() => inFlightRequests.delete(dedupKey));
   return request;
 }
 

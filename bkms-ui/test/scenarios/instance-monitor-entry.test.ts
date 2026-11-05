@@ -42,6 +42,7 @@ vi.mock('~/pages/application/detail/deploy/monitor-sideslider.vue', () => ({
   default: {
     name: 'MonitorSidesliderStub',
     props: ['isShow', 'initialSelection', 'envName', 'envNames', 'instanceGroups'],
+    emits: ['update:isShow'],
     render: () => null,
   },
 }));
@@ -125,9 +126,17 @@ describe('实例监控入口', () => {
     wrapper.unmount();
   });
 
-  it('无勾选时传全部模式，并响应式传递同数量替换后的实例快照', async () => {
-    const { groups, slider, wrapper } = mountMonitor();
+  it('关闭单实例监控并取消勾选后，顶部入口传全部模式和最新实例快照', async () => {
+    const { groups, selected, slider, wrapper } = mountMonitor(1);
     await wrapper.get('button').trigger('click');
+    expect(slider.props('initialSelection')).toEqual({ prod: ['pod-0'] });
+    slider.vm.$emit('update:isShow', false);
+    await nextTick();
+    expect(slider.props('isShow')).toBe(false);
+    selected.length = 0;
+
+    await wrapper.get('button').trigger('click');
+    expect(slider.props('isShow')).toBe(true);
     expect(slider.props('initialSelection')).toBeUndefined();
     expect(slider.props('instanceGroups')).toEqual(groups.value);
     groups.value = [{ envName: 'prod', instances: ['pod-c', 'pod-d'] }];

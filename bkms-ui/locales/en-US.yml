@@ -2275,5 +2275,6 @@ HostPort 目前仅对绑定联邦集群的环境生效: HostPort currently only 
 "最多选择 50 个实例": "Select up to 50 instances"
 "一次最多选择 50 个实例，请减少勾选数量，或清空选择后查看全部实例": "Select up to 50 instances. Select fewer instances, or clear the selection to view all instances"
 "选择实例后展示全部已选实例": "Show all selected instances after selecting instances"
+"所有图表按平均 CPU 使用量选取实例": "All charts use instances ranked by average CPU usage"
 "汇聚方法": "Aggregation method"
 "COUNT 下使用率指标的分子、分母分别计数，结果恒为 100%": "COUNT counts the numerator and denominator of usage ratios separately, so the result is always 100%"

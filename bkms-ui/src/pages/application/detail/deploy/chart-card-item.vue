@@ -38,7 +38,7 @@
         class="min-w-0 w-[50%] flex flex-col min-h-[130px]"
       >
         <ExploreChart
-          v-if="queryEnabled"
+          v-if="canQuery"
           :key="queryId"
           ref="exploreChartRef"
           class="min-h-0 flex-1"
@@ -120,7 +120,6 @@
   import {
     type MonitorAggregationMethod,
     type MonitorInstance,
-    type MonitorLimitType,
     type MonitorMetricTimeSeries,
     formatOffsetLabel,
     getCachedMetric,
@@ -137,30 +136,27 @@
   import type { TimeSeriesItem } from '~/@types/v1/bkintegrations-bkmonitor';
 
   interface IProps {
-    /** 未手选实例时查询环境内全部实例 */
-    all?: boolean;
     /** 是否为面积图（true=堆叠面积，false=普通折线无填充），默认 true */
     area?: boolean;
     /** 图表高度 */
     chartHeight?: number | string;
     /** 时间对比偏移量列表（秒） */
     compareOffsets?: number[];
-    /** 环境名称（作为接口入参，单环境模式） */
-    envName?: string;
+    endTime: number;
+    /** 查询的环境范围，用于统一图例标签格式。 */
     envNames?: string[];
-    /** 实例及其所属环境列表 */
+    /** 排名或手选确定的实例名单，当前期和对比期共用。 */
     instances: MonitorInstance[];
     /** 汇聚周期（秒） */
     interval?: number;
-    limit?: number;
-    limitType?: MonitorLimitType;
     method?: MonitorAggregationMethod;
     /** 指标类型（同时作为接口入参与图表区分） */
     metricKey: string;
-    /** 容器测量与查询参数提交完成后，才挂载会立即请求的 ExploreChart。 */
+    /** 容器测量与名单准备完成后，才挂载会立即请求的 ExploreChart。 */
     queryEnabled?: boolean;
     /** 筛选或刷新代次，用于隔离旧请求与缓存 */
     queryId: number;
+    startTime: number;
     /** 标题文字（无 title 插槽时生效） */
     title?: string;
   }
@@ -170,9 +166,6 @@
     interval: 60,
     title: '',
     area: true,
-    all: false,
-    limit: 10,
-    limitType: 'top',
     method: 'sum',
     queryEnabled: true,
   });
@@ -211,9 +204,9 @@
   const appDetailStore = useAppDetail();
 
   const exploreChartRef = ref<InstanceType<typeof ExploreChart>>();
+  const canQuery = computed(() => props.queryEnabled && props.instances.length > 0);
 
-  // ExploreChart 由内部 useEcharts 通过全局 $api 拉数据；targets.data 携带自建接口所需参数，
-  // useEcharts 会把时间范围（来自父组件 provide 的 timeRange）并入 resultParams 后传入桥接。
+  // targets.data 使用侧栏提交的时间范围和名单，确保曲线与排名使用同一查询快照。
   const panel = computed(() => ({
     dashboardId: CHART_GROUP,
     title: props.title,
@@ -226,17 +219,15 @@
         // 多环境标签包含环境名，避免同名实例共享图例及显隐状态。
         data: {
           appID: appDetailStore.appID,
-          all: props.all,
           compareOffsets: props.compareOffsets,
-          envName: props.envName,
+          endTime: props.endTime,
           envNames: props.envNames,
           instances: props.instances,
           metricKey: props.metricKey,
           interval: props.interval,
-          limit: props.limit,
-          limitType: props.limitType,
           method: props.method,
           queryId: props.queryId,
+          startTime: props.startTime,
         },
       },
     ],
@@ -282,7 +273,7 @@
   const tableLoading = ref(true);
 
   function syncLegendRows() {
-    if (!props.all && !props.instances?.length) {
+    if (!canQuery.value) {
       legendRows.value = [];
       tableLoading.value = false;
       return;
@@ -381,17 +372,12 @@
     // 时间对比：对缺少数据的 offset 合成占位行
     if (props.compareOffsets?.length) {
       const existingNames = new Set(rows.map(row => row.alias));
-      const currentInstances = getCachedMetric(props.metricKey, props.queryId, true)?.series ?? [];
       const synthesized: LegendRow[] = [];
       props.compareOffsets.forEach(offset => {
         const label = formatOffsetLabel(offset);
         const color = getColorByOffset(offset);
-        currentInstances.forEach(series => {
-          if (!series.instance) return;
-          const name = getMonitorInstanceLabel(
-            { envName: series.envName, instance: `${label}-${series.instance}` },
-            showEnvName,
-          );
+        props.instances.forEach(({ envName, instance }) => {
+          const name = getMonitorInstanceLabel({ envName, instance: `${label}-${instance}` }, showEnvName);
           if (existingNames.has(name)) return;
           synthesized.push({
             alias: name,
@@ -423,13 +409,9 @@
   );
   /** 实例或汇聚周期变化时（即将发起新请求），先清空图例表格并显示 loading */
   watch(
-    () => props.queryId,
+    [() => props.queryId, canQuery],
     () => {
-      if (!props.all && !props.instances?.length) {
-        tableLoading.value = false;
-        return;
-      }
-      tableLoading.value = true;
+      tableLoading.value = canQuery.value;
       legendRows.value = [];
     },
     { immediate: true },

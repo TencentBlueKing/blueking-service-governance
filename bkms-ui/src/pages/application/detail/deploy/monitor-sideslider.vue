@@ -27,9 +27,9 @@
         <span class="text-[#313238] text-[16px]">{{ $t('实例监控') }}</span>
         <div class="flex items-center">
           <DatePicker
-            v-model="value"
+            v-model="dateRangeValue"
             behavior="simplicity"
-            format="YYYY-MM-DD HH:mm:ss"
+            :format="dateFormat"
             :need-timezone="false"
             :version="2"
             @update:model-value="handleValueChange"
@@ -59,7 +59,7 @@
     </template>
 
     <div
-      class="monitor-toolbar border-b border-[#DCDEE5] bg-[#fff] px-[24px] py-[8px] shadow-[0_3px_5.5px_0_#00000012]"
+      class="monitor-toolbar flex-shrink-0 border-b border-[#DCDEE5] bg-[#fff] px-[24px] py-[8px] shadow-[0_3px_5.5px_0_#00000012]"
     >
       <div class="flex items-center gap-[16px] min-w-0">
         <!-- 实例名称 -->
@@ -95,19 +95,6 @@
                 :placeholder="$t('输入实例名称搜索')"
               />
             </div>
-            <div
-              class="flex items-center px-[12px] py-[6px] text-[#63656E] cursor-pointer hover:bg-[#f5f7fa]"
-              @click.stop="handleToggleAll"
-            >
-              <Checkbox
-                class="pointer-events-none"
-                :disabled="!visibleInstances.length"
-                :indeterminate="isPartiallySelected"
-                :model-value="isAllSelected"
-                size="small"
-              />
-              <span class="ml-[6px]">{{ $t('全选') }}</span>
-            </div>
             <Tree
               v-if="visibleInstances.length"
               ref="treeRef"
@@ -141,14 +128,16 @@
           </Select>
         </div>
         <div
-          v-bk-tooltips="{ content: $t('选择实例后展示全部已选实例'), disabled: !selectedInstance.length }"
+          v-bk-tooltips="
+            selectedInstance.length ? $t('选择实例后展示全部已选实例') : $t('所有图表按平均 CPU 使用量选取实例')
+          "
           class="flex items-center flex-shrink-0"
         >
           <span class="bg-[#FAFBFD] h-[32px] leading-[30px] text-[#4D4F56] text-[12px] px-[6px] b b-r-0 b-[#c4c6cc]"
             >Limit</span
           >
           <Select
-            v-model="limitType"
+            v-model="rankType"
             class="w-[96px]"
             :clearable="false"
             :disabled="!!selectedInstance.length"
@@ -277,7 +266,10 @@
         </div>
       </div>
     </div>
-    <div class="overflow-auto px-[24px] pt-[24px] pb-[24px] bg-[#F5F7FA] h-[calc(100vh-140px)]">
+    <div
+      v-bkloading="{ loading: isShow && chartPlotWidth > 0 && !queryReady }"
+      class="min-h-0 flex-1 overflow-auto px-[24px] pt-[24px] pb-[24px] bg-[#F5F7FA]"
+    >
       <div class="mb-[24px] bg-[#fff] h-[48px] px-[16px] py-[8px] shadow-[0_3px_5.5px_0_#00000012]">
         <Radio.Group
           v-model="metricFilter"
@@ -315,13 +307,14 @@
           <template #default="{ row }">
             <div class="flex items-center">
               <Progress
+                v-if="row.cpuLimitUsageRate !== undefined"
                 color="#3A84FF"
                 :percent="Math.min(row.cpuLimitUsageRate, 100)"
                 :show-text="false"
                 :stroke-width="6"
                 type="line"
               />
-              <span class="text-[#63656E] text-[12px] ml-[4px]">{{ formatDecimal(row.cpuLimitUsageRate) }}%</span>
+              <span class="text-[#63656E] text-[12px] ml-[4px]">{{ formatPercent(row.cpuLimitUsageRate) }}</span>
             </div>
           </template>
         </TableColumn>
@@ -331,7 +324,7 @@
           :min-width="120"
         >
           <template #default="{ row }">
-            <span class="text-[#63656E] text-[12px]">{{ formatDecimal(row.memLimitUsageRate) }}%</span>
+            <span class="text-[#63656E] text-[12px]">{{ formatPercent(row.memLimitUsageRate) }}</span>
           </template>
         </TableColumn>
         <TableColumn
@@ -373,19 +366,17 @@
           <chart-card-item
             v-for="item in group.items"
             :key="item.metricKey"
-            :all="chartParams.all"
             :area="item.area !== false"
             :compare-offsets="chartParams.compareOffsets"
-            :env-name="chartParams.envName"
+            :end-time="chartParams.endTime"
             :env-names="chartParams.envNames"
             :instances="chartParams.instances"
             :interval="chartParams.interval"
-            :limit="chartParams.limit"
-            :limit-type="chartParams.limitType"
             :method="chartParams.method"
             :metric-key="item.metricKey"
             :query-enabled="queryReady"
             :query-id="chartParams.queryId"
+            :start-time="chartParams.startTime"
             :title="item.title"
             @metric-data="onMetricData"
             @plot-width-change="handlePlotWidthChange"
@@ -406,32 +397,20 @@
 <script lang="ts" setup>
   import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, provide, ref, watch } from 'vue';
 
-  import DatePicker from '@blueking/date-picker';
+  import DatePicker, { DateRange } from '@blueking/date-picker';
   import { Table, TableColumn } from '@blueking/table';
-  import {
-    Checkbox,
-    Divider,
-    Input,
-    Message,
-    Progress,
-    Radio,
-    Select,
-    Sideslider,
-    Switcher,
-    Tag,
-    Tree,
-  } from 'bkui-vue';
+  import { Divider, Input, Message, Progress, Radio, Select, Sideslider, Switcher, Tag, Tree } from 'bkui-vue';
   import dayjs from 'dayjs';
   import { debounce } from 'lodash-es';
   import { useI18n } from 'vue-i18n';
   import IntervalSelector from '~/components/interval-selector.vue';
   import useInterval from '~/composables/use-interval';
   import {
-    fetchMonitorMetric,
+    fetchRankedMonitorInstances,
     getMonitorInstanceKey,
     getMonitorInstanceLabel,
+    invalidateMonitorChartQueries,
     isPercentUnit,
-    setChartTimeRange,
   } from '~/pages/application/detail/deploy/monitor-chart-bridge';
   import { useAppDetail } from '~/stores/app-detail';
   import { useDeployEnvStore } from '~/stores/deploy-env';
@@ -447,9 +426,8 @@
   const ChartCardItem = defineAsyncComponent(() => import('~/pages/application/detail/deploy/chart-card-item.vue'));
 
   type ChartParams = Omit<MonitorMetricQuery, 'appID' | 'metricKey'> & {
-    all: boolean;
     compareOffsets: number[];
-    instances: MonitorInstance[];
+    envNames: string[];
     queryId: number;
   };
   const props = defineProps<{
@@ -459,10 +437,10 @@
     instanceGroups?: MonitorInstanceGroup[];
   }>();
   interface MonitorInstanceRow {
-    cpuLimitUsageRate: number;
-    cpuUsage: number;
-    memLimitUsageRate: number;
-    memUsage: number;
+    cpuLimitUsageRate: number | undefined;
+    cpuUsage: number | undefined;
+    memLimitUsageRate: number | undefined;
+    memUsage: number | undefined;
     name: string;
   }
 
@@ -474,6 +452,7 @@
   const envStore = useDeployEnvStore();
   const sliderWidth = ref<number | string>(1200);
   const queryReady = ref(false);
+  let queryGeneration = 0;
 
   /** 监听窗口宽度变化，用于小屏适配 */
   const windowWidth = ref(window.innerWidth);
@@ -525,8 +504,7 @@
     committedInstances.value = [];
     searchText.value = '';
     metricData.value = {};
-    summaryMetricData.value = {};
-    chartParams.value.queryId += 1;
+    chartParams.value.instances = [];
     sliderWidth.value = 1200;
     metricFilter.value = 'all';
     timeCompareEnabled.value = false;
@@ -537,25 +515,36 @@
     onManualRefresh.cancel();
   }
   const metricData = ref<Partial<Record<string, MonitorMetricTimeSeries>>>({});
-  const summaryMetricData = ref<Partial<Record<string, MonitorMetricTimeSeries>>>({});
 
-  // 时间范围（秒级 Unix 时间戳），默认最近 2 天
-  const endTime = ref<number>(Math.floor(Date.now() / 1000));
-  const startTime = ref<number>(endTime.value - 2 * 24 * 60 * 60);
+  // 与日期选择器默认的「今天（至今）」保持一致。
+  const dateFormat = 'YYYY-MM-DD HH:mm:ss';
+  const dateRangeValue = ref<DateValue | undefined>(['now/d', 'now']);
+  const now = dayjs();
+  const endTime = ref(now.unix());
+  const startTime = ref(now.startOf('day').unix());
+  const refreshRevision = ref(0);
+
+  function setQueryTimeRange(start?: Dayjs | null, end?: Dayjs | null) {
+    if (!start?.isValid() || !end?.isValid()) return;
+    startTime.value = start.unix();
+    endTime.value = end.unix();
+  }
+
+  function syncPickerTimeRange() {
+    if (!dateRangeValue.value) return;
+    const { startDate, endDate } = new DateRange(dateRangeValue.value, dateFormat);
+    setQueryTimeRange(startDate, endDate);
+  }
 
   // 供 ExploreChart 内部 useEcharts 消费的全局注入：timeRange 控制图表 X 轴显示范围，
   // 必须与实际选择的时间范围同步，否则图表会按默认值裁剪显示窗口
   const timeRangeRef = ref<string[]>([
-    `${startTime.value ? dayjs.unix(startTime.value).format('YYYY-MM-DD HH:mm:ss') : 'now/d'}`,
-    `${endTime.value ? dayjs.unix(endTime.value).format('YYYY-MM-DD HH:mm:ss') : 'now'}`,
+    dayjs.unix(startTime.value).format(dateFormat),
+    dayjs.unix(endTime.value).format(dateFormat),
   ]);
-  const refreshImmediateRef = ref(0);
   provide('timeRange', timeRangeRef);
-  // 与 @blueking/monitor-vue3-components 中 ExploreChart 的通信契约。
-  // ExploreChart 内部会 inject("refreshImmediate") 并在 watcher 中依赖它
-  provide('refreshImmediate', refreshImmediateRef);
-  // 预置时间范围到桥接，确保图表组件挂载首拉即使用正确时间窗
-  setChartTimeRange(startTime.value, endTime.value);
+  // ExploreChart 依赖这项注入。侧栏通过 queryId 更新图表，不再额外触发组件内部刷新。
+  provide('refreshImmediate', ref(0));
 
   const selectedInstance = ref<string[]>([]);
   const committedInstances = ref<string[]>([]);
@@ -563,7 +552,7 @@
   const treeRef = ref<InstanceType<typeof Tree>>();
   const selectRef = ref<InstanceType<typeof Select>>();
   const limit = ref<number | string>(10);
-  const limitType = ref<'bottom' | 'top'>('top');
+  const rankType = ref<'bottom' | 'top'>('top');
   const methodOptions = ['sum', 'max', 'min', 'count', 'avg'] as const;
   const method = ref<(typeof methodOptions)[number]>('sum');
   interface TreeNodeData {
@@ -602,12 +591,6 @@
       .filter(group => group.children.length);
   });
   const isInternalSync = ref(false);
-  const isAllSelected = computed(
-    () => visibleInstances.value.length > 0 && visibleInstances.value.every(id => selectedInstance.value.includes(id)),
-  );
-  const isPartiallySelected = computed(
-    () => !isAllSelected.value && visibleInstances.value.some(id => selectedInstance.value.includes(id)),
-  );
   async function syncSelection() {
     await nextTick();
     selectRef.value?.setSelected(
@@ -648,18 +631,12 @@
     const last = committedInstances.value;
     if (last.length !== current.length || !last.every(id => current.includes(id))) handleFiltersChange();
   }
-  function handleToggleAll() {
-    if (!visibleInstances.value.length) return;
-    const visible = new Set(visibleInstances.value);
-    updateSelection(
-      isAllSelected.value
-        ? selectedInstance.value.filter(id => !visible.has(id))
-        : [...selectedInstance.value, ...visibleInstances.value],
-    );
-  }
-  function normalizeLimit() {
+  const rankingLimit = computed(() => {
     const parsed = Number(limit.value);
-    limit.value = Number.isFinite(parsed) ? Math.min(50, Math.max(1, Math.floor(parsed))) : 10;
+    return Number.isFinite(parsed) ? Math.min(50, Math.max(1, Math.floor(parsed))) : 10;
+  });
+  function normalizeLimit() {
+    limit.value = rankingLimit.value;
   }
   function updateSelection(ids: string[]) {
     const uniqueIds = Array.from(new Set(ids));
@@ -762,10 +739,8 @@
   const chartParams = ref<ChartParams>({
     endTime: endTime.value,
     startTime: startTime.value,
+    envNames: [],
     instances: [],
-    all: true,
-    limit: 10,
-    limitType: 'top',
     method: 'sum',
     interval: effectiveInterval.value,
     compareOffsets: [],
@@ -811,7 +786,9 @@
   }
   /** 实际生效的偏移秒数列表 */
   const effectiveCompareOffsets = computed(() =>
-    compareOffsetSecondsList.value.map(v => (typeof v === 'string' ? parseOffset(v) : v)),
+    timeCompareEnabled.value && !isMultiEnv.value
+      ? compareOffsetSecondsList.value.map(v => (typeof v === 'string' ? parseOffset(v) : v))
+      : [],
   );
 
   function handleCompareOffsetClear() {
@@ -836,38 +813,39 @@
     }
     showCustomInput.value = false;
   }
-  function handleFiltersChange() {
+  async function handleFiltersChange() {
     if (!isShow.value || !chartPlotWidth.value) return;
-    const all = !selectedInstance.value.length;
-    // 提交时固定查询快照，列表的 SSE 更新只改变搜索候选，不触发图表重新请求。
-    chartParams.value = {
+    const generation = ++queryGeneration;
+    const params = {
       endTime: endTime.value,
       startTime: startTime.value,
-      envName: queryEnvNames.value[0],
       envNames: [...queryEnvNames.value],
-      instances: selectedInstance.value.flatMap(id => {
-        const instance = instancesByKey.value.get(id);
-        return instance ? [{ ...instance }] : [];
-      }),
-      all,
-      ...(all
-        ? { limit: Math.min(50, Math.max(1, Math.floor(Number(limit.value) || 10))), limitType: limitType.value }
-        : {}),
       method: method.value,
       interval: effectiveInterval.value,
-      compareOffsets: timeCompareEnabled.value && !isMultiEnv.value ? effectiveCompareOffsets.value : [],
-      queryId: chartParams.value.queryId + 1,
     };
-    queryReady.value = true;
     committedInstances.value = [...selectedInstance.value];
+    invalidateMonitorChartQueries();
+    queryReady.value = false;
+    // 排名只在当前期做一次。收到名单后再用同一份查询快照挂载所有图表。
+    const instances = committedInstances.value.length
+      ? committedInstances.value.flatMap(id => {
+          const instance = selectedInstanceDetails.value[id];
+          return instance && params.envNames.includes(instance.envName) ? [instance] : [];
+        })
+      : await fetchRankedMonitorInstances({
+          ...params,
+          appID: appDetailStore.appID,
+          limit: rankingLimit.value,
+          rankType: rankType.value,
+        });
+    if (!isShow.value || generation !== queryGeneration) return;
     metricData.value = {};
-    summaryMetricData.value = {};
-    setChartTimeRange(startTime.value, endTime.value);
     timeRangeRef.value = [
-      dayjs.unix(startTime.value).format('YYYY-MM-DD HH:mm:ss'),
-      dayjs.unix(endTime.value).format('YYYY-MM-DD HH:mm:ss'),
+      dayjs.unix(params.startTime).format(dateFormat),
+      dayjs.unix(params.endTime).format(dateFormat),
     ];
-    refreshImmediateRef.value += 1;
+    chartParams.value = { ...params, instances, compareOffsets: effectiveCompareOffsets.value, queryId: generation };
+    queryReady.value = true;
   }
   function handleShowCustomInput() {
     showCustomInput.value = true;
@@ -888,19 +866,40 @@
       () => endTime.value,
       () => effectiveInterval.value,
       () => chartPlotWidth.value > 0,
-      () => limit.value,
-      () => limitType.value,
+      () => rankingLimit.value,
+      () => rankType.value,
       () => method.value,
+      () => appDetailStore.appID,
       () => JSON.stringify(queryEnvNames.value),
-      () => JSON.stringify(timeCompareEnabled.value ? effectiveCompareOffsets.value : []),
+      () => refreshRevision.value,
     ],
     handleFiltersChange,
   );
-  const onManualRefresh = debounce(handleFiltersChange, 300);
+  watch(
+    () => JSON.stringify(effectiveCompareOffsets.value),
+    () => {
+      // 对比时段沿用当前期名单。排名尚未返回时由该轮查询提交最新偏移量。
+      if (!isShow.value || !queryReady.value) return;
+      chartParams.value = {
+        ...chartParams.value,
+        compareOffsets: effectiveCompareOffsets.value,
+        queryId: ++queryGeneration,
+      };
+    },
+  );
+  function refresh() {
+    // 重新解析 now 等相对时间。由同一个 watcher 提交时间和刷新请求，避免重复查询。
+    syncPickerTimeRange();
+    refreshRevision.value += 1;
+  }
+  const onManualRefresh = debounce(refresh, 300);
   const { start: startPolling, stop: stopPolling } = useInterval(async () => {
-    handleFiltersChange();
+    // 排名仍在进行时跳过本次刷新，避免慢请求累积。
+    if (queryReady.value) refresh();
   }, autoRefreshInterval);
   onBeforeUnmount(() => {
+    queryGeneration += 1;
+    if (isShow.value) invalidateMonitorChartQueries();
     stopPolling();
     onManualRefresh.cancel();
   });
@@ -927,54 +926,22 @@
     }
   }
 
-  let summaryRequestedQueryId = -1;
-  async function onMetricData(payload: {
-    data: MonitorMetricTimeSeries | undefined;
-    metricKey: string;
-    queryId: number;
-  }) {
-    if (!isShow.value || payload.queryId !== chartParams.value.queryId) return;
+  function onMetricData(payload: { data: MonitorMetricTimeSeries | undefined; metricKey: string; queryId: number }) {
+    if (!isShow.value || !queryReady.value || payload.queryId !== chartParams.value.queryId) return;
     metricData.value = { ...metricData.value, [payload.metricKey]: payload.data };
-    if (
-      !chartParams.value.all ||
-      payload.metricKey !== 'cpu_limit_usage' ||
-      summaryRequestedQueryId === payload.queryId ||
-      !payload.data?.series?.length
-    )
-      return;
-    summaryRequestedQueryId = payload.queryId;
-    const params = chartParams.value;
-    const cpuSeries = payload.data.series;
-    // 其余三列沿用 CPU 当前期的实例及环境，避免独立排名后各列对应不同实例。
-    const instances = cpuSeries.flatMap(series =>
-      series.instance ? [{ envName: series.envName || params.envName || '', instance: series.instance }] : [],
-    );
-    if (!instances.length) return;
-    const results = await Promise.all(
-      ['memory_limit_usage', 'cpu_usage', 'memory_usage'].map(async metricKey => {
-        const data = await fetchMonitorMetric({
-          appID: appDetailStore.appID,
-          envName: params.envName,
-          envNames: params.envNames,
-          instances,
-          metricKey,
-          method: params.method,
-          interval: params.interval,
-          startTime: params.startTime,
-          endTime: params.endTime,
-        });
-        return [metricKey, data] as const;
-      }),
-    );
-    if (isShow.value && chartParams.value.queryId === payload.queryId)
-      summaryMetricData.value = Object.fromEntries(results);
   }
   watch(
     isShow,
-    show => {
-      if (!show) return;
+    (show, previousShow) => {
       queryReady.value = false;
       chartPlotWidth.value = 0;
+      if (!show) {
+        queryGeneration += 1;
+        if (previousShow) invalidateMonitorChartQueries();
+        onManualRefresh.cancel();
+        return;
+      }
+      syncPickerTimeRange();
       const selection: Record<string, MonitorInstance> = {};
       for (const [envName, names] of Object.entries(props.initialSelection || {})) {
         for (const instance of names) {
@@ -986,22 +953,21 @@
       selectedInstance.value = Object.keys(selection);
       searchText.value = '';
       limit.value = 10;
-      limitType.value = 'top';
+      rankType.value = 'top';
       method.value = 'sum';
-      handleFiltersChange();
       void syncSelection();
     },
     { immediate: true },
   );
 
   /** 将 bytes 统一转换为 MiB（1 MiB = 1024^2 bytes），保留 2 位小数；非有限值返回 '-'。 */
-  function formatBytes(value: number): string {
-    if (!Number.isFinite(value) || value < 0) return '-';
+  function formatBytes(value: number | undefined): string {
+    if (value === undefined || !Number.isFinite(value) || value < 0) return '-';
     return `${formatDecimal(value / 1024 / 1024, 2)}`;
   }
   /** 回显时最多显示指定小数位（默认 5 位），截断不四舍五入；非有限值返回 '-'。
    *  注意：此处仅用于展示，聚合/派生计算仍基于真实值，避免截断累积误差。 */
-  function formatDecimal(value: number, digits = 2): string {
+  function formatDecimal(value: number | undefined, digits = 2): string {
     if (value === null || value === undefined || !Number.isFinite(value)) return '-';
     const negative = value < 0 ? '-' : '';
     const abs = Math.abs(value);
@@ -1009,26 +975,23 @@
     const trimmed = decPart.slice(0, digits);
     return negative + (trimmed ? `${intPart}.${trimmed}` : intPart);
   }
+  function formatPercent(value: number | undefined): string {
+    return value === undefined ? '-' : `${formatDecimal(value)}%`;
+  }
 
   const tableData = computed<MonitorInstanceRow[]>(() => {
-    const metrics = chartParams.value.all
-      ? { ...summaryMetricData.value, cpu_limit_usage: metricData.value.cpu_limit_usage }
-      : metricData.value;
+    if (!queryReady.value) return [];
+    const metrics = metricData.value;
     const keys = ['cpu_limit_usage', 'memory_limit_usage', 'cpu_usage', 'memory_usage'] as const;
     const values = new Map<string, Map<string, TimeSeriesItem>>();
     for (const key of keys) {
       values.set(key, new Map((metrics[key]?.series || []).map(series => [getMonitorInstanceKey(series), series])));
     }
-    const rows = chartParams.value.all
-      ? (metricData.value.cpu_limit_usage?.series || []).map(series => ({
-          instance: series.instance || '',
-          envName: series.envName,
-        }))
-      : chartParams.value.instances;
-    return rows.map(instance => {
+    return chartParams.value.instances.map(instance => {
       const latest = (key: (typeof keys)[number]) => {
         const item = values.get(key)?.get(getMonitorInstanceKey(instance));
-        const value = item?.stat?.last?.[1] ?? item?.dataPoints?.at(-1)?.[0] ?? 0;
+        const value = item?.stat?.last?.[1];
+        if (typeof value !== 'number' || !Number.isFinite(value)) return undefined;
         return value * (isPercentUnit(metrics[key]?.unit) ? 100 : 1);
       };
       return {
@@ -1048,23 +1011,32 @@
     () => (key: MetricGroup['key']) => metricFilter.value === 'all' || metricFilter.value === key,
   );
 
-  const value = ref<DateValue | undefined>(['now/d', 'now']);
   const handleValueChange = (
     _val: DateValue | undefined,
     info: { dayjs: Dayjs | null; formatText: null | string }[],
   ) => {
-    const start = info?.[0]?.dayjs;
-    const end = info?.[1]?.dayjs;
-    if (start && end) {
-      startTime.value = start.unix();
-      endTime.value = end.unix();
-    }
+    setQueryTimeRange(info?.[0]?.dayjs, info?.[1]?.dayjs);
   };
 </script>
 <style lang="postcss" scoped>
+  :deep(.bk-modal-body) {
+    display: flex;
+    flex-direction: column;
+  }
+
   :deep(.bk-modal-content) {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden !important;
     scrollbar-gutter: auto !important;
     background-color: #f5f7fa;
+  }
+
+  :deep(.bk-sideslider-content) {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
   }
 
   :deep(.bk-select .bk-select-trigger .bk-select-tag:not(.collapse-tag)) {

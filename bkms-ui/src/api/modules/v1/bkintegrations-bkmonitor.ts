@@ -6,7 +6,7 @@
 import type { Config } from '~/api/interceptors';
 import type { NoInfer } from '~/api/ts-helpers';
 import { v1Fetch } from '~/api/clients';
-import type { GetApmServiceNameRequest, GetApmServiceNameOutput, GetInstanceTimeSeriesRequest, MetricTimeSeries, GetEnvApmRequest, GetEnvApmOutput, CreateEnvApmRequest, ApmOutput, BindApmToEnvRequest, EmptyOutput, ListAlertStrategiesRequest, ListAlertStrategiesOutput, CreateAlertStrategyRequest, AlertStrategyOutput, GetAlertStrategyRequest, UpdateAlertStrategyRequest, DeleteAlertStrategyRequest, ListAlertEventsByStrategyRequest, ListAlertEventsOutput, SwitchAlertStrategyRequest, SyncAlertStrategyRequest, ListAlertEventsRequest, GetAlertDetailRequest, ListApmsRequest, ListApmOutput, ListDashboardDirectoryTreeRequest, DashboardDirectoryOutput, ListUserGroupsRequest, ListUserGroupsOutput, CreateUserGroupRequest, UserGroupDetail, GetUserGroupRequest, UpdateUserGroupRequest, DeleteUserGroupRequest } from '~/@types/v1/bkintegrations-bkmonitor';
+import type { GetApmServiceNameRequest, GetApmServiceNameOutput, RankInstancesRequest, InstanceRankOutput, GetInstanceTimeSeriesRequest, MetricTimeSeries, GetEnvApmRequest, GetEnvApmOutput, CreateEnvApmRequest, ApmOutput, BindApmToEnvRequest, EmptyOutput, ListAlertStrategiesRequest, ListAlertStrategiesOutput, CreateAlertStrategyRequest, AlertStrategyOutput, GetAlertStrategyRequest, UpdateAlertStrategyRequest, DeleteAlertStrategyRequest, ListAlertEventsByStrategyRequest, ListAlertEventsOutput, SwitchAlertStrategyRequest, SyncAlertStrategyRequest, ListAlertEventsRequest, GetAlertDetailRequest, ListApmsRequest, ListApmOutput, ListDashboardDirectoryTreeRequest, DashboardDirectoryOutput, ListUserGroupsRequest, ListUserGroupsOutput, CreateUserGroupRequest, UserGroupDetail, GetUserGroupRequest, UpdateUserGroupRequest, DeleteUserGroupRequest } from '~/@types/v1/bkintegrations-bkmonitor';
 
 export const BkintegrationsBkmonitorService = {
   /**
@@ -25,6 +25,27 @@ export const BkintegrationsBkmonitorService = {
     params?: NoInfer<Request>,
     config?: Config,
   ) => await v1Fetch.get<Request, ResponseData>('/apps/{appID}/envs/{envName}/bkmonitor/apm-service-name')(params, config),
+  /**
+   * 按平均 CPU 使用量查询环境实例的 Top / Bottom N
+   *
+   * @method GET
+   * @path /apps/{appID}/envs/{envName}/bkmonitor/instance-ranks
+   * @tag bkintegrations-bkmonitor
+   * @param appID path string required 应用 ID
+   * @param envName path string required 环境名称
+   * @param limit query number 取前 N 个实例，1~50，默认 10
+   * @param rankType query "top" | "bottom" 排名方向，默认 top
+   * @param startTime query number required 排名时间范围的开始时间（Unix 时间戳，秒）
+   * @param endTime query number required 排名时间范围的结束时间（Unix 时间戳，秒）
+   * @param interval query number 子查询步长（秒），最小 60，默认 60
+   * @param method query "sum" | "max" | "min" | "count" | "avg" 汇聚方法，默认 sum
+   * @response 200 RankInstancesResp OK
+   * @response 400 GinErrorOutput Bad Request
+   */
+  rankInstances: async <Request extends RankInstancesRequest = RankInstancesRequest, ResponseData = InstanceRankOutput[]>(
+    params?: NoInfer<Request>,
+    config?: Config,
+  ) => await v1Fetch.get<Request, ResponseData>('/apps/{appID}/envs/{envName}/bkmonitor/instance-ranks')(params, config),
   /**
    * 查询实例监控指标时序数据
    *
