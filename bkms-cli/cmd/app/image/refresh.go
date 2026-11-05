@@ -19,10 +19,10 @@
 package image
 
 import (
-	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/client"
+	imagehandler "github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/handler/image"
 	cmdutil "github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/utils/cmd"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/utils/console"
 )
@@ -44,22 +44,19 @@ and can be promoted.`,
   bkms-cli app image refresh --app demo`,
 		PreRunE: cmdutil.ResolveAppPreRunE,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			result, err := client.New().RefreshAppImages(cmd.Context(), appID)
+			result, err := imagehandler.RefreshImages(cmd.Context(), client.New(), appID)
 			if err != nil {
-				return errors.Wrap(err, "refresh app images")
+				return err
 			}
 
-			switch result.Status {
-			case client.RefreshAppImagesStatusRefreshing:
+			if result.Status == client.RefreshAppImagesStatusRefreshing {
 				console.Warn("Images of app %s are already being refreshed, please check again later.", appID)
-			case client.RefreshAppImagesStatusFailed:
-				return errors.Errorf("refresh app images failed: %s", result.Message)
-			default:
-				console.Info(
-					"✓ Refreshed images of app %s: %s added, %s removed",
-					appID, countOrZero(result.AddedTagCnt), countOrZero(result.RemovedTagCnt),
-				)
+				return nil
 			}
+			console.Info(
+				"✓ Refreshed images of app %s: %s added, %s removed",
+				appID, countOrZero(result.AddedTagCnt), countOrZero(result.RemovedTagCnt),
+			)
 			return nil
 		},
 	}

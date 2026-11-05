@@ -65,7 +65,8 @@ var _ = Describe("PromoteImages", func() {
 	})
 
 	It("continues promoting remaining tags when one fails", func() {
-		cli.EXPECT().PromoteAppImage(mock.Anything, appID, "v1").Return(errors.New("not found")).Once()
+		clientErr := errors.New("promote app image v1 failed: [404] -> not found")
+		cli.EXPECT().PromoteAppImage(mock.Anything, appID, "v1").Return(clientErr).Once()
 		cli.EXPECT().PromoteAppImage(mock.Anything, appID, "v2").Return(nil).Once()
 
 		results := PromoteImages(ctx, cli, appID, []string{"v1", "v2"})
@@ -73,7 +74,8 @@ var _ = Describe("PromoteImages", func() {
 		failed := FailedPromoteResults(results)
 		Expect(failed).To(HaveLen(1))
 		Expect(failed[0].Tag).To(Equal("v1"))
-		Expect(failed[0].Err).To(MatchError(ContainSubstring("not found")))
+		// client 错误已含操作名与 tag，原样透传，不再重复包装
+		Expect(failed[0].Err).To(BeIdenticalTo(clientErr))
 		Expect(results[1].Err).NotTo(HaveOccurred())
 	})
 

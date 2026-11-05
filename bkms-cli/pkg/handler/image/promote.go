@@ -23,7 +23,6 @@ import (
 	"context"
 	"strings"
 
-	"github.com/pkg/errors"
 	"github.com/samber/lo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/client"
@@ -55,8 +54,8 @@ func PromoteImages(ctx context.Context, cli client.Client, appID string, tags []
 			results = append(results, PromoteResult{Tag: tag, Err: ctxErr})
 			continue
 		}
-		err := cli.PromoteAppImage(ctx, appID, tag)
-		results = append(results, PromoteResult{Tag: tag, Err: errors.Wrapf(err, "promote image %s", tag)})
+		// client 返回的错误已包含操作名与 tag，这里不再重复包装
+		results = append(results, PromoteResult{Tag: tag, Err: cli.PromoteAppImage(ctx, appID, tag)})
 	}
 	return results
 }
