@@ -425,52 +425,18 @@ func (h *Handler) GetInstanceTimeSeries(c *gin.Context) {
 		return
 	}
 	queryInput.Normalize()
-	app, env, err := ginperm.ValidateAppEnvByName(ctx, h.registry, uriInput.AppID, uriInput.EnvName, ginperm.TypeView)
+	target, err := h.validateInstanceMonitorTarget(ctx, uriInput)
 	if err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return
 	}
-	ws, err := h.workspaces().Get(ctx, workspace.ByWorkspaceID(app.WorkspaceID))
-	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get workspace"))
-		return
-	}
-	if ws.BkSystems.BkMonitorProjectID == "" {
-		bkerrs.AbortWithErr(
-			c,
-			bkerrs.Errorf(bkerrs.ErrCodeInvalidRequest, "bk monitor project is not ready for workspace %s", ws.ID),
-		)
-		return
-	}
-	if env.Cluster.ClusterID == "" || env.Cluster.Namespace == "" {
-		bkerrs.AbortWithErr(
-			c,
-			bkerrs.Errorf(bkerrs.ErrCodeInvalidRequest, "cluster info is not configured for environment %s", env.Name),
-		)
-		return
-	}
 
-	// 默认按请求传入的实例列表查询，集群/命名空间取自环境绑定信息
-	clusterID := env.Cluster.ClusterID
-	namespace := env.Cluster.Namespace
-	instances := queryInput.Instances
-
-	// all=true 时，改为查询该环境最新部署记录匹配的全部实例，避免前端拼接超长实例列表
-	if queryInput.All {
-		clusterID, namespace, instances, err = h.resolveAllInstances(ctx, app, uriInput.EnvName)
-		if err != nil {
-			bkerrs.AbortWithErr(c, err)
-			return
-		}
-	}
-
-	metricSvc := bkmmodel.NewMetricTimeSeriesService()
-
-	result, err := metricSvc.QueryTimeSeries(ctx, &bkmmodel.MetricsQuery{
-		BkBizID:    cast.ToInt64(ws.BkSystems.BkMonitorProjectID),
-		ClusterID:  clusterID,
-		Namespace:  namespace,
-		Instances:  instances,
+	// 按请求传入的实例直接查询，不校验实例是否属于该环境；集群、命名空间取自环境绑定信息
+	result, err := bkmmodel.NewMetricTimeSeriesService().QueryTimeSeries(ctx, &bkmmodel.MetricsQuery{
+		BkBizID:    target.bkBizID,
+		ClusterID:  target.env.Cluster.ClusterID,
+		Namespace:  target.env.Cluster.Namespace,
+		Instances:  queryInput.Instances,
 		MetricKeys: []string{queryInput.MetricKey},
 		Method:     bkmmodel.AggMethod(queryInput.Method),
 		StartTime:  queryInput.StartTime,
@@ -502,7 +468,6 @@ func (h *Handler) GetInstanceTimeSeries(c *gin.Context) {
 			}
 			series = append(series, item)
 		}
-		series = serializer.RankAndLimitTimeSeries(series, queryInput.Limit, queryInput.LimitType)
 		respData[key] = &serializer.MetricTimeSeries{
 			DisplayName: metric.DisplayName,
 			Unit:        metric.Unit,
@@ -513,25 +478,120 @@ func (h *Handler) GetInstanceTimeSeries(c *gin.Context) {
 	ginutils.OK(c, &serializer.InstanceTimeSeriesResp{Data: respData})
 }
 
-// resolveAllInstances 按该环境默认泳道的最新部署记录枚举全部实例，返回部署记录对应的集群、命名空间与实例列表。
-func (h *Handler) resolveAllInstances(
-	ctx context.Context, app *bkmsapp.Application, envName string,
-) (string, string, []string, error) {
-	// 仅 AppModel 类型应用存在部署记录，其他类型不支持按部署记录枚举实例
-	if !appruntime.IsAppModelType(app.Type) {
-		return "", "", nil, bkerrs.Errorf(
-			bkerrs.ErrCodeInvalidArgument, "all=true is not supported for app type %s", app.Type,
-		)
+// RankInstances 按平均 CPU 使用量查询环境实例的 Top / Bottom N
+//
+//	@ID			RankInstances
+//	@Summary	按平均 CPU 使用量查询环境实例的 Top / Bottom N
+//	@Tags		bkintegrations-bkmonitor
+//	@Produce	json
+//	@Security	BkUserInfo
+//	@Security	BkUserCredential
+//	@Param		appID		path		string	true	"应用 ID"
+//	@Param		envName		path		string	true	"环境名称"
+//	@Param		limit		query		int		false	"取前 N 个实例，1~50，默认 10"
+//	@Param		rankType	query		string	false	"排名方向，默认 top"	Enums(top, bottom)
+//	@Param		startTime	query		int		true	"排名时间范围的开始时间（Unix 时间戳，秒）"
+//	@Param		endTime		query		int		true	"排名时间范围的结束时间（Unix 时间戳，秒）"
+//	@Param		interval	query		int		false	"子查询步长（秒），最小 60，默认 60"
+//	@Param		method		query		string	false	"汇聚方法，默认 sum"	Enums(sum, max, min, count, avg)
+//	@Success	200			{object}	serializer.RankInstancesResp
+//	@Failure	400			{object}	bkerrs.GinErrorOutput
+//	@Router		/apps/{appID}/envs/{envName}/bkmonitor/instance-ranks [get]
+func (h *Handler) RankInstances(c *gin.Context) {
+	ctx := c.Request.Context()
+	var uriInput serializer.AppEnvURIInput
+	var queryInput serializer.RankInstancesQueryInput
+	if err := ginutils.BindURIQuery(c, &uriInput, &queryInput); err != nil {
+		bkerrs.AbortWithErr(c, err)
+		return
 	}
-	// 取默认泳道（空泳道名）的最新部署记录，与实例列表接口口径一致
-	record, podNames, err := appmodeldeploy.ListLatestPodNames(ctx, h.registry.DB, app.ID, envName, "")
+	queryInput.Normalize()
+	target, err := h.validateInstanceMonitorTarget(ctx, uriInput)
+	if err != nil {
+		bkerrs.AbortWithErr(c, err)
+		return
+	}
+
+	// 仅 AppModel 类型应用存在部署记录，才能拿到用于圈定候选实例的工作负载
+	if !appruntime.IsAppModelType(target.app.Type) {
+		bkerrs.AbortWithErr(c, bkerrs.Errorf(
+			bkerrs.ErrCodeInvalidArgument, "top instances is not supported for app type %s", target.app.Type,
+		))
+		return
+	}
+	// 取默认泳道（空泳道名）最新部署记录的主工作负载，只查部署记录、不访问集群
+	workloadKind, workloadName, err := appmodeldeploy.GetLatestWorkload(
+		ctx, h.registry.DB, target.app.ID, target.env.Name, "",
+	)
 	if err != nil {
 		if errors.Is(err, appmodeldeploy.ErrDeployRecordNotFound) {
-			return "", "", nil, bkerrs.Wrap(err, bkerrs.ErrCodeNotFound, "deploy record not found")
+			bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeNotFound, "deploy record not found"))
+			return
 		}
-		return "", "", nil, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list deployed instances")
+		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get deployed workload"))
+		return
 	}
-	return record.ClusterID, record.Namespace, podNames, nil
+
+	ranks, err := bkmmodel.NewMetricTimeSeriesService().RankInstances(ctx, &bkmmodel.InstanceRankQuery{
+		BkBizID:      target.bkBizID,
+		ClusterID:    target.env.Cluster.ClusterID,
+		Namespace:    target.env.Cluster.Namespace,
+		WorkloadKind: workloadKind,
+		WorkloadName: workloadName,
+		Method:       bkmmodel.AggMethod(queryInput.Method),
+		Limit:        queryInput.Limit,
+		RankType:     bkmmodel.RankType(queryInput.RankType),
+		StartTime:    queryInput.StartTime,
+		EndTime:      queryInput.EndTime,
+		Interval:     queryInput.Interval,
+		Username:     auth.MustGetUser(ctx).ID,
+	})
+	if err != nil {
+		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "rank instances"))
+		return
+	}
+
+	ginutils.OK(c, &serializer.RankInstancesResp{
+		Data: lo.Map(ranks, func(r *bkmmodel.InstanceRank, _ int) *serializer.InstanceRankOutput {
+			return &serializer.InstanceRankOutput{Instance: r.Instance, Value: r.Value}
+		}),
+	})
+}
+
+// instanceMonitorTarget 实例监控查询的目标：应用、环境与蓝鲸监控业务 ID
+type instanceMonitorTarget struct {
+	app     *bkmsapp.Application
+	env     *envmodel.Environment
+	bkBizID int64
+}
+
+// validateInstanceMonitorTarget 校验应用环境的查看权限，并确认工作空间已开通蓝鲸监控、环境已绑定集群与命名空间
+func (h *Handler) validateInstanceMonitorTarget(
+	ctx context.Context, uriInput serializer.AppEnvURIInput,
+) (*instanceMonitorTarget, error) {
+	app, env, err := ginperm.ValidateAppEnvByName(ctx, h.registry, uriInput.AppID, uriInput.EnvName, ginperm.TypeView)
+	if err != nil {
+		return nil, err
+	}
+	ws, err := h.workspaces().Get(ctx, workspace.ByWorkspaceID(app.WorkspaceID))
+	if err != nil {
+		return nil, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get workspace")
+	}
+	if ws.BkSystems.BkMonitorProjectID == "" {
+		return nil, bkerrs.Errorf(
+			bkerrs.ErrCodeInvalidRequest, "bk monitor project is not ready for workspace %s", ws.ID,
+		)
+	}
+	if env.Cluster.ClusterID == "" || env.Cluster.Namespace == "" {
+		return nil, bkerrs.Errorf(
+			bkerrs.ErrCodeInvalidRequest, "cluster info is not configured for environment %s", env.Name,
+		)
+	}
+	return &instanceMonitorTarget{
+		app:     app,
+		env:     env,
+		bkBizID: cast.ToInt64(ws.BkSystems.BkMonitorProjectID),
+	}, nil
 }
 
 // ListDashboardDirectoryTree 获取蓝鲸监控仪表盘数据

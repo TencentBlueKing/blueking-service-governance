@@ -109,11 +109,7 @@ func (s *MetricTimeSeriesService) QueryTimeSeries(
 		// 解析响应，按 pod 维度提取时序数据
 		metricData := result.Metrics[def.Key]
 		for _, series := range resp.Series {
-			podName := lo.CoalesceOrEmpty(
-				series.Dimensions["pod"],
-				series.Dimensions["pod_name"],
-				series.Dimensions["instance"],
-			)
+			podName := podNameOf(series)
 			if podName == "" {
 				continue
 			}
@@ -130,4 +126,13 @@ func (s *MetricTimeSeriesService) QueryTimeSeries(
 	}
 
 	return result, nil
+}
+
+// podNameOf 从时序维度中取实例（Pod）名称，兼容 pod / pod_name / instance 三种维度名
+func podNameOf(series bkmapi.TimeSeriesData) string {
+	return lo.CoalesceOrEmpty(
+		series.Dimensions["pod"],
+		series.Dimensions["pod_name"],
+		series.Dimensions["instance"],
+	)
 }

@@ -61,19 +61,15 @@ func init() {
 }
 
 // validateGetInstanceTimeSeriesQueryInput 结构体级校验：binding 的 required / max 只看 slice 本身，
-// 无法识别空数组与空白实例，因此在这里按「过滤空白后」校验数量在 1~MaxInstances 之间；
-// all=true 时由后端枚举实例，忽略 instances，不做要求
+// 无法识别空数组与空白实例，因此在这里按「过滤空白后」校验数量在 1~MaxInstances 之间
 func validateGetInstanceTimeSeriesQueryInput(sl validator.StructLevel) {
 	input := sl.Current().Interface().(GetInstanceTimeSeriesQueryInput)
-	if input.All {
-		return
-	}
 	count := lo.CountBy(input.Instances, func(inst string) bool {
 		return strings.TrimSpace(inst) != ""
 	})
 	if count == 0 {
 		sl.ReportError(input.Instances, "Instances", "Instances",
-			"instances must contain at least one non-empty value when all is false", "")
+			"instances must contain at least one non-empty value", "")
 	}
 	if count > MaxInstances {
 		sl.ReportError(input.Instances, "Instances", "Instances",

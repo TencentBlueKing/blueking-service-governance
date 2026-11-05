@@ -186,27 +186,6 @@ var _ = Describe("BkMonitor Serializer", func() {
 					StartTime: 1781366400,
 					EndTime:   1781452799,
 				}, true),
-				Entry("all=true with only empty string instances", serializer.GetInstanceTimeSeriesQueryInput{
-					All:       true,
-					Instances: []string{"", "  "},
-					MetricKey: "cpu_usage",
-					StartTime: 1781366400,
-					EndTime:   1781452799,
-				}, false),
-				Entry("all=true with empty instances", serializer.GetInstanceTimeSeriesQueryInput{
-					All:       true,
-					Instances: []string{},
-					MetricKey: "cpu_usage",
-					StartTime: 1781366400,
-					EndTime:   1781452799,
-				}, false),
-				Entry("all=true with nil instances", serializer.GetInstanceTimeSeriesQueryInput{
-					All:       true,
-					Instances: nil,
-					MetricKey: "cpu_usage",
-					StartTime: 1781366400,
-					EndTime:   1781452799,
-				}, false),
 				Entry("start_time greater than end_time", serializer.GetInstanceTimeSeriesQueryInput{
 					Instances: []string{"pod-a"},
 					MetricKey: "cpu_usage",
@@ -243,60 +222,15 @@ var _ = Describe("BkMonitor Serializer", func() {
 					StartTime: 1781366400,
 					EndTime:   1781452799,
 				}, false),
-				Entry("all=true ignores the instances upper limit", serializer.GetInstanceTimeSeriesQueryInput{
-					All:       true,
-					Instances: makeInstances(serializer.MaxInstances + 1),
-					MetricKey: "cpu_usage",
-					StartTime: 1781366400,
-					EndTime:   1781452799,
-				}, false),
-				Entry("limit with top on selected instances", serializer.GetInstanceTimeSeriesQueryInput{
-					Instances: []string{"pod-a"},
-					Limit:     10,
-					LimitType: "top",
-					MetricKey: "cpu_usage",
-					StartTime: 1781366400,
-					EndTime:   1781452799,
-				}, false),
-				Entry("limit with bottom on all instances", serializer.GetInstanceTimeSeriesQueryInput{
-					All:       true,
-					Limit:     50,
-					LimitType: "bottom",
-					MetricKey: "cpu_usage",
-					StartTime: 1781366400,
-					EndTime:   1781452799,
-				}, false),
-				Entry("limit exceeds maximum", serializer.GetInstanceTimeSeriesQueryInput{
-					All:       true,
-					Limit:     51,
-					MetricKey: "cpu_usage",
-					StartTime: 1781366400,
-					EndTime:   1781452799,
-				}, true),
-				Entry("negative limit", serializer.GetInstanceTimeSeriesQueryInput{
-					All:       true,
-					Limit:     -1,
-					MetricKey: "cpu_usage",
-					StartTime: 1781366400,
-					EndTime:   1781452799,
-				}, true),
-				Entry("invalid limitType", serializer.GetInstanceTimeSeriesQueryInput{
-					All:       true,
-					Limit:     10,
-					LimitType: "middle",
-					MetricKey: "cpu_usage",
-					StartTime: 1781366400,
-					EndTime:   1781452799,
-				}, true),
 				Entry("valid method", serializer.GetInstanceTimeSeriesQueryInput{
-					All:       true,
+					Instances: []string{"pod-a"},
 					Method:    "count",
 					MetricKey: "cpu_usage",
 					StartTime: 1781366400,
 					EndTime:   1781452799,
 				}, false),
 				Entry("invalid method", serializer.GetInstanceTimeSeriesQueryInput{
-					All:       true,
+					Instances: []string{"pod-a"},
 					Method:    "median",
 					MetricKey: "cpu_usage",
 					StartTime: 1781366400,
@@ -353,94 +287,106 @@ var _ = Describe("BkMonitor Serializer", func() {
 				}, []string{"pod-a"}, int64(120)),
 			)
 
-			It("defaults limitType to top and method to sum", func() {
+			It("defaults method to sum and keeps a specified one", func() {
 				input := serializer.GetInstanceTimeSeriesQueryInput{
-					All:       true,
-					Limit:     10,
+					Instances: []string{"pod-a"},
 					MetricKey: "cpu_usage",
 					StartTime: 1781366400,
 					EndTime:   1781452799,
 				}
 				input.Normalize()
-				Expect(input.Limit).To(Equal(10))
-				Expect(input.LimitType).To(Equal(serializer.LimitTypeTop))
 				Expect(input.Method).To(Equal("sum"))
-			})
 
-			It("keeps specified limitType and method", func() {
-				input := serializer.GetInstanceTimeSeriesQueryInput{
-					All:       true,
-					Limit:     10,
-					LimitType: serializer.LimitTypeBottom,
-					Method:    "max",
-					MetricKey: "cpu_usage",
-					StartTime: 1781366400,
-					EndTime:   1781452799,
-				}
+				input.Method = "max"
 				input.Normalize()
-				Expect(input.LimitType).To(Equal(serializer.LimitTypeBottom))
 				Expect(input.Method).To(Equal("max"))
 			})
 		})
 	})
 
-	Describe("RankAndLimitTimeSeries", func() {
-		newItem := func(name string, avg float64) *serializer.TimeSeriesItem {
-			return &serializer.TimeSeriesItem{
-				Instance: name,
-				Stat: &serializer.TimeSeriesItemStat{
-					// max 与 avg 刻意反序，确保排序只看 avg
-					Max: [2]float64{0, 100 - avg},
-					Avg: [2]float64{0, avg},
+	Describe("RankInstancesQueryInput", func() {
+		Context("Validation", func() {
+			DescribeTable(
+				"should validate correctly",
+				func(input serializer.RankInstancesQueryInput, shouldFail bool) {
+					err := binding.Validator.ValidateStruct(&input)
+					if shouldFail {
+						Expect(err).To(HaveOccurred())
+					} else {
+						Expect(err).NotTo(HaveOccurred())
+					}
 				},
-			}
-		}
-		names := func(items []*serializer.TimeSeriesItem) []string {
-			return lo.Map(items, func(s *serializer.TimeSeriesItem, _ int) string { return s.Instance })
-		}
-
-		It("returns items unchanged when limit is not positive", func() {
-			items := []*serializer.TimeSeriesItem{newItem("a", 1), newItem("b", 2)}
-			Expect(
-				names(serializer.RankAndLimitTimeSeries(items, 0, serializer.LimitTypeTop)),
-			).To(Equal([]string{"a", "b"}))
-			Expect(
-				names(serializer.RankAndLimitTimeSeries(items, -1, serializer.LimitTypeTop)),
-			).To(Equal([]string{"a", "b"}))
-		})
-
-		It("returns top N items sorted by avg descending", func() {
-			items := []*serializer.TimeSeriesItem{newItem("low", 10), newItem("high", 30), newItem("mid", 20)}
-			got := serializer.RankAndLimitTimeSeries(items, 2, serializer.LimitTypeTop)
-			Expect(names(got)).To(Equal([]string{"high", "mid"}))
-		})
-
-		It("returns bottom N items sorted by avg ascending", func() {
-			items := []*serializer.TimeSeriesItem{newItem("low", 10), newItem("high", 30), newItem("mid", 20)}
-			got := serializer.RankAndLimitTimeSeries(items, 2, serializer.LimitTypeBottom)
-			Expect(names(got)).To(Equal([]string{"low", "mid"}))
-		})
-
-		It("sorts all items when limit exceeds length", func() {
-			items := []*serializer.TimeSeriesItem{newItem("low", 10), newItem("high", 30)}
-			got := serializer.RankAndLimitTimeSeries(items, 10, serializer.LimitTypeTop)
-			Expect(names(got)).To(Equal([]string{"high", "low"}))
-		})
-
-		It("keeps original order for equal averages", func() {
-			items := []*serializer.TimeSeriesItem{newItem("first", 5), newItem("second", 5), newItem("third", 5)}
-			got := serializer.RankAndLimitTimeSeries(items, 2, serializer.LimitTypeBottom)
-			Expect(names(got)).To(Equal([]string{"first", "second"}))
-		})
-
-		It("treats nil Stat as zero", func() {
-			items := []*serializer.TimeSeriesItem{{Instance: "no-stat"}, newItem("with-stat", 5)}
-			Expect(names(serializer.RankAndLimitTimeSeries(items, 1, serializer.LimitTypeTop))).To(
-				Equal([]string{"with-stat"}),
+				Entry("only required time range", serializer.RankInstancesQueryInput{
+					StartTime: 1781366400,
+					EndTime:   1781452799,
+				}, false),
+				Entry("all optional fields set", serializer.RankInstancesQueryInput{
+					Limit:     50,
+					RankType:  "bottom",
+					StartTime: 1781366400,
+					EndTime:   1781452799,
+					Interval:  300,
+					Method:    "avg",
+				}, false),
+				Entry("missing start time", serializer.RankInstancesQueryInput{
+					EndTime: 1781452799,
+				}, true),
+				Entry("start_time greater than end_time", serializer.RankInstancesQueryInput{
+					StartTime: 1781452799,
+					EndTime:   1781366400,
+				}, true),
+				Entry("limit exceeds maximum", serializer.RankInstancesQueryInput{
+					Limit:     51,
+					StartTime: 1781366400,
+					EndTime:   1781452799,
+				}, true),
+				Entry("negative limit", serializer.RankInstancesQueryInput{
+					Limit:     -1,
+					StartTime: 1781366400,
+					EndTime:   1781452799,
+				}, true),
+				Entry("invalid rankType", serializer.RankInstancesQueryInput{
+					RankType:  "middle",
+					StartTime: 1781366400,
+					EndTime:   1781452799,
+				}, true),
+				Entry("invalid method", serializer.RankInstancesQueryInput{
+					Method:    "median",
+					StartTime: 1781366400,
+					EndTime:   1781452799,
+				}, true),
 			)
-			Expect(names(serializer.RankAndLimitTimeSeries(items, 1, serializer.LimitTypeBottom))).To(
-				Equal([]string{"no-stat"}),
-			)
+		})
+
+		Context("Normalize", func() {
+			It("fills defaults for empty fields", func() {
+				input := serializer.RankInstancesQueryInput{
+					StartTime: 1781366400,
+					EndTime:   1781452799,
+					Interval:  30,
+				}
+				input.Normalize()
+				Expect(input.Limit).To(Equal(serializer.DefaultRankLimit))
+				Expect(input.RankType).To(Equal(serializer.RankTypeTop))
+				Expect(input.Interval).To(Equal(serializer.DefaultInterval))
+				Expect(input.Method).To(Equal("sum"))
+			})
+
+			It("keeps specified values", func() {
+				input := serializer.RankInstancesQueryInput{
+					Limit:     5,
+					RankType:  serializer.RankTypeBottom,
+					StartTime: 1781366400,
+					EndTime:   1781452799,
+					Interval:  300,
+					Method:    "max",
+				}
+				input.Normalize()
+				Expect(input.Limit).To(Equal(5))
+				Expect(input.RankType).To(Equal(serializer.RankTypeBottom))
+				Expect(input.Interval).To(Equal(int64(300)))
+				Expect(input.Method).To(Equal("max"))
+			})
 		})
 	})
 
