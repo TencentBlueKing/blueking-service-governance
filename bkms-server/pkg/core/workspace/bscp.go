@@ -24,6 +24,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/cast"
 
+	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	bscpapi "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bscp"
 )
@@ -40,7 +41,13 @@ type BscpBinding struct {
 }
 
 // BindBscpProject 解析项目（显式 projectKey 或 Default 项目）并确保 credential 存在。
+// 当前环境关闭了 BSCP 对接时不做绑定，返回空的绑定结果。
 func BindBscpProject(ctx context.Context, bizID, projectKey string) (*BscpBinding, error) {
+	if bscpapi.Disabled() {
+		log.Infof(ctx, "bscp is disabled, skip binding bscp project for biz %s", bizID)
+		return &BscpBinding{}, nil
+	}
+
 	client, err := bscpapi.NewConfigClient(auth.MustGetUser(ctx))
 	if err != nil {
 		return nil, errors.Wrap(err, "create bscp config client")

@@ -62,6 +62,9 @@ type FeatureIntegrationsConfig struct {
 	EnableBkLoginUserinfoAuth bool
 	// EnableBkUserTenantVerify 控制是否通过 bk-user 校验用户所属租户和状态。
 	EnableBkUserTenantVerify bool
+	// DisableBSCP 关闭 BSCP（服务配置中心）对接，用于未部署 BSCP 的环境。
+	// 开启后创建工作空间不再绑定 BSCP 项目，BSCP 相关接口直接返回未启用错误。
+	DisableBSCP bool
 }
 
 // BkApiStagesConfig 蓝鲸 API 版本信息，不指定时均默认为 "prod"

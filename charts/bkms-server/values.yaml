@@ -214,6 +214,8 @@ svcConf:
     enableBkLoginUserinfoAuth: false
     # 用 bk-user 校验用户所属租户/状态
     enableBkUserTenantVerify: false
+    # 关闭 BSCP 对接，未部署 BSCP 的环境设为 true
+    disableBSCP: false
   # 蓝鲸 API 环境配置
   bkApiStages:
     # BSCP

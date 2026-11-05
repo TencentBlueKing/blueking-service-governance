@@ -50,6 +50,9 @@ const (
 	// ErrDetailCodeBSCPNoPermission BSCP 服务无权限
 	ErrDetailCodeBSCPNoPermission ErrDetailCode = "BSCP_NO_PERMISSION"
 
+	// ErrDetailCodeBSCPDisabled 当前环境关闭了 BSCP 对接
+	ErrDetailCodeBSCPDisabled ErrDetailCode = "BSCP_DISABLED"
+
 	// ErrDetailCodeComponentNotInstalled 环境所在集群未安装所需的组件（通过 module 区分具体组件）
 	ErrDetailCodeComponentNotInstalled ErrDetailCode = "COMPONENT_NOT_INSTALLED"
 
