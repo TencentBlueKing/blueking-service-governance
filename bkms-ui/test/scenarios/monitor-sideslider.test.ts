@@ -185,7 +185,7 @@ vi.mock('bkui-vue', async () => {
       type: { type: String, default: 'text' },
       disabled: Boolean,
     },
-    emits: ['update:modelValue', 'blur'],
+    emits: ['update:modelValue', 'blur', 'change', 'enter'],
     setup:
       (props, { emit }) =>
       () =>
@@ -196,6 +196,14 @@ vi.mock('bkui-vue', async () => {
           disabled: props.disabled,
           onInput: (event: Event) => emit('update:modelValue', (event.target as HTMLInputElement).value),
           onBlur: () => emit('blur'),
+          onChange: (event: Event) => {
+            const { value } = event.target as HTMLInputElement;
+            emit('update:modelValue', value);
+            emit('change', value);
+          },
+          onKeydown: (event: KeyboardEvent) => {
+            if (event.key === 'Enter') emit('enter', props.modelValue);
+          },
         }),
   });
   interface TreeNode {
@@ -394,6 +402,51 @@ describe('实例监控侧栏', () => {
     wrapper.unmount();
   });
 
+  it('Limit 键入期间不查询，回车和步进各提交一轮，重开后恢复默认值', async () => {
+    const { wrapper, chart } = await mountSlider();
+    const limitInput = wrapper.get<HTMLInputElement>('input[type="number"]');
+
+    for (const value of ['2', '25']) {
+      limitInput.element.value = value;
+      await limitInput.trigger('input');
+      await flushPromises();
+      expect(chart().props('queryEnabled')).toBe(true);
+      expect(mocks.rankInstances).toHaveBeenCalledTimes(1);
+      expect(mocks.getInstanceTimeSeries).toHaveBeenCalledTimes(8);
+    }
+
+    await limitInput.trigger('keydown', { key: 'Enter' });
+    await flushPromises();
+    expect(mocks.rankInstances).toHaveBeenCalledTimes(2);
+    expect(mocks.rankInstances).toHaveBeenLastCalledWith(expect.objectContaining({ limit: 25 }));
+    expect(mocks.getInstanceTimeSeries).toHaveBeenCalledTimes(16);
+
+    await limitInput.trigger('change');
+    await limitInput.trigger('blur');
+    await flushPromises();
+    expect(mocks.rankInstances).toHaveBeenCalledTimes(2);
+    expect(mocks.getInstanceTimeSeries).toHaveBeenCalledTimes(16);
+
+    const limitComponent = wrapper
+      .findAllComponents({ name: 'InputStub' })
+      .find(input => input.props('type') === 'number')!;
+    limitComponent.vm.$emit('update:modelValue', 26);
+    limitComponent.vm.$emit('change', 26);
+    await flushPromises();
+    expect(mocks.rankInstances).toHaveBeenCalledTimes(3);
+    expect(mocks.rankInstances).toHaveBeenLastCalledWith(expect.objectContaining({ limit: 26 }));
+    expect(mocks.getInstanceTimeSeries).toHaveBeenCalledTimes(24);
+
+    await wrapper.setProps({ isShow: false });
+    await wrapper.setProps({ isShow: true });
+    chart().vm.$emit('plot-width-change', 450);
+    await flushPromises();
+    expect(wrapper.get<HTMLInputElement>('input[type="number"]').element.value).toBe('10');
+    expect(mocks.rankInstances).toHaveBeenCalledTimes(4);
+    expect(mocks.rankInstances).toHaveBeenLastCalledWith(expect.objectContaining({ limit: 10 }));
+    wrapper.unmount();
+  });
+
   it('auto 尺寸变化仅在实际步长改变时重拉一轮', async () => {
     const { wrapper, chart } = await mountSlider();
     chart().vm.$emit('plot-width-change', 451);
@@ -431,9 +484,12 @@ describe('实例监控侧栏', () => {
     vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
     vi.setSystemTime(new Date(2026, 10, 5, 12));
     const { wrapper, chart, selects } = await mountSlider();
+    const limitInput = wrapper.get<HTMLInputElement>('input[type="number"]');
+    limitInput.element.value = '20';
+    await limitInput.trigger('input');
     selects()[1].vm.$emit('update:modelValue', 'bottom');
     selects()[3].vm.$emit('update:modelValue', 'avg');
-    await wrapper.get('input[type="number"]').setValue('20');
+    await limitInput.trigger('blur');
     await flushPromises();
     const previousQueryId = chart().props('queryId');
     mocks.rankInstances.mockResolvedValueOnce(rank(['pod-refreshed']));

@@ -151,15 +151,19 @@
               name="bottom"
             />
           </Select>
+          <!-- 数字步进按钮通过 change 提交，即使输入框未获得焦点。 -->
           <Input
-            v-model="limit"
-            class="w-[88px] ml-[-1px]"
+            v-model="limitDraft"
+            class="w-[150px] ml-[-1px] focus-within:z-1"
             :disabled="!!selectedInstance.length"
             :max="50"
             :min="1"
+            :placeholder="$t('请输入 0-50 的数字')"
             :precision="0"
             type="number"
-            @blur="normalizeLimit"
+            @blur="commitLimit"
+            @change="commitLimit"
+            @enter="commitLimit"
           />
         </div>
       </div>
@@ -551,7 +555,18 @@
   const searchText = ref('');
   const treeRef = ref<InstanceType<typeof Tree>>();
   const selectRef = ref<InstanceType<typeof Select>>();
-  const limit = ref<number | string>(10);
+  const DEFAULT_RANKING_LIMIT = 10;
+  // 查询只使用已提交的 Limit，避免键入过程中的中间值重复触发排名和时序请求。
+  const limitDraft = ref<number | string>(DEFAULT_RANKING_LIMIT);
+  const committedLimit = ref(DEFAULT_RANKING_LIMIT);
+  function commitLimit() {
+    const parsed = Number(limitDraft.value);
+    committedLimit.value = Number.isFinite(parsed)
+      ? Math.min(50, Math.max(1, Math.floor(parsed)))
+      : DEFAULT_RANKING_LIMIT;
+    limitDraft.value = committedLimit.value;
+  }
+
   const rankType = ref<'bottom' | 'top'>('top');
   const methodOptions = ['sum', 'max', 'min', 'count', 'avg'] as const;
   const method = ref<(typeof methodOptions)[number]>('sum');
@@ -630,13 +645,6 @@
     const current = selectedInstance.value;
     const last = committedInstances.value;
     if (last.length !== current.length || !last.every(id => current.includes(id))) handleFiltersChange();
-  }
-  const rankingLimit = computed(() => {
-    const parsed = Number(limit.value);
-    return Number.isFinite(parsed) ? Math.min(50, Math.max(1, Math.floor(parsed))) : 10;
-  });
-  function normalizeLimit() {
-    limit.value = rankingLimit.value;
   }
   function updateSelection(ids: string[]) {
     const uniqueIds = Array.from(new Set(ids));
@@ -835,7 +843,7 @@
       : await fetchRankedMonitorInstances({
           ...params,
           appID: appDetailStore.appID,
-          limit: rankingLimit.value,
+          limit: committedLimit.value,
           rankType: rankType.value,
         });
     if (!isShow.value || generation !== queryGeneration) return;
@@ -866,7 +874,7 @@
       () => endTime.value,
       () => effectiveInterval.value,
       () => chartPlotWidth.value > 0,
-      () => rankingLimit.value,
+      () => committedLimit.value,
       () => rankType.value,
       () => method.value,
       () => appDetailStore.appID,
@@ -952,7 +960,8 @@
       selectedInstanceDetails.value = selection;
       selectedInstance.value = Object.keys(selection);
       searchText.value = '';
-      limit.value = 10;
+      limitDraft.value = DEFAULT_RANKING_LIMIT;
+      committedLimit.value = DEFAULT_RANKING_LIMIT;
       rankType.value = 'top';
       method.value = 'sum';
       void syncSelection();
