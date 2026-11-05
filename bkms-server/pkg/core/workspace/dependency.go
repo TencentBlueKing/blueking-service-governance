@@ -29,9 +29,11 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkci"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkiam/role"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkrepo"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/cmdb"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/platformaccount"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bcs"
 	bkciapi "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bkci"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/perm"
@@ -185,6 +187,23 @@ func InitWorkspaceUser(ctx context.Context, id, displayName string, managers []s
 		return err
 	}
 
+	// 平台级虚拟账号加入管理员角色
+	return AddPlatformAccount(ctx, permMgr, id)
+}
+
+// AddPlatformAccount 把平台级虚拟账号加入空间的管理员角色，未启用时跳过；重复加入没有副作用
+func AddPlatformAccount(ctx context.Context, permMgr perm.Manager, workspaceID string) error {
+	account, ok := platformaccount.Get()
+	if !ok {
+		return nil
+	}
+	admin, err := permMgr.GetRole(ctx, workspaceID, role.BuiltinRoleCode.Admin)
+	if err != nil {
+		return errors.Wrapf(err, "get admin role of workspace %s", workspaceID)
+	}
+	if err = permMgr.AddRoleForUsers(ctx, admin.ID, []string{account.ID}); err != nil {
+		return errors.Wrapf(err, "add platform account to admin role of workspace %s", workspaceID)
+	}
 	return nil
 }
 

@@ -110,6 +110,9 @@ func Load(ctx context.Context, cfgFile string) (*Config, error) {
 	if err := validate.Struct(cfg.Account); err != nil {
 		return nil, errors.Wrap(err, "validate AccountConfig")
 	}
+	if err := validate.Struct(cfg.PlatformAccount); err != nil {
+		return nil, errors.Wrap(err, "validate PlatformAccountConfig")
+	}
 
 	if err := validateBkLoginDependencies(&cfg); err != nil {
 		return nil, err

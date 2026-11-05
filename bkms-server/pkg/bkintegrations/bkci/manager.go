@@ -190,11 +190,27 @@ func (m *ProjectManager) genDefaultProjectCode(workspaceID string) string {
 type PipelineManager struct {
 	db          *mongo.Database
 	workspaceID string
+	// caller 调用蓝盾使用的身份，为空时使用请求用户
+	caller *auth.User
 }
 
 // NewPipelineManager ...
 func NewPipelineManager(db *mongo.Database, workspaceID string) *PipelineManager {
 	return &PipelineManager{db: db, workspaceID: workspaceID}
+}
+
+// WithCaller 指定调用蓝盾使用的身份，本地记录的创建人仍是请求用户
+func (m *PipelineManager) WithCaller(caller auth.User) *PipelineManager {
+	m.caller = &caller
+	return m
+}
+
+// callerOf 返回调用蓝盾使用的身份
+func (m *PipelineManager) callerOf(ctx context.Context) auth.User {
+	if m.caller != nil {
+		return *m.caller
+	}
+	return auth.MustGetUser(ctx)
 }
 
 // Initialize 初始化流水线：不存在则创建，已存在的共享内置类型按模板 semver 升级
@@ -280,7 +296,7 @@ func (m *PipelineManager) createPipeline(ctx context.Context, pipelineType strin
 	var err error
 
 	// 创建 bkci API 客户端
-	client, err := bkci.New(auth.MustGetUser(ctx))
+	client, err := bkci.New(m.callerOf(ctx))
 	if err != nil {
 		return nil, errors.Wrap(err, "create bkci client")
 	}
@@ -362,7 +378,7 @@ func (m *PipelineManager) updateBuiltinPipelineFromTemplate(
 	pipeline *Pipeline,
 	tmpl *PipelineTemplate,
 ) (*Pipeline, error) {
-	client, err := bkci.New(auth.MustGetUser(ctx))
+	client, err := bkci.New(m.callerOf(ctx))
 	if err != nil {
 		return nil, errors.Wrap(err, "create bkci client")
 	}
@@ -396,7 +412,7 @@ func (m *PipelineManager) createBKCIPipeline(ctx context.Context, tmpl *Pipeline
 	}
 
 	// 2. 调用 bkci API client 创建流水线
-	client, err := bkci.New(auth.MustGetUser(ctx))
+	client, err := bkci.New(m.callerOf(ctx))
 	if err != nil {
 		return "", errors.Wrapf(err, "create bkci client")
 	}

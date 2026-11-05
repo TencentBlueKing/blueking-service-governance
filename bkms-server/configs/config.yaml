@@ -63,6 +63,13 @@ bkIAMSystemIDs:
 tenant:
   # 是否开启多租户模式；关闭时仅接受空 tenant 或 default
   enableMultiTenantMode: false
+# 平台级虚拟账号，未启用时使用请求用户本人调用外部系统
+# 启用前须先用开启了虚拟账号的配置执行 grant_platform_account 命令为存量空间补发权限
+platformAccount:
+  enabled: false
+  username: ""
+  # 虚拟账号的 access_token
+  accessToken: ""
 # ------------------------------ 外部依赖服务（蓝鲸 SaaS & 公司系统） ------------------------------
 # BCS 配置，由于管理 BCS 集群内的资源
 bcs:

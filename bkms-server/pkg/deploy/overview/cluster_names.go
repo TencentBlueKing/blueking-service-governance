@@ -25,7 +25,7 @@ import (
 	"github.com/samber/lo"
 
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/platformaccount"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bcs"
 )
 
@@ -44,14 +44,14 @@ func queryClusterNames(ctx context.Context, rows []EnvRow) clusterNameByID {
 		return out
 	}
 
-	user, err := auth.GetUser(ctx)
+	caller, err := platformaccount.GetCaller(ctx)
 	if err != nil {
 		log.WarnAttrs(ctx, "deploy overview skips cluster names, no authenticated user",
 			slog.String("error", err.Error()),
 		)
 		return out
 	}
-	client, err := bcs.New(user)
+	client, err := bcs.New(caller)
 	if err != nil {
 		log.WarnAttrs(ctx, "deploy overview skips cluster names, init bcs client failed",
 			slog.String("error", err.Error()),
