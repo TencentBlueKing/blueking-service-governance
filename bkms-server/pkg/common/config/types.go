@@ -65,6 +65,9 @@ type FeatureIntegrationsConfig struct {
 	// EnableIndependentBkRepo 制品库为独立部署：不接入权限中心，
 	// 接口改用制品库账号的 Basic 认证，而非平台账号认证；制品库成员需在制品库侧自行管理。
 	EnableIndependentBkRepo bool
+	// DisableBSCP 关闭 BSCP（服务配置中心）对接，用于未部署 BSCP 的环境。
+	// 开启后创建工作空间不再绑定 BSCP 项目，BSCP 相关接口直接返回未启用错误。
+	DisableBSCP bool
 }
 
 // BkApiStagesConfig 蓝鲸 API 版本信息，不指定时均默认为 "prod"

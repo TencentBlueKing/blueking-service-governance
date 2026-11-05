@@ -216,6 +216,8 @@ svcConf:
     enableBkUserTenantVerify: false
     # 制品库为独立部署：不接入权限中心，接口使用制品库账号 Basic 认证，制品库成员需在制品库侧自行管理
     enableIndependentBkRepo: false
+    # 关闭 BSCP 对接，未部署 BSCP 的环境设为 true
+    disableBSCP: false
   # 蓝鲸 API 环境配置
   bkApiStages:
     # BSCP

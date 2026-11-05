@@ -64,8 +64,19 @@ type ApiClient struct {
 	user auth.User
 }
 
+// ErrDisabled 当前环境关闭了 BSCP 对接（featureIntegrations.disableBSCP）
+var ErrDisabled = errors.New("bscp integration is disabled by featureIntegrations.disableBSCP")
+
+// Disabled 返回当前环境是否关闭了 BSCP 对接
+func Disabled() bool {
+	return config.G != nil && config.G.FeatureIntegrations.DisableBSCP
+}
+
 // New 创建 BSCP API 客户端，根据配置返回真实客户端或 stub 客户端
 func New(user auth.User) (Client, error) {
+	if Disabled() {
+		return nil, ErrDisabled
+	}
 	// 测试时使用 stub 客户端
 	if config.G.Development.UseStubBSCP {
 		log.InfoNoContext("use stub bscp client according to config")

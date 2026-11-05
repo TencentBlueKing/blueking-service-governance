@@ -20,6 +20,8 @@ package bkintegrations
 
 import (
 	"github.com/gin-gonic/gin"
+
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
 )
 
 // Handler contains views required by external platform integration Gin routes.
@@ -111,10 +113,11 @@ type Handler interface {
 // Register registers Gin external platform integration routes.
 func Register(rg *gin.RouterGroup, h Handler) {
 	// --- BSCP 相关路由 ---
-	rg.GET("/bscp/bizs", h.ListBSCPBizs)
-	rg.GET("/bscp/bizs/:bizID/services", h.ListBSCPServices)
-	rg.GET("/bscp/bizs/:bizID/services/:serviceID/configs", h.ListBSCPConfigs)
-	rg.GET("/bscp/bizs/:bizID/services/:serviceID/configs/:configID", h.GetBSCPConfig)
+	bscpGroup := rg.Group("/bscp", ginutils.RequireBSCP())
+	bscpGroup.GET("/bizs", h.ListBSCPBizs)
+	bscpGroup.GET("/bizs/:bizID/services", h.ListBSCPServices)
+	bscpGroup.GET("/bizs/:bizID/services/:serviceID/configs", h.ListBSCPConfigs)
+	bscpGroup.GET("/bizs/:bizID/services/:serviceID/configs/:configID", h.GetBSCPConfig)
 
 	// --- BKCC 相关路由 ---
 	rg.GET("/bkcc/businesses/authorized", h.ListBKCCAuthorizedBusinesses)

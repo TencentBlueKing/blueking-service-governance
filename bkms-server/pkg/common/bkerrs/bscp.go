@@ -32,6 +32,18 @@ func WrapBSCPNoPermission(err error, msg string) *Error {
 	)
 }
 
+// WrapBSCPDisabled 包装为当前环境关闭了 BSCP 对接的错误
+func WrapBSCPDisabled(err error) *Error {
+	return Wrap(err, ErrCodeInvalidRequest, "bscp is disabled in current environment").SetDetails(
+		NewDetail(
+			ErrDetailCodeBSCPDisabled,
+			"bscp is disabled in current environment",
+			WithSystem(SystemName),
+			WithModule("bscp"),
+		),
+	)
+}
+
 // WrapBSCPNotFullyReleased 包装为 BSCP 服务未全量发布错误
 func WrapBSCPNotFullyReleased(err error, bizID, serviceID string) error {
 	wrappedErr := Wrapf(err, ErrCodeNotFound, "no fully released version for service: %s in biz: %s", serviceID, bizID)
