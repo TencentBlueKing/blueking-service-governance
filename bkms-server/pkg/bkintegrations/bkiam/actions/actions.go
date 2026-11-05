@@ -63,6 +63,18 @@ var EnvAction = struct{ View, Edit, Delete, Create, Deploy string }{
 	Deploy: "deploy_env",
 }
 
+// AppEnvAction 应用在环境中的操作，同时关联应用和环境两种资源。
+//
+// 同一条授权里应用和环境必须同时满足，因此不同角色的应用范围和环境范围不会拼接。
+var AppEnvAction = struct{ View, Edit, Deploy string }{
+	// 查看应用在环境中的数据
+	View: "view_app_in_env",
+	// 编辑应用在环境中的配置
+	Edit: "edit_app_in_env",
+	// 部署应用到环境
+	Deploy: "deploy_app_to_env",
+}
+
 // BKCI 资源操作
 
 // ProjectAction 项目操作

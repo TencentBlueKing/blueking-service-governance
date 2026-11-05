@@ -35,7 +35,7 @@ var _ = Describe("BKMSRoleScopesGenerator", func() {
 	It("should render admin scopes covering workspace / app / env actions", func() {
 		g := BKMSRoleScopesGenerator{WorkspaceID: wsID, WorkspaceName: wsName, TplRoleCode: role.BuiltinRoleCode.Admin}
 		scopes := g.Generate()
-		Expect(scopes).To(HaveLen(5))
+		Expect(scopes).To(HaveLen(6))
 
 		// All scopes must be tagged with the configured BKMS system id.
 		for _, s := range scopes {
@@ -52,6 +52,18 @@ var _ = Describe("BKMSRoleScopesGenerator", func() {
 		Expect(scopes[0].Resources[0].Type).To(Equal(types.WorkspaceResourceType))
 		Expect(scopes[0].Resources[0].Paths[0][0].ID).To(Equal(wsID))
 		Expect(scopes[0].Resources[0].Paths[0][0].Name).To(Equal(wsName))
+
+		// Last scope: app-env actions bound to both app and env on the workspace node.
+		appEnv := scopes[len(scopes)-1]
+		Expect(appEnv.Actions).To(ConsistOf(
+			types.Action{ID: "view_app_in_env"},
+			types.Action{ID: "edit_app_in_env"},
+			types.Action{ID: "deploy_app_to_env"},
+		))
+		Expect(appEnv.Resources).To(HaveLen(2))
+		Expect(appEnv.Resources[0].Type).To(Equal(types.AppResourceType))
+		Expect(appEnv.Resources[1].Type).To(Equal(types.EnvResourceType))
+		Expect(appEnv.Resources[1].Paths[0][0].ID).To(Equal(wsID))
 	})
 
 	It("should render developer scopes (no delete on workspace)", func() {
