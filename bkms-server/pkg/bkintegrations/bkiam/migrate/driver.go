@@ -76,6 +76,10 @@ type Config struct {
 	// the resource provider callback base, i.e. the value rendered into
 	// `provider_config.host` of the system model.
 	BkmsHost string
+	// BkTenantID is sent as the X-Bk-Tenant-Id header on every IAM backend
+	// request. It is required by the gateway in multi-tenant mode, and should
+	// be left empty in single-tenant mode.
+	BkTenantID string
 }
 
 // IAMDriver migrates bkms IAM models into BlueKing IAM while persisting the
@@ -90,6 +94,10 @@ type IAMDriver struct {
 // NewIAMDriver creates a new IAMDriver wrapping the given migrate database
 // driver, using the supplied Config to talk to the IAM backend.
 func NewIAMDriver(d database.Driver, cfg Config) *IAMDriver {
+	var opts []client.Option
+	if cfg.BkTenantID != "" {
+		opts = append(opts, client.WithBkTenantID(cfg.BkTenantID))
+	}
 	return &IAMDriver{
 		Driver: d,
 		iamClient: client.NewIAMBackendClient(
@@ -97,6 +105,7 @@ func NewIAMDriver(d database.Driver, cfg Config) *IAMDriver {
 			cfg.BkmsSystemID,
 			cfg.AppCode,
 			cfg.AppSecret,
+			opts...,
 		),
 		cfg:            cfg,
 		migrateTimeout: defaultMigrateTimeout,

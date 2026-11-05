@@ -29,6 +29,7 @@ import (
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/iam"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/tenant"
 )
 
 const (
@@ -40,7 +41,7 @@ const (
 // NewMigrateIAMSystemModelCmd 将 bkms IAM 系统模型（资源类型、操作、实例选择等）
 // 一次性注册到蓝鲸权限中心。
 func NewMigrateIAMSystemModelCmd() *cobra.Command {
-	var srvCfg, bkmsHost string
+	var srvCfg, bkmsHost, tenantID string
 
 	cmd := &cobra.Command{
 		Use:   "migrate_iam_system_model",
@@ -71,12 +72,20 @@ func NewMigrateIAMSystemModelCmd() *cobra.Command {
 				Collection: iamSchemaMigrationsCollection,
 			}
 
+			if tenantID == "" {
+				tenantID = tenant.DefaultTenantID
+				if cfg.Tenant.EnableMultiTenantMode {
+					tenantID = tenant.SystemTenantID
+				}
+			}
+
 			iamCfg := migrate.Config{
 				BkApiGatewayURL: iamGatewayURL,
 				BkmsSystemID:    cfg.BkIAMSystemIDs.Bkms,
 				AppCode:         cfg.BkApp.Code,
 				AppSecret:       cfg.BkApp.Secret,
 				BkmsHost:        bkmsHost,
+				BkTenantID:      tenantID,
 			}
 
 			if err = migrate.Migrate(mongoCfg, iamCfg); err != nil {
@@ -89,6 +98,8 @@ func NewMigrateIAMSystemModelCmd() *cobra.Command {
 	cmd.Flags().StringVar(&srvCfg, "srvCfg", "", "server config file")
 	cmd.Flags().StringVar(&bkmsHost, "bkms-host", "",
 		"externally reachable bkms-server URL rendered into IAM system provider_config.host")
+	cmd.Flags().StringVar(&tenantID, "tenant-id", "",
+		"X-Bk-Tenant-Id sent to IAM; defaults to \"system\" in multi-tenant mode, \"default\" otherwise")
 	_ = cmd.MarkFlagRequired("srvCfg")
 	_ = cmd.MarkFlagRequired("bkms-host")
 	return cmd
