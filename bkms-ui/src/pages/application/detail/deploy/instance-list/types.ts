@@ -100,3 +100,9 @@ export type InstanceTableMode = 'multiEnv' | 'single';
 
 /** 实例 Watch SSE 的业务事件。 */
 export type InstanceWatchEvent = InstancePluginWatchEvent | InstancePodWatchEvent;
+
+/** 监控实例选择器复用列表已有快照，不额外加载全量实例。 */
+export interface MonitorInstanceGroup {
+  envName: string;
+  instances: string[];
+}

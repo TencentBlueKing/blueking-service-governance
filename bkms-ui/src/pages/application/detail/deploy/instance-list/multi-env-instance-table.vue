@@ -84,7 +84,10 @@
     />
   </Skeleton>
 
-  <InstanceActionsHost ref="actionsHostRef" />
+  <InstanceActionsHost
+    ref="actionsHostRef"
+    :monitor-instance-groups="monitorInstanceGroups"
+  />
 </template>
 
 <script lang="ts" setup>
@@ -109,6 +112,7 @@
     InstanceListSourceMode,
     InstanceSelectionChangePayload,
     InstanceTableExpose,
+    MonitorInstanceGroup,
   } from './types';
   import type { EnvOutputObj } from '~/@types/env';
 
@@ -176,6 +180,13 @@
   const envSelections = ref<Map<string, AppInstanceOutputObj[]>>(new Map());
   /** 环境名称到实例总数的映射 */
   const envTotals = ref<Map<string, number>>(new Map());
+  const envInstanceNames = ref<Map<string, string[]>>(new Map());
+  const monitorInstanceGroups = computed<MonitorInstanceGroup[]>(() =>
+    selectedEnvs.value.map(envName => ({
+      envName,
+      instances: envInstanceNames.value.get(envName) ?? [],
+    })),
+  );
 
   /** 当前存在选中实例的环境名称（优先返回第一个非零选中的环境） */
   const selectedEnvName = computed<string | undefined>(() => {
@@ -258,10 +269,15 @@
     envSelections.value = new Map();
   }
 
-  // 同步单个环境表格返回的总数信息。
+  // 复用各环境已有快照，供监控侧栏显示总数与搜索实例。
   function handleEnvDataLoaded(payload: InstanceDataLoadedPayload) {
     envTotals.value.set(payload.envName, payload.total);
     envTotals.value = new Map(envTotals.value);
+    envInstanceNames.value.set(
+      payload.envName,
+      payload.instances.map(instance => instance.id).filter((id): id is string => !!id),
+    );
+    envInstanceNames.value = new Map(envInstanceNames.value);
   }
 
   // 同步单个环境表格返回的选中实例集合。
@@ -301,6 +317,13 @@
   const { canAdjustWeight, canGrayDeploy, handleRowAction, instanceActions } = useInstanceListController({
     actionsHostRef,
     getEnvName: () => selectedEnvName.value || selectedEnvs.value[0] || '',
+    getMonitorSelection: () =>
+      Object.fromEntries(
+        [...envSelections.value].map(([envName, instances]) => [
+          envName,
+          instances.map(instance => instance.id).filter((id): id is string => !!id),
+        ]),
+      ),
     getSelectedInstances: getAllSelections,
     selectedCount,
     isAllInstancesSelected,
@@ -328,8 +351,14 @@
           envTotals.value.delete(envName);
         }
       }
+      for (const envName of envInstanceNames.value.keys()) {
+        if (!selectedEnvs.value.includes(envName) || !isEnvRequestable(envName)) {
+          envInstanceNames.value.delete(envName);
+        }
+      }
       envSelections.value = new Map(envSelections.value);
       envTotals.value = new Map(envTotals.value);
+      envInstanceNames.value = new Map(envInstanceNames.value);
     },
     { immediate: true, deep: true },
   );

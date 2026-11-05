@@ -262,3 +262,14 @@ describe('实例列表：热更新列', () => {
     expect(screen.queryByTestId('publish-status-dot')).not.toBeInTheDocument();
   });
 });
+
+describe('实例列表：监控选择快照', () => {
+  it('实例总数不变但名称替换时重新通知父组件', async () => {
+    const { emitted, rerender } = await renderTable([{ id: 'pod-a' }, { id: 'pod-b' }]);
+    await rerender({ data: [{ id: 'pod-c' }, { id: 'pod-d' }] });
+    expect(emitted()['data-loaded']).toEqual([
+      [{ envName: 'prod', total: 2, instances: [{ id: 'pod-a' }, { id: 'pod-b' }] }],
+      [{ envName: 'prod', total: 2, instances: [{ id: 'pod-c' }, { id: 'pod-d' }] }],
+    ]);
+  });
+});

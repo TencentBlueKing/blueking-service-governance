@@ -88,7 +88,10 @@
     </InstanceTable>
   </Skeleton>
 
-  <InstanceActionsHost ref="actionsHostRef" />
+  <InstanceActionsHost
+    ref="actionsHostRef"
+    :monitor-instance-groups="monitorInstanceGroups"
+  />
 </template>
 <script lang="ts" setup>
   import { computed, ref, watch } from 'vue';
@@ -112,7 +115,7 @@
   import { useInstanceListWatch } from './composables/use-instance-list-watch';
   import { isPolarisHealthy, matchesInstanceIPFilter } from './instance-utils';
 
-  import type { InstanceListSourceMode } from './types';
+  import type { InstanceListSourceMode, MonitorInstanceGroup } from './types';
   import type { ISearchValue } from 'bkui-vue/lib/search-select/utils';
 
   const props = defineProps<{
@@ -155,6 +158,13 @@
       envName: trpcDeployStore.curEnvItem?.name || '',
     }),
   });
+
+  const monitorInstanceGroups = computed<MonitorInstanceGroup[]>(() => [
+    {
+      envName: trpcDeployStore.curEnvItem?.name || '',
+      instances: instanceList.value.map(instance => instance.id).filter((id): id is string => !!id),
+    },
+  ]);
 
   const isCrossPageSelection = computed(() => instanceTableRef.value?.isCrossPageSelection ?? false);
 
