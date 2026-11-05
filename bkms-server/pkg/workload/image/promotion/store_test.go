@@ -26,28 +26,54 @@ import (
 	. "github.com/onsi/gomega"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/snapshot"
 )
 
 var _ = Describe("Promotion store", func() {
 	var (
 		ctx        context.Context
 		promotions *Store
+		snapshots  *snapshot.ImageStore
 	)
 
 	BeforeEach(func() {
 		ctx = testutil.NewDefaultTenantContext()
 		promotions = testutil.NewStore(GinkgoT(), Meta)
+		snapshots = testutil.NewStore(GinkgoT(), snapshot.ImageMeta)
 	})
 
 	AfterEach(func() {
 		Expect(testutil.CleanupMetaColl(Meta)).To(Succeed())
+		Expect(testutil.CleanupMetaColl(snapshot.ImageMeta)).To(Succeed())
 	})
 
+	seedSnapshot := func(repoKey, tag string) {
+		Expect(snapshot.UpsertTags(ctx, testutil.NewDB(GinkgoT()), repoKey, []string{tag})).To(Succeed())
+	}
+
+	// promote 先写入镜像快照再晋级，模拟 tag 已存在于仓库快照中的正常场景
 	promote := func(appID, repoKey, tag, operator string) {
-		Expect(Promote(ctx, promotions, appID, repoKey, tag, operator)).To(Succeed())
+		seedSnapshot(repoKey, tag)
+		Expect(Promote(ctx, promotions, snapshots, appID, repoKey, tag, operator)).To(Succeed())
 	}
 
 	Describe("Promote", func() {
+		It("should reject tag that does not exist in image snapshots", func() {
+			err := Promote(ctx, promotions, snapshots, "app1", "repokey1", "not-exists", "alice")
+			Expect(err).To(MatchError(ErrImageTagNotFound))
+
+			exists, err := promotions.Exists(ctx, ByTag("app1", "repokey1", "not-exists"))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(exists).To(BeFalse())
+		})
+
+		It("should reject tag that only exists in another repo", func() {
+			seedSnapshot("repokey2", "v1.0.0")
+
+			err := Promote(ctx, promotions, snapshots, "app1", "repokey1", "v1.0.0", "alice")
+			Expect(err).To(MatchError(ErrImageTagNotFound))
+		})
+
 		It("should create a new promotion record", func() {
 			promote("app1", "repokey1", "v1.0.0", "alice")
 

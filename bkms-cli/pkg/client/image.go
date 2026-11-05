@@ -60,3 +60,34 @@ type ListAppImagesResp struct {
 	// Data ListAppImagesRespData
 	Data ListAppImagesRespData `json:"data"`
 }
+
+// 刷新应用镜像快照的结果状态
+const (
+	// RefreshAppImagesStatusSuccess 本次刷新已完成
+	RefreshAppImagesStatusSuccess = "success"
+	// RefreshAppImagesStatusRefreshing 已有刷新在进行中，本次未重复发起
+	RefreshAppImagesStatusRefreshing = "refreshing"
+	// RefreshAppImagesStatusFailed 刷新失败，快照保留上一次成功的内容
+	RefreshAppImagesStatusFailed = "failed"
+)
+
+// RefreshAppImagesResult 刷新应用镜像快照结果
+type RefreshAppImagesResult struct {
+	// Status 刷新状态：success / refreshing / failed
+	Status string `json:"status" yaml:"status"`
+
+	// Message 提示信息
+	Message string `json:"message" yaml:"message"`
+
+	// AddedTagCnt 本次新增 tag 数量
+	AddedTagCnt string `json:"addedTagCnt" yaml:"addedTagCnt"`
+
+	// RemovedTagCnt 本次删除 tag 数量
+	RemovedTagCnt string `json:"removedTagCnt" yaml:"removedTagCnt"`
+}
+
+// RefreshAppImagesResp 刷新应用镜像快照
+type RefreshAppImagesResp struct {
+	// Data RefreshAppImagesResult
+	Data RefreshAppImagesResult `json:"data"`
+}

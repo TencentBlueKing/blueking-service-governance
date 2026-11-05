@@ -28,12 +28,16 @@ func NewCmd() *cobra.Command {
 		Short: "Manage application images",
 		Long: `Manage application images and image repositories.
 
-Use this command to view and manage container images for your applications.`,
+Use this command to view, refresh and promote container images for your applications.`,
 		DisableFlagsInUseLine: true,
 	}
 
 	// 查询镜像
 	cmd.AddCommand(NewListCmd())
+	// 刷新镜像
+	cmd.AddCommand(NewRefreshCmd())
+	// 晋级镜像
+	cmd.AddCommand(NewPromoteCmd())
 
 	return cmd
 }

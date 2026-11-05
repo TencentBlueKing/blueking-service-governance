@@ -109,6 +109,10 @@ type Client interface {
 	ListBuildRecords(ctx context.Context, appID, keyword string) ([]BuildRecord, error)
 	// ListAppImages 获取应用镜像列表
 	ListAppImages(ctx context.Context, appID, keyword string) ([]Image, error)
+	// RefreshAppImages 手动刷新应用镜像快照
+	RefreshAppImages(ctx context.Context, appID string) (*RefreshAppImagesResult, error)
+	// PromoteAppImage 晋级应用镜像 tag
+	PromoteAppImage(ctx context.Context, appID, tag string) error
 
 	// ---------- 应用配置文件 ----------
 
