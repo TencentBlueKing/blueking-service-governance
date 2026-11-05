@@ -1,39 +1,68 @@
-# app app-cfg-file 子命令
+# app config-file 子命令
 
-# view 正常退出
-exec $BKMS_CLI_BIN app app-cfg-file view --app $BKMS_APP_ID
+# list 正常退出
+exec $BKMS_CLI_BIN app config-file list --app $BKMS_APP_ID
 stdout .
 
-exec $BKMS_CLI_BIN app app-cfg-file view --app $BKMS_APP_ID -o json
+exec $BKMS_CLI_BIN app config-file list --app $BKMS_APP_ID -o json
 stdout .
 
-# view 缺 --app
-! exec $BKMS_CLI_BIN app app-cfg-file view
-stderr 'required flag\(s\) "app" not set'
-
-# edit 缺 --app
-! exec $BKMS_CLI_BIN app app-cfg-file edit -f /tmp/nonexistent.txt
-stderr 'required flag\(s\) "app" not set'
-
-# list-versions 正常退出
-exec $BKMS_CLI_BIN app app-cfg-file list-versions --app $BKMS_APP_ID
+# mount-preview 正常退出
+exec $BKMS_CLI_BIN app config-file mount-preview --app $BKMS_APP_ID --env $BKMS_ENV_NAME -o json
 stdout .
 
-exec $BKMS_CLI_BIN app app-cfg-file list-versions --app $BKMS_APP_ID -o json
-stdout .
+# mount-preview 环境不存在
+! exec $BKMS_CLI_BIN app config-file mount-preview --app $BKMS_APP_ID --env no-such-env-$UNIQUE
+stderr 'env no-such-env-\d+ not found'
 
-# list-versions 缺 --app
-! exec $BKMS_CLI_BIN app app-cfg-file list-versions
+# view 文件不存在
+! exec $BKMS_CLI_BIN app config-file view --app $BKMS_APP_ID --name no-such-file-$UNIQUE
+stderr 'config file name=no-such-file-\d+ not found'
+
+# list 缺 --app
+! exec $BKMS_CLI_BIN app config-file list
 stderr 'required flag\(s\) "app" not set'
 
-# view-version 缺 --app
-! exec $BKMS_CLI_BIN app app-cfg-file view-version --version 1
-stderr 'required flag\(s\) "app" not set'
+# view 缺 --name / --id
+! exec $BKMS_CLI_BIN app config-file view --app $BKMS_APP_ID
+stderr 'at least one of the flags in the group \[name id\] is required'
+
+# view --name 与 --id 互斥
+! exec $BKMS_CLI_BIN app config-file view --app $BKMS_APP_ID --name a.conf --id 0123456789abcdef01234567
+stderr 'if any flags in the group \[name id\] are set none of the others can be'
+
+# edit 缺内容
+! exec $BKMS_CLI_BIN app config-file edit --app $BKMS_APP_ID --name a.conf
+stderr 'at least one of the flags in the group \[file file-content\] is required'
+
+# create 缺 --mount-dir
+! exec $BKMS_CLI_BIN app config-file create --app $BKMS_APP_ID --name a.conf
+stderr 'required flag\(s\) "mount-dir" not set'
+
+# update 未指定任何修改
+! exec $BKMS_CLI_BIN app config-file update --app $BKMS_APP_ID --name a.conf
+stderr 'at least one of the flags in the group'
+
+# update --per-env 与 --unified 互斥
+! exec $BKMS_CLI_BIN app config-file update --app $BKMS_APP_ID --name a.conf --per-env --unified
+stderr 'if any flags in the group \[per-env unified\] are set none of the others can be'
+
+# reset 缺 --env
+! exec $BKMS_CLI_BIN app config-file reset --app $BKMS_APP_ID --name a.conf
+stderr 'required flag\(s\) "env" not set'
+
+# view-version 缺 --version / --version-id
+! exec $BKMS_CLI_BIN app config-file view-version --app $BKMS_APP_ID --name a.conf
+stderr 'at least one of the flags in the group \[version version-id\] is required'
+
+# diff-version 缺 --from
+! exec $BKMS_CLI_BIN app config-file diff-version --app $BKMS_APP_ID --name a.conf
+stderr 'required flag\(s\) "from" not set'
 
 # rollback-version 缺 --app
-! exec $BKMS_CLI_BIN app app-cfg-file rollback-version --version 1
+! exec $BKMS_CLI_BIN app config-file rollback-version --name a.conf --version 1
 stderr 'required flag\(s\) "app" not set'
 
 # delete-version 缺 --app
-! exec $BKMS_CLI_BIN app app-cfg-file delete-version --version 1
+! exec $BKMS_CLI_BIN app config-file delete-version --name a.conf --version 1
 stderr 'required flag\(s\) "app" not set'

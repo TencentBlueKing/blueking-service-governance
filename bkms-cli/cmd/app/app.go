@@ -22,9 +22,9 @@ package app
 import (
 	"github.com/spf13/cobra"
 
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/cmd/app/appcfgfile"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/cmd/app/appspec"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/cmd/app/build"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/cmd/app/cfgfile"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/cmd/app/component"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/cmd/app/dashboard"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/cmd/app/deploy"
@@ -66,7 +66,7 @@ Use this command to list and manage applications in your BKMS workspaces.`,
 	// 应用镜像管理（命令组）
 	cmd.AddCommand(image.NewCmd())
 	// 应用配置文件管理（命令组）
-	cmd.AddCommand(appcfgfile.NewCmd())
+	cmd.AddCommand(cfgfile.NewCmd())
 	// 应用实例管理（命令组）
 	cmd.AddCommand(instance.NewCmd())
 	// 发布文件到开发模式pod中
