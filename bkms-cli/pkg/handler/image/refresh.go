@@ -28,7 +28,12 @@ import (
 
 // RefreshImages 刷新应用镜像快照。服务端返回 failed 或未知状态（含空响应）时返回错误，
 // 只有 success 与 refreshing（已有刷新在进行中）视为正常结果。
-func RefreshImages(ctx context.Context, cli client.Client, appID string) (*client.RefreshAppImagesResult, error) {
+func RefreshImages(ctx context.Context, appID string) (*client.RefreshAppImagesResult, error) {
+	return refreshImages(ctx, client.New(), appID)
+}
+
+// refreshImages 是 RefreshImages 的实现，client 由参数注入以便单测替换为 mock
+func refreshImages(ctx context.Context, cli client.Client, appID string) (*client.RefreshAppImagesResult, error) {
 	result, err := cli.RefreshAppImages(ctx, appID)
 	if err != nil {
 		return nil, err

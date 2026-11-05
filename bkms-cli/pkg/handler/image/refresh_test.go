@@ -30,7 +30,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/client/mocks"
 )
 
-var _ = Describe("RefreshImages", func() {
+var _ = Describe("refreshImages", func() {
 	const appID = "demo"
 
 	var (
@@ -48,7 +48,7 @@ var _ = Describe("RefreshImages", func() {
 			cli.EXPECT().RefreshAppImages(mock.Anything, appID).
 				Return(&client.RefreshAppImagesResult{Status: status, AddedTagCnt: "1"}, nil).Once()
 
-			result, err := RefreshImages(ctx, cli, appID)
+			result, err := refreshImages(ctx, cli, appID)
 
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result.Status).To(Equal(status))
@@ -62,7 +62,7 @@ var _ = Describe("RefreshImages", func() {
 			cli.EXPECT().RefreshAppImages(mock.Anything, appID).
 				Return(&client.RefreshAppImagesResult{Status: status, Message: message}, nil).Once()
 
-			result, err := RefreshImages(ctx, cli, appID)
+			result, err := refreshImages(ctx, cli, appID)
 
 			Expect(result).To(BeNil())
 			Expect(err).To(MatchError(ContainSubstring(expectedErr)))
@@ -76,7 +76,7 @@ var _ = Describe("RefreshImages", func() {
 	It("returns client error as is", func() {
 		cli.EXPECT().RefreshAppImages(mock.Anything, appID).Return(nil, errors.New("boom")).Once()
 
-		_, err := RefreshImages(ctx, cli, appID)
+		_, err := refreshImages(ctx, cli, appID)
 
 		Expect(err).To(MatchError("boom"))
 	})

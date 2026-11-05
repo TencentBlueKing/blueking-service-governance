@@ -44,7 +44,7 @@ and can be promoted.`,
   bkms-cli app image refresh --app demo`,
 		PreRunE: cmdutil.ResolveAppPreRunE,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			result, err := imagehandler.RefreshImages(cmd.Context(), client.New(), appID)
+			result, err := imagehandler.RefreshImages(cmd.Context(), appID)
 			if err != nil {
 				return err
 			}
