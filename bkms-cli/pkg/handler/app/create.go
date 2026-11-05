@@ -27,6 +27,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/client"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/constant"
 )
 
 // CreateApp 创建应用，读取 YAML 文件并调用后端 API
@@ -39,6 +40,10 @@ func CreateApp(ctx context.Context, workspaceID, specFile string) (*client.AppMi
 	if err != nil {
 		return nil, errors.Wrapf(err, "read app spec file %s failed", specFile)
 	}
+	// 已废弃的字段 YAML 解析时会被忽略，先显式拒绝，避免报出让人误解的缺字段错误
+	if err = rejectRemovedFields(file); err != nil {
+		return nil, err
+	}
 	spec := new(AppCreateSpec)
 	if err = yaml.Unmarshal(file, spec); err != nil {
 		return nil, errors.Wrapf(err, "parse app spec file %s failed, please check YAML syntax", specFile)
@@ -47,27 +52,55 @@ func CreateApp(ctx context.Context, workspaceID, specFile string) (*client.AppMi
 		return nil, errors.Wrap(err, "validate app spec")
 	}
 
-	// 确定应用 ID：用户指定则使用，否则自动生成
-	appID := spec.ID
-	if appID == "" {
-		cli := client.New()
-		suffix, autoErr := cli.GetAppIDAutoSuffix(ctx)
-		if autoErr != nil {
-			return nil, errors.Wrap(autoErr, "get app id auto suffix")
-		}
-		var buildErr error
-		appID, buildErr = buildAppID(spec.Name, suffix)
-		if buildErr != nil {
-			return nil, buildErr
-		}
+	// 应用 ID 固定由服务端返回的后缀与 name 拼接生成，不允许用户指定
+	suffix, err := client.New().GetAppIDAutoSuffix(ctx)
+	if err != nil {
+		return nil, errors.Wrap(err, "get app id auto suffix")
+	}
+	appID, err := buildAppID(spec.Name, suffix)
+	if err != nil {
+		return nil, err
 	}
 
-	// 构建后端 API 请求体
-	body, err := buildCreateAppRequest(appID, spec)
+	// 构建后端 API 请求体：平台托管应用走 bkmsapps，Helm / Agones 走旧的 apps 接口
+	helmBody, bkmsBody, err := buildCreateAppRequest(appID, spec)
 	if err != nil {
 		return nil, errors.Wrap(err, "build create app request")
 	}
 
-	// 调用后端 API 创建应用
-	return client.New().CreateApp(ctx, workspaceID, body)
+	cli := client.New()
+	if bkmsBody != nil {
+		return cli.CreateBKMSApp(ctx, workspaceID, bkmsBody)
+	}
+	return cli.CreateApp(ctx, workspaceID, helmBody)
+}
+
+// rejectRemovedFields 拒绝已废弃的创建字段，并给出新写法指引。
+// 这些字段已从 AppCreateSpec 移除，YAML 解析会静默忽略，必须在解析前单独检查。
+func rejectRemovedFields(raw []byte) error {
+	var doc struct {
+		Type         string `yaml:"type"`
+		AppModelSpec struct {
+			TrpcSpec map[string]any `yaml:"trpcSpec"`
+			TafSpec  map[string]any `yaml:"tafSpec"`
+		} `yaml:"appModelSpec"`
+	}
+	// 只做字段检查：解析失败时 doc 为零值，下面都不命中，
+	// YAML 语法错误交给后续的结构体解析统一报出
+	_ = yaml.Unmarshal(raw, &doc)
+
+	switch doc.Type {
+	case constant.AppTypeTrpc, constant.AppTypeTaf:
+		return errors.Errorf(
+			"'type: %s' is no longer supported, use 'framework: %s' with 'language' and 'frameworkConfigFile' instead",
+			doc.Type, doc.Type)
+	case constant.AppTypeBKMSApp:
+		return errors.New("'type: bkmsApp' should not be set, use 'framework' with 'language' instead")
+	}
+	if doc.AppModelSpec.TrpcSpec != nil || doc.AppModelSpec.TafSpec != nil {
+		return errors.New(
+			"'appModelSpec.trpcSpec' / 'appModelSpec.tafSpec' are no longer supported, " +
+				"use the top-level 'frameworkConfigFile' with 'name' and 'mountDir' instead")
+	}
+	return nil
 }

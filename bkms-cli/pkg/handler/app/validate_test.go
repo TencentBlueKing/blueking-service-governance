@@ -26,23 +26,22 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-// validTrpcSpec 返回一个合法的 trpc 类型 AppCreateSpec
+// validTrpcSpec 返回一个合法的 trpc 框架 AppCreateSpec
 func validTrpcSpec() *AppCreateSpec {
 	return &AppCreateSpec{
-		Name: "my-app",
-		Type: "trpc",
+		Name:      "my-app",
+		Framework: "trpc",
+		Language:  "go",
 		BuildConfig: &BuildConfigSpec{
 			SourceType: "imageRegistry",
 			ImageBuildConfig: &ImageBuildConfigSpec{
 				Name: "mirrors.tencent.com/myns/my-app",
 			},
 		},
-		AppModelSpec: &AppModelSpecSpec{
-			TrpcSpec: &TrpcSpecSpec{
-				Language: "go",
-				FileName: "trpc_go.yaml",
-				FilePath: "/app/conf",
-			},
+		AppModelSpec: &AppModelSpecSpec{},
+		FrameworkConfigFile: &FrameworkConfigFileSpec{
+			Name:     "trpc_go.yaml",
+			MountDir: "/app/conf",
 		},
 	}
 }
@@ -82,17 +81,115 @@ var _ = Describe("AppCreateSpec Validate", func() {
 
 	// ==================== type 校验（oneof 枚举） ====================
 	Describe("type field", func() {
-		It("should return error when type is empty", func() {
+		It("should return error when neither type nor framework is set", func() {
 			spec := validTrpcSpec()
-			spec.Type = ""
-			Expect(spec.Validate()).To(MatchError(ContainSubstring("'type' is required")))
+			spec.Framework = ""
+			spec.Language = ""
+			spec.FrameworkConfigFile = nil
+			Expect(spec.Validate()).To(MatchError(ContainSubstring("either 'framework")))
 		})
 
-		It("should return error when type is invalid", func() {
+		DescribeTable("only accepts helm / agones",
+			func(appType string, ok bool) {
+				spec := validTrpcSpec()
+				spec.Framework = ""
+				spec.Language = ""
+				spec.FrameworkConfigFile = nil
+				spec.AppModelSpec = nil
+				spec.Type = appType
+				spec.HelmSpec = &HelmSpecSpec{HelmSource: &HelmSourceSpec{
+					RepoType:       "HelmRepo",
+					HelmRepoConfig: &HelmRepoConfigSpec{RepoURL: "https://charts.example.com", ChartName: "c"},
+				}}
+				if ok {
+					Expect(spec.Validate()).To(Succeed())
+				} else {
+					Expect(spec.Validate()).To(MatchError(ContainSubstring("'type' is invalid")))
+				}
+			},
+			Entry("helm", "helm", true),
+			Entry("agones", "agones", true),
+			// trpc / taf 已不再作为 type 支持，必须使用 framework
+			Entry("trpc rejected", "trpc", false),
+			Entry("taf rejected", "taf", false),
+			Entry("bkmsApp rejected", "bkmsApp", false),
+			Entry("unknown", "unknown", false),
+		)
+	})
+
+	// ==================== id 不再允许用户指定 ====================
+	Describe("id field", func() {
+		It("should reject user-specified id", func() {
 			spec := validTrpcSpec()
-			spec.Type = "unknown"
-			Expect(spec.Validate()).To(MatchError(ContainSubstring("'type' is invalid")))
+			spec.ID = "my-app-abc123"
+			Expect(spec.Validate()).To(MatchError(ContainSubstring("'id' is not supported")))
 		})
+	})
+
+	// ==================== framework + language 新写法 ====================
+	Describe("framework field", func() {
+		It("should pass for blank framework without frameworkConfigFile", func() {
+			spec := validTrpcSpec()
+			spec.Framework = "blank"
+			spec.Language = "python"
+			spec.FrameworkConfigFile = nil
+			spec.AppModelSpec = &AppModelSpecSpec{Command: []string{"python3"}}
+			Expect(spec.Validate()).NotTo(HaveOccurred())
+		})
+
+		It("should return error when language is missing", func() {
+			spec := validTrpcSpec()
+			spec.Framework = "blank"
+			spec.Language = ""
+			spec.FrameworkConfigFile = nil
+			Expect(spec.Validate()).To(MatchError(ContainSubstring("'language' is required")))
+		})
+
+		It("should reject frameworkConfigFile for blank", func() {
+			spec := validTrpcSpec()
+			spec.Framework = "blank"
+			spec.Language = "go"
+			spec.FrameworkConfigFile = &FrameworkConfigFileSpec{Name: "a.yaml", MountDir: "/app"}
+			Expect(spec.Validate()).To(MatchError(ContainSubstring("not supported for framework 'blank'")))
+		})
+
+		It("should require frameworkConfigFile for trpc", func() {
+			spec := validTrpcSpec()
+			spec.FrameworkConfigFile = nil
+			Expect(spec.Validate()).To(MatchError(ContainSubstring("'frameworkConfigFile' is required")))
+		})
+
+		It("should reject framework on helm apps", func() {
+			spec := validTrpcSpec()
+			spec.Type = "helm"
+			Expect(spec.Validate()).To(MatchError(ContainSubstring("not supported for helm")))
+		})
+
+		It("rejects frameworkConfigFile on helm apps", func() {
+			spec := validTrpcSpec()
+			spec.Framework = ""
+			spec.Language = ""
+			spec.AppModelSpec = nil
+			spec.Type = "helm"
+			Expect(spec.Validate()).To(MatchError(ContainSubstring("'frameworkConfigFile' is not supported")))
+		})
+
+		DescribeTable("accepts the documented framework and language combinations",
+			func(framework, language string) {
+				spec := validTrpcSpec()
+				spec.Framework = framework
+				spec.Language = language
+				if framework == "blank" {
+					spec.FrameworkConfigFile = nil
+				}
+				Expect(spec.Validate()).To(Succeed())
+			},
+			Entry("trpc + go", "trpc", "go"),
+			Entry("trpc + cpp", "trpc", "cpp"),
+			Entry("taf + cpp", "taf", "cpp"),
+			Entry("blank + python", "blank", "python"),
+			Entry("blank + nodejs", "blank", "nodejs"),
+		)
 	})
 
 	// ==================== buildConfig.sourceType 校验（required + oneof） ====================
@@ -112,21 +209,6 @@ var _ = Describe("AppCreateSpec Validate", func() {
 		It("should return error when buildConfig.sourceType is invalid", func() {
 			spec := validTrpcSpec()
 			spec.BuildConfig.SourceType = "invalidSource"
-			Expect(spec.Validate()).To(MatchError(ContainSubstring("is invalid")))
-		})
-	})
-
-	// ==================== appModelSpec.trpcSpec.language 校验（required + oneof） ====================
-	Describe("appModelSpec.trpcSpec.language field", func() {
-		It("should return error when trpcSpec.language is empty", func() {
-			spec := validTrpcSpec()
-			spec.AppModelSpec.TrpcSpec.Language = ""
-			Expect(spec.Validate()).To(MatchError(ContainSubstring("is required")))
-		})
-
-		It("should return error when trpcSpec.language is invalid", func() {
-			spec := validTrpcSpec()
-			spec.AppModelSpec.TrpcSpec.Language = "java"
 			Expect(spec.Validate()).To(MatchError(ContainSubstring("is invalid")))
 		})
 	})

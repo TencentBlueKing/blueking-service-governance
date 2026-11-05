@@ -39,11 +39,14 @@ func NewGetCmd() *cobra.Command {
 		Short: "Get application details",
 		Long: `Get the full definition of an application, including build config and app model spec.
 
-The output in YAML format is compatible with 'app create -f', enabling a read-modify-write workflow.`,
+The YAML and JSON output describes the current state of an application and cannot be fed
+back into 'app create -f': the spec file for creating uses a different set of fields
+(for example 'framework' and 'frameworkConfigFile', and no 'type' for platform-managed apps).
+Run 'bkms-cli app create --help' for the spec file format.`,
 		Example: `  # Get app details in default table format
   bkms-cli app get --app myapp
 
-  # Get app details in YAML (can be saved and used with 'app create -f')
+  # Get app details in YAML
   bkms-cli app get --app myapp -o yaml
 
   # Get app details in JSON
@@ -82,6 +85,12 @@ func printAppDetails(app *client.AppFull) {
 	console.Info("  %-20s %s", "Name:", app.Name)
 	console.Info("  %-20s %s", "DisplayName:", app.DisplayName)
 	console.Info("  %-20s %s", "Type:", app.Type)
+	if app.Framework != "" {
+		console.Info("  %-20s %s", "Framework:", app.Framework)
+	}
+	if app.Language != "" {
+		console.Info("  %-20s %s", "Language:", app.Language)
+	}
 	if app.BuildConfig != nil {
 		console.Info("  %-20s %s", "BuildSource:", formatBuildSource(app.BuildConfig))
 	}

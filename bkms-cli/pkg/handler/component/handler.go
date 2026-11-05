@@ -25,7 +25,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/client"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/constant"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/utils/apptype"
 )
 
 // CreateAppComponentRefInput 是创建应用组件引用的请求体。
@@ -101,10 +101,10 @@ func DeleteAppComponent(ctx context.Context, cli client.Client, appID, compName 
 }
 
 func ensureAppModelApp(appType string) error {
-	if appType == constant.AppTypeTrpc || appType == constant.AppTypeTaf {
+	if apptype.IsAppModel(appType) {
 		return nil
 	}
-	return errors.Errorf("app type %q does not support components (only trpc/taf apps are supported)", appType)
+	return errors.Errorf("app type %q does not support components (only appmodel apps are supported)", appType)
 }
 
 func componentKind(comp client.AppComponent) string {

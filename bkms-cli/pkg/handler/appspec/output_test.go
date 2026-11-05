@@ -23,6 +23,7 @@ import (
 	. "github.com/onsi/gomega"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/client"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/utils/apptype"
 )
 
 var _ = Describe("Output Formatting", func() {
@@ -185,21 +186,16 @@ var _ = Describe("Output Formatting", func() {
 		})
 	})
 
-	Describe("isAppModelType", func() {
-		It("should return true for trpc", func() {
-			Expect(isAppModelType("trpc")).To(BeTrue())
+	Describe("client.IsAppModelType", func() {
+		It("should return true for trpc, taf and bkmsApp", func() {
+			Expect(apptype.IsAppModel("trpc")).To(BeTrue())
+			Expect(apptype.IsAppModel("taf")).To(BeTrue())
+			Expect(apptype.IsAppModel("bkmsApp")).To(BeTrue())
 		})
 
-		It("should return true for taf", func() {
-			Expect(isAppModelType("taf")).To(BeTrue())
-		})
-
-		It("should return false for helm", func() {
-			Expect(isAppModelType("helm")).To(BeFalse())
-		})
-
-		It("should return false for agones", func() {
-			Expect(isAppModelType("agones")).To(BeFalse())
+		It("should return false for helm and agones", func() {
+			Expect(apptype.IsAppModel("helm")).To(BeFalse())
+			Expect(apptype.IsAppModel("agones")).To(BeFalse())
 		})
 	})
 })

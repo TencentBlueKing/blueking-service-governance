@@ -30,6 +30,7 @@ import (
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/client"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/constant"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/utils/apptype"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/utils/clierr"
 )
 
@@ -89,8 +90,7 @@ func createDeployForEnv(
 	file []byte,
 	deploySpecFile string,
 ) error {
-	switch app.Type {
-	case constant.AppTypeHelm:
+	if app.Type == constant.AppTypeHelm {
 		opts := new(client.HelmDeployOptions)
 		if err := yaml.Unmarshal(file, opts); err != nil {
 			return errors.Wrapf(err, "parse deploy spec file %s failed", deploySpecFile)
@@ -99,27 +99,18 @@ func createDeployForEnv(
 			return err
 		}
 		return cli.CreateAppHelmDeploy(ctx, app.ID, envName, *opts)
-
-	case constant.AppTypeTrpc:
-		opts := new(client.AppModelDeployOptions)
-		if err := yaml.Unmarshal(file, opts); err != nil {
-			return errors.Wrapf(err, "parse deploy spec file %s failed", deploySpecFile)
-		}
-		if err := opts.Validate(); err != nil {
-			return err
-		}
-		return cli.CreateAppTrpcDeploy(ctx, app.ID, envName, *opts)
-
-	case constant.AppTypeTaf:
-		opts := new(client.AppModelDeployOptions)
-		if err := yaml.Unmarshal(file, opts); err != nil {
-			return errors.Wrapf(err, "parse deploy spec file %s failed", deploySpecFile)
-		}
-		if err := opts.Validate(); err != nil {
-			return err
-		}
-		return cli.CreateAppTafDeploy(ctx, app.ID, envName, *opts)
-	default:
-		return errors.Errorf("unknown app type: %s", app.Type)
 	}
+
+	if !apptype.IsAppModel(app.Type) {
+		return errors.Errorf("unsupported app type for deploy: %s", app.Type)
+	}
+
+	opts := new(client.AppModelDeployOptions)
+	if err := yaml.Unmarshal(file, opts); err != nil {
+		return errors.Wrapf(err, "parse deploy spec file %s failed", deploySpecFile)
+	}
+	if err := opts.Validate(); err != nil {
+		return err
+	}
+	return cli.CreateBKMSAppDeploy(ctx, app.ID, envName, *opts)
 }

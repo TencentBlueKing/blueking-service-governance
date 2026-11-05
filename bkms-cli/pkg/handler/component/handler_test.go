@@ -82,6 +82,24 @@ var _ = Describe("ListAppComponents", func() {
 		Expect(comps[0].Kind).To(Equal(client.AppComponentKindRef))
 	})
 
+	It("accepts bkmsApp applications", func() {
+		cli.EXPECT().GetAppDetail(mock.Anything, appID).Return(&client.AppDetail{
+			Type:      constant.AppTypeBKMSApp,
+			Framework: constant.FrameworkBlank,
+			AppModelSpec: &client.AppModelSpec{
+				Components: []client.AppComponent{
+					{Name: "local-vol", Type: "VolumeSecret", Version: "v1.0.0"},
+				},
+			},
+		}, nil)
+
+		comps, err := ListAppComponents(ctx, cli, appID, "")
+
+		Expect(err).NotTo(HaveOccurred())
+		Expect(comps).To(HaveLen(1))
+		Expect(comps[0].Kind).To(Equal(client.AppComponentKindInst))
+	})
+
 	It("rejects unsupported app types", func() {
 		cli.EXPECT().GetAppDetail(mock.Anything, appID).Return(&client.AppDetail{
 			Type: constant.AppTypeHelm,
@@ -91,7 +109,7 @@ var _ = Describe("ListAppComponents", func() {
 
 		Expect(comps).To(BeNil())
 		Expect(err).To(HaveOccurred())
-		Expect(err.Error()).To(ContainSubstring("only trpc/taf"))
+		Expect(err.Error()).To(ContainSubstring("only appmodel apps"))
 	})
 
 	It("rejects unknown kind filters", func() {
@@ -141,7 +159,7 @@ var _ = Describe("CreateAppComponentRef", func() {
 
 		Expect(name).To(BeEmpty())
 		Expect(err).To(HaveOccurred())
-		Expect(err.Error()).To(ContainSubstring("only trpc/taf"))
+		Expect(err.Error()).To(ContainSubstring("only appmodel apps"))
 	})
 })
 
