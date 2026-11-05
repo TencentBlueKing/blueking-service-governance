@@ -32,15 +32,15 @@ const DefaultInterval int64 = 60
 // MaxInstances 一次最多查询的实例数
 const MaxInstances = 50
 
-// DefaultTopInstancesLimit 实例排名默认取前 N 个
-const DefaultTopInstancesLimit = 10
+// DefaultRankLimit 实例排名默认取前 N 个
+const DefaultRankLimit = 10
 
 // 实例排名方向
 const (
-	// LimitTypeTop 按平均 CPU 使用量从高到低取前 N 个（默认）
-	LimitTypeTop = "top"
-	// LimitTypeBottom 按平均 CPU 使用量从低到高取前 N 个
-	LimitTypeBottom = "bottom"
+	// RankTypeTop 按平均 CPU 使用量从高到低取前 N 个（默认）
+	RankTypeTop = "top"
+	// RankTypeBottom 按平均 CPU 使用量从低到高取前 N 个
+	RankTypeBottom = "bottom"
 )
 
 // --- BkMonitor URI 参数 ---
@@ -205,12 +205,12 @@ func (r *GetInstanceTimeSeriesQueryInput) Normalize() {
 
 // --- 实例排名 ---
 
-// ListTopInstancesQueryInput 实例排名的 Query 参数
-type ListTopInstancesQueryInput struct {
+// RankInstancesQueryInput 实例排名的 Query 参数
+type RankInstancesQueryInput struct {
 	// Limit 取前 N 个实例，取值 1~50，默认 10
 	Limit int `form:"limit" binding:"omitempty,min=1,max=50"`
-	// LimitType 排名方向：top 按平均 CPU 使用量从高到低、bottom 从低到高，默认 top
-	LimitType string `form:"limitType" binding:"omitempty,oneof=top bottom" enums:"top,bottom"`
+	// RankType 排名方向：top 按平均 CPU 使用量从高到低、bottom 从低到高，默认 top
+	RankType string `form:"rankType" binding:"omitempty,oneof=top bottom" enums:"top,bottom"`
 	// StartTime 排名时间范围的开始时间（Unix 时间戳，秒）
 	StartTime int64 `form:"startTime" binding:"required,min=1,ltefield=EndTime"`
 	// EndTime 排名时间范围的结束时间（Unix 时间戳，秒）
@@ -222,12 +222,12 @@ type ListTopInstancesQueryInput struct {
 }
 
 // Normalize 设置默认的排名数量、方向、子查询步长与汇聚方法
-func (r *ListTopInstancesQueryInput) Normalize() {
+func (r *RankInstancesQueryInput) Normalize() {
 	if r.Limit <= 0 {
-		r.Limit = DefaultTopInstancesLimit
+		r.Limit = DefaultRankLimit
 	}
-	if r.LimitType == "" {
-		r.LimitType = LimitTypeTop
+	if r.RankType == "" {
+		r.RankType = RankTypeTop
 	}
 	if r.Interval < DefaultInterval {
 		r.Interval = DefaultInterval
@@ -237,17 +237,17 @@ func (r *ListTopInstancesQueryInput) Normalize() {
 	}
 }
 
-// TopInstanceOutput 实例排名结果
-type TopInstanceOutput struct {
+// InstanceRankOutput 实例排名结果
+type InstanceRankOutput struct {
 	// Instance 实例（Pod）名称
 	Instance string `json:"instance"`
 	// Value 时间范围内的平均 CPU 使用量（核数）
 	Value float64 `json:"value"`
 }
 
-// ListTopInstancesResp 实例排名的响应，已按 limitType 排好序
-type ListTopInstancesResp struct {
-	Data []*TopInstanceOutput `json:"data"`
+// RankInstancesResp 实例排名的响应，已按 rankType 排好序
+type RankInstancesResp struct {
+	Data []*InstanceRankOutput `json:"data"`
 }
 
 // TimeSeriesItemStat 时序数据统计信息

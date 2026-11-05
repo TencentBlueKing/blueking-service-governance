@@ -8141,6 +8141,105 @@
                 }
             }
         },
+        "/apps/{appID}/envs/{envName}/bkmonitor/instance-ranks": {
+            "get": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "bkintegrations-bkmonitor"
+                ],
+                "summary": "按平均 CPU 使用量查询环境实例的 Top / Bottom N",
+                "operationId": "RankInstances",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "应用 ID",
+                        "name": "appID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "环境名称",
+                        "name": "envName",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "取前 N 个实例，1~50，默认 10",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "top",
+                            "bottom"
+                        ],
+                        "type": "string",
+                        "description": "排名方向，默认 top",
+                        "name": "rankType",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "排名时间范围的开始时间（Unix 时间戳，秒）",
+                        "name": "startTime",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "排名时间范围的结束时间（Unix 时间戳，秒）",
+                        "name": "endTime",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "子查询步长（秒），最小 60，默认 60",
+                        "name": "interval",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "sum",
+                            "max",
+                            "min",
+                            "count",
+                            "avg"
+                        ],
+                        "type": "string",
+                        "description": "汇聚方法，默认 sum",
+                        "name": "method",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.RankInstancesResp"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
         "/apps/{appID}/envs/{envName}/bkmonitor/instance-time-series": {
             "post": {
                 "security": [
@@ -8202,98 +8301,6 @@
                     },
                     "404": {
                         "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
-                        }
-                    }
-                }
-            }
-        },
-        "/apps/{appID}/envs/{envName}/bkmonitor/top-instances": {
-            "get": {
-                "security": [
-                    {
-                        "BkUserInfo": []
-                    },
-                    {
-                        "BkUserCredential": []
-                    }
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "bkintegrations-bkmonitor"
-                ],
-                "summary": "按平均 CPU 使用量查询环境实例的 Top / Bottom N",
-                "operationId": "ListTopInstances",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "应用 ID",
-                        "name": "appID",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "环境名称",
-                        "name": "envName",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "integer",
-                        "description": "取前 N 个实例，1~50，默认 10",
-                        "name": "limit",
-                        "in": "query"
-                    },
-                    {
-                        "enum": [
-                            "top",
-                            "bottom"
-                        ],
-                        "type": "string",
-                        "description": "排名方向，默认 top",
-                        "name": "limitType",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "排名时间范围的开始时间（Unix 时间戳，秒）",
-                        "name": "startTime",
-                        "in": "query",
-                        "required": true
-                    },
-                    {
-                        "type": "integer",
-                        "description": "排名时间范围的结束时间（Unix 时间戳，秒）",
-                        "name": "endTime",
-                        "in": "query",
-                        "required": true
-                    },
-                    {
-                        "type": "integer",
-                        "description": "子查询步长（秒），最小 60，默认 60",
-                        "name": "interval",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "同一 Pod 内多个容器的汇聚方法，默认 sum",
-                        "name": "method",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/serializer.ListTopInstancesResp"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
                         "schema": {
                             "$ref": "#/definitions/bkerrs.GinErrorOutput"
                         }
@@ -29460,6 +29467,19 @@
                 }
             }
         },
+        "serializer.InstanceRankOutput": {
+            "type": "object",
+            "properties": {
+                "instance": {
+                    "description": "Instance 实例（Pod）名称",
+                    "type": "string"
+                },
+                "value": {
+                    "description": "Value 时间范围内的平均 CPU 使用量（核数）",
+                    "type": "number"
+                }
+            }
+        },
         "serializer.InstanceTimeSeriesResp": {
             "type": "object",
             "properties": {
@@ -30444,17 +30464,6 @@
             "properties": {
                 "data": {
                     "$ref": "#/definitions/serializer.RuntimeImagesOutputObjs"
-                }
-            }
-        },
-        "serializer.ListTopInstancesResp": {
-            "type": "object",
-            "properties": {
-                "data": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/serializer.TopInstanceOutput"
-                    }
                 }
             }
         },
@@ -32577,6 +32586,17 @@
                 }
             }
         },
+        "serializer.RankInstancesResp": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/serializer.InstanceRankOutput"
+                    }
+                }
+            }
+        },
         "serializer.RecoverConditionInput": {
             "type": "object",
             "properties": {
@@ -34249,19 +34269,6 @@
                 "enabled": {
                     "description": "是否启用 GPA。true 时下发 CR，false 时删除 CR",
                     "type": "boolean"
-                }
-            }
-        },
-        "serializer.TopInstanceOutput": {
-            "type": "object",
-            "properties": {
-                "instance": {
-                    "description": "Instance 实例（Pod）名称",
-                    "type": "string"
-                },
-                "value": {
-                    "description": "Value 时间范围内的平均 CPU 使用量（核数）",
-                    "type": "number"
                 }
             }
         },

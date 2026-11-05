@@ -304,11 +304,11 @@ var _ = Describe("BkMonitor Serializer", func() {
 		})
 	})
 
-	Describe("ListTopInstancesQueryInput", func() {
+	Describe("RankInstancesQueryInput", func() {
 		Context("Validation", func() {
 			DescribeTable(
 				"should validate correctly",
-				func(input serializer.ListTopInstancesQueryInput, shouldFail bool) {
+				func(input serializer.RankInstancesQueryInput, shouldFail bool) {
 					err := binding.Validator.ValidateStruct(&input)
 					if shouldFail {
 						Expect(err).To(HaveOccurred())
@@ -316,41 +316,41 @@ var _ = Describe("BkMonitor Serializer", func() {
 						Expect(err).NotTo(HaveOccurred())
 					}
 				},
-				Entry("only required time range", serializer.ListTopInstancesQueryInput{
+				Entry("only required time range", serializer.RankInstancesQueryInput{
 					StartTime: 1781366400,
 					EndTime:   1781452799,
 				}, false),
-				Entry("all optional fields set", serializer.ListTopInstancesQueryInput{
+				Entry("all optional fields set", serializer.RankInstancesQueryInput{
 					Limit:     50,
-					LimitType: "bottom",
+					RankType:  "bottom",
 					StartTime: 1781366400,
 					EndTime:   1781452799,
 					Interval:  300,
 					Method:    "avg",
 				}, false),
-				Entry("missing start time", serializer.ListTopInstancesQueryInput{
+				Entry("missing start time", serializer.RankInstancesQueryInput{
 					EndTime: 1781452799,
 				}, true),
-				Entry("start_time greater than end_time", serializer.ListTopInstancesQueryInput{
+				Entry("start_time greater than end_time", serializer.RankInstancesQueryInput{
 					StartTime: 1781452799,
 					EndTime:   1781366400,
 				}, true),
-				Entry("limit exceeds maximum", serializer.ListTopInstancesQueryInput{
+				Entry("limit exceeds maximum", serializer.RankInstancesQueryInput{
 					Limit:     51,
 					StartTime: 1781366400,
 					EndTime:   1781452799,
 				}, true),
-				Entry("negative limit", serializer.ListTopInstancesQueryInput{
+				Entry("negative limit", serializer.RankInstancesQueryInput{
 					Limit:     -1,
 					StartTime: 1781366400,
 					EndTime:   1781452799,
 				}, true),
-				Entry("invalid limitType", serializer.ListTopInstancesQueryInput{
-					LimitType: "middle",
+				Entry("invalid rankType", serializer.RankInstancesQueryInput{
+					RankType:  "middle",
 					StartTime: 1781366400,
 					EndTime:   1781452799,
 				}, true),
-				Entry("invalid method", serializer.ListTopInstancesQueryInput{
+				Entry("invalid method", serializer.RankInstancesQueryInput{
 					Method:    "median",
 					StartTime: 1781366400,
 					EndTime:   1781452799,
@@ -360,22 +360,22 @@ var _ = Describe("BkMonitor Serializer", func() {
 
 		Context("Normalize", func() {
 			It("fills defaults for empty fields", func() {
-				input := serializer.ListTopInstancesQueryInput{
+				input := serializer.RankInstancesQueryInput{
 					StartTime: 1781366400,
 					EndTime:   1781452799,
 					Interval:  30,
 				}
 				input.Normalize()
-				Expect(input.Limit).To(Equal(serializer.DefaultTopInstancesLimit))
-				Expect(input.LimitType).To(Equal(serializer.LimitTypeTop))
+				Expect(input.Limit).To(Equal(serializer.DefaultRankLimit))
+				Expect(input.RankType).To(Equal(serializer.RankTypeTop))
 				Expect(input.Interval).To(Equal(serializer.DefaultInterval))
 				Expect(input.Method).To(Equal("sum"))
 			})
 
 			It("keeps specified values", func() {
-				input := serializer.ListTopInstancesQueryInput{
+				input := serializer.RankInstancesQueryInput{
 					Limit:     5,
-					LimitType: serializer.LimitTypeBottom,
+					RankType:  serializer.RankTypeBottom,
 					StartTime: 1781366400,
 					EndTime:   1781452799,
 					Interval:  300,
@@ -383,7 +383,7 @@ var _ = Describe("BkMonitor Serializer", func() {
 				}
 				input.Normalize()
 				Expect(input.Limit).To(Equal(5))
-				Expect(input.LimitType).To(Equal(serializer.LimitTypeBottom))
+				Expect(input.RankType).To(Equal(serializer.RankTypeBottom))
 				Expect(input.Interval).To(Equal(int64(300)))
 				Expect(input.Method).To(Equal("max"))
 			})

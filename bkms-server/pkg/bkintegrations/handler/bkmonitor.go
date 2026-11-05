@@ -478,9 +478,9 @@ func (h *Handler) GetInstanceTimeSeries(c *gin.Context) {
 	ginutils.OK(c, &serializer.InstanceTimeSeriesResp{Data: respData})
 }
 
-// ListTopInstances 按平均 CPU 使用量查询环境实例的 Top / Bottom N
+// RankInstances 按平均 CPU 使用量查询环境实例的 Top / Bottom N
 //
-//	@ID			ListTopInstances
+//	@ID			RankInstances
 //	@Summary	按平均 CPU 使用量查询环境实例的 Top / Bottom N
 //	@Tags		bkintegrations-bkmonitor
 //	@Produce	json
@@ -489,21 +489,18 @@ func (h *Handler) GetInstanceTimeSeries(c *gin.Context) {
 //	@Param		appID		path		string	true	"应用 ID"
 //	@Param		envName		path		string	true	"环境名称"
 //	@Param		limit		query		int		false	"取前 N 个实例，1~50，默认 10"
-//	@Param		limitType	query		string	false	"排名方向，默认 top"	Enums(top, bottom)
+//	@Param		rankType	query		string	false	"排名方向，默认 top"	Enums(top, bottom)
 //	@Param		startTime	query		int		true	"排名时间范围的开始时间（Unix 时间戳，秒）"
 //	@Param		endTime		query		int		true	"排名时间范围的结束时间（Unix 时间戳，秒）"
 //	@Param		interval	query		int		false	"子查询步长（秒），最小 60，默认 60"
-//	@Param		method		query		string	false	"同一 Pod 内多个容器的汇聚方法，默认 sum"	Enums(sum, max, min,
-//
-// count, avg)
-//
-//	@Success	200			{object}	serializer.ListTopInstancesResp
+//	@Param		method		query		string	false	"汇聚方法，默认 sum"	Enums(sum, max, min, count, avg)
+//	@Success	200			{object}	serializer.RankInstancesResp
 //	@Failure	400			{object}	bkerrs.GinErrorOutput
-//	@Router		/apps/{appID}/envs/{envName}/bkmonitor/top-instances [get]
-func (h *Handler) ListTopInstances(c *gin.Context) {
+//	@Router		/apps/{appID}/envs/{envName}/bkmonitor/instance-ranks [get]
+func (h *Handler) RankInstances(c *gin.Context) {
 	ctx := c.Request.Context()
 	var uriInput serializer.AppEnvURIInput
-	var queryInput serializer.ListTopInstancesQueryInput
+	var queryInput serializer.RankInstancesQueryInput
 	if err := ginutils.BindURIQuery(c, &uriInput, &queryInput); err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return
@@ -543,7 +540,7 @@ func (h *Handler) ListTopInstances(c *gin.Context) {
 		WorkloadName: workloadName,
 		Method:       bkmmodel.AggMethod(queryInput.Method),
 		Limit:        queryInput.Limit,
-		RankType:     bkmmodel.RankType(queryInput.LimitType),
+		RankType:     bkmmodel.RankType(queryInput.RankType),
 		StartTime:    queryInput.StartTime,
 		EndTime:      queryInput.EndTime,
 		Interval:     queryInput.Interval,
@@ -554,9 +551,9 @@ func (h *Handler) ListTopInstances(c *gin.Context) {
 		return
 	}
 
-	ginutils.OK(c, &serializer.ListTopInstancesResp{
-		Data: lo.Map(ranks, func(r *bkmmodel.InstanceRank, _ int) *serializer.TopInstanceOutput {
-			return &serializer.TopInstanceOutput{Instance: r.Instance, Value: r.Value}
+	ginutils.OK(c, &serializer.RankInstancesResp{
+		Data: lo.Map(ranks, func(r *bkmmodel.InstanceRank, _ int) *serializer.InstanceRankOutput {
+			return &serializer.InstanceRankOutput{Instance: r.Instance, Value: r.Value}
 		}),
 	})
 }
