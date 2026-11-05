@@ -40,6 +40,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime/runtimemod/mods"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/platformaccount"
 	bkciapi "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bkci"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	bkmsreg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/registry"
@@ -75,7 +76,7 @@ func ExecuteBKCIPipelineBuild(
 		if cfg.CodeRepo == nil {
 			return nil, nil, errors.Errorf("code repo config not found")
 		}
-		// 构建来源是代码库时，需要在蓝盾上初始化代码仓库
+		// 构建来源是代码库时，需要在蓝盾上初始化代码仓库（依赖调用者的 Git OAuth 授权，不能用虚拟账号）
 		_, err := bkci.NewRepositoryManager(db, app.WorkspaceID).Initialize(
 			ctx, cfg.CodeRepo.RepoURL, cfg.CodeRepo.RepoAlias,
 		)
@@ -83,7 +84,9 @@ func ExecuteBKCIPipelineBuild(
 			return nil, nil, errors.Wrapf(err, "ensure bkci repository")
 		}
 		// 虽然工作空间创建时候就会初始化 dockerfile 通用构建流水线，但是这里还是需要重新初始化，因为可能会有模板版本更新
-		_, err = bkci.NewPipelineManager(db, app.WorkspaceID).Initialize(ctx, string(bkci.PipelineTypeDockerfile))
+		_, err = bkci.NewPipelineManager(db, app.WorkspaceID).
+			WithCaller(platformaccount.MustGetCaller(ctx)).
+			Initialize(ctx, string(bkci.PipelineTypeDockerfile))
 		if err != nil {
 			return nil, nil, errors.Wrap(err, "init builtin dockerfile pipeline")
 		}
@@ -125,7 +128,12 @@ func ExecuteBKCIPipelineBuild(
 		return nil, nil, errors.Wrapf(err, "get workspace %s type %s pipeline", app.WorkspaceID, cfg.PipelineType)
 	}
 
-	client, err := bkciapi.New(auth.MustGetUser(ctx))
+	// 内置流水线由虚拟账号执行，自定义流水线由请求用户执行
+	caller := platformaccount.MustGetCaller(ctx)
+	if cfg.SourceType == SourceTypePipeline {
+		caller = auth.MustGetUser(ctx)
+	}
+	client, err := bkciapi.New(caller)
 	if err != nil {
 		return nil, nil, errors.Wrapf(err, "init bkci client")
 	}

@@ -23,10 +23,12 @@ import (
 
 	"github.com/TencentBlueKing/gopkg/collection/set"
 	"github.com/pkg/errors"
+	"github.com/samber/lo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkiam"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkiam/role"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/platformaccount"
 )
 
 // iamServicer 是 LocalManager 内部依赖的 IAMService 编排接口。
@@ -317,6 +319,10 @@ func (m *LocalManager) ListRoleMembers(ctx context.Context, roleID string) ([]st
 	members, err := m.svc.ListRoleMembers(ctx, roleID)
 	if err != nil {
 		return nil, errors.Wrap(err, "list role members")
+	}
+	// 平台级虚拟账号不是真实成员，不对外展示
+	if account, ok := platformaccount.Get(); ok {
+		members = lo.Without(members, account.ID)
 	}
 	return members, nil
 }

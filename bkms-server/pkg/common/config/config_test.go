@@ -541,6 +541,56 @@ asynq:
 			))
 		})
 
+		Context("with platform account", func() {
+			loadWithPlatformAccount := func(platformAccount string) (*config.Config, error) {
+				configContent := `
+bkApp:
+  code: test-app
+  secret: test-secret
+account:
+  authBaseURL: http://auth.example.com
+  loginURL: http://login.example.com
+metrics:
+  port: 8081
+httpServer:
+  address: 127.0.0.1
+  port: 32303
+asynq:
+  redis:
+    host: localhost
+    port: 6380
+platformAccount:
+` + platformAccount
+				Expect(os.WriteFile(configFile, []byte(configContent), 0o644)).To(Succeed())
+				return config.Load(ctx, configFile)
+			}
+
+			It("should allow empty account fields when not enabled", func() {
+				cfg, err := loadWithPlatformAccount("  enabled: false\n")
+				Expect(err).NotTo(HaveOccurred())
+				Expect(cfg.PlatformAccount.Enabled).To(BeFalse())
+			})
+
+			It("should load the account when enabled", func() {
+				cfg, err := loadWithPlatformAccount(
+					"  enabled: true\n  username: bkms-platform\n  accessToken: token\n",
+				)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(cfg.PlatformAccount.Username).To(Equal("bkms-platform"))
+			})
+
+			DescribeTable("should fail when enabled with a missing field",
+				func(platformAccount, wantField string) {
+					_, err := loadWithPlatformAccount(platformAccount)
+					Expect(err).To(HaveOccurred())
+					Expect(err.Error()).To(ContainSubstring("validate PlatformAccountConfig"))
+					Expect(err.Error()).To(ContainSubstring(wantField))
+				},
+				Entry("username", "  enabled: true\n  accessToken: token\n", "Username"),
+				Entry("access token", "  enabled: true\n  username: bkms-platform\n", "AccessToken"),
+			)
+		})
+
 		It("should fail when http server port is missing", func() {
 			configContent := `
 bkApp:

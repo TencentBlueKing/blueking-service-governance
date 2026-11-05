@@ -98,6 +98,17 @@ type BkIAMSystemIDsConfig struct {
 	BkCC string
 }
 
+// PlatformAccountConfig 平台级虚拟账号配置，未启用时使用请求用户本人调用外部系统；
+// 启用前须先用开启了虚拟账号的配置执行 grant_platform_account 命令为存量空间补发权限
+type PlatformAccountConfig struct {
+	// Enabled 是否启用虚拟账号
+	Enabled bool
+	// Username 虚拟账号的用户名
+	Username string `validate:"required_if=Enabled true"`
+	// AccessToken 虚拟账号的 access_token，属于敏感信息
+	AccessToken string `validate:"required_if=Enabled true"`
+}
+
 // --------------------------- 外部依赖服务（蓝鲸 SaaS & 公司系统） ---------------------------
 
 // BCSConfig BCS 配置
@@ -438,6 +449,8 @@ type Config struct {
 	BkApiStages BkApiStagesConfig
 	// BkIAMSystemIDs 接入蓝鲸权限中心（IAM）时使用的各业务系统 ID
 	BkIAMSystemIDs BkIAMSystemIDsConfig
+	// PlatformAccount 平台级虚拟账号配置
+	PlatformAccount PlatformAccountConfig
 
 	// --------------------------- 外部依赖服务（蓝鲸 SaaS & 公司系统） ---------------------------
 	// 蓝鲸容器平台（BCS）配置

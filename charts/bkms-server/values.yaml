@@ -214,6 +214,13 @@ svcConf:
     enableBkLoginUserinfoAuth: false
     # 用 bk-user 校验用户所属租户/状态
     enableBkUserTenantVerify: false
+  # 平台级虚拟账号，未启用时使用请求用户本人调用外部系统
+  # 启用前须先用开启了虚拟账号的配置执行 grant_platform_account 命令为存量空间补发权限
+  platformAccount:
+    enabled: false
+    username: ""
+    # 虚拟账号的 access_token
+    accessToken: ""
   # 蓝鲸 API 环境配置
   bkApiStages:
     # BSCP
