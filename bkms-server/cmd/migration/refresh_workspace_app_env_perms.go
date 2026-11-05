@@ -52,6 +52,7 @@ import (
 //  2. 按内置角色模板给管理员、开发者、SRE、运营者用户组追加授权（POST 合并语义）。
 //
 // 分级管理员是覆盖写入，因此会按本地数据重建所有平台（含 BSCP）的授权范围，平台信息不全的 workspace 会被跳过。
+// 已没有绑定记录的 BSCP 服务不再保留在授权范围内，重新绑定时会再次加入。
 // 开启按应用环境 action 鉴权前必须执行完成且失败数为 0。支持 --dry-run 预览。
 func NewRefreshWorkspaceAppEnvPermsCmd() *cobra.Command {
 	var srvCfg string
@@ -101,32 +102,38 @@ func refreshWorkspaceAppEnvPerms(
 	if err != nil {
 		return errors.Wrap(err, "list workspaces")
 	}
-	// 就绪和停用的空间都要补发：停用的空间重新启用时不会重新授权，这里不补就一直缺新 action。
-	// 初始化中的空间跳过，初始化完成时会按新模板授权。
-	workspaces = lo.Reject(workspaces, func(ws workspace.Workspace, _ int) bool {
-		return ws.State == workspace.StateProcessing
-	})
 	if len(filterIDs) > 0 {
+		allIDs := lo.Map(workspaces, func(ws workspace.Workspace, _ int) string { return ws.ID })
+		if missing := lo.Without(filterIDs, allIDs...); len(missing) > 0 {
+			return errors.Errorf("workspaces not found: %s", strings.Join(missing, ","))
+		}
 		workspaces = lo.Filter(workspaces, func(ws workspace.Workspace, _ int) bool {
 			return lo.Contains(filterIDs, ws.ID)
 		})
 	}
+	// 就绪和停用的空间都要补发：停用的空间重新启用时不会重新授权，这里不补就一直缺新 action。
+	// 初始化中的空间跳过，初始化完成时会按新模板授权。
+	initializing, workspaces := lo.FilterReject(workspaces, func(ws workspace.Workspace, _ int) bool {
+		return ws.State == workspace.StateProcessing
+	})
+	for _, ws := range initializing {
+		log.Infof(ctx, "workspace %s is initializing, skipping", ws.ID)
+	}
 
-	var success, skipped, failed int
-	var failedIDs []string
+	var success int
+	var skippedIDs, failedIDs []string
 	for _, ws := range workspaces {
 		data := buildWorkspaceData(ws)
 		// 分级管理员是覆盖写入，平台信息不全会意外缩减其授权范围
 		if err = hasAllPlatformData(data); err != nil {
 			log.Errorf(ctx, "workspace %s platform data incomplete: %v, skipping", ws.ID, err)
-			skipped++
+			skippedIDs = append(skippedIDs, ws.ID)
 			continue
 		}
 		// 应用、BSCP 绑定以及分级管理员与用户组记录按租户存储，切到该 workspace 所属租户
 		wsCtx := store.ScopeToTenant(ctx, ws.TenantID)
 		if data.BSCP, err = buildBSCPOptions(wsCtx, db, ws); err != nil {
 			log.Errorf(ctx, "workspace %s build bscp options failed: %v", ws.ID, err)
-			failed++
 			failedIDs = append(failedIDs, ws.ID)
 			continue
 		}
@@ -144,13 +151,11 @@ func refreshWorkspaceAppEnvPerms(
 
 		if err = permMgr.UpdateWorkspaceAdmin(wsCtx, data); err != nil {
 			log.Errorf(ctx, "update workspace admin for %s failed: %v", ws.ID, err)
-			failed++
 			failedIDs = append(failedIDs, ws.ID)
 			continue
 		}
 		if err = permMgr.UpdateWorkspaceScopeBuiltinRoles(wsCtx, data); err != nil {
 			log.Errorf(ctx, "update workspace builtin roles for %s failed: %v", ws.ID, err)
-			failed++
 			failedIDs = append(failedIDs, ws.ID)
 			continue
 		}
@@ -160,13 +165,14 @@ func refreshWorkspaceAppEnvPerms(
 
 	log.Infof(
 		ctx, "refresh_workspace_app_env_perms completed: total=%d, success=%d, skipped=%d, failed=%d, dryRun=%v",
-		len(workspaces), success, skipped, failed, dryRun,
+		len(workspaces), success, len(skippedIDs), len(failedIDs), dryRun,
 	)
-	if skipped > 0 || failed > 0 {
-		if skipped > 0 {
-			log.Warn(
+	if len(skippedIDs) > 0 || len(failedIDs) > 0 {
+		if len(skippedIDs) > 0 {
+			log.Warnf(
 				ctx,
-				"skipped workspaces must be fixed and refreshed before enabling app-env action checks",
+				"skipped workspaces must be fixed and refreshed before enabling app-env action checks: %s",
+				strings.Join(skippedIDs, ","),
 			)
 		}
 		if len(failedIDs) > 0 {
@@ -178,7 +184,7 @@ func refreshWorkspaceAppEnvPerms(
 		}
 		return errors.Errorf(
 			"refresh_workspace_app_env_perms incomplete: %d skipped, %d failed of %d workspaces",
-			skipped, failed, len(workspaces),
+			len(skippedIDs), len(failedIDs), len(workspaces),
 		)
 	}
 	return nil

@@ -3,48 +3,6 @@
   "enabled": true,
   "operations": [
     {
-      "operation": "upsert_resource_type",
-      "data": {
-        "id": "env_type",
-        "name": "环境类型",
-        "name_en": "env type",
-        "description": "环境类型，取值为 development、test、staging、production",
-        "description_en": "env type: development, test, staging or production",
-        "parents": [
-          {
-            "system_id": "{{ .BKMSSystemID }}",
-            "id": "workspace"
-          }
-        ],
-        "provider_config": {
-          "path": "/xxx/env_types/"
-        },
-        "version": 1
-      }
-    },
-    {
-      "operation": "upsert_instance_selection",
-      "data": {
-        "id": "env_list",
-        "name": "环境列表",
-        "name_en": "envs",
-        "resource_type_chain": [
-          {
-            "system_id": "{{ .BKMSSystemID }}",
-            "id": "workspace"
-          },
-          {
-            "system_id": "{{ .BKMSSystemID }}",
-            "id": "env_type"
-          },
-          {
-            "system_id": "{{ .BKMSSystemID }}",
-            "id": "env"
-          }
-        ]
-      }
-    },
-    {
       "operation": "upsert_action",
       "data": {
         "id": "view_app_in_env",
