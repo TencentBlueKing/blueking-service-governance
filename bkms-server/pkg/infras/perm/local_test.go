@@ -27,6 +27,7 @@ import (
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkiam"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkiam/role"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/ctxkey"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 )
@@ -315,6 +316,37 @@ var _ = Describe("LocalManager", func() {
 			Expect(fake.gotCreateWSData.BKRepo).NotTo(BeNil())
 			Expect(fake.gotCreateWSData.BKRepo.ProjectID).To(Equal(bkRepoID))
 			Expect(fake.gotCreateWSData.BKRepo.ProjectName).To(Equal(bkRepoID))
+		})
+	})
+
+	Context("independent bkrepo", func() {
+		var originalCfg *config.Config
+
+		BeforeEach(func() {
+			originalCfg = config.G
+			config.G = &config.Config{}
+			config.G.FeatureIntegrations.EnableIndependentBkRepo = true
+		})
+
+		AfterEach(func() {
+			config.G = originalCfg
+		})
+
+		It("does not grant bkrepo scopes to workspace admin", func() {
+			fake.createWSAdminResp = &role.Role{ID: "r-admin"}
+			Expect(mgr.CreateWorkspaceAdmin(
+				ctx, testWS, displayName, []string{"u1"}, bkCIID, bcsID, bkRepoID,
+			)).To(Succeed())
+			Expect(fake.gotCreateWSData.BKCI).NotTo(BeNil())
+			Expect(fake.gotCreateWSData.BKRepo).To(BeNil())
+		})
+
+		It("does not grant bkrepo scopes to builtin roles", func() {
+			Expect(mgr.CreateWorkspaceScopeBuiltinRoles(
+				ctx, testWS, displayName, bkCIID, bcsID, bkRepoID,
+			)).To(Succeed())
+			Expect(fake.gotCreateBuiltinData.BKCI).NotTo(BeNil())
+			Expect(fake.gotCreateBuiltinData.BKRepo).To(BeNil())
 		})
 	})
 

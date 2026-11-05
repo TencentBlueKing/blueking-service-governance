@@ -27,6 +27,8 @@ featureIntegrations:
   enableBkLoginUserinfoAuth: false
   # 用 bk-user 校验用户所属租户/状态
   enableBkUserTenantVerify: false
+  # 制品库为独立部署：不接入权限中心，接口使用制品库账号 Basic 认证
+  enableIndependentBkRepo: false
 # 蓝鲸 API 环境配置
 bkApiStages:
   # BSCP

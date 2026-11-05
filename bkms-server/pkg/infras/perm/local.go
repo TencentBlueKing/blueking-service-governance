@@ -27,6 +27,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkiam"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkiam/role"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bkrepo"
 )
 
 // iamServicer 是 LocalManager 内部依赖的 IAMService 编排接口。
@@ -345,10 +346,7 @@ func (m *LocalManager) CreateWorkspaceAdmin(
 			// 历史兼容 quirk：BCS.ProjectName 取 bkCIProjectID 而非 bcsProjectID。
 			ProjectName: bkCIProjectID,
 		},
-		BKRepo: &bkiam.BKRepoOptions{
-			ProjectID:   bkRepoProjectID,
-			ProjectName: bkRepoProjectID,
-		},
+		BKRepo: bkRepoOptions(bkRepoProjectID),
 	}
 	if _, err := m.svc.CreateWorkspaceAdmin(ctx, data, users); err != nil {
 		return errors.Wrap(err, "create workspace admin")
@@ -376,15 +374,23 @@ func (m *LocalManager) CreateWorkspaceScopeBuiltinRoles(
 			// 历史兼容 quirk：BCS.ProjectName 取 bkCIProjectID 而非 bcsProjectID。
 			ProjectName: bkCIProjectID,
 		},
-		BKRepo: &bkiam.BKRepoOptions{
-			ProjectID:   bkRepoProjectID,
-			ProjectName: bkRepoProjectID,
-		},
+		BKRepo: bkRepoOptions(bkRepoProjectID),
 	}
 	if _, err := m.svc.CreateWorkspaceScopeBuiltinRoles(ctx, data); err != nil {
 		return errors.Wrap(err, "create workspace builtin roles")
 	}
 	return nil
+}
+
+// bkRepoOptions 生成角色的制品库权限范围；独立部署的制品库未接入权限中心，不授予制品库权限
+func bkRepoOptions(bkRepoProjectID string) *bkiam.BKRepoOptions {
+	if bkrepo.IndependentEnabled() {
+		return nil
+	}
+	return &bkiam.BKRepoOptions{
+		ProjectID:   bkRepoProjectID,
+		ProjectName: bkRepoProjectID,
+	}
 }
 
 // AddRoleForUsers 为角色添加用户
