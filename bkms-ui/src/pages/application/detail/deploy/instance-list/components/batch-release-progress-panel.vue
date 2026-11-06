@@ -271,11 +271,11 @@
 
   /** 状态 Tag 主题 → bkui Tag 配色。 */
   const TAG_CLASSES = {
-    danger: '!border-none !bg-[#FFEBEB] !text-[#EA3636]',
-    default: '!border-none !bg-[#F0F1F5] !text-[#63656E]',
-    info: '!border-none !bg-[#E1ECFF] !text-[#3A84FF]',
-    success: '!border-none !bg-[#E5F6EA] !text-[#2CAF5E]',
-    warning: '!border-none !bg-[#FDEED8] !text-[#F59500]',
+    danger: '!border-none !bg-[#FFEBEB] !text-[#E71818]',
+    default: '!border-none !bg-[#F0F1F5] !text-[#4D4F56]',
+    info: '!border-none !bg-[#E1ECFF] !text-[#1768EF]',
+    success: '!border-none !bg-[#DAF6E5] !text-[#299E56]',
+    warning: '!border-none !bg-[#FDEED8] !text-[#E38B02]',
   } as const;
 
   const themeClass = computed(() => THEMES[props.view.kind]);

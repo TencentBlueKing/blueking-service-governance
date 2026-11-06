@@ -64,6 +64,7 @@
             <span class="text-[13px] font-bold leading-[20px] text-[#313238]">{{ batchTitle(row) }}</span>
             <Tag
               v-if="row.isFull"
+              size="small"
               theme="info"
             >
               {{ $t('全量') }}
@@ -76,7 +77,7 @@
           </div>
         </div>
         <div
-          class="mt-[8px] flex gap-[5px]"
+          class="mt-[8px] flex gap-[4px]"
           data-testid="batch-squares"
         >
           <!-- 方块按实例数比例均分宽度（如 1 实例 = 100% 宽）；浅蓝=本批要发布，深蓝=此前批次已发布，灰=未发布 -->
@@ -105,7 +106,7 @@
         <!-- 无暂停配置的批次补充「不停」标签；末批之后无下一批，不展示 -->
         <Tag
           v-else-if="row.batchIndex < preview.rows.length"
-          class="mt-[10px]"
+          class="mt-[10px] !text-[#4D4F56]"
         >
           {{ $t('不停，直接进入下一批') }}
         </Tag>
@@ -146,3 +147,15 @@
     return `${head} · ${t('累计 {0} 个', [row.updatedCount])}${percentSuffix}`;
   }
 </script>
+
+<style lang="postcss" scoped>
+  :deep(.bk-tag-info) {
+    background-color: #e1ecff;
+    color: #1768ef;
+  }
+
+  :deep(.bk-tag-warning) {
+    background-color: #fdeed8;
+    color: #e38b02;
+  }
+</style>
