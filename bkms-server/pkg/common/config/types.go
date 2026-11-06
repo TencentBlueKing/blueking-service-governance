@@ -67,6 +67,7 @@ type FeatureIntegrationsConfig struct {
 	EnableIndependentBkRepo bool
 	// DisableBSCP 关闭 BSCP（服务配置中心）对接，用于未部署 BSCP 的环境。
 	// 开启后创建工作空间不再绑定 BSCP 项目，BSCP 相关接口直接返回未启用错误。
+	// 关闭期间创建的工作空间没有 BSCP 绑定，重新启用 BSCP 后需逐个执行 bind-bscp-project 命令补绑。
 	DisableBSCP bool
 }
 

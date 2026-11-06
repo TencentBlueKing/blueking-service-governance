@@ -30,6 +30,7 @@ import (
 	"github.com/TencentBlueKing/bk-apigateway-sdks/core/define"
 	"github.com/pkg/errors"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/utils/httpresp"
@@ -65,7 +66,7 @@ type ApiClient struct {
 }
 
 // ErrDisabled 当前环境关闭了 BSCP 对接（featureIntegrations.disableBSCP）
-var ErrDisabled = errors.New("bscp integration is disabled by featureIntegrations.disableBSCP")
+var ErrDisabled = bkerrs.ErrBSCPDisabled
 
 // Disabled 返回当前环境是否关闭了 BSCP 对接
 func Disabled() bool {

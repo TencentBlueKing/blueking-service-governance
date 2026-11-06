@@ -217,6 +217,7 @@ svcConf:
     # 制品库为独立部署：不接入权限中心，接口使用制品库账号 Basic 认证，制品库成员需在制品库侧自行管理
     enableIndependentBkRepo: false
     # 关闭 BSCP 对接，未部署 BSCP 的环境设为 true
+    # 关闭期间创建的工作空间没有 BSCP 绑定，重新启用后需逐个执行 bind-bscp-project 命令补绑
     disableBSCP: false
   # 蓝鲸 API 环境配置
   bkApiStages:
