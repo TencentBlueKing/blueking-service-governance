@@ -29,7 +29,7 @@ import (
 func RequireBSCP() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if bscp.Disabled() {
-			bkerrs.AbortWithErr(c, bkerrs.WrapBSCPDisabled(bscp.ErrDisabled))
+			bkerrs.AbortWithErr(c, bscp.ErrDisabled)
 			return
 		}
 		c.Next()

@@ -30,6 +30,7 @@ import (
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
+	bscpapi "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bscp"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
 	storereg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
@@ -75,6 +76,9 @@ func runBindBscpProject(
 	cfg, err := config.Load(ctx, srvCfg)
 	if err != nil {
 		return errors.Wrap(err, "load config")
+	}
+	if bscpapi.Disabled() {
+		return errors.Wrap(bscpapi.ErrDisabled, "cannot bind workspace to bscp project")
 	}
 
 	// 交互式读取 access token（密文输入，不回显），避免经命令行参数明文传递
