@@ -39,8 +39,9 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
-// maxWaitDuration 等待 BKM Project 就绪的最长时间, 自 workspace 创建起算
-const maxWaitDuration = 10 * time.Minute
+// maxWaitDuration 等待 BKM Project 就绪的最长时间, 自 workspace 创建起算。
+// 监控空间由监控侧定时任务（每 10 分钟一轮）同步创建, 需覆盖多个同步周期
+const maxWaitDuration = 25 * time.Minute
 
 // initHandler 工作空间初始化任务处理函数
 //
