@@ -174,13 +174,16 @@
               </div>
             </template>
           </Select>
-          <!-- 跳转空间设置「发布策略」页管理策略 -->
-          <span
-            class="shrink-0 cursor-pointer text-[12px] text-[#3A84FF]"
+          <!-- 查看已选策略详情，可克隆为空间策略；未选中策略时不可点 -->
+          <Button
+            class="shrink-0"
+            :disabled="!selectedStrategy"
+            text
+            theme="primary"
             @click="handleViewStrategies"
           >
             {{ $t('查看') }}
-          </span>
+          </Button>
         </div>
         <div
           v-if="strategyHintText"
@@ -193,96 +196,11 @@
   </Form>
 
   <!-- 发布预览：摘要栏 + 批次时间线 -->
-  <div
+  <ReleasePreviewPanel
     v-if="releasePreview"
-    class="rounded-[2px] bg-[#F5F7FA] p-[16px] mb-[24px]"
-  >
-    <div class="mb-[12px] flex items-baseline gap-[8px]">
-      <span class="text-[14px] font-bold leading-[22px] text-[#313238]">{{ $t('发布预览') }}</span>
-      <span class="text-[12px] leading-[20px] text-[#979BA5]">
-        {{ $t('按所选环境的 {0} 个实例换算', [releasePreview.summary.totalReplicas]) }}
-      </span>
-    </div>
-    <!-- 摘要栏：label 在上，数值 + 单位在下 -->
-    <div
-      class="mb-[16px] flex items-stretch rounded-[2px] border border-[#DCDEE5] bg-white px-[24px] py-[14px]"
-      data-testid="release-summary"
-    >
-      <template
-        v-for="(item, index) in releaseSummaryItems"
-        :key="item.label"
-      >
-        <div
-          v-if="index > 0"
-          class="mx-[24px] h-[36px] w-[1px] shrink-0 self-center bg-[#DCDEE5]"
-        ></div>
-        <div class="min-w-0 flex-1">
-          <div class="text-[12px] leading-[16px] text-[#979BA5]">{{ item.label }}</div>
-          <div class="mt-[6px] flex items-baseline">
-            <span class="text-[20px] font-semibold leading-[24px] text-[#313238]">{{ item.value }}</span>
-            <span class="ml-[4px] text-[12px] leading-[16px] text-[#63656E]">{{ item.unit }}</span>
-          </div>
-        </div>
-      </template>
-    </div>
-    <!-- 批次时间线：编号圆节点 + 批次描述 + 进度方块 + 暂停标签 -->
-    <div class="relative pl-[30px]">
-      <div class="absolute bottom-[22px] left-[12px] top-[12px] w-[2px] bg-[#DCDEE5]"></div>
-      <div
-        v-for="row in releasePreview.rows"
-        :key="row.batchIndex"
-        class="relative pb-[16px] last:pb-0"
-      >
-        <span
-          class="absolute left-[-30px] top-0 flex h-[24px] w-[24px] items-center justify-center rounded-full bg-[#3A84FF] text-[12px] font-medium text-white"
-        >
-          {{ row.batchIndex }}
-        </span>
-        <div class="flex items-center justify-between gap-[8px]">
-          <div class="flex min-w-0 items-center gap-[6px]">
-            <span class="text-[13px] font-bold leading-[20px] text-[#313238]">{{ batchTitle(row) }}</span>
-            <Tag
-              v-if="row.isFull"
-              theme="info"
-            >
-              {{ $t('全量') }}
-            </Tag>
-          </div>
-          <div class="shrink-0 text-[13px] leading-[20px] text-[#313238]">
-            <span class="font-bold">{{ $t('{0}/{1}', [row.updatedCount, releasePreview.summary.totalReplicas]) }}</span>
-            <span class="ml-[2px] text-[#979BA5]">{{ $t('实例') }}</span>
-          </div>
-        </div>
-        <div
-          class="mt-[8px] flex gap-[5px]"
-          data-testid="batch-squares"
-        >
-          <!-- 方块按实例数比例均分宽度（如 1 实例 = 100% 宽）；浅蓝=本批要发布，深蓝=此前批次已发布，灰=未发布 -->
-          <span
-            v-for="(square, squareIndex) in buildBatchSquares(row, releasePreview.summary.totalReplicas)"
-            :key="squareIndex"
-            class="h-[10px] flex-1 rounded-[2px]"
-            :class="{
-              'bg-[#3A84FF]': square === 'prev',
-              'bg-[#A3C5FD]': square === 'new',
-              'bg-[#DCDEE5]': square === 'pending',
-            }"
-          ></span>
-        </div>
-        <Tag
-          v-if="row.pause"
-          class="mt-[10px]"
-          :theme="row.pause.mode === 'permanent' ? 'warning' : 'info'"
-        >
-          {{
-            row.pause.mode === 'permanent'
-              ? $t('永久暂停 · 手动继续')
-              : $t('暂停 {0} 秒后自动继续', [row.pause.seconds])
-          }}
-        </Tag>
-      </div>
-    </div>
-  </div>
+    class="mb-[24px]"
+    :preview="releasePreview"
+  />
 
   <!-- 新建策略：叠加在部署抽屉之上的独立抽屉，保存后自动选中并刷新发布预览 -->
   <StrategySideslider
@@ -290,6 +208,15 @@
     :existing-names="existingStrategyNames"
     mode="create"
     @success="handleStrategyCreated"
+  />
+
+  <!-- 查看策略：叠加在部署抽屉之上的独立抽屉，展示已选策略详情，可克隆为空间策略 -->
+  <StrategySideslider
+    v-model:is-show="viewStrategyVisible"
+    :existing-names="existingStrategyNames"
+    mode="view"
+    :strategy="selectedStrategy"
+    @success="handleStrategyCloned"
   />
 
   <!-- “资源规格” 和 “环境变量” 统一预检查弹窗 -->
@@ -310,10 +237,9 @@
 <script lang="ts" setup>
   import { computed, onMounted, reactive, ref, watch } from 'vue';
 
-  import { Button, Form, Input, Message, Select, Tag } from 'bkui-vue';
+  import { Button, Form, Input, Message, Select } from 'bkui-vue';
   import { Plus } from 'bkui-vue/lib/icon';
   import { useI18n } from 'vue-i18n';
-  import { useRouter } from 'vue-router';
   import { ReleaseStrategiesService } from '~/api/modules/v1/release-strategies';
   import { type RevisionType, revisionRequestFields } from '~/components/code-revision/revision';
   import { isAppModelAppType } from '~/composables/app-type';
@@ -330,12 +256,11 @@
   import EnvVarPrecheckDialog from './env-var-precheck-dialog.vue';
   import {
     type ReleasePreviewResult,
-    type ReleasePreviewRow,
-    buildBatchSquares,
     buildReleasePreview,
     buildStrategyHint,
     formatOptionTarget,
   } from './release-preview';
+  import ReleasePreviewPanel from './release-preview-panel.vue';
   import { type DeployableAppType, type DeployParams, useDeployAPIs } from './use-deploy';
   import { useDeployPrecheck } from './use-deploy-precheck';
 
@@ -365,7 +290,6 @@
   );
 
   const { t } = useI18n();
-  const router = useRouter();
   const spaceStore = useSpaceStore();
   const trpcDeployStore = useTrpcDeployStore();
   const appDetailStore = useAppDetail();
@@ -445,6 +369,8 @@
   const strategySelectRef = ref();
   /** 「新建策略」抽屉：叠加在部署抽屉之上，独立维护显隐 */
   const createStrategyVisible = ref(false);
+  /** 「查看策略」抽屉：展示已选策略详情，可克隆为空间策略 */
+  const viewStrategyVisible = ref(false);
   /** 空间内已有策略名称：新建抽屉用于名称唯一性校验 */
   const existingStrategyNames = computed(() => releaseStrategies.value.map(item => item.name ?? ''));
   // 选项展示：策略名 + 批次序列摘要，如「生产谨慎发布(1个,25%,50%,全量)」；
@@ -542,6 +468,11 @@
     createStrategyVisible.value = true;
   }
 
+  /** 查看抽屉中克隆为空间策略成功：刷新策略列表，成功提示由查看抽屉展示。 */
+  async function handleStrategyCloned() {
+    await fetchReleaseStrategies();
+  }
+
   /** 新建成功：关闭抽屉、刷新策略列表并选中新策略，发布预览随选中项自动重算。 */
   async function handleStrategyCreated(strategy?: ReleaseStrategyOutputObj) {
     createStrategyVisible.value = false;
@@ -550,12 +481,13 @@
     formModel.releaseStrategyID = strategy.id;
   }
 
-  /** 「查看」跳转空间设置下的发布策略页，集中管理空间内策略。 */
+  /**
+   * 查看已选策略：打开查看抽屉（叠加在部署抽屉之上）；
+   * 未选中策略时「查看」置灰不可点，此处兜底拦截。
+   */
   function handleViewStrategies() {
-    router.push({
-      name: 'basicItem',
-      params: { space: spaceStore.currentSpace, menuName: 'releaseStrategies' },
-    });
+    if (!selectedStrategy.value) return;
+    viewStrategyVisible.value = true;
   }
 
   onMounted(() => {
@@ -571,17 +503,6 @@
   const releasePreview = computed<null | ReleasePreviewResult>(() => {
     if (formModel.releaseMode !== 'canary' || !selectedStrategy.value) return null;
     return buildReleasePreview(selectedStrategy.value.batches, Number(formModel.replicas));
-  });
-
-  const releaseSummaryItems = computed(() => {
-    const summary = releasePreview.value?.summary;
-    if (!summary) return [];
-    return [
-      { label: t('批次数'), value: summary.batchCount, unit: t('批') },
-      { label: t('暂停次数'), value: summary.pauseCount, unit: t('次') },
-      { label: t('实例总数'), value: summary.totalReplicas, unit: t('个') },
-      { label: t('流量批次'), value: summary.trafficBatchCount, unit: t('个') },
-    ];
   });
 
   /**
@@ -605,16 +526,6 @@
     parts.push(t('最后自动全量'));
     return parts.join('，');
   });
-
-  /** 批次标题：首批数值 target 为「N 个实例」，其余为「累计 N 个（P%）」 */
-  function batchTitle(row: ReleasePreviewRow): string {
-    const head = t('第 {0} 批', [row.batchIndex]);
-    if (row.batchIndex === 1 && !row.isPercent) {
-      return `${head} · ${t('{0} 个实例', [row.updatedCount])}`;
-    }
-    const percentSuffix = row.isPercent ? `（${row.targetText}）` : '';
-    return `${head} · ${t('累计 {0} 个', [row.updatedCount])}${percentSuffix}`;
-  }
 
   /** 切换发布方式；切回「一次更新全部」时清空已选策略。 */
   function handleChangeReleaseMode(mode: 'all' | 'canary') {

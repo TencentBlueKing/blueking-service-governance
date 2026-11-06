@@ -265,6 +265,8 @@
   const basicCollapsed = ref(false);
   const batchCollapsed = ref(false);
   const previewVisible = ref(false);
+  /** 查看态点击「克隆为空间策略」进入克隆态时置 true：提交成功后提示「已克隆为空间策略」而非「策略已创建」 */
+  const clonedFromView = ref(false);
 
   /**
    * 当前场景：打开时取 props.mode，查看态点击「克隆为空间策略」会在抽屉内切到克隆态，
@@ -420,6 +422,7 @@
    */
   function handleClone() {
     if (!props.strategy) return;
+    clonedFromView.value = true;
     fillForm('clone');
   }
 
@@ -429,6 +432,7 @@
     // 抽屉跨策略复用，关闭时清掉后端名称错误，避免残留到下一次打开
     apiNameError.value = '';
     batchesEmptyError.value = '';
+    clonedFromView.value = false;
   }
 
   /** 名称失焦：先清掉后端返回的重名文案，再交给 Form 重新校验，避免旧错误一直挂着 */
@@ -473,7 +477,10 @@
           { workspaceID: spaceStore.currentSpace, ...payload },
           config,
         );
-        Message({ theme: 'success', message: t('策略已创建') });
+        Message({
+          theme: 'success',
+          message: clonedFromView.value ? t('已克隆为空间策略「{0}」', [saved?.name]) : t('策略已创建'),
+        });
       }
       visible.value = false;
       emit('success', saved);
