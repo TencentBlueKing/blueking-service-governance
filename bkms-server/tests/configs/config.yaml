@@ -24,6 +24,7 @@ featureIntegrations:
   enableBkUserTenantVerify: false    # 用 bk-user 校验用户所属租户/状态
   # 测试配置显式关闭：创建空间时 BCS 复用蓝盾项目，不单独创建 BCS 项目。
   enableIndependentBCSProject: false
+  disableBuiltinDockerfilePipeline: false   # 关闭内置 Dockerfile 构建流水线
 # 蓝鲸 API 环境配置
 bkApiStages:
   kubeinsight: prod

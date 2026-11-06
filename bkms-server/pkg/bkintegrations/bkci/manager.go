@@ -44,6 +44,16 @@ var ErrBuildTriggerPipelineRequireEnsure = errors.New(
 	"build-trigger pipeline must be created via TriggerPipelineManager.Ensure",
 )
 
+// ErrBuiltinDockerfilePipelineDisabled 当前环境关闭了内置 Dockerfile 流水线（featureIntegrations.disableBuiltinDockerfilePipeline）
+var ErrBuiltinDockerfilePipelineDisabled = errors.New(
+	"builtin dockerfile pipeline is disabled by featureIntegrations.disableBuiltinDockerfilePipeline",
+)
+
+// BuiltinDockerfilePipelineDisabled 返回当前环境是否关闭了内置 Dockerfile 流水线
+func BuiltinDockerfilePipelineDisabled() bool {
+	return config.G != nil && config.G.FeatureIntegrations.DisableBuiltinDockerfilePipeline
+}
+
 // ProjectManager 蓝盾项目管理
 type ProjectManager struct {
 	db          *mongo.Database
@@ -252,6 +262,9 @@ func NewPipelineManager(db *mongo.Database, workspaceID string) *PipelineManager
 //     UpdatePipeline，会冲掉实例上的显示名、已注入的回调脚本，以及触发器同步子需求写入的
 //     Git 事件条件；模板变更若需滚动，应另做保留上述字段的合并式 Sync，而不是套用本函数
 func (m *PipelineManager) Initialize(ctx context.Context, pipelineType string) (*Pipeline, error) {
+	if pipelineType == string(PipelineTypeDockerfile) && BuiltinDockerfilePipelineDisabled() {
+		return nil, ErrBuiltinDockerfilePipelineDisabled
+	}
 	pipelineStore := store.Of(m.db, PipelineMeta)
 	pipeline, err := pipelineStore.Get(ctx, ByWorkspaceAndType(m.workspaceID, pipelineType))
 	if err != nil {

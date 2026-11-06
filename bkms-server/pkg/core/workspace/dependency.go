@@ -33,6 +33,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkrepo"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/cmdb"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
+	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bcs"
 	bkciapi "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bkci"
@@ -122,7 +123,6 @@ func ensureBkSystemsWithIndependentBCSProject(
 		return nil, errors.Wrap(err, "resolve workspace bcs project")
 	}
 
-	// 绑定 BSCP Default 项目并确保 credential 存在
 	bscpBinding, err := BindBscpProject(ctx, cmdbInfo.BizID, "")
 	if err != nil {
 		return nil, errors.Wrap(err, "bind bscp project")
@@ -239,11 +239,14 @@ func buildBkSystems(
 }
 
 func initializeDefaultBKCIPipelines(ctx context.Context, db *mongo.Database, workspaceID string) error {
-	_, err := bkci.NewPipelineManager(db, workspaceID).Initialize(ctx, string(bkci.PipelineTypeDockerfile))
-	if err != nil {
+	if bkci.BuiltinDockerfilePipelineDisabled() {
+		log.Infof(ctx, "builtin dockerfile pipeline is disabled, skip creating it for workspace %s", workspaceID)
+	} else if _, err := bkci.NewPipelineManager(db, workspaceID).Initialize(
+		ctx, string(bkci.PipelineTypeDockerfile),
+	); err != nil {
 		return errors.Wrap(err, "create builtin dockerfile pipeline")
 	}
-	_, err = bkci.NewPipelineManager(db, workspaceID).Initialize(ctx, string(bkci.PipelineTypeHelmGitBuild))
+	_, err := bkci.NewPipelineManager(db, workspaceID).Initialize(ctx, string(bkci.PipelineTypeHelmGitBuild))
 	if err != nil {
 		return errors.Wrap(err, "create builtin helm-git-build pipeline")
 	}

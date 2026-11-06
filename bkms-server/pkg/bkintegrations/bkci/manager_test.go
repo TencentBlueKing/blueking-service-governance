@@ -340,6 +340,19 @@ var _ = Describe("PipelineManager Initialize", func() {
 		_, pipelineStore, templateStore = setupManagerTestStores()
 	})
 
+	It("should refuse dockerfile pipeline when it is disabled", func() {
+		origin := config.G.FeatureIntegrations.DisableBuiltinDockerfilePipeline
+		config.G.FeatureIntegrations.DisableBuiltinDockerfilePipeline = true
+		DeferCleanup(func() { config.G.FeatureIntegrations.DisableBuiltinDockerfilePipeline = origin })
+		// 已有记录也不放行，避免构建时继续使用缺少插件的流水线
+		createManagerTestPipeline(ctx, pipelineStore, "1.0.0")
+
+		result, err := manager.Initialize(ctx, string(PipelineTypeDockerfile))
+
+		Expect(err).To(MatchError(ErrBuiltinDockerfilePipelineDisabled))
+		Expect(result).To(BeNil())
+	})
+
 	It("should return custom pipeline directly without template version check", func() {
 		pipeline := &Pipeline{
 			ID:          "p-custom-pipeline-id",

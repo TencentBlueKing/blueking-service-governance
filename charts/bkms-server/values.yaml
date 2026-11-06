@@ -220,6 +220,8 @@ svcConf:
     # false：新建/绑定都按蓝盾项目处理，BCS ID/Code 复用蓝盾项目
     #     （绑定已有项目时拉取 BCS 和蓝盾授权项目的交集）。
     enableIndependentBCSProject: false
+    # 关闭内置 Dockerfile 构建流水线，蓝盾未安装「构建并推送 Docker 镜像」插件的环境设为 true
+    disableBuiltinDockerfilePipeline: false
   # 蓝鲸 API 环境配置
   bkApiStages:
     # BSCP
