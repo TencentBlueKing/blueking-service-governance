@@ -31,7 +31,7 @@
  *   10. 主工作负载为 Deployment：分批发布按钮禁用（仅 GameDeployment 支持）
  *   11. 主工作负载为 GameDeployment：分批发布可用
  *   12. 点下拉内「新建策略」：叠加新建策略抽屉；保存后抽屉关闭、自动选中新策略并刷新发布预览
- *   13. 点「查看」：跳转空间设置「发布策略」页
+ *   13. 点「查看」：打开已选策略查看抽屉；未选策略时置灰不可点
  *   14. 策略末批未到全量：提示收尾为「最后自动全量」，预览追加系统补齐的全量批
  *   15. 两批策略（25% → 100%）：提示保留首批灰度阶段，不误判为单批全量
  *   16. 主工作负载资格检查完成前：分批发布禁用；返回 Deployment 后仍禁用
@@ -42,7 +42,7 @@
  *   - ReleaseStrategiesService.createReleaseStrategy → harness 返回新建结果（含 id，供「自动选中」断言）
  *   - use-deploy 的 useDeployAPIs → harness.createDeployDirectly / buildAndCreateDeploy / listDeployRecords（断言部署参数与主工作负载）
  *   - use-deploy-precheck / use-app-repo-ref-select / use-recommend-tag / use-app-visible-envs / use-leave-confirm / stores → 契约 stub
- *   - vue-router → mock-router 工厂（断言「查看」的 push 目标）
+ *   - vue-router → mock-router 工厂（业务已不直接跳页，保留路由依赖兜底）
  *   - ImageSelect → 可填值 stub（真实组件依赖镜像列表接口）；CodeRevisionField 为全局组件 → 注册空 stub
  *
  * backlog（不确定项，待业务确认）：
@@ -73,7 +73,7 @@ const harness = vi.hoisted(() => ({
   createReleaseStrategy: vi.fn(),
 }));
 
-/** 「查看」跳转断言用 */
+/** vue-router mock 工厂的 push 桩（「查看」已改为打开查看抽屉，不再断言跳页，保留兜底） */
 const routerMocks = vi.hoisted(() => ({ push: vi.fn() }));
 
 /** 可变应用类型：helm / taf / trpc，供应用类型禁用用例切换 */
@@ -136,7 +136,11 @@ vi.mock('vue-i18n', async importOriginal => ({
   useI18n: () => ({
     t: (s: string, params?: unknown[]) => {
       let out = s;
-      if (Array.isArray(params)) params.forEach((p, i) => (out = out.replace(`{${i}}`, String(p))));
+      if (Array.isArray(params)) {
+        params.forEach((p, i) => {
+          out = out.replace(`{${i}}`, String(p));
+        });
+      }
       return out;
     },
     te: () => true,
@@ -318,7 +322,11 @@ async function submitForm() {
 /** 与 useI18n mock 保持一致：直译并处理 {0} 插值 */
 function translate(key: string, params?: unknown[]) {
   let out = key;
-  if (Array.isArray(params)) params.forEach((p, i) => (out = out.replace(`{${i}}`, String(p))));
+  if (Array.isArray(params)) {
+    params.forEach((p, i) => {
+      out = out.replace(`{${i}}`, String(p));
+    });
+  }
   return out;
 }
 
@@ -407,16 +415,20 @@ describe('部署表单：发布策略选择', () => {
     expect(screen.getByText('第 3 批 · 累计 10 个（50%）')).toBeInTheDocument();
     expect(screen.getByText('第 4 批 · 累计 20 个（100%）')).toBeInTheDocument();
     expect(screen.getByText('全量')).toBeInTheDocument();
-    // 右侧实例分数：每批一行「已累计/总数」
-    expect(screen.getAllByText('实例')).toHaveLength(4);
-    expect(screen.getByText('1/20')).toBeInTheDocument();
-    expect(screen.getByText('5/20')).toBeInTheDocument();
-    expect(screen.getByText('20/20')).toBeInTheDocument();
+    // 右侧实例分数：每批一行「新版本 X · 旧版本 Y」（发布预览面板改版后的口径）
+    expect(screen.getByText('新版本 1 · 旧版本 19')).toBeInTheDocument();
+    expect(screen.getByText('新版本 5 · 旧版本 15')).toBeInTheDocument();
+    expect(screen.getByText('新版本 10 · 旧版本 10')).toBeInTheDocument();
+    expect(screen.getByText('新版本 20 · 旧版本 0')).toBeInTheDocument();
+    // 无暂停配置的批次（除末批）带「不停」标签：4 批中仅批次 1
+    expect(screen.getAllByText('不停，直接进入下一批')).toHaveLength(1);
     // 实例进度方块：每批一行 20 个方块，宽度按实例比例均分（flex-1）；
     // 颜色：浅蓝=本批要发布（首批首方块），深蓝=此前批次已发布（次批首方块）
     const squareRows = screen.getAllByTestId('batch-squares');
     expect(squareRows).toHaveLength(4);
-    squareRows.forEach(row => expect(row.children).toHaveLength(20));
+    for (const row of squareRows) {
+      expect(row.children).toHaveLength(20);
+    }
     expect(squareRows[0].children[0].className).toContain('bg-[#A3C5FD]');
     expect(squareRows[1].children[0].className).toContain('bg-[#3A84FF]');
     // 暂停标签：permanent → 橙色（warning）；duration → 蓝色（info）
@@ -633,15 +645,20 @@ describe('部署表单：抽屉内新建发布策略', () => {
     expect(harness.createDeployDirectly.mock.calls[0][0]).toMatchObject({ releaseStrategyID: 'strategy-new' });
   });
 
-  it('当用户点「查看」时，应跳转空间设置下的发布策略页', async () => {
+  it('当用户点「查看」时，应打开已选策略的查看抽屉', async () => {
     await renderForm();
     await enableCanaryMode();
 
-    await userEvent.click(screen.getByText('查看'));
+    // 未选中策略时「查看」置灰不可点
+    expect(screen.getByRole('button', { name: '查看' })).toBeDisabled();
 
-    expect(routerMocks.push).toHaveBeenCalledWith({
-      name: 'basicItem',
-      params: { space: 'ws-1', menuName: 'releaseStrategies' },
-    });
+    // 选中策略后点击「查看」：叠加查看抽屉，展示所选策略
+    await chooseStrategy(/生产谨慎发布/);
+    await userEvent.click(screen.getByRole('button', { name: '查看' }));
+    const header = await screen.findByTestId('strategy-sideslider-header');
+    expect(within(header).getByText('查看策略')).toBeInTheDocument();
+    expect(within(header).getByText('生产谨慎发布')).toBeInTheDocument();
+    // 查看态页脚提供「克隆为空间策略」入口
+    expect(screen.getByText('克隆为空间策略')).toBeInTheDocument();
   });
 });

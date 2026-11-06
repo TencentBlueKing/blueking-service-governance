@@ -381,6 +381,7 @@ Chart 版本: Chart Version
 '搜索 Chart 版本/镜像 Tag/操作人': 'Search Chart Version/Image Tag/Operator'
 查看 Values: View Values
 已部署: Deployed
+已回滚: Rolled Back
 已卸载: Uninstalled
 已废弃: Deprecated
 卸载中: Uninstalling
@@ -1485,6 +1486,72 @@ CLB 区域: CLB Region
 '{0}/{1}': '{0}/{1}'
 永久暂停 · 手动继续: 'Pause permanently · resume manually'
 '暂停 {0} 秒后自动继续': 'Pause for {0} seconds before auto-continuing'
+'新版本 {0} · 旧版本 {1}': '{0} on new version · {1} on old version'
+'不停，直接进入下一批': 'No pause, proceed to the next batch directly'
+'部署任务已提交，正在更新全部 {0} 个实例': 'Deploy task submitted, updating all {0} instances'
+'部署任务已提交，开始第 1 批灰度发布': 'Deploy task submitted, starting grayscale release of batch 1'
+'当前环境灰度发布：': 'Grayscale release in current environment: '
+' · 第 {index} 批正在更新实例（{version}）': ' · batch {index} is updating instances ({version})'
+'第 {0} 批已暂停': 'Batch {0} paused'
+' · 已更新 {replicas} 个实例（{version}）': ' · {replicas} instances updated ({version})'
+'第 {0} 批失败': 'Batch {0} failed'
+'，已暂停当前批次（{version}）': ', the current batch is paused ({version})'
+当前批次实例更新失败: The current batch failed to update instances
+正在回滚: Rolling back
+' · 已恢复 {replicas} 个实例，正在清理灰度资源（{version}）': ' · {replicas} instances restored, cleaning up grayscale resources ({version})'
+' · 已恢复 {replicas} 个实例（{version}）': ' · {replicas} instances restored ({version})'
+灰度发布已完成: Grayscale release completed
+继续发布: Continue
+回退上一批: Rollback One Batch
+跳过剩余批次: Skip Remaining Batches
+暂停发布: Pause Release
+回退: Rollback
+跳过并全量: Skip and Update All
+回滚: Rollback
+更多: More
+确认回滚到旧版本？: Roll back to the old version?
+将结束本次灰度发布，实例恢复为旧版本镜像。: This grayscale release will end and instances will be restored to the old image.
+确认回退到上一批？: Roll back one batch?
+当前批已更新的实例恢复为旧版本，流量权重回到上一批配置。: Instances updated in the current batch will be restored to the old version, and traffic weight will return to the previous batch configuration.
+确认跳过剩余批次？: Skip the remaining batches?
+将不再分批暂停，直接全量更新剩余实例，请确认当前版本已验证通过。: Remaining instances will be updated all at once without further batch pauses. Make sure the current version has passed verification.
+'已继续发布，开始执行第 {0} 批': 'Release continued, starting batch {0}'
+'已重试，开始执行第 {0} 批': 'Retried, starting batch {0}'
+'已开始回滚，实例将恢复为 {0}': 'Rollback started, instances will be restored to {0}'
+已回退到上一批: Rolled back to the previous batch
+已跳过剩余批次，正在全量更新剩余实例: 'Remaining batches skipped, updating all remaining instances'
+已暂停分批发布: Batch release paused
+操作失败，请稍后重试: 'Operation failed, please try again later'
+分批发布进行中，请先完成、跳过或回滚: 'A batch release is in progress. Please finish, skip or roll it back first'
+'已克隆为空间策略「{0}」': 'Cloned as workspace strategy "{0}"'
+查看发布进度: View Release Progress
+返回实例列表: 'Back to Instance List'
+灰度发布进度: 'Grayscale Release Progress'
+'环境：': 'Environment: '
+已完成: Completed
+正在更新: Updating
+暂停中: Paused
+未开始: 'Not Started'
+'共 {0} 批': '{0} batches in total'
+'当前第 {0} 批': 'Batch {0} in progress'
+'已更新 {0}/{1} 个实例': '{0}/{1} instances updated'
+'累计更新 {0} 个实例': 'Cumulative to {0} instances'
+'累计更新至 {0}': 'Cumulative to {0}'
+全量更新剩余实例: 'Update remaining instances to full'
+'暂停 {0} 秒 · 自动继续': 'Pause for {0}s · auto-resume'
+'不停 · 自动继续': 'No pause · auto-resume'
+系统自动补齐全量: 'Automatically completed to full by the system'
+'等待手动继续': 'Waiting for manual resume'
+'暂停中 {0}': 'Paused {0}'
+'已暂停': 'Paused'
+'正在全量更新': 'Updating to full'
+'正在清理灰度资源': 'Cleaning up canary resources'
+'{0} 秒后自动继续': 'Auto-resume in {0}s'
+'定时暂停中 · {0} 后自动继续': 'Timed pause · auto-continue in {0}'
+'正在更新实例': 'Updating instances'
+灰度新起: 'New Canary'
+灰度前: 'Pre-Canary'
+搜索实例名: 'Search by instance name'
 '先 {0} 个实例': 'Start with {0} instances'
 '先更新到 {0}': 'Start at {0}'
 '确认后累计到 {0}': 'After confirmation, accumulate to {0}'

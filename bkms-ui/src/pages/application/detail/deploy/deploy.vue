@@ -106,7 +106,7 @@
               />
               <span class="leading-[20px] text-[#4D4F56]">{{ curDeployStatus?.text }}</span>
               <i
-                v-if="curDeployStatus?.isFailed && curDeployStatus?.message"
+                v-if="curDeployStatus?.message"
                 v-bk-tooltips="{
                   content: curDeployStatus?.message,
                   theme: 'dark',
@@ -211,6 +211,31 @@
           @view-instances="handleViewEnvInstances"
         />
         <template v-else-if="activeTab === 'instance'">
+          <!--
+            分批发布控制横幅 / 灰度发布进度视图互斥渲染：
+            点击横幅「查看发布进度」后隐藏横幅并切换为独立进度视图，点「返回实例列表」复原。
+          -->
+          <BatchReleaseBanner
+            v-if="batchReleaseView && !isBatchReleaseProgressActive"
+            class="mb-[16px]"
+            :pending-action="batchReleasePendingAction"
+            :view="batchReleaseView"
+            @action="handleBatchReleaseAction"
+            @close="handleBatchReleaseClose"
+            @view-progress="showBatchReleaseProgress = true"
+          />
+          <BatchReleaseProgressPanel
+            v-else-if="isBatchReleaseProgressActive && batchReleaseView"
+            :key="curEnv"
+            class="mb-[16px]"
+            :env-item="trpcDeployStore.curEnvItem"
+            :env-name="curEnv"
+            :pending-action="batchReleasePendingAction"
+            :progress="batchReleaseProgress"
+            :view="batchReleaseView"
+            @action="handleBatchReleaseAction"
+            @back="showBatchReleaseProgress = false"
+          />
           <!-- 构建状态提示 -->
           <Alert
             v-if="isBuildAlertVisible"
@@ -261,13 +286,21 @@
             </template>
           </Alert>
           <template v-if="isMultiEnvMode || isDeployStatusVisible">
-            <!-- 单环境 -->
-            <InstanceList
+            <!--
+              单环境：进度视图展示时隐藏（保持实例 Watch 活跃与页面状态，返回时零成本还原）。
+              InstanceList 模板是多根片段，v-show 直接挂在组件上不会生效，必须包一层真实元素承载 v-show。
+            -->
+            <div
               v-if="!isMultiEnvMode"
-              :key="curEnv"
-              :has-deploy-record="instanceListHasDeployRecord"
-              @remove-deploy="handleRemoveDeploy"
-            />
+              v-show="!isBatchReleaseProgressActive"
+            >
+              <InstanceList
+                :key="curEnv"
+                ref="instanceListRef"
+                :has-deploy-record="instanceListHasDeployRecord"
+                @remove-deploy="handleRemoveDeploy"
+              />
+            </div>
             <!-- 多环境 -->
             <MultiEnvInstanceTable
               v-else
@@ -406,11 +439,15 @@
   import { resolveInstanceListHasDeployRecord, shouldResetDeployStatusOnEnvChange } from './deploy-status-rules';
   import EnvVarPrecheckDialog from './env-var-precheck-dialog.vue';
   import FeatureEnv from './feature-env.vue';
+  import BatchReleaseBanner from './instance-list/components/batch-release-banner.vue';
+  import BatchReleaseProgressPanel from './instance-list/components/batch-release-progress-panel.vue';
+  import { useBatchReleaseControl } from './instance-list/composables/use-batch-release-control';
   import FullUpdate from './instance-list/full-update.vue';
   import InstanceList from './instance-list/instance-list.vue';
   import MultiEnvInstanceTable from './instance-list/multi-env-instance-table.vue';
   import ScaleInstance from './instance-list/scale-instance.vue';
   import DeployOverview from './overview/deploy-overview.vue';
+  import { type DeployOverviewCanaryProgress, toCanaryProgress } from './overview/use-deploy-overview';
   import QuicklyDeploy from './quickly-deploy.vue';
   import RemoveDeploy from './remove-deploy.vue';
   import { DeployableAppType, useDeployAPIs } from './use-deploy';
@@ -437,7 +474,11 @@
   const currentEnvDeployDisabledReason = computed(() => getEnvDeployDisabledReason(trpcDeployStore.curEnvItem));
   const isFederationEnv = useIsFederationEnv(() => trpcDeployStore.curEnvItem);
   // 普通集群的隐藏环境仍可进入仅镜像维护；联邦集群不支持该操作。
-  const fullUpdateDisabledReason = computed(() => (isFederationEnv.value ? currentEnvDeployDisabledReason.value : ''));
+  // 分批发布进行中时禁止并发部署，提示先完成或回滚。
+  const fullUpdateDisabledReason = computed(() => {
+    if (isFederationEnv.value) return currentEnvDeployDisabledReason.value;
+    return batchReleaseBusyReason.value;
+  });
   const { getAppDeployStatusInfo } = useDeployStatusMap();
   const { t } = useI18n();
   const {
@@ -617,6 +658,43 @@
     { label: t('部署历史'), name: 'history' },
   ]);
 
+  /** 单环境实例列表：分批发布控制横幅的数据与操作。 */
+  const instanceListRef = ref<InstanceType<typeof InstanceList> | null>(null);
+  const {
+    busyReason: batchReleaseBusyReason,
+    handleAction: handleBatchReleaseAction,
+    handleClose: handleBatchReleaseClose,
+    pendingAction: batchReleasePendingAction,
+    progress: batchReleaseProgress,
+    refresh: refreshBatchRelease,
+    view: batchReleaseView,
+  } = useBatchReleaseControl({
+    getAppID: () => appDetailStore.appID || '',
+    getEnvName: () => trpcDeployStore.curEnvItem?.name || '',
+    // 仅单环境实例列表展示：多环境表格、联邦集群与其它 Tab 都不涉及分批发布控制。
+    isEnabled: () =>
+      activeTab.value === TAB_NAMES.instance &&
+      !isMultiEnvMode.value &&
+      !isFederationEnv.value &&
+      isAppModelAppType(appDetailStore.appType),
+    refreshInstances: () => instanceListRef.value?.handleListReleaseInstances?.(),
+    refreshDeployStatus: () => envSelectPanelRef.value?.refreshDeployStatuses?.(),
+  });
+
+  /**
+   * 灰度发布进度视图显隐：点击横幅「查看发布进度」进入，点「返回实例列表」退出。
+   * 横幅消失（切 Tab、发布关闭、完成被关闭）或切换环境时复位回横幅态。
+   */
+  const showBatchReleaseProgress = ref(false);
+  const isBatchReleaseProgressActive = computed(() => !!batchReleaseView.value && showBatchReleaseProgress.value);
+
+  watch(batchReleaseView, view => {
+    if (!view) showBatchReleaseProgress.value = false;
+  });
+  watch(curEnv, () => {
+    showBatchReleaseProgress.value = false;
+  });
+
   /** 仅部署总览、实例列表支持多环境；其余 Tab 关闭多选入口 */
   const isEnvMultiSelectable = computed(() => !SINGLE_ENV_TABS.includes(activeTab.value));
 
@@ -736,6 +814,17 @@
         statusInfo = getAppDeployStatusInfo(latest.status || '');
         isFailed = (DEPLOY_FAILED_STATUSES as readonly string[]).includes(latest.status!);
         isRunning = latest.status === APP_DEPLOY_STATUS.DEPLOYING;
+        // 分批发布进行中：部署状态补充为「灰度发布中」，与部署总览状态列保持一致
+        if (latest.status === APP_DEPLOY_STATUS.DEPLOYING && latest.inProgressReleaseMode === 'canary') {
+          const progress = canaryProgress.value;
+          statusInfo =
+            progress?.currentBatch != null
+              ? {
+                  icon: 'loading',
+                  text: t('灰度发布中 · 第 {0}/{1} 批', [progress.currentBatch, progress.totalBatches]),
+                }
+              : { icon: 'loading', text: t('灰度发布中') };
+        }
       }
 
       return {
@@ -748,6 +837,10 @@
   );
 
   const latestDeployStatus = ref<LatestDeployStatus | null>(null);
+  /** 分批发布进行中的批次进度；由横幅控制器的完整进度派生，用于部署状态展示「灰度发布中」。 */
+  const canaryProgress = computed<DeployOverviewCanaryProgress | null>(() =>
+    toCanaryProgress(batchReleaseProgress.value),
+  );
 
   /**
    * 实例列表的「是否有部署记录」判定：build 阶段恒视为有记录（构建不删旧实例，
@@ -864,6 +957,9 @@
       if (prevDeployStatus && prevDeployStatus !== nextLatestDeployStatus.status) {
         await envSelectPanelRef.value?.refreshDeployStatuses?.();
       }
+      // 分批发布进行中时补查进度，部署状态展示「灰度发布中 · 第 N/M 批」，横幅展示批次控制；
+      // 非分批发布清空进度，已结束的记录仍需补查一次以展示「已完成 / 失败」结果。
+      await refreshBatchRelease(nextLatestDeployStatus);
     } catch (err) {
       // 旧环境销毁后返回的 404 不应停止或污染新环境轮询。
       if (appID !== appDetailStore.appID || envName !== trpcDeployStore.curEnvItem?.name) return;

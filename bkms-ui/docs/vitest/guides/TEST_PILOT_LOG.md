@@ -29,6 +29,7 @@
 | 组件内 `onBeforeRouteUpdate/Leave` 守卫要求 router-view 子组件上下文 | detail.vue 直挂 mount 无该上下文，vue-router mock 未导出守卫 → setup 抛错 | vue-router mock 补守卫导出：适配场景用 no-op；要验证守卫逻辑用捕获回调（`onBeforeRouteUpdate: cb => guards.push(cb)`）直接调用 | height-chain / app-detail-shell |
 | 模板用 `v-bk-tooltips` 时报「Failed to resolve directive」 | bkui-vue 插件 install 只注册组件（preset.js），指令须显式注册 | render 时 `global.directives: { 'bk-tooltips': bkTooltips }`（对齐 src/modules/global.ts） | quickly-deploy-release-strategy.test.ts |
 | bkui Input type=number 填值：clear 触发「不能为空」校验 Message、tripleClick 全选失效、逐字输入会拼成「120」 | 组件库 number 输入交互与 jsdom 选择行为不一致 | 直接 `fireEvent.update(input, '20')` 赋值 | quickly-deploy-release-strategy.test.ts |
+| `i18n-t` 插槽文案（`共 {0} 批`）用 `getByText('共 3 批')` 查不到 | 共享 I18nTStub 只直译 keypath；且真实插值下子节点是元素时文本被嵌套 span 打散，默认 matcher 只匹配元素直接文本节点 | 需断言插值文案时在文件内定义插值 stub：按 `{0}/{1}` 把默认插槽子节点提取为纯文本后整体渲染（参考 batch-release-control.test.ts 的 I18nTInterp） | batch-release-control.test.ts |
 
 ## 环境事实（前置）
 
