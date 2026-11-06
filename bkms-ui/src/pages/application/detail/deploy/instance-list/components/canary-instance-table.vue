@@ -108,7 +108,7 @@
             <span>{{ row.image?.split(':')?.pop() || '--' }}</span>
             <Tag
               v-if="resolveInstanceCanaryState(row.image, newImageTag) === 'new'"
-              class="!border-none !bg-[#E5F6EA] !text-[12px] !leading-[18px] !text-[#2CAF5E]"
+              class="!border-none !bg-[#DAF6E5] !text-[12px] !leading-[18px] !text-[#299E56]"
               size="small"
             >
               {{ $t('灰度新起') }}

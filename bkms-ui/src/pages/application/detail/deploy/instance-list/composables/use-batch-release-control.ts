@@ -79,6 +79,8 @@ export function useBatchReleaseControl(options: UseBatchReleaseControlOptions) {
 
   const progress = ref<BatchReleaseProgressOutputObj | null>(null);
   const pendingAction = ref<BatchReleaseAction | null>(null);
+  // 进度回查进行中：横幅渲染骨架占位，避免数据返回时横幅突然弹出造成布局跳动。
+  const loading = ref(false);
   // 接口已确认「无进度」的部署记录：空结果是稳定态，记住后不再随 latest-status 每 5s 空转。
   const emptyQueriedDeployID = ref('');
   // 请求世代：环境切换或新一轮请求开始后丢弃过期响应。
@@ -107,6 +109,7 @@ export function useBatchReleaseControl(options: UseBatchReleaseControlOptions) {
   function reset() {
     requestToken += 1;
     progress.value = null;
+    loading.value = false;
     // 换应用 / 环境时旧的「空进度」记忆失效，否则新环境可能被误判为无需查询。
     emptyQueriedDeployID.value = '';
   }
@@ -154,7 +157,14 @@ export function useBatchReleaseControl(options: UseBatchReleaseControlOptions) {
     }
     if (!shouldFetchBatchReleaseProgress(latest, progress.value, emptyQueriedDeployID.value)) return;
     // 加超时避免进度请求挂起时把上层「最新部署状态」轮询一起卡住。
-    await withTimeout(fetchProgress(latest), PROGRESS_REFETCH_TIMEOUT);
+    // 过期响应不回写 loading：真正的收尾由最新一轮请求或 reset 负责。
+    const token = ++requestToken;
+    loading.value = true;
+    try {
+      await withTimeout(fetchProgress(latest), PROGRESS_REFETCH_TIMEOUT);
+    } finally {
+      if (token === requestToken) loading.value = false;
+    }
   }
 
   /** 后台刷新：不占用操作收尾，失败只记录日志。 */
@@ -248,6 +258,7 @@ export function useBatchReleaseControl(options: UseBatchReleaseControlOptions) {
     handleAction,
     handleClose,
     isBusy,
+    loading,
     pendingAction,
     progress,
     refresh,

@@ -177,7 +177,7 @@
   }
 </script>
 
-<style scoped>
+<style lang="postcss" scoped>
   /* 三段拼接的输入组：靠深层选择器抹平组件库圆角，原子类无法穿透子组件根节点 */
   .target-value {
     width: 120px;

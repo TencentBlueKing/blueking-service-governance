@@ -217,3 +217,15 @@
     brand: 'bg-[#e1ecff] text-[#1768ef]',
   };
 </script>
+
+<style lang="postcss" scoped>
+  :deep(.bk-tag-info) {
+    background-color: #e1ecff;
+    color: #1768ef;
+  }
+
+  :deep(.bk-tag-warning) {
+    background-color: #fdeed8;
+    color: #e38b02;
+  }
+</style>
