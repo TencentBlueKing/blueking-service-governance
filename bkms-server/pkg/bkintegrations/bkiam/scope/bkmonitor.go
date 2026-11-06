@@ -19,10 +19,17 @@
 package scope
 
 import (
+	"strings"
+
+	"github.com/samber/lo"
+
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkiam/scope/template"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/iam/types"
 )
+
+// bkMonitorMCPActionSuffix 监控 MCP 相关 action 的 ID 后缀，如 using_dashboard_mcp
+const bkMonitorMCPActionSuffix = "_mcp"
 
 // BKMonitorRoleScopesGenerator 是 bk-monitor 角色权限范围生成器
 type BKMonitorRoleScopesGenerator struct {
@@ -33,7 +40,7 @@ type BKMonitorRoleScopesGenerator struct {
 
 // Generate 生成权限范围
 func (g BKMonitorRoleScopesGenerator) Generate() []types.AuthorizationScope {
-	return generateFromTemplate(
+	scopes := generateFromTemplate(
 		template.GetRoleScopeTemplatePath("bkmonitor", g.TplRoleCode),
 		map[string]any{
 			"BKMonitorSystemID": config.G.BkIAMSystemIDs.BkMonitor,
@@ -41,6 +48,24 @@ func (g BKMonitorRoleScopesGenerator) Generate() []types.AuthorizationScope {
 			"SpaceName":         g.SpaceName,
 		},
 	)
+	if config.G.FeatureIntegrations.DisableBkMonitorMCPPerms {
+		scopes = dropMCPActions(scopes)
+	}
+	return scopes
+}
+
+// dropMCPActions 移除所有 MCP action，移除后没有 action 的 scope 一并丢弃
+func dropMCPActions(scopes []types.AuthorizationScope) []types.AuthorizationScope {
+	result := make([]types.AuthorizationScope, 0, len(scopes))
+	for _, s := range scopes {
+		s.Actions = lo.Reject(s.Actions, func(a types.Action, _ int) bool {
+			return strings.HasSuffix(a.ID, bkMonitorMCPActionSuffix)
+		})
+		if len(s.Actions) > 0 {
+			result = append(result, s)
+		}
+	}
+	return result
 }
 
 var _ AuthScopesGenerator = (*BKMonitorRoleScopesGenerator)(nil)

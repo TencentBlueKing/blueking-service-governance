@@ -23,6 +23,7 @@ import (
 	. "github.com/onsi/gomega"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkiam/role"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/iam/types"
 )
 
@@ -111,6 +112,37 @@ var _ = Describe("BKMonitorRoleScopesGenerator", func() {
 				Expect(spaceActions).To(ContainElement(action))
 			}
 			Expect(spaceActions).NotTo(ContainElement(mcpManageAction))
+		})
+
+		Context("when DisableBkMonitorMCPPerms is enabled", func() {
+			BeforeEach(func() {
+				config.G.FeatureIntegrations.DisableBkMonitorMCPPerms = true
+				DeferCleanup(func() { config.G.FeatureIntegrations.DisableBkMonitorMCPPerms = false })
+			})
+
+			DescribeTable("should drop all MCP actions and keep the rest",
+				func(roleCode string) {
+					g := BKMonitorRoleScopesGenerator{
+						SpaceID:     spaceID,
+						SpaceName:   spaceName,
+						TplRoleCode: roleCode,
+					}
+					scopes := g.Generate()
+					Expect(scopes).NotTo(BeEmpty())
+					Expect(scopes[0].Actions).To(ContainElement(types.Action{ID: "view_business_v2"}))
+
+					for _, s := range scopes {
+						Expect(s.Actions).NotTo(BeEmpty())
+						for _, action := range append(mcpViewActions, mcpManageAction) {
+							Expect(s.Actions).NotTo(ContainElement(action))
+						}
+					}
+				},
+				Entry("admin", role.BuiltinRoleCode.Admin),
+				Entry("developer", role.BuiltinRoleCode.Developer),
+				Entry("sre", role.BuiltinRoleCode.SRE),
+				Entry("operator", role.BuiltinRoleCode.Operator),
+			)
 		})
 	})
 })

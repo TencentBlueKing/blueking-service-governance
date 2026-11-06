@@ -69,6 +69,9 @@ type FeatureIntegrationsConfig struct {
 	// DisableBuiltinDockerfilePipeline 关闭内置的 Dockerfile 构建流水线，用于蓝盾未安装
 	// 「构建并推送 Docker 镜像」插件的环境：创建工作空间时不预建，构建时直接报错。
 	DisableBuiltinDockerfilePipeline bool
+	// DisableBkMonitorMCPPerms 授权监控空间时不包含 MCP 相关 action（using_*_mcp），
+	// 用于监控未在权限中心注册这些 action 的环境，否则更新分级管理员会因 action 不存在而失败。
+	DisableBkMonitorMCPPerms bool
 }
 
 // BkApiStagesConfig 蓝鲸 API 版本信息，不指定时均默认为 "prod"
