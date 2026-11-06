@@ -24,6 +24,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/cast"
 
+	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	bscpapi "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bscp"
 )
@@ -40,6 +41,7 @@ type BscpBinding struct {
 }
 
 // BindBscpProject 解析项目（显式 projectKey 或 Default 项目）并确保 credential 存在。
+// 当前环境关闭了 BSCP 对接时返回 bscpapi.ErrDisabled。
 func BindBscpProject(ctx context.Context, bizID, projectKey string) (*BscpBinding, error) {
 	client, err := bscpapi.NewConfigClient(auth.MustGetUser(ctx))
 	if err != nil {
@@ -62,6 +64,16 @@ func BindBscpProject(ctx context.Context, bizID, projectKey string) (*BscpBindin
 		CredentialID: credentialID,
 		Token:        token,
 	}, nil
+}
+
+// bindDefaultBscpProject 创建工作空间时绑定 BSCP Default 项目。
+// 当前环境关闭了 BSCP 对接时跳过绑定，返回空的绑定结果；开启后需通过 bind-bscp-project 命令补绑。
+func bindDefaultBscpProject(ctx context.Context, bizID string) (*BscpBinding, error) {
+	if bscpapi.Disabled() {
+		log.Infof(ctx, "bscp is disabled, skip binding bscp project for biz %s", bizID)
+		return &BscpBinding{}, nil
+	}
+	return BindBscpProject(ctx, bizID, "")
 }
 
 // resolveProject 解析要绑定的 BSCP 项目。

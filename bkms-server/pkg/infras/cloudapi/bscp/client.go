@@ -30,6 +30,7 @@ import (
 	"github.com/TencentBlueKing/bk-apigateway-sdks/core/define"
 	"github.com/pkg/errors"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/utils/httpresp"
@@ -64,8 +65,19 @@ type ApiClient struct {
 	user auth.User
 }
 
+// ErrDisabled 当前环境关闭了 BSCP 对接（featureIntegrations.disableBSCP）
+var ErrDisabled = bkerrs.ErrBSCPDisabled
+
+// Disabled 返回当前环境是否关闭了 BSCP 对接
+func Disabled() bool {
+	return config.G != nil && config.G.FeatureIntegrations.DisableBSCP
+}
+
 // New 创建 BSCP API 客户端，根据配置返回真实客户端或 stub 客户端
 func New(user auth.User) (Client, error) {
+	if Disabled() {
+		return nil, ErrDisabled
+	}
 	// 测试时使用 stub 客户端
 	if config.G.Development.UseStubBSCP {
 		log.InfoNoContext("use stub bscp client according to config")

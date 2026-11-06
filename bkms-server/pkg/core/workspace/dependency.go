@@ -80,7 +80,7 @@ func EnsureBkSystems(
 	}
 
 	// 绑定 BSCP Default 项目并确保 credential 存在
-	bscpBinding, err := BindBscpProject(ctx, cmdbInfo.BizID, "")
+	bscpBinding, err := bindDefaultBscpProject(ctx, cmdbInfo.BizID)
 	if err != nil {
 		return nil, errors.Wrap(err, "bind bscp project")
 	}

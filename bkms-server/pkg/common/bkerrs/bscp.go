@@ -18,7 +18,16 @@
 
 package bkerrs
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+)
+
+// ErrBSCPDisabled 当前环境关闭了 BSCP 对接（featureIntegrations.disableBSCP）。
+// WriteError 会将错误链中含有该错误的响应统一转换为 BSCP_DISABLED，调用方无需逐层转换。
+var ErrBSCPDisabled = errors.New("bscp integration is disabled by featureIntegrations.disableBSCP")
+
+const bscpDisabledMsg = "bscp is disabled in current environment"
 
 // WrapBSCPNoPermission wraps a BSCP permission error into the standard API shape.
 func WrapBSCPNoPermission(err error, msg string) *Error {
@@ -26,6 +35,18 @@ func WrapBSCPNoPermission(err error, msg string) *Error {
 		NewDetail(
 			ErrDetailCodeBSCPNoPermission,
 			"bscp service permission denied",
+			WithSystem(SystemName),
+			WithModule("bscp"),
+		),
+	)
+}
+
+// WrapBSCPDisabled 包装为当前环境关闭了 BSCP 对接的错误
+func WrapBSCPDisabled(err error) *Error {
+	return Wrap(err, ErrCodeInvalidRequest, bscpDisabledMsg).SetDetails(
+		NewDetail(
+			ErrDetailCodeBSCPDisabled,
+			bscpDisabledMsg,
 			WithSystem(SystemName),
 			WithModule("bscp"),
 		),

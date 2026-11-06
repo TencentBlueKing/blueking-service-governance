@@ -22,6 +22,7 @@ bkPlatUrls:
 featureIntegrations:
   enableBkLoginUserinfoAuth: false   # bk_token 走 bk-login 网关 userinfo
   enableBkUserTenantVerify: false    # 用 bk-user 校验用户所属租户/状态
+  disableBSCP: false                 # 关闭 BSCP 对接
 # 蓝鲸 API 环境配置
 bkApiStages:
   kubeinsight: prod

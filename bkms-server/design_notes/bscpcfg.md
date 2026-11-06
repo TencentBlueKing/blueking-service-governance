@@ -114,3 +114,4 @@ graph TD
 - **环境名称对齐**：bkms 环境名与 BSCP 环境名保持一致，创建绑定时按名称匹配，未命中则自动创建。
 - **激活方式**：配置管理能力由 `app-bscpcfg-mgr enable` / `disable` 命令按 appID 操作 `Metadata.enable`；前端只负责环境绑定。
 - **workspace 绑定前置**：使用前必须通过 `bind-bscp-project` 命令（或创建 workspace 时自动）绑定 workspace 与 BSCP 项目，写入 `BkSystems.BkBSCPProjectID / Key` 并创建 credential。
+- **关闭 BSCP 对接**：`featureIntegrations.disableBSCP: true` 时，`/bscp`、`/apps/:appID/bscpcfg` 路由以及应用配置中 BSCP 来源的读写均返回 `BSCP_DISABLED`，本地来源配置不受影响；创建 workspace 时跳过 BSCP 绑定，`bind-bscp-project` 命令直接报错。重新启用后，关闭期间创建的 workspace 需逐个执行 `bind-bscp-project` 补绑。
