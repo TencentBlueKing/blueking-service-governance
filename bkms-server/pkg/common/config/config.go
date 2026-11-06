@@ -131,6 +131,7 @@ func setDefaultConfigValues(vp *viper.Viper) {
 	vp.SetDefault("httpServer.writeTimeout", DefaultHTTPServerWriteTimeout)
 	vp.SetDefault("httpServer.idleTimeout", DefaultHTTPServerIdleTimeout)
 	vp.SetDefault("httpServer.shutdownTimeout", DefaultHTTPServerShutdownTimeout)
+	vp.SetDefault("featureIntegrations.enableIndependentBCSProject", false)
 }
 
 func validateBkLoginDependencies(cfg *Config) error {

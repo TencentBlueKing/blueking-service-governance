@@ -22,6 +22,10 @@ bkPlatUrls:
 featureIntegrations:
   enableBkLoginUserinfoAuth: false   # bk_token 走 bk-login 网关 userinfo
   enableBkUserTenantVerify: false    # 用 bk-user 校验用户所属租户/状态
+  # 测试配置显式关闭：创建空间时 BCS 复用蓝盾项目，不单独创建 BCS 项目。
+  enableIndependentBCSProject: false
+  disableBuiltinDockerfilePipeline: false   # 关闭内置 Dockerfile 构建流水线
+  disableBkMonitorMCPPerms: false   # 授权监控空间时不包含 MCP 相关权限
 # 蓝鲸 API 环境配置
 bkApiStages:
   kubeinsight: prod
@@ -58,6 +62,8 @@ bkci:
     builderImageCode: "tlinux3_ci"
     # 流水线模板使用的构建机镜像版本，为空时由 bkci 模板加载逻辑决定默认值
     builderImageVersion: "2.*"
+    # 流水线模板使用的构建机类型（dispatchType.buildType），需为目标蓝盾支持的类型；为空时默认 PUBLIC_DEVCLOUD
+    builderDispatchType: "PUBLIC_DEVCLOUD"
 # 蓝盾制品库配置，用于项目 & 仓库初始化
 bkrepo:
   baseUrl: https://bkrepo.example.com

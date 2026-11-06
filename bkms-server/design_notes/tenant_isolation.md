@@ -177,7 +177,7 @@ store 在 Encode 钩子执行后，按已填好租户的原对象把租户写回
 
 | 入口 | 处理 |
 |---|---|
-| HTTP 业务 API | `/bkms/v1/bkms-server` 路由组挂 `tenant.Required`，写入 ctx |
+| HTTP 业务 API | `/bkms/v1/bkms-server` 路由组挂 `tenant.Required`，写入 ctx。多租户模式下租户取 `X-Bk-Tenant-Id`，未传时用登录态租户（bk-login userinfo 返回，前端因此不传该头）；传了则须与登录态一致，登录态无租户（access token）时必须传并经 bk-user 校验 |
 | 平台管理 API | 同上，另由 `RequirePlatformRole` 打显式范围标记，见 5.2 |
 | 异步任务 | envelope 增加 `_tenantID`：投递时 ctx 无租户直接失败，消费时写回 ctx，详见 4.1；只访问全局集合的任务声明 `Global()`，见 4.2 |
 | `cmd/migration/*` 与命令行 | ctx 无租户，访问租户集合时显式传 `TenantAll()`；后续调用业务函数或投递任务前用 `store.ScopeToTenant` 设置资源所属租户，见 5.1 |
@@ -307,6 +307,11 @@ DetailSyncTask = taskq.NewTaskType[ImageDetailSyncArgs](name, handle, opts...).G
   - 以 `workspaceID` / `appID` 开头的已经等价于租户内唯一；
   - 对应外部或物理资源的（`environments` 的集群 + 命名空间、`bkci_projects.code`、`bkmonitor_apm_inst_config.apmID`）
     本应全局唯一，改成租户内唯一反而允许两个租户占用同一资源；
+  - `workspaces.bkSystems.bkBcsProjectCode`（partial，`000025`）存的是 BCS 返回的 projectCode。
+    多租户 BCS 中项目有租户归属，用户填写的 `tenantProjectCode` 租户内唯一，返回的 projectCode 被改写为
+    `{tenantID}-{tenantProjectCode}`，BCS 保证其全局唯一，因此全局唯一索引与租户内唯一等价。
+    BKMS 只能存、只能用 BCS 返回的 projectCode，不能自行拼接；需要按确定值回查项目时（独立 BCS 项目创建重试）
+    改用由 BKMS 指定的 projectID，它不会被 BCS 改写；
   - 业务主键 `workspaces.id` 是用户自选的 slug，改为租户内唯一涉及 IAM 资源 ID 和外部系统命名，作为产品决策单独评估。
 - `plat_admin_port_forward_whitelist` 以环境 ID 作 `_id`，按环境查询走 `_id` 索引，无需额外索引。
 

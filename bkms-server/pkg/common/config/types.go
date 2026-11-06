@@ -62,6 +62,16 @@ type FeatureIntegrationsConfig struct {
 	EnableBkLoginUserinfoAuth bool
 	// EnableBkUserTenantVerify 控制是否通过 bk-user 校验用户所属租户和状态。
 	EnableBkUserTenantVerify bool
+	// EnableIndependentBCSProject 控制 BCS 项目是否与蓝盾项目解耦。
+	// 为 true：蓝盾始终新建；新建容器则创建 BCS 项目，绑定已有容器则绑定已有 BCS 项目。
+	// 为 false：新建/绑定都按蓝盾项目处理，BCS ID/Code 复用蓝盾项目。
+	EnableIndependentBCSProject bool
+	// DisableBuiltinDockerfilePipeline 关闭内置的 Dockerfile 构建流水线，用于蓝盾未安装
+	// 「构建并推送 Docker 镜像」插件的环境：创建工作空间时不预建，构建时直接报错。
+	DisableBuiltinDockerfilePipeline bool
+	// DisableBkMonitorMCPPerms 授权监控空间时不包含 MCP 相关 action（using_*_mcp），
+	// 用于监控未在权限中心注册这些 action 的环境，否则更新分级管理员会因 action 不存在而失败。
+	DisableBkMonitorMCPPerms bool
 }
 
 // BkApiStagesConfig 蓝鲸 API 版本信息，不指定时均默认为 "prod"
@@ -125,6 +135,9 @@ type BKCIPipelineTmplConfig struct {
 	BuilderImageCode string
 	// BuilderImageVersion 蓝盾流水线模板使用的构建机镜像版本，为空时由模板加载逻辑决定默认值
 	BuilderImageVersion string
+	// BuilderDispatchType 蓝盾流水线模板使用的构建机类型（dispatchType.buildType），为空时由模板加载逻辑决定默认值；
+	// 取值需为目标蓝盾支持的类型，如 PUBLIC_DEVCLOUD、DOCKER
+	BuilderDispatchType string
 }
 
 // BKCIConfig 蓝盾配置

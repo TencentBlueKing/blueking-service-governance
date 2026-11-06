@@ -163,29 +163,30 @@ func (s *cmdbService) ListBusinessesWithLevel2Details(ctx context.Context) ([]Bu
 		id := cast.ToInt64(biz.Level2BizID)
 		return id, id > 0
 	}))
-	if len(level2BizIDSet) == 0 {
-		return []BusinessDetail{}, nil
-	}
 
-	details, err := s.ListLevel2BusinessDetails(ctx, level2BizIDSet)
-	if err != nil {
-		return nil, errors.Wrap(err, "list txcmdb business level2 details")
+	// 社区版 / 多租户 CMDB 没有二级业务字段，此时不查 txcmdb，只返回 bkcc 基础信息
+	detailMap := map[string]txcmdb.Level2BusinessDetail{}
+	if len(level2BizIDSet) > 0 {
+		details, err := s.ListLevel2BusinessDetails(ctx, level2BizIDSet)
+		if err != nil {
+			return nil, errors.Wrap(err, "list txcmdb business level2 details")
+		}
+		detailMap = lo.SliceToMap(
+			details,
+			func(detail txcmdb.Level2BusinessDetail) (string, txcmdb.Level2BusinessDetail) {
+				return detail.Level2BizID, detail
+			},
+		)
 	}
-	detailMap := lo.SliceToMap(
-		details,
-		func(detail txcmdb.Level2BusinessDetail) (string, txcmdb.Level2BusinessDetail) {
-			return detail.Level2BizID, detail
-		},
-	)
 
 	results := lo.Map(businesses, func(biz bkcc.Business, _ int) BusinessDetail {
 		detail, ok := detailMap[biz.Level2BizID]
 		if !ok {
-			// txcmdb 明细缺失时保留 bkcc 基础信息，避免授权业务列表被误过滤
+			// 无二级业务或 txcmdb 明细缺失时保留 bkcc 基础信息，避免授权业务列表被误过滤
 			return BusinessDetail{
 				BizID:       biz.BizID,
 				BizName:     biz.BizName,
-				Level2BizID: biz.Level2BizID,
+				Level2BizID: lo.Ternary(cast.ToInt64(biz.Level2BizID) > 0, biz.Level2BizID, ""),
 			}
 		}
 		return BusinessDetail{

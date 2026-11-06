@@ -33,7 +33,32 @@ import (
 const (
 	testBuilderImageCode    = "custom_ci"
 	testBuilderImageVersion = "3.*"
+	testBuilderDispatchType = "DOCKER"
 )
+
+// renderedDispatchTypes 返回渲染后模板中所有构建环境的 buildType
+func renderedDispatchTypes(renderedData []byte) []string {
+	var rendered struct {
+		Stages []struct {
+			Containers []struct {
+				DispatchType *struct {
+					BuildType string `json:"buildType"`
+				} `json:"dispatchType"`
+			} `json:"containers"`
+		} `json:"stages"`
+	}
+	Expect(json.Unmarshal(renderedData, &rendered)).To(Succeed())
+
+	var buildTypes []string
+	for _, stage := range rendered.Stages {
+		for _, container := range stage.Containers {
+			if container.DispatchType != nil {
+				buildTypes = append(buildTypes, container.DispatchType.BuildType)
+			}
+		}
+	}
+	return buildTypes
+}
 
 var _ = Describe("PipelineTemplatesReloader", func() {
 	Describe("buildRenderContext", func() {
@@ -41,11 +66,13 @@ var _ = Describe("PipelineTemplatesReloader", func() {
 			testConfig := &config.Config{}
 			testConfig.BKCI.PipelineTmpl.BuilderImageCode = testBuilderImageCode
 			testConfig.BKCI.PipelineTmpl.BuilderImageVersion = testBuilderImageVersion
+			testConfig.BKCI.PipelineTmpl.BuilderDispatchType = testBuilderDispatchType
 
 			renderContext := newPipelineTemplatesReloader(testConfig, nil).buildRenderContext()
 
 			Expect(renderContext[pipelineTmplCtxKeyImageCode]).To(Equal(testBuilderImageCode))
 			Expect(renderContext[pipelineTmplCtxKeyImageVersion]).To(Equal(testBuilderImageVersion))
+			Expect(renderContext[pipelineTmplCtxKeyDispatchType]).To(Equal(testBuilderDispatchType))
 			Expect(renderContext).NotTo(HaveKey(pipelineTmplCtxKeyCallbackURL))
 			Expect(renderContext).NotTo(HaveKey(pipelineTmplCtxKeyCredentialID))
 		})
@@ -55,6 +82,7 @@ var _ = Describe("PipelineTemplatesReloader", func() {
 
 			Expect(renderContext[pipelineTmplCtxKeyImageCode]).To(Equal(defaultPipelineBuilderImageCode))
 			Expect(renderContext[pipelineTmplCtxKeyImageVersion]).To(Equal(defaultPipelineBuilderImageVersion))
+			Expect(renderContext[pipelineTmplCtxKeyDispatchType]).To(Equal(defaultPipelineBuilderDispatchType))
 		})
 
 		It("should build context with default builder image when builder image config is empty", func() {
@@ -62,7 +90,31 @@ var _ = Describe("PipelineTemplatesReloader", func() {
 
 			Expect(renderContext[pipelineTmplCtxKeyImageCode]).To(Equal(defaultPipelineBuilderImageCode))
 			Expect(renderContext[pipelineTmplCtxKeyImageVersion]).To(Equal(defaultPipelineBuilderImageVersion))
+			Expect(renderContext[pipelineTmplCtxKeyDispatchType]).To(Equal("PUBLIC_DEVCLOUD"))
 		})
+	})
+
+	Describe("builder dispatch type", func() {
+		DescribeTable("should render configured buildType into every build container",
+			func(filename string) {
+				rawData, err := os.ReadFile(filepath.Join("assets", "pipeline_templates", filename))
+				Expect(err).NotTo(HaveOccurred())
+
+				testConfig := &config.Config{}
+				testConfig.BKCI.PipelineTmpl.BuilderDispatchType = testBuilderDispatchType
+				renderedData, err := renderPipelineTemplate(
+					filename, rawData, newPipelineTemplatesReloader(testConfig, nil).buildRenderContext(),
+				)
+				Expect(err).NotTo(HaveOccurred())
+
+				buildTypes := renderedDispatchTypes(renderedData)
+				Expect(buildTypes).NotTo(BeEmpty())
+				Expect(buildTypes).To(HaveEach(testBuilderDispatchType))
+			},
+			Entry("dockerfile", "dockerfile.json"),
+			Entry("helm git build", "helm_git_build.json"),
+			Entry("build trigger", "build_trigger.json"),
+		)
 	})
 
 	Describe("renderPipelineTemplate", func() {
@@ -74,6 +126,7 @@ var _ = Describe("PipelineTemplatesReloader", func() {
 			renderedData, err := renderPipelineTemplate("dockerfile.json", rawData, map[string]any{
 				pipelineTmplCtxKeyImageCode:    testBuilderImageCode,
 				pipelineTmplCtxKeyImageVersion: testBuilderImageVersion,
+				pipelineTmplCtxKeyDispatchType: testBuilderDispatchType,
 			})
 			Expect(err).NotTo(HaveOccurred())
 

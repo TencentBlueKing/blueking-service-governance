@@ -29,6 +29,7 @@ import (
 	"github.com/TencentBlueKing/bk-apigateway-sdks/core/define"
 	"github.com/TencentBlueKing/gopkg/mapx"
 	"github.com/pkg/errors"
+	"github.com/samber/lo"
 	"github.com/spf13/cast"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
@@ -40,12 +41,18 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/metrics"
 )
 
+// projectNotFoundBusinessCodes BCS 项目不存在时返回的业务码：
+// 40404 为 bcs-project-manager 直接返回，1405516 为经 bcs-api-gateway 转发后返回（message: project is not exists）
+var projectNotFoundBusinessCodes = []int{40404, 1405516}
+
 // Client BCS API 客户端接口
 type Client interface {
 	// ListAuthorizedProjects 获取有权限的项目列表
 	ListAuthorizedProjects(ctx context.Context) ([]Project, error)
 	// GetProject 根据项目 id, 获取项目详情
 	GetProject(ctx context.Context, id string) (*Project, error)
+	// CreateProject 创建 BCS 项目
+	CreateProject(ctx context.Context, in CreateProjectInput) (*Project, error)
 	// ListClustersByProject 获取项目下的集群列表
 	ListClustersByProject(ctx context.Context, projectID string) ([]Cluster, error)
 	// ListNamespacesByCluster 获取集群下的命名空间列表
@@ -176,19 +183,58 @@ func (c *ApiClient) GetProject(ctx context.Context, id string) (*Project, error)
 
 	result, err := c.handleOperation(ctx, op)
 	if err != nil {
-		return nil, err
+		if isProjectNotFoundError(err) {
+			return nil, errors.Wrapf(ErrProjectNotFound, "get project %s", id)
+		}
+		return nil, errors.Wrapf(err, "get project %s", id)
 	}
 
-	data := mapx.GetMap(result, "data")
-	return &Project{
-		ID:          mapx.GetStr(data, "projectID"),
-		Code:        mapx.GetStr(data, "projectCode"),
-		Name:        mapx.GetStr(data, "name"),
-		Kind:        mapx.GetStr(data, "kind"),
-		Description: mapx.GetStr(data, "description"),
-		BizID:       mapx.GetStr(data, "businessID"),
-		IsOffline:   mapx.GetBool(data, "isOffline"),
-	}, nil
+	project, err := parseProject(mapx.GetMap(result, "data"))
+	if err != nil {
+		return nil, errors.Wrapf(err, "parse project %s", id)
+	}
+	return project, nil
+}
+
+// isProjectNotFoundError 只认 BCS 的业务码：项目不存在时 BCS 返回 HTTP 200 + projectNotFoundBusinessCodes。
+// HTTP 404 来自网关或路由（如地址配置错误），不能当作项目不存在，否则会误走自动创建
+func isProjectNotFoundError(err error) bool {
+	var apiErr *apiError
+	return errors.As(err, &apiErr) && lo.Contains(projectNotFoundBusinessCodes, apiErr.Code)
+}
+
+// CreateProject 创建 BCS 项目
+func (c *ApiClient) CreateProject(ctx context.Context, in CreateProjectInput) (*Project, error) {
+	body := map[string]any{
+		"name":        in.Name,
+		"projectCode": in.ProjectCode,
+		"kind":        in.Kind,
+	}
+	if in.ProjectID != "" {
+		body["projectID"] = in.ProjectID
+	}
+	if in.BusinessID != "" {
+		body["businessID"] = in.BusinessID
+	}
+
+	op := c.NewOperation(
+		bkapi.OperationConfig{
+			Name:   "create_project",
+			Method: "POST",
+			Path:   "/bcsproject/v1/projects",
+		},
+		bkapi.OptSetRequestBody(body),
+	)
+
+	result, err := c.handleOperation(ctx, op)
+	if err != nil {
+		return nil, errors.Wrap(err, "create bcs project")
+	}
+	project, err := parseProject(mapx.GetMap(result, "data"))
+	if err != nil {
+		return nil, errors.Wrap(err, "parse created bcs project")
+	}
+	return project, nil
 }
 
 // ListClustersByProject 获取项目下的集群列表
@@ -304,26 +350,46 @@ func (c *ApiClient) handleOperation(
 	defer metrics.ClientRequest("bcs", apiOperation.FullName(), started, &err)
 
 	ctx, span := apm.StartClientSpan(ctx, "bcs", apiOperation.FullName())
-	resp, err := apiOperation.SetContext(ctx).SetResult(&result).Request()
+	// 不用 SetResult 交给 SDK 解码：响应体不是 JSON 时 SDK 只返回解码错误，状态码和响应体都会丢失
+	resp, err := apiOperation.SetContext(ctx).Request()
 	defer apm.EndClientSpan(span, resp, &err)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
 
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, errors.Wrapf(err, "read bcs api %s response body", apiOperation.FullName())
+	}
 	if !httpresp.IsSuccess(resp) {
-		errMsg, _ := io.ReadAll(resp.Body)
-		if len(errMsg) == 0 {
-			errMsg, _ = json.Marshal(result)
-		}
 		return nil, errors.Errorf("call bcs api %s failed, http code: %d, err: %s",
-			apiOperation.FullName(), resp.StatusCode, errMsg)
+			apiOperation.FullName(), resp.StatusCode, truncateBody(body))
+	}
+	if err = json.Unmarshal(body, &result); err != nil {
+		return nil, errors.Wrapf(err, "decode bcs api %s response, http code: %d, body: %s",
+			apiOperation.FullName(), resp.StatusCode, truncateBody(body))
 	}
 
 	if cast.ToInt(result["code"]) != 0 {
-		return nil, errors.New(mapx.GetStr(result, "message"))
+		return nil, &apiError{
+			Operation:  apiOperation.FullName(),
+			HTTPStatus: resp.StatusCode,
+			Code:       cast.ToInt(result["code"]),
+			Message:    mapx.GetStr(result, "message"),
+		}
 	}
 	return result, nil
+}
+
+// maxErrBodyLen 错误信息中保留的响应体长度上限，避免网关返回整页 HTML 时撑爆日志
+const maxErrBodyLen = 512
+
+func truncateBody(body []byte) string {
+	if len(body) <= maxErrBodyLen {
+		return string(body)
+	}
+	return string(body[:maxErrBodyLen]) + "...(truncated)"
 }
 
 // ListUserTokens 获取 BCS Auth Info
@@ -356,4 +422,23 @@ func (c *ApiClient) ListUserTokens(ctx context.Context) ([]UserToken, error) {
 		}
 	}
 	return tokens, nil
+}
+
+func parseProject(data map[string]any) (*Project, error) {
+	if len(data) == 0 {
+		return nil, errors.New("bcs project data is empty")
+	}
+	project := &Project{
+		ID:          mapx.GetStr(data, "projectID"),
+		Code:        mapx.GetStr(data, "projectCode"),
+		Name:        mapx.GetStr(data, "name"),
+		Kind:        mapx.GetStr(data, "kind"),
+		Description: mapx.GetStr(data, "description"),
+		BizID:       mapx.GetStr(data, "businessID"),
+		IsOffline:   mapx.GetBool(data, "isOffline"),
+	}
+	if project.ID == "" {
+		return nil, errors.New("bcs project id is empty")
+	}
+	return project, nil
 }

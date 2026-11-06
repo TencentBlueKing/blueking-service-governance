@@ -20,6 +20,7 @@ package workspace
 
 import (
 	"context"
+	"strings"
 
 	"github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -31,6 +32,21 @@ import (
 // ErrWorkspaceNotFound 工作空间未找到时, 返回固定错误
 var ErrWorkspaceNotFound = errors.New("workspace not found")
 
+// ErrBCSProjectAlreadyBound BCS 项目已被其他工作空间绑定
+var ErrBCSProjectAlreadyBound = errors.New("bcs project already bound")
+
+// ErrBCSProjectAlreadyExists 自动创建使用的确定性 BCS 项目已存在，且不能作为本次重试复用
+var ErrBCSProjectAlreadyExists = errors.New("bcs project already exists")
+
+// ErrIndependentWorkspaceBizRequired 独立 BCS 模式下新建容器项目必须提供业务 ID
+var ErrIndependentWorkspaceBizRequired = errors.New("bizID is required when creating an independent bcs project")
+
+// ErrIndependentWorkspaceBizInvalid 独立 BCS 模式下业务不存在或当前用户无权访问
+var ErrIndependentWorkspaceBizInvalid = errors.New("independent workspace biz is invalid")
+
+// bcsProjectCodeIndex BCS 项目 code 唯一索引名，用于从唯一键冲突中区分出 BCS 项目重复绑定
+const bcsProjectCodeIndex = "bkSystems.bkBcsProjectCode_1"
+
 // WorkspaceStore 工作空间存储
 type WorkspaceStore = store.GenericStore[Workspace]
 
@@ -41,6 +57,8 @@ type WorkspaceStore = store.GenericStore[Workspace]
 //
 // 索引（由 golang-migrate 维护）：
 // - 唯一：id
+// - 唯一（partial）：bkSystems.bkBcsProjectCode。存的是 BCS 返回的 projectCode，本身全局唯一（多租户下为 {tenantID}-{code}），
+// 索引不需要带 tenantID
 // - 普通：tenantID
 var Meta = store.Meta[Workspace]{
 	Collection:   "workspaces",
@@ -51,6 +69,24 @@ var Meta = store.Meta[Workspace]{
 // ByWorkspaceID 按工作空间 ID 匹配
 func ByWorkspaceID(id string) store.Opt {
 	return store.Where("id", id)
+}
+
+// ByBCSProject 按绑定的 BCS 项目匹配，projectID 与 projectCode 任一命中即可，为空的一方不参与匹配。
+// 两者都为空时不匹配任何工作空间。
+//
+// BCS 项目跨租户唯一，检查是否已被绑定时调用方应传 store.TenantAll()，否则其他租户的绑定会被漏掉
+func ByBCSProject(projectID, projectCode string) store.Opt {
+	conds := make(bson.A, 0, 2)
+	if projectID != "" {
+		conds = append(conds, bson.M{"bkSystems.bkBcsProjectID": projectID})
+	}
+	if projectCode != "" {
+		conds = append(conds, bson.M{"bkSystems.bkBcsProjectCode": projectCode})
+	}
+	if len(conds) == 0 {
+		return store.Where("bkSystems.bkBcsProjectCode", bson.M{"$in": bson.A{}})
+	}
+	return store.Where("$or", conds)
 }
 
 // InState 按工作空间状态匹配
@@ -66,6 +102,21 @@ func KeywordMatches(keyword string) store.Opt {
 // DefaultOrder 默认工作空间排序：按更新时间降序，相同则按 ID 升序（保证分页稳定）
 func DefaultOrder() store.Opt {
 	return store.Combine(store.Desc("updatedAt"), store.Asc("id"))
+}
+
+// Create 创建工作空间。绑定的 BCS 项目已被其他工作空间占用时返回 ErrBCSProjectAlreadyBound
+func Create(ctx context.Context, workspaces *WorkspaceStore, ws *Workspace) error {
+	err := workspaces.Create(ctx, ws)
+	if errors.Is(err, store.ErrDuplicate) && strings.Contains(err.Error(), bcsProjectCodeIndex) {
+		return errors.Wrapf(
+			ErrBCSProjectAlreadyBound,
+			"bcs project(%s) already bound by another workspace", ws.BkSystems.BkBCSProjectCode,
+		)
+	}
+	if err != nil {
+		return errors.Wrapf(err, "create workspace %s", ws.ID)
+	}
+	return nil
 }
 
 // Update 更新已经存在的工作空间的可变字段，不存在时返回 ErrWorkspaceNotFound。

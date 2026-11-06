@@ -22,6 +22,7 @@ package bkrepo
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"io"
 	"time"
@@ -166,12 +167,25 @@ func (c *ApiClient) handleOperation(
 	defer metrics.ClientRequest("bkrepo", apiOperation.FullName(), started, &err)
 
 	ctx, span := apm.StartClientSpan(ctx, "bkrepo", opName)
-	resp, err := apiOperation.SetContext(ctx).SetResult(&result).Request()
+	// 不使用 SetResult 让 SDK 解码：SDK 会先读走响应体，非 2xx 时错误信息里就拿不到原文
+	resp, err := apiOperation.SetContext(ctx).Request()
 	defer apm.EndClientSpan(span, resp, &err)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, errors.Wrapf(err, "read bkrepo api %s response body", opName)
+	}
+	// 非 2xx 的响应体可能为空或不是 JSON（如鉴权失败），解码失败时交给下面的状态码检查报错
+	if jsonErr := json.Unmarshal(body, &result); jsonErr != nil && httpresp.IsSuccess(resp) {
+		return nil, errors.Wrapf(
+			jsonErr, "decode bkrepo api %s response, status code: %d, body: %s",
+			opName, resp.StatusCode, truncateBody(body),
+		)
+	}
 
 	// 根据返回码判断是否失败
 	code := cast.ToInt(mapx.Get(result, "code", 0))
@@ -187,10 +201,9 @@ func (c *ApiClient) handleOperation(
 
 	// HTTP 状态码检查
 	if !httpresp.IsSuccess(resp) {
-		errMsg, _ := io.ReadAll(resp.Body)
 		return nil, errors.Errorf(
 			"call bkrepo api %s failed, status code: %d, err: %s",
-			opName, resp.StatusCode, errMsg,
+			opName, resp.StatusCode, truncateBody(body),
 		)
 	}
 
@@ -202,6 +215,17 @@ func (c *ApiClient) handleOperation(
 		)
 	}
 	return result, nil
+}
+
+// maxErrorBodyLen 错误信息中保留的响应体最大长度，避免把大段 HTML 等内容写进错误和日志
+const maxErrorBodyLen = 512
+
+// truncateBody 截断响应体用于错误信息展示
+func truncateBody(body []byte) string {
+	if len(body) <= maxErrorBodyLen {
+		return string(body)
+	}
+	return string(body[:maxErrorBodyLen]) + "...(truncated)"
 }
 
 // handleOperationWithoutResult 发起请求，忽略返回数据但仍处理错误

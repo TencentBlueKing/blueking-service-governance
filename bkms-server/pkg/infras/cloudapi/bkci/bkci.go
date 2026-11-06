@@ -20,6 +20,7 @@
 package bkci
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"io"
@@ -99,6 +100,8 @@ func New(user auth.User) (Client, error) {
 		Stage:        config.G.BkApiStages.BkCI,
 		ClientOptions: []define.BkApiClientOption{
 			bkapi.OptSetRequestHeader("x-bkapi-authorization", string(authorization)),
+			// X-DEVOPS-UID 是蓝盾用户态接口的临时兼容头，部分环境仍用它识别调用用户，值与 bk_username 一致。
+			bkapi.OptSetRequestHeader("X-DEVOPS-UID", user.ID),
 			tenant.OptBkApiTenantHeader(),
 			bkapi.OptJsonResultProvider(),
 			bkapi.OptJsonBodyProvider(),
@@ -163,8 +166,9 @@ func (c *ApiClient) GetProject(ctx context.Context, projectCode string) (*Projec
 	}
 
 	return &Project{
-		ID:            mapx.GetStr(result, "data.projectId"),
-		Code:          projectCode,
+		ID: mapx.GetStr(result, "data.projectId"),
+		// 以蓝盾返回的项目 Code 为准，多租户蓝盾的 Code 带租户前缀
+		Code:          cmp.Or(mapx.GetStr(result, "data.projectCode"), projectCode),
 		Name:          mapx.GetStr(result, "data.projectName"),
 		Creator:       mapx.GetStr(result, "data.creator"),
 		HasManagePerm: mapx.GetBool(result, "data.managePermission"),
@@ -966,17 +970,28 @@ func (c *ApiClient) handleOperation(
 	defer metrics.ClientRequest("bkci", apiOperation.FullName(), started, &err)
 
 	ctx, span := apm.StartClientSpan(ctx, "bkci", opName)
-	resp, err := apiOperation.SetContext(ctx).SetResult(&result).Request()
+	// 不使用 SetResult 让 SDK 解码：SDK 解码失败时会丢弃响应原文，排查网关返回非 JSON 的问题时无从下手
+	resp, err := apiOperation.SetContext(ctx).Request()
 	defer apm.EndClientSpan(span, resp, &err)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
 
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, errors.Wrapf(err, "read bkci api %s response body", opName)
+	}
 	// HTTP 状态码检查
-	// 404 错误 -> 蓝盾资源不存在
+	// 404 错误 -> 蓝盾资源不存在；网关未注册该资源时同样是 404，带上响应原文以便区分
 	if resp.StatusCode == http.StatusNotFound {
-		return nil, ObjectNotFound
+		return nil, errors.Wrapf(ObjectNotFound, "bkci api %s, body: %s", opName, truncateBody(body))
+	}
+	if err = json.Unmarshal(body, &result); err != nil {
+		return nil, errors.Wrapf(
+			err, "decode bkci api %s response, status code: %d, body: %s",
+			opName, resp.StatusCode, truncateBody(body),
+		)
 	}
 	// 根据返回码判断是否失败
 	// 蓝鲸网关错误码字段是 Code，蓝盾错误码字段是 Status
@@ -999,6 +1014,17 @@ func (c *ApiClient) handleOperation(
 		return nil, newBusinessError(opName, code, status, result)
 	}
 	return result, nil
+}
+
+// maxErrorBodyLen 错误信息中保留的响应体最大长度，避免把大段 HTML 等内容写进错误和日志
+const maxErrorBodyLen = 512
+
+// truncateBody 截断响应体用于错误信息展示
+func truncateBody(body []byte) string {
+	if len(body) <= maxErrorBodyLen {
+		return string(body)
+	}
+	return string(body[:maxErrorBodyLen]) + "...(truncated)"
 }
 
 // newHTTPError 构造 HTTP 非 2xx 场景的错误
