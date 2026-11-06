@@ -69,6 +69,10 @@ type FeatureIntegrationsConfig struct {
 	// 开启后创建工作空间不再绑定 BSCP 项目，BSCP 相关接口直接返回未启用错误。
 	// 关闭期间创建的工作空间没有 BSCP 绑定，重新启用 BSCP 后需逐个执行 bind-bscp-project 命令补绑。
 	DisableBSCP bool
+	// EnableIndependentBCSProject 控制 BCS 项目是否与蓝盾项目解耦。
+	// 为 true：蓝盾始终新建；新建容器则创建 BCS 项目，绑定已有容器则绑定已有 BCS 项目。
+	// 为 false：新建/绑定都按蓝盾项目处理，BCS ID/Code 复用蓝盾项目。
+	EnableIndependentBCSProject bool
 }
 
 // BkApiStagesConfig 蓝鲸 API 版本信息，不指定时均默认为 "prod"

@@ -28,63 +28,189 @@ import (
 	"github.com/spf13/cast"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 
+	bcsmanager "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bcs"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkci"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkrepo"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/cmdb"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bcs"
 	bkciapi "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bkci"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/perm"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/tenant"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	bkmsreg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/registry"
 )
 
 // EnsureBkSystems 保证依赖的蓝鲸项目存在
 func EnsureBkSystems(
+	ctx context.Context, db *mongo.Database, workspaceID, displayName, bkciProjectID string, bizID int64,
+) (*BkSystems, error) {
+	if IndependentBCSProjectEnabled() {
+		// bcs project 与 bkci 无关联，额外创建 bcs 项目
+		return ensureBkSystemsWithIndependentBCSProject(ctx, db, workspaceID, displayName, bkciProjectID, bizID)
+	}
+	// bcs 与 bkci 共用 project
+	return ensureBkSystemsWithSharedProjectIdentity(ctx, db, workspaceID, bkciProjectID, bizID)
+}
+
+func ensureBkSystemsWithSharedProjectIdentity(
 	ctx context.Context, db *mongo.Database, workspaceID, bkciProjectID string, bizID int64,
 ) (*BkSystems, error) {
+	// 1. 查询 CMDB 业务信息
 	cmdbInfo, err := fetchCMDBInfo(ctx, bkciProjectID, bizID)
 	if err != nil {
 		return nil, errors.Wrap(err, "fetch cmdb cmdbInfo")
 	}
 
+	// 2. 创建/绑定蓝盾项目
 	bkciProjMgr := bkci.NewProjectManager(db, workspaceID)
-	// 创建/绑定蓝盾项目
 	createProjResp, err := bkciProjMgr.Initialize(ctx, bkciProjectID, cmdbInfo.ObsProductID, cmdbInfo.ObsProductName)
 	if err != nil {
 		return nil, err
 	}
 
-	isBoundExistedBKCIProject := true
-	// 如果 bkCiProjectID 为空, 说明是创建新项目
-	if bkciProjectID == "" {
-		isBoundExistedBKCIProject = false
+	// 3. 如果 bkCiProjectID 为空, 说明是创建新项目
+	isBoundExistedBKCIProject := bkciProjectID != ""
+	if !isBoundExistedBKCIProject {
 		// 新建项目时会创建一条默认的镜像构建流水线
 		// ps: 这里目前产品上没有对应说明, 用户可能不知晓有这个操作
-		_, err = bkci.NewPipelineManager(db, workspaceID).Initialize(ctx, string(bkci.PipelineTypeDockerfile))
-		if err != nil {
-			return nil, errors.Wrap(err, "create builtin dockerfile pipeline")
+		if err = initializeDefaultBKCIPipelines(ctx, db, workspaceID); err != nil {
+			return nil, err
 		}
-		// 同时初始化 Helm Git Build 流水线
-		_, err = bkci.NewPipelineManager(db, workspaceID).Initialize(ctx, string(bkci.PipelineTypeHelmGitBuild))
-		if err != nil {
-			return nil, errors.Wrap(err, "create builtin helm-git-build pipeline")
-		}
-
 		bkciProjectID = createProjResp.Code
 	}
 
-	// 初始化蓝盾制品库仓库
+	// 4. 初始化蓝盾制品库仓库
 	if err = bkrepo.NewProjectManager(db, workspaceID, auth.MustGetUser(ctx).ID).Initialize(ctx); err != nil {
 		return nil, errors.Wrap(err, "init bkrepo project")
 	}
 
-	// 绑定 BSCP Default 项目并确保 credential 存在
+	// 5. 绑定 BSCP Default 项目并确保 credential 存在
 	bscpBinding, err := bindDefaultBscpProject(ctx, cmdbInfo.BizID)
 	if err != nil {
 		return nil, errors.Wrap(err, "bind bscp project")
 	}
 
+	// 6. 组装蓝鲸系统信息，BCS 项目 ID / Code 复用蓝盾项目 UID / Code
+	return buildBkSystems(
+		createProjResp,
+		createProjResp.ID,
+		createProjResp.Code,
+		bkciProjectID,
+		isBoundExistedBKCIProject,
+		cmdbInfo,
+		bscpBinding,
+	), nil
+}
+
+func ensureBkSystemsWithIndependentBCSProject(
+	ctx context.Context, db *mongo.Database, workspaceID, displayName, bkciProjectID string, bizID int64,
+) (*BkSystems, error) {
+	// 1. 校验 BCS 项目绑定条件，在创建任何外部资源之前失败。
+	// 独立 BCS 模式下，请求里的 bkciProjectID 承载的是待绑定的 BCS project code；
+	// 为空则表示由服务端为当前 workspace 确保一个独立 BCS 项目存在。
+	boundBCSProject, cmdbInfo, err := prepareIndependentBCSBinding(
+		ctx, store.Of(db, Meta), workspaceID, bkciProjectID, bizID,
+	)
+	if err != nil {
+		return nil, errors.Wrap(err, "prepare independent bcs binding")
+	}
+
+	// 2. 新建蓝盾项目、默认流水线与制品库
+	createProjResp, err := initializeIndependentBKCIResources(ctx, db, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+
+	// 3. 显式绑定时直接使用已校验的 BCS 项目，否则按确定性 projectID 创建或复用
+	bcsProject := boundBCSProject
+	if bcsProject == nil {
+		if bcsProject, err = ensureIndependentBCSProject(ctx, workspaceID, displayName, bizID); err != nil {
+			return nil, errors.Wrap(err, "ensure workspace bcs project")
+		}
+	}
+
+	// 4. 绑定 BSCP Default 项目并确保 credential 存在
+	bscpBinding, err := bindDefaultBscpProject(ctx, cmdbInfo.BizID)
+	if err != nil {
+		return nil, errors.Wrap(err, "bind bscp project")
+	}
+
+	// 5. 组装蓝鲸系统信息，BCS 项目 ID / Code 使用 BCS 返回值
+	return buildBkSystems(
+		createProjResp,
+		bcsProject.ID,
+		bcsProject.Code,
+		createProjResp.Code,
+		false,
+		cmdbInfo,
+		bscpBinding,
+	), nil
+}
+
+func prepareIndependentBCSBinding(
+	ctx context.Context, workspaces *WorkspaceStore, workspaceID, boundBCSProjectCode string, bizID int64,
+) (*bcs.Project, *cmdb.BusinessDetail, error) {
+	// 自动创建 BCS 项目
+	if boundBCSProjectCode == "" {
+		// 1. 业务 ID 必填，且当前用户可访问
+		if bizID <= 0 {
+			return nil, nil, ErrIndependentWorkspaceBizRequired
+		}
+		if err := validateIndependentWorkspaceBiz(ctx, bizID); err != nil {
+			return nil, nil, err
+		}
+		// 2. 自动创建前确认确定性 BCS projectID 不存在，或属于本次重试可复用的项目。
+		// 业务不一致或已被其他 workspace 绑定时，在创建蓝盾资源之前失败。
+		if err := ensureAutoCreateBCSProjectReusable(ctx, workspaces, workspaceID, bizID); err != nil {
+			return nil, nil, err
+		}
+		// 3. 独立 BCS 模式只补齐业务 ID，不再回填二级业务/运营产品。
+		return nil, &cmdb.BusinessDetail{BizID: cast.ToString(bizID)}, nil
+	}
+
+	// 显式绑定已有 BCS 项目
+	// 1. 加载 BCS 项目，且项目必须关联业务
+	project, err := bcsmanager.NewProjectManager().LoadBoundProject(ctx, boundBCSProjectCode)
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "load bound bcs project")
+	}
+	if cast.ToInt64(project.BizID) <= 0 {
+		return nil, nil, errors.Errorf("bcs project(%s) has no associated bizID", boundBCSProjectCode)
+	}
+	// 2. 先校验是否已被其他 workspace 占用，避免后续先创建外部资源再失败。
+	if err = ensureBCSProjectNotBound(ctx, workspaces, workspaceID, project); err != nil {
+		return nil, nil, errors.Wrap(err, "ensure bcs project not bound")
+	}
+	// 3. 业务 ID 取自 BCS 项目
+	return project, &cmdb.BusinessDetail{BizID: project.BizID}, nil
+}
+
+func initializeIndependentBKCIResources(
+	ctx context.Context, db *mongo.Database, workspaceID string,
+) (*bkci.Project, error) {
+	// 1. 新建蓝盾项目。独立 BCS 模式下蓝盾项目始终新建，传空强制走创建逻辑。
+	bkciProjMgr := bkci.NewProjectManager(db, workspaceID)
+	createProjResp, err := bkciProjMgr.Initialize(ctx, "", "", "")
+	if err != nil {
+		return nil, err
+	}
+	// 2. 初始化默认流水线
+	if err = initializeDefaultBKCIPipelines(ctx, db, workspaceID); err != nil {
+		return nil, err
+	}
+	// 3. 初始化蓝盾制品库仓库
+	if err = bkrepo.NewProjectManager(db, workspaceID, auth.MustGetUser(ctx).ID).Initialize(ctx); err != nil {
+		return nil, errors.Wrap(err, "init bkrepo project")
+	}
+	return createProjResp, nil
+}
+
+func buildBkSystems(
+	createProjResp *bkci.Project, bcsProjectID, bcsProjectCode, bkciProjectID string,
+	isBoundExistedBKCIProject bool, cmdbInfo *cmdb.BusinessDetail, bscpBinding *BscpBinding,
+) *BkSystems {
 	return &BkSystems{
 		// 蓝盾项目 Code, 可读唯一字符串，如：bkce
 		BkCIProjectID: bkciProjectID,
@@ -92,10 +218,10 @@ func EnsureBkSystems(
 		BkCIProjectUID: createProjResp.ID,
 		// BkRepo 项目 ID 使用蓝盾项目可读 code (如 bkce)
 		BkRepoProjectID: createProjResp.Code,
-		// BCS 项目 ID 使用蓝盾项目 UID (32 位字符串)
-		BkBCSProjectID: createProjResp.ID,
-		// BCS 项目 Code, 使用蓝盾项目可读 code (如 bkce)
-		BkBCSProjectCode: createProjResp.Code,
+		// BCS 项目 ID：关闭独立 BCS 项目时复用蓝盾 UID，开启时用 BCS 返回值
+		BkBCSProjectID: bcsProjectID,
+		// BCS 项目 Code：关闭独立 BCS 项目时复用蓝盾 code，开启时用 BCS 返回值
+		BkBCSProjectCode: bcsProjectCode,
 		// BSCP 项目 ID / Key
 		BkBSCPProjectID:  bscpBinding.ProjectID,
 		BkBSCPProjectKey: bscpBinding.ProjectKey,
@@ -112,7 +238,94 @@ func EnsureBkSystems(
 		BkCCBizID: cmdbInfo.BizID,
 		// 二级业务 ID
 		Level2BizID: cmdbInfo.Level2BizID,
-	}, nil
+	}
+}
+
+func initializeDefaultBKCIPipelines(ctx context.Context, db *mongo.Database, workspaceID string) error {
+	_, err := bkci.NewPipelineManager(db, workspaceID).Initialize(ctx, string(bkci.PipelineTypeDockerfile))
+	if err != nil {
+		return errors.Wrap(err, "create builtin dockerfile pipeline")
+	}
+	// 同时初始化 Helm Git Build 流水线
+	_, err = bkci.NewPipelineManager(db, workspaceID).Initialize(ctx, string(bkci.PipelineTypeHelmGitBuild))
+	if err != nil {
+		return errors.Wrap(err, "create builtin helm-git-build pipeline")
+	}
+	return nil
+}
+
+func validateIndependentWorkspaceBiz(ctx context.Context, bizID int64) error {
+	cmdbSvc, err := cmdb.NewService(auth.MustGetUser(ctx))
+	if err != nil {
+		return errors.Wrap(err, "initial cmdb service")
+	}
+	if _, err = cmdbSvc.GetBusinessByID(ctx, bizID); err != nil {
+		return errors.Wrapf(ErrIndependentWorkspaceBizInvalid, "validate bkcc biz %d: %v", bizID, err)
+	}
+	return nil
+}
+
+func ensureAutoCreateBCSProjectReusable(
+	ctx context.Context, workspaces *WorkspaceStore, workspaceID string, bizID int64,
+) error {
+	// 1. 按确定性 projectID 查询 BCS 项目，不存在时可直接创建
+	projectID, err := independentBCSProjectID(ctx, workspaceID)
+	if err != nil {
+		return err
+	}
+	project, err := bcsmanager.NewProjectManager().LoadBoundProject(ctx, projectID)
+	if err != nil {
+		if errors.Is(err, bcs.ErrProjectNotFound) {
+			return nil
+		}
+		return errors.Wrapf(err, "check bcs project %s before create", projectID)
+	}
+	// 2. 已存在时，业务须与本次请求一致
+	if cast.ToInt64(project.BizID) != bizID {
+		return errors.Wrapf(
+			ErrBCSProjectAlreadyExists,
+			"bcs project(%s) belongs to biz %s, not requested biz %d",
+			project.Code,
+			project.BizID,
+			bizID,
+		)
+	}
+	// 3. 且未被其他工作空间绑定
+	if err = ensureBCSProjectNotBound(ctx, workspaces, workspaceID, project); err != nil {
+		return errors.Wrap(err, "ensure bcs project not bound")
+	}
+	return nil
+}
+
+// independentBCSProjectID 返回工作空间独立 BCS 项目的确定性 projectID，自动创建与重试回查都使用它
+func independentBCSProjectID(ctx context.Context, workspaceID string) (string, error) {
+	tenantID, ok := tenant.GetTenantID(ctx)
+	if !ok {
+		return "", errors.Wrapf(tenant.ErrTenantIDRequired, "bcs project id of workspace %s", workspaceID)
+	}
+	return bcsmanager.WorkspaceProjectID(tenantID, workspaceID), nil
+}
+
+func ensureIndependentBCSProject(
+	ctx context.Context, workspaceID, displayName string, bizID int64,
+) (*bcs.Project, error) {
+	// 1. 计算确定性 projectID
+	projectID, err := independentBCSProjectID(ctx, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	// 2. 按 projectID 复用已有项目，不存在则创建。
+	// 是否已被其他工作空间绑定已在 prepareIndependentBCSBinding 预检，写库时还有唯一索引兜底
+	project, err := bcsmanager.NewProjectManager().EnsureProject(ctx, bcsmanager.ProjectSpec{
+		ID:    projectID,
+		Code:  bkci.DefaultProjectCode(workspaceID),
+		Name:  bcsmanager.WorkspaceProjectName(displayName, workspaceID),
+		BizID: bizID,
+	})
+	if err != nil {
+		return nil, errors.Wrap(err, "ensure bcs project")
+	}
+	return project, nil
 }
 
 // CreateExternalImageRegistry 创建外部镜像仓库信息
@@ -188,11 +401,43 @@ func InitWorkspaceUser(ctx context.Context, id, displayName string, managers []s
 	return nil
 }
 
+// IndependentBCSProjectEnabled 为 true 时由 BKMS 独立创建/绑定 BCS 项目，不再复用蓝盾项目标识。
+func IndependentBCSProjectEnabled() bool {
+	return config.G != nil && config.G.FeatureIntegrations.EnableIndependentBCSProject
+}
+
+// ensureBCSProjectNotBound 检查 BCS 项目未被其他工作空间绑定。
+// 存储的 projectID / projectCode 都是 BCS 返回值，全局唯一（多租户下 projectCode 为 {tenantID}-{code}），
+// 因此不按租户过滤，与唯一索引 bkSystems.bkBcsProjectCode 的范围保持一致
+func ensureBCSProjectNotBound(
+	ctx context.Context, workspaces *WorkspaceStore, workspaceID string, project *bcs.Project,
+) error {
+	if project == nil {
+		return errors.New("bcs project is nil")
+	}
+	boundWorkspace, err := workspaces.Get(ctx, store.TenantAll(), ByBCSProject(project.ID, project.Code))
+	if err != nil {
+		if errors.Is(err, ErrWorkspaceNotFound) {
+			return nil
+		}
+		return errors.Wrapf(err, "find workspace by bcs project %s", project.Code)
+	}
+	if boundWorkspace.ID == workspaceID {
+		return nil
+	}
+	return errors.Wrapf(
+		ErrBCSProjectAlreadyBound,
+		"bcs project(%s) already bound by workspace %s",
+		project.Code,
+		boundWorkspace.ID,
+	)
+}
+
 // fetchCMDBInfo 查询 CMDB 相关字段（二级业务 ID、运营产品 ID/名称）
 func fetchCMDBInfo(ctx context.Context, bkciProjectID string, bizID int64) (*cmdb.BusinessDetail, error) {
 	user := auth.MustGetUser(ctx)
 
-	// 当 bizID 未传入时，通过 bkciProjectID 从 BCS 获取项目关联的业务 ID
+	// 1. 当 bizID 未传入时，通过 bkciProjectID 从 BCS 获取项目关联的业务 ID
 	if bizID <= 0 && bkciProjectID != "" {
 		bcsClient, err := bcs.New(user)
 		if err != nil {
@@ -208,6 +453,7 @@ func fetchCMDBInfo(ctx context.Context, bkciProjectID string, bizID int64) (*cmd
 		}
 	}
 
+	// 2. 查询 CMDB 业务详情
 	cmdbSvc, err := cmdb.NewService(user)
 	if err != nil {
 		return nil, errors.Wrap(err, "initial cmdb service")

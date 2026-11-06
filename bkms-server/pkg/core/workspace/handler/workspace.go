@@ -25,6 +25,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/pkg/errors"
 	"github.com/samber/lo"
 	"golang.org/x/sync/errgroup"
 
@@ -536,9 +537,16 @@ func (h *Handler) CreateWorkspace(c *gin.Context) {
 		return
 	}
 
-	bkSystem, err := workspace.EnsureBkSystems(ctx, h.registry.DB, input.ID, input.BkCIProjectID, input.BkCCBizID)
+	bkSystem, err := workspace.EnsureBkSystems(
+		ctx,
+		h.registry.DB,
+		input.ID,
+		input.DisplayName,
+		input.BkCIProjectID,
+		input.BkCCBizID,
+	)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "ensure blueking system"))
+		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, classifyEnsureBkSystemsErr(err), "ensure blueking system"))
 		return
 	}
 
@@ -578,7 +586,11 @@ func (h *Handler) CreateWorkspace(c *gin.Context) {
 		BkSystems: *bkSystem,
 		Creator:   auth.MustGetUser(ctx).ID,
 	}
-	if err = h.workspaces().Create(ctx, ws); err != nil {
+	if err = workspace.Create(ctx, h.workspaces(), ws); err != nil {
+		if errors.Is(err, workspace.ErrBCSProjectAlreadyBound) {
+			bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeAlreadyExists, "create workspace in DB"))
+			return
+		}
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "create workspace in DB"))
 		return
 	}
@@ -992,6 +1004,19 @@ func (h *Handler) hasActiveDeploymentsInWorkspace(ctx context.Context, workspace
 		}
 	}
 	return false, nil
+}
+
+func classifyEnsureBkSystemsErr(err error) bkerrs.ErrCode {
+	switch {
+	case errors.Is(err, workspace.ErrIndependentWorkspaceBizRequired),
+		errors.Is(err, workspace.ErrIndependentWorkspaceBizInvalid):
+		return bkerrs.ErrCodeInvalidRequest
+	case errors.Is(err, workspace.ErrBCSProjectAlreadyExists),
+		errors.Is(err, workspace.ErrBCSProjectAlreadyBound):
+		return bkerrs.ErrCodeAlreadyExists
+	default:
+		return bkerrs.ErrCodeInternalServerError
+	}
 }
 
 func abortIfEnvClusterNamespaceOccupied(c *gin.Context, err error) bool {
