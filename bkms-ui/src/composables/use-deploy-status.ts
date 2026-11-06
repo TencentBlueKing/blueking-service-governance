@@ -25,6 +25,7 @@ import { type AppType, isHelmLikeAppType } from '~/composables/app-type';
 /** AppModel 部署状态 → 文案 key（用于 t()） */
 const APP_DEPLOY_STATUS_TEXT_KEY: Record<string, string> = {
   [APP_DEPLOY_STATUS.DEPLOYED]: '已部署',
+  [APP_DEPLOY_STATUS.ROLLED_BACK]: '已回滚',
   [APP_DEPLOY_STATUS.DEPLOYING]: '部署中',
   [APP_DEPLOY_STATUS.FAILED]: '部署失败',
   [APP_DEPLOY_STATUS.POLLING_TIMEOUT]: '部署失败',
@@ -38,6 +39,7 @@ const APP_DEPLOY_STATUS_TEXT_KEY: Record<string, string> = {
 /** AppModel 部署状态 → ColorIcon 图标名 */
 const APP_DEPLOY_STATUS_ICON: Record<string, string> = {
   [APP_DEPLOY_STATUS.DEPLOYED]: 'normal',
+  [APP_DEPLOY_STATUS.ROLLED_BACK]: 'warning-2',
   [APP_DEPLOY_STATUS.DEPLOYING]: 'loading',
   [APP_DEPLOY_STATUS.UNINSTALLING]: 'loading',
   [APP_DEPLOY_STATUS.UNINSTALLED]: 'normal',
@@ -51,6 +53,7 @@ const APP_DEPLOY_STATUS_ICON: Record<string, string> = {
 /** AppModel 部署状态 → 颜色 */
 const APP_DEPLOY_STATUS_COLOR: Record<string, string> = {
   [APP_DEPLOY_STATUS.DEPLOYED]: 'green',
+  [APP_DEPLOY_STATUS.ROLLED_BACK]: 'orange',
   [APP_DEPLOY_STATUS.DEPLOYING]: 'blue',
   [APP_DEPLOY_STATUS.FAILED]: 'red',
   [APP_DEPLOY_STATUS.POLLING_TIMEOUT]: 'red',
