@@ -22,6 +22,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 
@@ -33,19 +34,32 @@ import (
 )
 
 var _ = Describe("ApiClient", func() {
+	type capturedRequest struct {
+		auth string
+		body []byte
+	}
+
 	var (
 		originalCfg *config.Config
 		server      *httptest.Server
-		gotAuth     string
-		gotBody     map[string]any
+		requests    chan capturedRequest
 	)
+
+	// lastRequest 取出服务端收到的请求，返回认证头与解码后的请求体
+	lastRequest := func() (string, map[string]any) {
+		var req capturedRequest
+		Eventually(requests).Should(Receive(&req))
+		var body map[string]any
+		Expect(json.Unmarshal(req.body, &body)).To(Succeed())
+		return req.auth, body
+	}
 
 	BeforeEach(func() {
 		originalCfg = config.G
-		gotAuth, gotBody = "", nil
+		requests = make(chan capturedRequest, 1)
 		server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			gotAuth = r.Header.Get("Authorization")
-			Expect(json.NewDecoder(r.Body).Decode(&gotBody)).To(Succeed())
+			body, _ := io.ReadAll(r.Body)
+			requests <- capturedRequest{auth: r.Header.Get("Authorization"), body: body}
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(`{"code": 0, "data": "ok"}`))
 		}))
@@ -67,7 +81,8 @@ var _ = Describe("ApiClient", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		Expect(client.CreateProject(context.Background(), "demo")).To(Succeed())
-		Expect(gotAuth).To(Equal("Platform " + expectedCredential))
+		auth, _ := lastRequest()
+		Expect(auth).To(Equal("Platform " + expectedCredential))
 	})
 
 	It("should use basic auth for independent bkrepo", func() {
@@ -76,7 +91,8 @@ var _ = Describe("ApiClient", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		Expect(client.CreateProject(context.Background(), "demo")).To(Succeed())
-		Expect(gotAuth).To(Equal("Basic " + expectedCredential))
+		auth, _ := lastRequest()
+		Expect(auth).To(Equal("Basic " + expectedCredential))
 	})
 
 	It("should keep project name as is when multi-tenant mode is disabled", func() {
@@ -85,7 +101,8 @@ var _ = Describe("ApiClient", func() {
 
 		ctx := tenant.WithTenantID(context.Background(), "system")
 		Expect(client.CreateProject(ctx, "system.demo")).To(Succeed())
-		Expect(gotBody["name"]).To(Equal("system.demo"))
+		_, body := lastRequest()
+		Expect(body["name"]).To(Equal("system.demo"))
 	})
 
 	It("should trim tenant prefix from project name in multi-tenant mode", func() {
@@ -95,8 +112,9 @@ var _ = Describe("ApiClient", func() {
 
 		ctx := tenant.WithTenantID(context.Background(), "system")
 		Expect(client.CreateProject(ctx, "system.demo")).To(Succeed())
-		Expect(gotBody["name"]).To(Equal("demo"))
-		Expect(gotBody["displayName"]).To(Equal("demo"))
+		_, body := lastRequest()
+		Expect(body["name"]).To(Equal("demo"))
+		Expect(body["displayName"]).To(Equal("demo"))
 	})
 
 	It("should not trim prefix of another tenant", func() {
@@ -106,6 +124,7 @@ var _ = Describe("ApiClient", func() {
 
 		ctx := tenant.WithTenantID(context.Background(), "tenant-a")
 		Expect(client.CreateProject(ctx, "system.demo")).To(Succeed())
-		Expect(gotBody["name"]).To(Equal("system.demo"))
+		_, body := lastRequest()
+		Expect(body["name"]).To(Equal("system.demo"))
 	})
 })

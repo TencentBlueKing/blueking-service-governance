@@ -208,15 +208,22 @@ var _ = Describe("LocalManager", func() {
 	)
 
 	var (
-		fake *fakeIAMServicer
-		mgr  *LocalManager
-		ctx  context.Context
+		fake        *fakeIAMServicer
+		mgr         *LocalManager
+		ctx         context.Context
+		originalCfg *config.Config
 	)
 
 	BeforeEach(func() {
 		fake = newFakeIAMServicer()
 		mgr = &LocalManager{svc: fake}
 		ctx = ctxWithUser(testUser)
+		originalCfg = config.G
+		config.G = &config.Config{}
+	})
+
+	AfterEach(func() {
+		config.G = originalCfg
 	})
 
 	Context("HasCreateWorkspacePerm", func() {
@@ -320,16 +327,8 @@ var _ = Describe("LocalManager", func() {
 	})
 
 	Context("independent bkrepo", func() {
-		var originalCfg *config.Config
-
 		BeforeEach(func() {
-			originalCfg = config.G
-			config.G = &config.Config{}
 			config.G.FeatureIntegrations.EnableIndependentBkRepo = true
-		})
-
-		AfterEach(func() {
-			config.G = originalCfg
 		})
 
 		It("does not grant bkrepo scopes to workspace admin", func() {
