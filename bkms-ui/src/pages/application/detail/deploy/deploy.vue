@@ -236,6 +236,13 @@
             @action="handleBatchReleaseAction"
             @back="showBatchReleaseProgress = false"
           />
+          <!-- 进度回查进行中的骨架占位，避免横幅数据返回后突然撑开布局 -->
+          <Layout.shape
+            v-else-if="batchReleaseLoading"
+            class="mb-[16px]"
+            :height="40"
+            :width="'100%'"
+          />
           <!-- 构建状态提示 -->
           <Alert
             v-if="isBuildAlertVisible"
@@ -664,6 +671,7 @@
     busyReason: batchReleaseBusyReason,
     handleAction: handleBatchReleaseAction,
     handleClose: handleBatchReleaseClose,
+    loading: batchReleaseLoading,
     pendingAction: batchReleasePendingAction,
     progress: batchReleaseProgress,
     refresh: refreshBatchRelease,
