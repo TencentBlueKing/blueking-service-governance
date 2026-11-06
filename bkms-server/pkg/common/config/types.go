@@ -63,7 +63,7 @@ type FeatureIntegrationsConfig struct {
 	// EnableBkUserTenantVerify 控制是否通过 bk-user 校验用户所属租户和状态。
 	EnableBkUserTenantVerify bool
 	// EnableIndependentBkRepo 制品库为独立部署：不接入权限中心，
-	// 接口改用制品库账号的 Basic 认证，而非平台账号认证。
+	// 接口改用制品库账号的 Basic 认证，而非平台账号认证；制品库成员需在制品库侧自行管理。
 	EnableIndependentBkRepo bool
 }
 

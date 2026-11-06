@@ -47,11 +47,6 @@ type ApiClient struct {
 	operator string
 }
 
-// IndependentEnabled 返回制品库是否为独立部署（featureIntegrations.enableIndependentBkRepo）
-func IndependentEnabled() bool {
-	return config.G != nil && config.G.FeatureIntegrations.EnableIndependentBkRepo
-}
-
 // New 创建 Client，根据配置返回真实客户端或 stub 客户端
 // 需注意：默认使用平台账号认证；独立部署的制品库使用制品库账号的 Basic 认证
 // ref: https://github.com/TencentBlueKing/bk-repo/blob/master/docs/apidoc-user/common/common.md
@@ -63,7 +58,7 @@ func New(operator string) (Client, error) {
 	}
 
 	scheme := "Platform"
-	if IndependentEnabled() {
+	if config.G.FeatureIntegrations.EnableIndependentBkRepo {
 		scheme = "Basic"
 	}
 	authorization := fmt.Sprintf(

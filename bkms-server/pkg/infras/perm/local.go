@@ -26,8 +26,8 @@ import (
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkiam"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkiam/role"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bkrepo"
 )
 
 // iamServicer 是 LocalManager 内部依赖的 IAMService 编排接口。
@@ -382,9 +382,10 @@ func (m *LocalManager) CreateWorkspaceScopeBuiltinRoles(
 	return nil
 }
 
-// bkRepoOptions 生成角色的制品库权限范围；独立部署的制品库未接入权限中心，不授予制品库权限
+// bkRepoOptions 生成角色的制品库权限范围；独立部署的制品库未接入权限中心，不授予制品库权限，
+// 制品库成员需在制品库侧自行管理
 func bkRepoOptions(bkRepoProjectID string) *bkiam.BKRepoOptions {
-	if bkrepo.IndependentEnabled() {
+	if config.G.FeatureIntegrations.EnableIndependentBkRepo {
 		return nil
 	}
 	return &bkiam.BKRepoOptions{
