@@ -36,6 +36,8 @@ featureIntegrations:
   # 关闭 BSCP 对接，未部署 BSCP 的环境设为 true
   # 关闭期间创建的工作空间没有 BSCP 绑定，重新启用后需逐个执行 bind-bscp-project 命令补绑
   disableBSCP: false
+  # 关闭内置 Dockerfile 构建流水线，蓝盾未安装「构建并推送 Docker 镜像」插件的环境设为 true
+  disableBuiltinDockerfilePipeline: false
 # 蓝鲸 API 环境配置
 bkApiStages:
   # BSCP
