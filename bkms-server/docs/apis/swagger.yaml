@@ -4282,6 +4282,59 @@ definitions:
         description: 卸载状态
         type: string
     type: object
+  serializer.DeployDiagnosisOutputObj:
+    properties:
+      deploy:
+        allOf:
+        - $ref: '#/definitions/serializer.DeployOutputObj'
+        description: Deploy 最新一次部署；从未部署过时各字段为空
+      emptyReason:
+        description: |-
+          EmptyReason groups 为空时的空态：no_deploy / deploying / all_healthy / no_instance / instances_unavailable；
+          有结论时为空字符串
+        type: string
+      generatedAt:
+        description: GeneratedAt 诊断完成时间
+        type: string
+      groups:
+        description: Groups 按规则分组的结论，多条时默认展示第一组
+        items:
+          $ref: '#/definitions/serializer.DiagnosisGroupObj'
+        type: array
+      partial:
+        description: Partial 日志或事件未取全时为 true，提示「部分证据未取到」
+        type: boolean
+      partialReasons:
+        description: PartialReasons 未取全的数据源：logs / events；没有则为空数组
+        items:
+          type: string
+        type: array
+      summary:
+        allOf:
+        - $ref: '#/definitions/serializer.DiagnosisSummaryObj'
+        description: Summary 实例计数
+    type: object
+  serializer.DeployOutputObj:
+    properties:
+      buildID:
+        description: BuildID 一键构建部署的构建 ID，用于跳转构建记录；直接部署时为空
+        type: string
+      deployID:
+        description: DeployID 运行实例所属的部署记录 ID，用于查看完整资源 YAML；一键构建从未进入部署阶段时为空
+        type: string
+      message:
+        description: Message 最新记录上的说明，失败时通常是失败原因
+        type: string
+      phase:
+        description: Phase 归一后的阶段：inProgress / succeeded / failed / other
+        type: string
+      stage:
+        description: Stage 一键构建部署所处阶段：build / deploy；直接部署时为空
+        type: string
+      status:
+        description: Status 最新记录上的原始状态，只用于展示
+        type: string
+    type: object
   serializer.DeployOverviewAutoscalingMetricObj:
     properties:
       averageUtilization:
@@ -4494,6 +4547,126 @@ definitions:
     properties:
       enabled:
         type: boolean
+    type: object
+  serializer.DiagnosisActionObj:
+    properties:
+      id:
+        description: ID 跳转目标：frameworkConfig / deployConfig / buildHistory / redeploy
+        type: string
+      label:
+        description: Label 按钮文案
+        type: string
+    type: object
+  serializer.DiagnosisEventObj:
+    properties:
+      content:
+        description: Content 事件内容
+        type: string
+      createdAt:
+        description: CreatedAt 事件发生时间
+        type: string
+      level:
+        description: Level 事件级别，如 Normal / Warning
+        type: string
+      resourceKind:
+        description: ResourceKind 事件关联的资源类型，如 Pod、Deployment
+        type: string
+      resourceName:
+        description: ResourceName 事件关联的资源名
+        type: string
+    type: object
+  serializer.DiagnosisGroupObj:
+    properties:
+      actions:
+        description: Actions 解决方案按钮
+        items:
+          $ref: '#/definitions/serializer.DiagnosisActionObj'
+        type: array
+      category:
+        description: Category 分类的展示文案，如「配置下发」
+        type: string
+      categoryId:
+        description: CategoryID 分类标识：config_delivery / startup_failure / deploy_failure
+          / build_failure
+        type: string
+      cause:
+        description: Cause 出错原因主句
+        type: string
+      causeDetail:
+        description: CauseDetail 主句下的说明
+        type: string
+      confidence:
+        description: Confidence 置信度：high / low，面板不展示
+        type: string
+      instances:
+        description: Instances 命中该规则的实例，已按重启次数降序；阶段性结论（部署 / 构建失败）为空数组
+        items:
+          $ref: '#/definitions/serializer.DiagnosisInstanceObj'
+        type: array
+      relatedEvents:
+        description: RelatedEvents 不归属某个实例的工作负载事件，如副本创建失败、配额不足
+        items:
+          $ref: '#/definitions/serializer.DiagnosisEventObj'
+        type: array
+      ruleId:
+        description: RuleID 规则标识，作标签 key：framework-config-not-found / unknown / deploy-failed
+          / build-failed
+        type: string
+      ruleName:
+        description: RuleName 标签文案，展示为「规则名 · 实例数」
+        type: string
+      solutions:
+        description: Solutions 处理步骤，按数组顺序编号展示
+        items:
+          type: string
+        type: array
+    type: object
+  serializer.DiagnosisInstanceObj:
+    properties:
+      evidence:
+        description: Evidence 命中规则的日志行，空则不展示
+        items:
+          type: string
+        type: array
+      id:
+        description: ID Pod 名，下载日志时传给现有日志接口
+        type: string
+      logHint:
+        description: LogHint 日志区说明，空则不展示
+        type: string
+      logLines:
+        description: LogLines 日志正文，空表示未取到该实例日志
+        items:
+          type: string
+        type: array
+      logSource:
+        description: LogSource 日志来源：previous / current / none
+        type: string
+      relatedConfigs:
+        description: RelatedConfigs 该实例的相关配置，路径比对结果已算好
+        items:
+          $ref: '#/definitions/serializer.RelatedConfigRowObj'
+        type: array
+      relatedEvents:
+        description: RelatedEvents 本次部署开始后与该实例相关的事件，空表示没有相关事件
+        items:
+          $ref: '#/definitions/serializer.DiagnosisEventObj'
+        type: array
+      restartCount:
+        description: RestartCount 重启次数
+        type: integer
+      status:
+        description: Status 实例状态，如 CrashLoopBackOff
+        type: string
+    type: object
+  serializer.DiagnosisSummaryObj:
+    properties:
+      abnormalCount:
+        description: AbnormalCount 异常实例数，与部署入口的异常数口径一致
+        type: integer
+      totalCount:
+        description: TotalCount 当前环境实例总数
+        type: integer
     type: object
   serializer.EdgeReasonOutputObj:
     properties:
@@ -5389,6 +5562,11 @@ definitions:
         items:
           $ref: '#/definitions/serializer.BkCIPipelineVariableOutput'
         type: array
+    type: object
+  serializer.GetDeployDiagnosisOutput:
+    properties:
+      data:
+        $ref: '#/definitions/serializer.DeployDiagnosisOutputObj'
     type: object
   serializer.GetEnvApmOutput:
     properties:
@@ -8363,6 +8541,21 @@ definitions:
       status:
         type: string
       vendor:
+        type: string
+    type: object
+  serializer.RelatedConfigRowObj:
+    properties:
+      danger:
+        description: Danger 为 true 时 Value 标红，表示与日志中的路径不一致
+        type: boolean
+      hint:
+        description: Hint Value 旁的提示，空则不展示
+        type: string
+      label:
+        description: Label 左列名称
+        type: string
+      value:
+        description: Value 右列取值
         type: string
     type: object
   serializer.ReleaseStrategyInput:
@@ -16059,6 +16252,48 @@ paths:
       summary: 触发 bkmsApp 应用构建并自动部署
       tags:
       - build-autodeploy
+  /apps/{appID}/envs/{envName}/deploy-diagnosis:
+    get:
+      description: |-
+        诊断该环境（泳道）最新一次部署为什么没有正常运行，给出出错原因、处理步骤和跳转按钮，供部署页面板与 CLI 展示。
+        1) 诊断对象固定为最新一次部署，AppModel 应用会把一键构建部署记录也纳入比较，构建阶段失败同样能被诊断。
+        2) 采集最新部署的实例、异常实例的日志（重启前日志优先）、本次部署开始后的 Pod 与工作负载事件，以及框架配置。
+        3) 有异常实例时按实例规则逐个匹配并按规则分组；没有异常实例时用阶段规则判断部署 / 构建是否已失败。
+        4) 部署进行中不做诊断，返回 emptyReason=deploying；日志或事件未取全时仍给结论，并通过 partialReasons 标明。
+        5) 只有列实例失败会使整个请求失败。设计说明见 design_notes/deploy_diagnosis.md。
+      operationId: GetDeployDiagnosis
+      parameters:
+      - description: 应用 ID
+        in: path
+        name: appID
+        required: true
+        type: string
+      - description: 部署环境名称
+        in: path
+        name: envName
+        required: true
+        type: string
+      - description: 部署的泳道名称（空字符串表示不使用泳道）
+        in: query
+        name: trafficLaneName
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.GetDeployDiagnosisOutput'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 获取部署诊断结论
+      tags:
+      - deploy-diagnosis
   /apps/{appID}/envs/{envName}/deployable-image-tags:
     get:
       operationId: ListDeployableImageTags

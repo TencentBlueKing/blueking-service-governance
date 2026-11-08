@@ -16,14 +16,24 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
-// Package file 提供受限根目录下的安全文件读取工具，避免路径逃逸与符号链接攻击
+// Package file 提供文件与路径相关的工具，包括受限根目录下的安全读取（避免路径逃逸与符号链接攻击）和路径比较
 package file
 
 import (
 	"os"
+	"path/filepath"
 
 	"github.com/pkg/errors"
 )
+
+// IsSameAbsPath 判断两个路径是否指向同一绝对路径，比较前会做 filepath.Clean（去掉多余的 / 和 . / ..）
+// 任一方是相对路径时返回 false：相对路径依赖工作目录，单凭字符串无法确定指向
+func IsSameAbsPath(a, b string) bool {
+	if !filepath.IsAbs(a) || !filepath.IsAbs(b) {
+		return false
+	}
+	return filepath.Clean(a) == filepath.Clean(b)
+}
 
 // SafeReadFile 安全地读取 baseDir 下的文件，底层使用 os.Root 以防止路径逃逸和符号链接攻击
 func SafeReadFile(baseDir, name string) ([]byte, error) {

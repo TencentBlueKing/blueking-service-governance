@@ -130,6 +130,16 @@ func NewLogManager(
 	}, nil
 }
 
+// NewPodLogManager 为已确认归属的 Pod 创建日志管理器，不再校验实例是否属于当前部署
+// 适用于调用方刚按部署记录列出 Pod 的场景，例如部署诊断，避免每个实例重复列一次 Pod
+func NewPodLogManager(clusterID, namespace, containerName string) *LogManager {
+	return &LogManager{
+		namespace:     namespace,
+		containerName: containerName,
+		podClient:     k8sclient.NewPodClient(cluster.NewConfig(clusterID)),
+	}
+}
+
 // ListLogs 查询实例日志
 func (m *LogManager) ListLogs(
 	ctx context.Context,

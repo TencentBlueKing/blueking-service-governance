@@ -440,19 +440,14 @@ func (h *Handler) frameworkFileLocation(
 	if !appruntime.IsAppModelType(app.Type) {
 		return "", "", nil
 	}
-	defs, err := appcfg.ListDefsByApp(
-		ctx,
-		store.Of(h.registry.DB, appcfg.AppConfigFileDefMeta),
-		app.ID,
-		appcfg.DefFilterConfigKind(appcfg.ConfigKindFramework),
-	)
+	def, err := appcfg.GetFrameworkDef(ctx, store.Of(h.registry.DB, appcfg.AppConfigFileDefMeta), app.ID)
 	if err != nil {
-		return "", "", errors.Wrapf(err, "list framework defs for app %s", app.ID)
+		return "", "", errors.Wrapf(err, "get framework def for app %s", app.ID)
 	}
-	if len(defs) != 1 {
+	if def == nil {
 		return "", "", nil
 	}
-	return defs[0].Name, defs[0].MountDir, nil
+	return def.Name, def.MountDir, nil
 }
 
 // ListApps 查询 app 列表，只返回基本信息。
