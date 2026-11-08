@@ -56,6 +56,8 @@ var (
 	BuildLogCleaned = errors.New("bkci build log cleaned")
 	// BuildLogQueryFailed 构建日志查询异常
 	BuildLogQueryFailed = errors.New("bkci build log query failed")
+	// FeatureDisabled 蓝盾特性已禁用
+	FeatureDisabled = errors.New("bkci feature disabled")
 )
 
 // 引用自蓝盾
@@ -172,7 +174,7 @@ func (c *ApiClient) GetProject(ctx context.Context, projectCode string) (*Projec
 }
 
 // CreateProject 创建蓝盾项目
-// 注意：社区版不需要 obsProductID & obsProductName
+// 注意：obsProductID & obsProductName 为可选参数
 func (c *ApiClient) CreateProject(
 	ctx context.Context,
 	projectCode, obsProductID, obsProductName string,
@@ -187,7 +189,7 @@ func (c *ApiClient) CreateProject(
 		"projectType": "5",
 		"description": "蓝鲸服务治理",
 	}
-	// 仅当运营产品 ID 与名称均非空时才设置（社区版无这些信息）
+	// 仅当运营产品 ID 与名称均非空时才设置
 	if obsProductID != "" && obsProductName != "" {
 		body["productId"] = obsProductID
 		body["productName"] = obsProductName
@@ -214,8 +216,12 @@ func (c *ApiClient) CreateProject(
 
 // ------------------------------------------ 蓝盾代码库 & OAuth API ------------------------------------------
 
-// ListOAuthGitProjects 获取用户有 OAuth 授权给蓝盾的 Git 项目列表
+// ListOAuthGitProjects 获取用户有 OAuth 授权给蓝盾的 Git 项目列表。
 func (c *ApiClient) ListOAuthGitProjects(ctx context.Context, projectCode, keyword string) ([]GitProject, error) {
+	if config.G.FeatureIntegrations.BkciOAuthGitDisabled {
+		return nil, FeatureDisabled
+	}
+
 	params := map[string]string{"projectId": projectCode}
 	if keyword != "" {
 		params["search"] = keyword
@@ -249,8 +255,12 @@ func (c *ApiClient) ListOAuthGitProjects(ctx context.Context, projectCode, keywo
 	return projects, nil
 }
 
-// GetOAuthUrl 获取用户授权 Git 项目给蓝盾的 OAuth 授权地址
+// GetOAuthUrl 获取用户授权 Git 项目给蓝盾的 OAuth 授权地址。
 func (c *ApiClient) GetOAuthUrl(ctx context.Context, projectCode string) (string, error) {
+	if config.G.FeatureIntegrations.BkciOAuthGitDisabled {
+		return "", FeatureDisabled
+	}
+
 	apiOperation := c.NewOperation(
 		// 与 ListOAuthGitProjects 共用一个 API，但是获取的不同数据字段（当 Git 项目列表为空时，会提示用户进行授权）
 		bkapi.OperationConfig{
@@ -354,6 +364,58 @@ func (c *ApiClient) DeleteCredential(ctx context.Context, projectCode, credentia
 func (c *ApiClient) ListPipelines(
 	ctx context.Context, projectCode, keyword string, page, pageSize int64,
 ) (int64, []Pipeline, error) {
+	if config.G.FeatureIntegrations.BkciPipelineSearchByName {
+		// search_by_name 接口不支持分页，返回 id+name 精简列表
+		return c.listPipelinesByName(ctx, projectCode, keyword)
+	}
+	return c.listPipelinesByPaging(ctx, projectCode, keyword, page, pageSize)
+}
+
+// listPipelinesByName 使用 v4_user_pipeline_search_by_name 接口搜索流水线。
+func (c *ApiClient) listPipelinesByName(
+	ctx context.Context, projectCode, keyword string,
+) (int64, []Pipeline, error) {
+	params := map[string]string{}
+	if keyword != "" {
+		params["pipelineName"] = keyword
+	}
+
+	apiOperation := c.NewOperation(
+		bkapi.OperationConfig{
+			Name:   "v4_user_pipeline_search_by_name",
+			Method: "GET",
+			Path:   "/v4/apigw-user/projects/{projectId}/pipelines/search_by_name",
+		},
+		bkapi.OptSetRequestPathParams(
+			map[string]string{"projectId": projectCode},
+		),
+	).SetQueryParams(params)
+
+	result, err := c.handleOperation(ctx, apiOperation)
+	if err != nil {
+		return 0, nil, err
+	}
+
+	// 该接口返回 data 为数组，元素仅含 pipelineId/pipelineName
+	var pipelines []Pipeline
+	for _, d := range mapx.GetList(result, "data") {
+		p, ok := d.(map[string]any)
+		if !ok {
+			return 0, nil, errors.New("invalid pipeline data (not map[string]any type)")
+		}
+		pipelines = append(pipelines, Pipeline{
+			ID:   mapx.GetStr(p, "pipelineId"),
+			Name: mapx.GetStr(p, "pipelineName"),
+		})
+	}
+
+	return int64(len(pipelines)), pipelines, nil
+}
+
+// listPipelinesByPaging 流水线搜索
+func (c *ApiClient) listPipelinesByPaging(
+	ctx context.Context, projectCode, keyword string, page, pageSize int64,
+) (int64, []Pipeline, error) {
 	params := map[string]string{
 		"page":     cast.ToString(page),
 		"pageSize": cast.ToString(pageSize),
@@ -362,6 +424,7 @@ func (c *ApiClient) ListPipelines(
 	if keyword != "" {
 		params["pipelineName"] = keyword
 	}
+
 	apiOperation := c.NewOperation(
 		bkapi.OperationConfig{
 			Name:   "v4_user_pipeline_paging_search_by_name",
@@ -691,10 +754,14 @@ func (c *ApiClient) ListRepository(
 	return total, repositories, nil
 }
 
-// GetRepository 获取蓝盾代码库详情
+// GetRepository 获取蓝盾代码库详情。
 func (c *ApiClient) GetRepository(
 	ctx context.Context, projectCode, repoHashID string,
 ) (*Repository, error) {
+	if config.G.FeatureIntegrations.BkciRepositoryQueryDisabled {
+		return nil, FeatureDisabled
+	}
+
 	apiOperation := c.NewOperation(
 		bkapi.OperationConfig{
 			Name:   "v4_user_repository_get",
@@ -722,19 +789,24 @@ func (c *ApiClient) GetRepository(
 	}, nil
 }
 
-// CreateRepository 创建蓝盾代码库，返回代码库 Hash ID（目前只支持 codeGit + OAuth）
+// CreateRepository 创建蓝盾代码库，返回代码库 Hash ID。
 func (c *ApiClient) CreateRepository(
-	ctx context.Context, projectCode, repoURL, repoAlias string,
+	ctx context.Context, projectCode string, opts CreateRepositoryOptions,
 ) (string, error) {
+	authType := opts.AuthType
+	if authType == "" {
+		authType = AuthTypeOAuth
+	}
 	body := map[string]any{
-		"@type":       "codeGit",
-		"aliasName":   repoAlias,
-		"url":         repoURL,
-		"authType":    "OAUTH",
-		"projectName": repoAlias,
+		"@type":       opts.RepoType,
+		"aliasName":   opts.Alias,
+		"url":         opts.URL,
+		"projectName": opts.Alias,
 		"userName":    c.user.ID,
-		// OAUTH 是不需要指定凭证的，但是蓝盾 API 有做检查
-		"credentialId": "",
+		"authType":    authType,
+		"scmCode":     opts.RepoType,
+		// OAUTH 不需要指定凭证，但蓝盾 API 有做检查
+		"credentialId": opts.CredentialID,
 	}
 
 	apiOperation := c.NewOperation(
@@ -759,10 +831,14 @@ func (c *ApiClient) CreateRepository(
 	return repoID, nil
 }
 
-// ListRepositoryBranches 获取代码库分支列表
+// ListRepositoryBranches 获取代码库分支列表。
 func (c *ApiClient) ListRepositoryBranches(
 	ctx context.Context, projectCode, repositoryID, repositoryType, search string, page, pageSize int64,
 ) ([]RepositoryRef, error) {
+	if config.G.FeatureIntegrations.BkciRepositoryQueryDisabled {
+		return nil, FeatureDisabled
+	}
+
 	params := map[string]string{
 		"repositoryId":   repositoryID,
 		"repositoryType": repositoryType,
@@ -792,10 +868,14 @@ func (c *ApiClient) ListRepositoryBranches(
 	return parseRepositoryRefs(mapx.GetList(result, "data"))
 }
 
-// ListRepositoryTags 获取代码库标签列表
+// ListRepositoryTags 获取代码库标签列表。
 func (c *ApiClient) ListRepositoryTags(
 	ctx context.Context, projectCode, repositoryID, repositoryType, search string, page, pageSize int64,
 ) ([]RepositoryRef, error) {
+	if config.G.FeatureIntegrations.BkciRepositoryQueryDisabled {
+		return nil, FeatureDisabled
+	}
+
 	params := map[string]string{
 		"repositoryId":   repositoryID,
 		"repositoryType": repositoryType,

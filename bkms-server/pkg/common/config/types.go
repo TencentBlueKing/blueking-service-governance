@@ -62,6 +62,12 @@ type FeatureIntegrationsConfig struct {
 	EnableBkLoginUserinfoAuth bool
 	// EnableBkUserTenantVerify 控制是否通过 bk-user 校验用户所属租户和状态。
 	EnableBkUserTenantVerify bool
+	// BkciPipelineSearchByName 蓝盾（bkci）流水线搜索使用 search_by_name 接口
+	BkciPipelineSearchByName bool
+	// BkciOAuthGitDisabled 蓝盾（bkci）禁用 OAuth 授权 Git 项目
+	BkciOAuthGitDisabled bool
+	// BkciRepositoryQueryDisabled 蓝盾（bkci）禁用代码库详情/分支/标签查询
+	BkciRepositoryQueryDisabled bool
 }
 
 // BkApiStagesConfig 蓝鲸 API 版本信息，不指定时均默认为 "prod"
