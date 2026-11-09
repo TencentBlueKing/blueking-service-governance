@@ -322,6 +322,7 @@ var _ = Describe("BkMonitor Serializer", func() {
 				}, false),
 				Entry("all optional fields set", serializer.RankInstancesQueryInput{
 					Limit:     50,
+					RankBy:    "memory_usage",
 					RankType:  "bottom",
 					StartTime: 1781366400,
 					EndTime:   1781452799,
@@ -342,6 +343,26 @@ var _ = Describe("BkMonitor Serializer", func() {
 				}, true),
 				Entry("negative limit", serializer.RankInstancesQueryInput{
 					Limit:     -1,
+					StartTime: 1781366400,
+					EndTime:   1781452799,
+				}, true),
+				Entry("rankBy cpu_limit_usage", serializer.RankInstancesQueryInput{
+					RankBy:    "cpu_limit_usage",
+					StartTime: 1781366400,
+					EndTime:   1781452799,
+				}, false),
+				Entry("rankBy memory_limit_usage", serializer.RankInstancesQueryInput{
+					RankBy:    "memory_limit_usage",
+					StartTime: 1781366400,
+					EndTime:   1781452799,
+				}, false),
+				Entry("rankBy cpu_usage", serializer.RankInstancesQueryInput{
+					RankBy:    "cpu_usage",
+					StartTime: 1781366400,
+					EndTime:   1781452799,
+				}, false),
+				Entry("unsupported rankBy", serializer.RankInstancesQueryInput{
+					RankBy:    "network_receive",
 					StartTime: 1781366400,
 					EndTime:   1781452799,
 				}, true),
@@ -367,6 +388,7 @@ var _ = Describe("BkMonitor Serializer", func() {
 				}
 				input.Normalize()
 				Expect(input.Limit).To(Equal(serializer.DefaultRankLimit))
+				Expect(input.RankBy).To(Equal("cpu_limit_usage"))
 				Expect(input.RankType).To(Equal(serializer.RankTypeTop))
 				Expect(input.Interval).To(Equal(serializer.DefaultInterval))
 				Expect(input.Method).To(Equal("sum"))
@@ -375,6 +397,7 @@ var _ = Describe("BkMonitor Serializer", func() {
 			It("keeps specified values", func() {
 				input := serializer.RankInstancesQueryInput{
 					Limit:     5,
+					RankBy:    "memory_usage",
 					RankType:  serializer.RankTypeBottom,
 					StartTime: 1781366400,
 					EndTime:   1781452799,
@@ -383,6 +406,7 @@ var _ = Describe("BkMonitor Serializer", func() {
 				}
 				input.Normalize()
 				Expect(input.Limit).To(Equal(5))
+				Expect(input.RankBy).To(Equal("memory_usage"))
 				Expect(input.RankType).To(Equal(serializer.RankTypeBottom))
 				Expect(input.Interval).To(Equal(int64(300)))
 				Expect(input.Method).To(Equal("max"))

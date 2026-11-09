@@ -8160,7 +8160,7 @@ const docTemplate = `{
                 "tags": [
                     "bkintegrations-bkmonitor"
                 ],
-                "summary": "按平均 CPU 使用量查询环境实例的 Top / Bottom N",
+                "summary": "按指定指标的平均值查询环境实例的 Top / Bottom N",
                 "operationId": "RankInstances",
                 "parameters": [
                     {
@@ -8181,6 +8181,18 @@ const docTemplate = `{
                         "type": "integer",
                         "description": "取前 N 个实例，1~50，默认 10",
                         "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "cpu_limit_usage",
+                            "memory_limit_usage",
+                            "cpu_usage",
+                            "memory_usage"
+                        ],
+                        "type": "string",
+                        "description": "排名指标",
+                        "name": "rankBy",
                         "in": "query"
                     },
                     {
@@ -29477,8 +29489,12 @@ const docTemplate = `{
                     "description": "Instance 实例（Pod）名称",
                     "type": "string"
                 },
+                "unit": {
+                    "description": "Unit 排名指标的单位：percent（0~1）、cores、bytes",
+                    "type": "string"
+                },
                 "value": {
-                    "description": "Value 时间范围内的平均 CPU 使用量（核数）",
+                    "description": "Value 排名指标在时间范围内的平均值（原始单位）",
                     "type": "number"
                 }
             }

@@ -42,9 +42,30 @@ const (
 // minRankStep 排名子查询的最小步长（秒）
 const minRankStep int64 = 60
 
-// promqlInstanceRank 按工作负载内 Pod 的平均 CPU 使用量排名。
-// 占位：topk/bottomk、N、汇聚方法、集群、命名空间、工作负载类型、工作负载名称、子查询范围（秒）、步长（秒）
-const promqlInstanceRank = `%[1]s(%[2]d, avg_over_time((%[3]s by(pod)(rate(container_cpu_usage_seconds_total{bcs_cluster_id="%[4]s",namespace=~"^(%[5]s)$",workload_kind="%[6]s",workload_name="%[7]s",container_name!="POD"}[1m])))[%[8]ds:%[9]ds]))` //nolint:lll
+// DefaultRankBy 默认排名指标：CPU 使用率
+const DefaultRankBy = MetricCPULimitUsage
+
+// promqlInstanceRank 按排名指标在时间范围内的平均值取 topk / bottomk。
+// 占位：topk/bottomk、N、排名指标表达式、子查询范围（秒）、步长（秒）
+const promqlInstanceRank = `%[1]s(%[2]d, avg_over_time((%[3]s)[%[4]ds:%[5]ds]))`
+
+// 排名指标表达式，占位：汇聚方法、集群、命名空间、工作负载类型、工作负载名称。
+// 用量按工作负载过滤；使用率的分母（limits）不带 workload 标签，只按集群、命名空间过滤，按 pod 与分子对齐
+const (
+	promqlRankCPUUsage    = `%[1]s by(pod)(rate(container_cpu_usage_seconds_total{bcs_cluster_id="%[2]s",namespace=~"^(%[3]s)$",workload_kind="%[4]s",workload_name="%[5]s",container_name!="POD"}[1m]))` //nolint:lll
+	promqlRankMemoryUsage = `%[1]s by(pod)(container_memory_working_set_bytes{bcs_cluster_id="%[2]s",namespace=~"^(%[3]s)$",workload_kind="%[4]s",workload_name="%[5]s",container_name!="POD"})`          //nolint:lll
+
+	promqlRankCPULimits    = `%[1]s by(pod)(kube_pod_container_resource_limits_cpu_cores{bcs_cluster_id="%[2]s",namespace=~"^(%[3]s)$",container_name!="POD"})`    //nolint:lll
+	promqlRankMemoryLimits = `%[1]s by(pod)(kube_pod_container_resource_limits_memory_bytes{bcs_cluster_id="%[2]s",namespace=~"^(%[3]s)$",container_name!="POD"})` //nolint:lll
+)
+
+// rankExprTemplates 排名指标到表达式模板的映射
+var rankExprTemplates = map[string]string{
+	MetricCPULimitUsage:    promqlRankCPUUsage + " / " + promqlRankCPULimits,
+	MetricMemoryLimitUsage: promqlRankMemoryUsage + " / " + promqlRankMemoryLimits,
+	MetricCPUUsage:         promqlRankCPUUsage,
+	MetricMemoryUsage:      promqlRankMemoryUsage,
+}
 
 // InstanceRankQuery 实例排名查询参数
 type InstanceRankQuery struct {
@@ -58,6 +79,8 @@ type InstanceRankQuery struct {
 	WorkloadKind string
 	// WorkloadName 工作负载名称
 	WorkloadName string
+	// RankBy 排名指标，默认 DefaultRankBy
+	RankBy string
 	// Method 汇聚方法，默认 sum
 	Method AggMethod
 	// Limit 取前 N 个
@@ -78,25 +101,39 @@ type InstanceRankQuery struct {
 type InstanceRank struct {
 	// Instance 实例（Pod）名称
 	Instance string
-	// Value 平均 CPU 使用量（核数）
+	// Value 排名指标的平均值（原始单位）
 	Value float64
+	// Unit 排名指标的单位
+	Unit string
 }
 
-// BuildInstanceRankPromQL 构建实例排名的 PromQL
-func BuildInstanceRankPromQL(q *InstanceRankQuery) string {
+// BuildInstanceRankPromQL 构建实例排名的 PromQL，排名指标不支持时返回错误
+func BuildInstanceRankPromQL(q *InstanceRankQuery) (string, error) {
+	rankBy := lo.Ternary(q.RankBy == "", DefaultRankBy, q.RankBy)
+	exprTpl, ok := rankExprTemplates[rankBy]
+	if !ok {
+		return "", errors.Errorf("unsupported rank metric: %s", rankBy)
+	}
 	fn := lo.Ternary(q.RankType == RankTypeBottom, "bottomk", "topk")
 	method := lo.Ternary(q.Method == "", AggMethodSum, q.Method)
 	step := max(q.Interval, minRankStep)
 	// 范围至少一个步长，避免出现 [0s:...]
 	rangeSeconds := max(q.EndTime-q.StartTime, step)
-	return fmt.Sprintf(
-		promqlInstanceRank,
-		fn, q.Limit, method, q.ClusterID, q.Namespace, q.WorkloadKind, q.WorkloadName, rangeSeconds, step,
-	)
+	expr := fmt.Sprintf(exprTpl, method, q.ClusterID, q.Namespace, q.WorkloadKind, q.WorkloadName)
+	return fmt.Sprintf(promqlInstanceRank, fn, q.Limit, expr, rangeSeconds, step), nil
 }
 
-// RankInstances 查询平均 CPU 使用量排名前 Limit 的实例
+// RankInstances 查询排名指标平均值排名前 Limit 的实例
 func (s *MetricTimeSeriesService) RankInstances(ctx context.Context, q *InstanceRankQuery) ([]*InstanceRank, error) {
+	promql, err := BuildInstanceRankPromQL(q)
+	if err != nil {
+		return nil, err
+	}
+	rankBy := lo.Ternary(q.RankBy == "", DefaultRankBy, q.RankBy)
+	unit := lo.FindOrElse(MetricDefinitions, MetricDefinition{}, func(def MetricDefinition) bool {
+		return def.Key == rankBy
+	}).Unit
+
 	client, err := s.newClient(q.Username)
 	if err != nil {
 		return nil, errors.Wrap(err, "new bkmonitor client")
@@ -105,7 +142,7 @@ func (s *MetricTimeSeriesService) RankInstances(ctx context.Context, q *Instance
 	queryConfig := bkmapi.QueryConfig{
 		DataSourceLabel: "prometheus",
 		DataTypeLabel:   "time_series",
-		PromQL:          BuildInstanceRankPromQL(q),
+		PromQL:          promql,
 		Interval:        max(q.Interval, minRankStep),
 		IntervalUnit:    "s",
 	}
@@ -115,7 +152,8 @@ func (s *MetricTimeSeriesService) RankInstances(ctx context.Context, q *Instance
 	resp, err := client.TimeSeriesUnifyQuery(ctx, req)
 	if err != nil {
 		return nil, errors.Wrapf(
-			err, "rank instances of workload %s/%s in namespace %s", q.WorkloadKind, q.WorkloadName, q.Namespace,
+			err, "rank instances of workload %s/%s in namespace %s by %s",
+			q.WorkloadKind, q.WorkloadName, q.Namespace, rankBy,
 		)
 	}
 
@@ -125,7 +163,7 @@ func (s *MetricTimeSeriesService) RankInstances(ctx context.Context, q *Instance
 			return nil, false
 		}
 		// 取最后一个点的值
-		return &InstanceRank{Instance: name, Value: series.Datapoints[len(series.Datapoints)-1][0]}, true
+		return &InstanceRank{Instance: name, Value: series.Datapoints[len(series.Datapoints)-1][0], Unit: unit}, true
 	})
 
 	// 返回顺序不保证，按排名方向重新排序

@@ -89,7 +89,7 @@ type Handler interface {
 	GetEnvApm(c *gin.Context)
 	// GetInstanceTimeSeries 查询实例监控指标时序数据
 	GetInstanceTimeSeries(c *gin.Context)
-	// RankInstances 按平均 CPU 使用量查询环境实例的 Top / Bottom N
+	// RankInstances 按指定指标的平均值查询环境实例的 Top / Bottom N
 	RankInstances(c *gin.Context)
 	// ListDashboardDirectoryTree 获取蓝鲸监控仪表盘数据
 	ListDashboardDirectoryTree(c *gin.Context)
