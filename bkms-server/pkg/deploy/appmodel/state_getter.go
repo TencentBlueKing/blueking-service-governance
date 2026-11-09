@@ -61,6 +61,10 @@ type DeployStateGetter struct {
 	imageTag string
 	// oldImageTag 分批发布前的镜像标签，创建部署记录时写入初始进度
 	oldImageTag string
+	// deployID 部署记录 ID，用于确认集群中的 Rollout 属于该记录
+	deployID string
+	// batchCount 分批发布的批次总数
+	batchCount int
 }
 
 // NewDeployStateGetter 创建部署状态获取器
@@ -73,11 +77,21 @@ func NewDeployStateGetter(record *Record) *DeployStateGetter {
 		workloadKind: kind,
 		releaseMode:  record.GetReleaseMode(),
 		imageTag:     record.ImageTag,
+		deployID:     record.ID.Hex(),
 	}
 	if record.BatchProgress != nil {
 		getter.oldImageTag = record.BatchProgress.OldImageTag
 	}
+	if record.ReleaseStrategy != nil {
+		getter.batchCount = len(record.ReleaseStrategy.Batches)
+	}
 	return getter
+}
+
+// GetLiveBatchReleaseState 实时读取集群中的 Rollout 与主工作负载，得到分批发布记录当前的状态与进度，不写入部署记录。
+// 再次部署切换 Rollout 期间，集群中的 Rollout 仍属于上一次发布，此时返回 ErrReleaseSwitching
+func GetLiveBatchReleaseState(ctx context.Context, record *Record) (*DeployState, error) {
+	return NewDeployStateGetter(record).getBatchReleaseState(ctx)
 }
 
 // Get 获取部署状态
@@ -191,7 +205,8 @@ func (g *DeployStateGetter) getWorkloadHealth(ctx context.Context) (*k8sstatus.R
 
 // getBatchReleaseState 读取与主工作负载（GameDeployment）同名的 Rollout，得到分批发布的状态与进度：
 // 回滚完成为已回滚，批次状态为已完成时为已部署，其余仍为部署中。
-// 主工作负载不存在视为部署失败；读取 Rollout 失败（含被删除）返回错误，由上层保留上一次进度并重试
+// 主工作负载不存在视为部署失败；读取 Rollout 失败（含被删除）返回错误，由上层保留上一次进度并重试。
+// Rollout 的部署 ID 注解不等于该记录时返回 ErrReleaseSwitching
 func (g *DeployStateGetter) getBatchReleaseState(ctx context.Context) (*DeployState, error) {
 	kind, name := g.getMainWorkload()
 	if kind != k8skind.GameDeploy || name == "" {
@@ -210,13 +225,28 @@ func (g *DeployStateGetter) getBatchReleaseState(ctx context.Context) (*DeploySt
 	if err != nil {
 		return nil, errors.Wrapf(err, "%s %s", kind, name)
 	}
-	status, err := batchrelease.NewRolloutClient(clusterCfg).GetStatus(ctx, g.namespace, name)
+	rollout, err := batchrelease.NewRolloutClient(clusterCfg).Get(ctx, g.namespace, name)
 	if err != nil {
-		return nil, errors.Wrap(err, "get rollout status")
+		return nil, errors.Wrap(err, "get rollout")
+	}
+	if deployID := rollout.GetAnnotations()[AnnotationKeyDeployID]; deployID != g.deployID {
+		return nil, errors.Wrapf(
+			batchrelease.ErrReleaseSwitching, "rollout %s/%s belongs to deploy %q rather than deploy record %s",
+			g.namespace, name, deployID, g.deployID,
+		)
+	}
+	status, err := batchrelease.ParseStatus(rollout.Object)
+	if err != nil {
+		return nil, errors.Wrapf(err, "rollout %s/%s", g.namespace, name)
 	}
 
+	// 跳过剩余批次后、Kourse 处理前批次序号等于批次总数，与 Kourse 处理后一样视为不在任何批次中
+	batchIndex := status.CurrentStepIndex
+	if batchIndex != nil && g.batchCount > 0 && *batchIndex >= int64(g.batchCount) {
+		batchIndex = nil
+	}
 	progress := &BatchProgress{
-		CurrentBatchIndex:       status.CurrentStepIndex,
+		CurrentBatchIndex:       batchIndex,
 		BatchPhase:              status.BatchPhase(snapshot),
 		RolloutPhase:            status.Phase,
 		Message:                 status.ProgressMessage(),

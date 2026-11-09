@@ -27,6 +27,7 @@ import (
 	"github.com/samber/lo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
+	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	appmodeldeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/appmodel"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/batchrelease"
@@ -40,7 +41,7 @@ import (
 //
 //	@ID			GetBatchReleaseProgress
 //	@Summary	获取分批发布进度
-//	@Description	返回环境 / 泳道最新部署记录的分批发布进度，进度由部署轮询任务写入，不实时请求集群；
+//	@Description	返回环境 / 泳道最新部署记录的分批发布进度
 //	@Description	没有部署记录或最新记录不是分批发布时 data 为 null
 //	@Tags		deploy
 //	@Produce	json
@@ -82,6 +83,20 @@ func (h *Handler) GetBatchReleaseProgress(c *gin.Context) {
 	if record.GetReleaseMode() != appmodeldeploy.ReleaseModeCanary {
 		ginutils.OK(c, serializer.GetBatchReleaseProgressOutput{})
 		return
+	}
+	// 从集群内实时获取 rollout 状态，避免依赖轮询任务导致的数据延迟
+	if record.IsBatchReleasing() {
+		state, err := appmodeldeploy.GetLiveBatchReleaseState(ctx, record)
+		if err == nil && state.BatchProgress == nil {
+			// 主工作负载缺失等情况只有状态没有进度，由轮询任务把记录置为失败
+			err = errors.New(state.Message)
+		}
+		if err != nil {
+			log.Warnf(ctx, "get live batch release progress of deploy record %s failed, use the recorded one: %v",
+				record.ID.Hex(), err)
+		} else {
+			record.Status, record.BatchProgress = state.Status, state.BatchProgress
+		}
 	}
 	ginutils.OK(c, serializer.GetBatchReleaseProgressOutput{
 		Data: new(serializer.BatchReleaseProgressOutputObj).FromModel(record),
