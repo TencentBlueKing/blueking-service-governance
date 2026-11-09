@@ -23,8 +23,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-
-	"github.com/pkg/errors"
 )
 
 // DashboardDirectoryItem 仪表盘目录树中的仪表盘
@@ -88,7 +86,7 @@ func (c *SvcBasedClient) ListDashboardDirectoryTree(
 		return nil, err
 	}
 	if resp.StatusCode() != http.StatusOK {
-		return nil, errors.Errorf("list dashboard directory tree failed: [%d] -> %s", resp.StatusCode(), resp.Body())
+		return nil, formatAPIError(resp, "list dashboard directory tree")
 	}
 
 	return flattenDashboardDirectoryTree(respData.Data), nil
@@ -120,7 +118,7 @@ func (c *SvcBasedClient) ListAppDashboards(ctx context.Context, appID string) ([
 		return nil, err
 	}
 	if resp.StatusCode() != http.StatusOK {
-		return nil, errors.Errorf("list app dashboards failed: [%d] -> %s", resp.StatusCode(), resp.Body())
+		return nil, formatAPIError(resp, "list app dashboards")
 	}
 
 	return respData.Data, nil
@@ -136,7 +134,7 @@ func (c *SvcBasedClient) CreateAppDashboard(ctx context.Context, appID, uid stri
 		return err
 	}
 	if resp.StatusCode() != http.StatusOK && resp.StatusCode() != http.StatusCreated {
-		return errors.Errorf("create app dashboard failed: [%d] -> %s", resp.StatusCode(), resp.Body())
+		return formatAPIError(resp, "create app dashboard")
 	}
 
 	return nil
@@ -158,7 +156,7 @@ func (c *SvcBasedClient) UpdateAppDashboard(
 		return err
 	}
 	if resp.StatusCode() != http.StatusOK {
-		return errors.Errorf("update app dashboard failed: [%d] -> %s", resp.StatusCode(), resp.Body())
+		return formatAPIError(resp, "update app dashboard")
 	}
 
 	return nil
@@ -176,7 +174,7 @@ func (c *SvcBasedClient) DeleteAppDashboard(ctx context.Context, appID, uid stri
 		return err
 	}
 	if resp.StatusCode() != http.StatusOK && resp.StatusCode() != http.StatusNoContent {
-		return errors.Errorf("delete app dashboard failed: [%d] -> %s", resp.StatusCode(), resp.Body())
+		return formatAPIError(resp, "delete app dashboard")
 	}
 
 	return nil

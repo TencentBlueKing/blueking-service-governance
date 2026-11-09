@@ -15,6 +15,7 @@ require (
 	github.com/howeyc/gopass v0.0.0-20210920133722-c8aef6fb66ef
 	github.com/itchyny/gojq v0.12.19
 	github.com/jinzhu/copier v0.4.0
+	github.com/keygen-sh/machineid v1.1.3
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/onsi/ginkgo/v2 v2.32.0
 	github.com/onsi/gomega v1.42.1

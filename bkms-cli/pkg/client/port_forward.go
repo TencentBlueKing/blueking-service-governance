@@ -71,7 +71,8 @@ func (c *SvcBasedClient) CheckPortForwardPermission(
 
 	// 403 表示权限校验不通过
 	if resp.StatusCode() == http.StatusForbidden {
-		return errors.Errorf("port-forward permission denied: %s", ExtractServerErrorFromBytes(resp.Body()))
+		return errors.Errorf("port-forward permission denied: %s%s",
+			ExtractServerErrorFromBytes(resp.Body()), traceIDSuffix(resp.Header()))
 	}
 
 	// 其他非 2xx 状态码中，400 通常是 WebSocket 升级失败（权限已通过），视为正常
@@ -124,13 +125,17 @@ func (c *SvcBasedClient) dialWebSocket(
 		header.Set("Authorization", auth)
 	}
 	header.Set("User-Agent", version.UserAgent())
+	if deviceID := c.cli.Header.Get(headerDeviceID); deviceID != "" {
+		header.Set(headerDeviceID, deviceID)
+	}
 
 	conn, resp, err := websocket.Dial(ctx, wsURL, &websocket.DialOptions{
 		HTTPHeader: header,
 	})
 	if err != nil {
 		if resp != nil {
-			return nil, errors.Errorf("%s (HTTP %s)", ExtractServerError(resp), resp.Status)
+			return nil, errors.Errorf("%s (HTTP %s)%s",
+				ExtractServerError(resp), resp.Status, traceIDSuffix(resp.Header))
 		}
 		return nil, errors.Wrap(err, "websocket dial")
 	}
