@@ -23,6 +23,34 @@ export type RankInstancesRequest = RankInstancesQueryInput & {
    * 环境名称
    */
   envName: string;
+  /**
+   * 取前 N 个实例，1~50，默认 10
+   */
+  limit?: number;
+  /**
+   * 排名指标
+   */
+  rankBy?: 'cpu_limit_usage' | 'memory_limit_usage' | 'cpu_usage' | 'memory_usage';
+  /**
+   * 排名方向，默认 top
+   */
+  rankType?: 'top' | 'bottom';
+  /**
+   * 排名时间范围的开始时间（Unix 时间戳，秒）
+   */
+  startTime: number;
+  /**
+   * 排名时间范围的结束时间（Unix 时间戳，秒）
+   */
+  endTime: number;
+  /**
+   * 子查询步长（秒），最小 60，默认 60
+   */
+  interval?: number;
+  /**
+   * 汇聚方法，默认 sum
+   */
+  method?: 'sum' | 'max' | 'min' | 'count' | 'avg';
 };
 
 export type GetInstanceTimeSeriesRequest = GetInstanceTimeSeriesQueryInput & {
@@ -389,7 +417,7 @@ export interface RankInstancesQueryInput {
   /**
    * Method 同一 Pod 内多个容器的数据如何合并，默认 sum，建议与图表汇聚方法一致
    */
-  method?: "sum" | "max" | "min" | "count" | "avg";
+  method?: 'sum' | 'max' | 'min' | 'count' | 'avg';
   /**
    * RankBy 排名指标，默认 cpu_limit_usage：
    * - cpu_limit_usage: CPU 使用率（用量 / limits）
@@ -397,11 +425,11 @@ export interface RankInstancesQueryInput {
    * - cpu_usage: CPU 用量（核数）
    * - memory_usage: 内存用量（Working Set，字节）
    */
-  rankBy?: "cpu_limit_usage" | "memory_limit_usage" | "cpu_usage" | "memory_usage";
+  rankBy?: 'cpu_limit_usage' | 'memory_limit_usage' | 'cpu_usage' | 'memory_usage';
   /**
    * RankType 排名方向：top 按排名指标平均值从高到低、bottom 从低到高，默认 top
    */
-  rankType?: "top" | "bottom";
+  rankType?: 'top' | 'bottom';
   /**
    * StartTime 排名时间范围的开始时间（Unix 时间戳，秒）
    */
@@ -429,7 +457,7 @@ export interface GetInstanceTimeSeriesQueryInput {
    * Method 汇聚方法，同一 Pod 内多个容器的数据如何合并，默认 sum；
    * 使用率类指标的分子与分母使用同一方法（count 时比值恒为 1）
    */
-  method?: "sum" | "max" | "min" | "count" | "avg";
+  method?: 'sum' | 'max' | 'min' | 'count' | 'avg';
   /**
    * MetricKey 指定要查询的指标标识，可用值：
    * - cpu_usage: CPU 使用量（核数）
@@ -464,8 +492,7 @@ export interface CreateEnvApmResp {
   data?: ApmOutput;
 }
 
-export interface EmptyOutput {
-}
+export interface EmptyOutput {}
 
 export interface ListAlertStrategiesResp {
   data?: ListAlertStrategiesOutput;
@@ -504,8 +531,7 @@ export interface UpdateAlertStrategyBody {
   triggerCondition?: TriggerConditionInput;
 }
 
-export interface EmptyOutput {
-}
+export interface EmptyOutput {}
 
 export interface ListAlertEventsResp {
   data?: ListAlertEventsOutput;
@@ -548,8 +574,7 @@ export interface GetUserGroupResp {
   data?: UserGroupDetail;
 }
 
-export interface EmptyOutput {
-}
+export interface EmptyOutput {}
 
 export interface UserGroupDetail {
   /**
@@ -941,7 +966,7 @@ export interface AlertEventOutput {
 export interface EffectiveScopeInput {
   envIDs?: string[];
   envTypes?: string[];
-  type: "all" | "env_type" | "specific_envs";
+  type: 'all' | 'env_type' | 'specific_envs';
 }
 
 export interface EffectiveTimeRangeInput {
@@ -954,7 +979,7 @@ export interface RecoverConditionInput {
 }
 
 export interface ThresholdConfigInput {
-  method: "gte" | "gt" | "lte" | "lt" | "eq" | "neq";
+  method: 'gte' | 'gt' | 'lte' | 'lt' | 'eq' | 'neq';
   value?: number;
 }
 

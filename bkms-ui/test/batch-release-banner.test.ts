@@ -616,18 +616,67 @@ describe('buildBatchReleaseSteps：批次步骤视图模型', () => {
 });
 
 describe('resolveInstanceCanaryState：实例灰度归属判定', () => {
-  it('镜像 Tag 等于本次新版本时为灰度新起', () => {
-    expect(resolveInstanceCanaryState('registry.bk.com/app:v1.8.3', 'v1.8.3')).toBe('new');
+  const progress = { newImageTag: 'v1.8.3', workloadUpdateRevision: 'app-7d9f8c5b6d' };
+
+  it('实例工作负载版本等于本次新版本版本号时为灰度新起', () => {
+    expect(
+      resolveInstanceCanaryState({ image: 'registry.bk.com/app:v1.7.0', workloadRevision: 'app-7d9f8c5b6d' }, progress),
+    ).toBe('new');
   });
 
-  it('镜像仍为旧版本时为灰度前', () => {
-    expect(resolveInstanceCanaryState('registry.bk.com/app:v1.8.2', 'v1.8.3')).toBe('before');
+  it('实例工作负载版本仍为旧版本版本号时为灰度前（即使镜像 Tag 恰好一致）', () => {
+    expect(
+      resolveInstanceCanaryState({ image: 'registry.bk.com/app:v1.8.3', workloadRevision: 'app-5c4b3a2f1e' }, progress),
+    ).toBe('before');
   });
 
-  it('实例镜像缺失或新版本 Tag 缺失时一律按灰度前兜底', () => {
-    expect(resolveInstanceCanaryState(undefined, 'v1.8.3')).toBe('before');
-    expect(resolveInstanceCanaryState('', 'v1.8.3')).toBe('before');
-    expect(resolveInstanceCanaryState('registry.bk.com/app:v1.8.3', '')).toBe('before');
-    expect(resolveInstanceCanaryState('registry.bk.com/app:v1.8.3', undefined as unknown as string)).toBe('before');
+  it('灰度完成后镜像 Tag 与进度快照口径不一致时，仍按版本号判定为灰度新起', () => {
+    // 回归：此前以镜像 Tag 判定，灰度已完成但 Tag 对不上时会整片误判为「灰度前」
+    expect(
+      resolveInstanceCanaryState(
+        { image: 'registry.bk.com/app:202610281105', workloadRevision: 'app-7d9f8c5b6d' },
+        { newImageTag: '202610281605', workloadUpdateRevision: 'app-7d9f8c5b6d' },
+      ),
+    ).toBe('new');
+  });
+
+  it('进度尚未回填工作负载版本时回退镜像 Tag 判定', () => {
+    expect(resolveInstanceCanaryState({ image: 'registry.bk.com/app:v1.8.3' }, { newImageTag: 'v1.8.3' })).toBe('new');
+    expect(resolveInstanceCanaryState({ image: 'registry.bk.com/app:v1.8.2' }, { newImageTag: 'v1.8.3' })).toBe(
+      'before',
+    );
+    // 实例版本号缺失同样回退镜像 Tag
+    expect(resolveInstanceCanaryState({ image: 'registry.bk.com/app:v1.8.3', workloadRevision: '' }, progress)).toBe(
+      'new',
+    );
+  });
+
+  it('灰度已完成且全量更新时，即使版本号与镜像 Tag 都对不上也判为灰度新起', () => {
+    const completed = {
+      status: 'deployed',
+      replicas: 4,
+      updatedReplicas: 4,
+      newImageTag: '202610281605',
+      workloadUpdateRevision: '',
+    };
+    expect(
+      resolveInstanceCanaryState({ image: 'registry.bk.com/app:202610281105', workloadRevision: '' }, completed),
+    ).toBe('new');
+  });
+
+  it('未完成全量更新或非已完成态时，不套用「已完成」兜底', () => {
+    const deploying = { status: 'deploying', replicas: 4, updatedReplicas: 2, newImageTag: 'v1.8.3' };
+    expect(resolveInstanceCanaryState({ image: 'registry.bk.com/app:v1.8.2' }, deploying)).toBe('before');
+    // 已完成但总数未知（replicas=0）时不能直接判为新版本
+    expect(
+      resolveInstanceCanaryState({ image: 'registry.bk.com/app:v1.8.2' }, { status: 'deployed', replicas: 0 }),
+    ).toBe('before');
+  });
+
+  it('版本号与镜像均缺失时一律按灰度前兜底', () => {
+    expect(resolveInstanceCanaryState(undefined, progress)).toBe('before');
+    expect(resolveInstanceCanaryState(null, null)).toBe('before');
+    expect(resolveInstanceCanaryState({}, {})).toBe('before');
+    expect(resolveInstanceCanaryState({ image: 'registry.bk.com/app:v1.8.3' }, {})).toBe('before');
   });
 });
