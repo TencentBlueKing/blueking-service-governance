@@ -26,6 +26,7 @@ import {
 } from '../release-preview';
 
 import type { BatchReleaseProgressOutputObj, LatestDeployStatus } from '~/@types/v1/deploy';
+import type { AppInstanceOutputObj } from '~/@types/v1/instance';
 
 /**
  * 分批发布控制横幅的纯函数层。
@@ -128,7 +129,21 @@ export interface BatchReleaseStepVM {
   title: BatchReleaseMessageDescriptor;
 }
 
-/** 实例灰度归属：new=灰度新起（镜像已更新到本次新版本），before=灰度前（仍为旧版本） */
+/** 灰度归属判定用到的实例字段：版本号为主口径，镜像 Tag 仅为兜底。 */
+export type CanaryStateInstance = Pick<AppInstanceOutputObj, 'image' | 'workloadRevision'>;
+
+/**
+ * 灰度归属判定用到的进度字段：
+ * - workloadUpdateRevision：工作负载 status.updateRevision，实例版本与之相等即为新版本实例；
+ * - status / updatedReplicas / replicas：工作负载版本尚未回填时，用「已完成且全量更新」兜底；
+ * - newImageTag：上述口径都不可用时的最后兜底（镜像 Tag 比对）。
+ */
+export type CanaryStateProgress = Pick<
+  BatchReleaseProgressOutputObj,
+  'newImageTag' | 'replicas' | 'status' | 'updatedReplicas' | 'workloadUpdateRevision'
+>;
+
+/** 实例灰度归属：new=灰度新起（已更新到本次新版本），before=灰度前（仍为旧版本） */
 export type InstanceCanaryState = 'before' | 'new';
 
 const ACTION_LABELS: Record<BatchReleaseAction, string> = {
@@ -517,11 +532,32 @@ export function resolveBatchReleaseSuccessMessage(
   return { key: '已暂停分批发布', params: [] };
 }
 
-/** 实例灰度归属判定：以实例实际镜像为准，与横幅「已更新 X/Y」在滚动瞬间可能存在轻微偏差，属预期行为。 */
-export function resolveInstanceCanaryState(image: string | undefined, newImageTag: string): InstanceCanaryState {
+/**
+ * 实例灰度归属判定：以实例所属工作负载版本（Pod 的 controller-revision-hash）为准，
+ * 实例版本等于本次新版本 `workloadUpdateRevision` 即为灰度新起，否则为灰度前。
+ *
+ * 不再以镜像 Tag 为主口径：Tag 只是镜像地址的一部分，重新构建复用同一 Tag、
+ * 或进度快照里的 Tag 与实例实际 Tag 口径不一致时，灰度完成后仍会被误判为「灰度前」。
+ * 版本号由后端随进度下发，与横幅「已更新 X/Y」同源，灰度结束后也不会回退。
+ *
+ * 后端字段未回填时的两级兜底（顺序不可调换）：
+ * 1. 进度已是「已完成且全量更新」：全部实例必然是新版本，直接判为灰度新起；
+ * 2. 否则退化为镜像 Tag 比对（仅用于灰度进行中且工作负载版本尚未读到）。
+ */
+export function resolveInstanceCanaryState(
+  instance: CanaryStateInstance | null | undefined,
+  progress: CanaryStateProgress | null | undefined,
+): InstanceCanaryState {
+  const instanceRevision = instance?.workloadRevision?.trim() ?? '';
+  const updateRevision = progress?.workloadUpdateRevision?.trim() ?? '';
+  if (instanceRevision && updateRevision) return instanceRevision === updateRevision ? 'new' : 'before';
+
+  if (isCanaryReleaseFullyUpdated(progress)) return 'new';
+
+  const image = instance?.image ?? '';
+  const newImageTag = progress?.newImageTag?.trim() ?? '';
   if (!image || !newImageTag) return 'before';
-  const tag = image.split(':').pop() ?? '';
-  return tag === newImageTag ? 'new' : 'before';
+  return (image.split(':').pop() ?? '') === newImageTag ? 'new' : 'before';
 }
 
 /** 标题状态 Tag：定时暂停展示「定时暂停中 · mm:ss 后自动继续」，手动 / 永久暂停展示「等待手动继续」。 */
@@ -618,6 +654,13 @@ function formatPauseCountdown(seconds: number): string {
   const mm = Math.floor(total / 60);
   const ss = total % 60;
   return `${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}`;
+}
+
+/** 分批发布是否已完成全量更新：终态 deployed 且已更新实例数覆盖总实例数。 */
+function isCanaryReleaseFullyUpdated(progress: CanaryStateProgress | null | undefined): boolean {
+  if (progress?.status !== APP_DEPLOY_STATUS.DEPLOYED) return false;
+  const replicas = progress.replicas ?? 0;
+  return replicas > 0 && (progress.updatedReplicas ?? 0) >= replicas;
 }
 
 /** 批次暂停方式的副文本描述。 */

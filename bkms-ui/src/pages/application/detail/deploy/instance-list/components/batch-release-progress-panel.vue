@@ -173,10 +173,10 @@
       </div>
     </div>
 
-    <!-- 灰度实例列表：全部 / 灰度新起 / 灰度前，与横幅「已更新」同口径 -->
+    <!-- 灰度实例列表：全部 / 灰度新起 / 灰度前，与横幅「已更新」同口径（按工作负载版本号判定） -->
     <CanaryInstanceTable
       :env-name="envName"
-      :new-image-tag="view.newImageTag"
+      :progress="progress"
     />
   </div>
 </template>

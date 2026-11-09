@@ -107,7 +107,7 @@
           <div class="flex items-center gap-[6px]">
             <span>{{ row.image?.split(':')?.pop() || '--' }}</span>
             <Tag
-              v-if="resolveInstanceCanaryState(row.image, newImageTag) === 'new'"
+              v-if="resolveInstanceCanaryState(row, progress) === 'new'"
               class="!border-none !bg-[#DAF6E5] !text-[12px] !leading-[18px] !text-[#299E56]"
               size="small"
             >
@@ -199,12 +199,13 @@
 
   import type { InstanceCanaryState } from '../batch-release';
   import type { InstanceListSourceMode, InstanceRowAction } from '../types';
+  import type { BatchReleaseProgressOutputObj } from '~/@types/v1/deploy';
 
   const props = defineProps<{
     /** 当前环境名（实例 Watch 请求作用域） */
     envName: string;
-    /** 本次分批发布的新版本镜像 Tag（灰度归属判定口径） */
-    newImageTag: string;
+    /** 分批发布进度快照（灰度归属判定口径：工作负载版本号为主，新版本镜像 Tag 兜底） */
+    progress: BatchReleaseProgressOutputObj | null;
   }>();
 
   const { t } = useI18n();
@@ -262,11 +263,11 @@
     pagination.value.current = 1;
   }
 
-  /** 胶囊筛选计数：computed O(n) 派生，随 Watch 实时刷新。 */
+  /** 胶囊筛选计数：computed O(n) 派生，随 Watch 与进度轮询实时刷新。 */
   const counts = computed(() => {
     const result: Record<CanaryFilterId, number> = { all: instanceList.value.length, before: 0, new: 0 };
     for (const instance of instanceList.value) {
-      result[resolveInstanceCanaryState(instance.image, props.newImageTag)] += 1;
+      result[resolveInstanceCanaryState(instance, props.progress)] += 1;
     }
     return result;
   });
@@ -277,10 +278,7 @@
   const filteredInstances = computed(() => {
     const text = keyword.value.trim().toLowerCase();
     return instanceList.value.filter(instance => {
-      if (
-        activeFilter.value !== 'all' &&
-        resolveInstanceCanaryState(instance.image, props.newImageTag) !== activeFilter.value
-      ) {
+      if (activeFilter.value !== 'all' && resolveInstanceCanaryState(instance, props.progress) !== activeFilter.value) {
         return false;
       }
       return !text || (instance.id ?? '').toLowerCase().includes(text);
