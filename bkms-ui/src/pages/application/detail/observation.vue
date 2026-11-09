@@ -39,6 +39,7 @@
         ></i>
         <a
           v-if="standaloneMonitorUrl"
+          :aria-label="$t('在新标签页打开')"
           class="bkms-icon bkms-icon-jump-link text-[16px] bg-[#fafbfd] cursor-pointer p-[4px] rounded-[4px] hover:text-[#3A84FF]"
           :href="standaloneMonitorUrl"
           rel="noopener noreferrer"
