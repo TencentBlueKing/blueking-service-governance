@@ -27,6 +27,7 @@ import (
 
 	"github.com/TencentBlueKing/gopkg/mapx"
 	"github.com/samber/lo"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
@@ -341,6 +342,8 @@ type AppInstanceOutputObj struct {
 	IP string `json:"ip"`
 	// 镜像
 	Image string `json:"image"`
+	// 实例所属的工作负载版本（Pod 的 controller-revision-hash 标签）
+	WorkloadRevision string `json:"workloadRevision"`
 	// 重启次数
 	RestartCount int64 `json:"restartCount,string"`
 	// 状态，由 pod.status.phase 等解析获得
@@ -401,19 +404,21 @@ func (o *AppInstanceOutputObj) FromPodManifest(
 
 	// 平台侧覆盖单实例权重的唯一入口是给 Pod 打 AnnotationKeyWeight 注解
 	polarisWeightOverride := mapx.GetStr(manifest, []string{"metadata", "annotations", polaris.AnnotationKeyWeight})
+	workloadRevision := mapx.GetStr(manifest, []string{"metadata", "labels", appsv1.ControllerRevisionHashLabelKey})
 
 	*o = AppInstanceOutputObj{
-		ID:           podName,
-		DeployID:     deployID,
-		IP:           mapx.GetStr(manifest, "status.podIP"),
-		NodeIP:       mapx.GetStr(manifest, "status.hostIP"),
-		Image:        image,
-		RestartCount: restartCount,
-		Status:       podstatus.NewParser(manifest).Parse().Code,
-		Message:      message,
-		IsHealthy:    isHealthy,
-		Age:          timex.CalcAge(mapx.GetStr(manifest, "metadata.creationTimestamp")),
-		Resources:    resources,
+		ID:               podName,
+		DeployID:         deployID,
+		IP:               mapx.GetStr(manifest, "status.podIP"),
+		NodeIP:           mapx.GetStr(manifest, "status.hostIP"),
+		Image:            image,
+		WorkloadRevision: workloadRevision,
+		RestartCount:     restartCount,
+		Status:           podstatus.NewParser(manifest).Parse().Code,
+		Message:          message,
+		IsHealthy:        isHealthy,
+		Age:              timex.CalcAge(mapx.GetStr(manifest, "metadata.creationTimestamp")),
+		Resources:        resources,
 
 		AppInstancePolarisObj: AppInstancePolarisObj{PolarisWeightOverride: polarisWeightOverride},
 	}

@@ -364,6 +364,10 @@ type BatchReleaseProgressOutputObj struct {
 	OldImageTag string `json:"oldImageTag"`
 	// 新镜像标签
 	NewImageTag string `json:"newImageTag"`
+	// 新版本：工作负载 status.updateRevision，实例 workloadRevision 与之相等即为新版本实例；轮询任务读到工作负载前为空
+	WorkloadUpdateRevision string `json:"workloadUpdateRevision"`
+	// 旧版本：工作负载 status.currentRevision；轮询任务读到工作负载前为空
+	WorkloadCurrentRevision string `json:"workloadCurrentRevision"`
 }
 
 // FromModel converts a batch release deploy record to progress output.
@@ -376,20 +380,22 @@ func (o *BatchReleaseProgressOutputObj) FromModel(record *appmodeldeploy.Record)
 	})
 	strategy := lo.FromPtr(record.ReleaseStrategy)
 	*o = BatchReleaseProgressOutputObj{
-		DeployID:          record.ID.Hex(),
-		Status:            string(record.Status),
-		StrategyID:        strategy.ID,
-		StrategyName:      strategy.Name,
-		Batches:           releasestrategyserializer.NewBatchOutputObjs(strategy.Batches),
-		CurrentBatchIndex: progress.CurrentBatchIndex,
-		BatchPhase:        string(progress.BatchPhase),
-		RolloutPhase:      progress.RolloutPhase,
-		Message:           progress.Message,
-		PauseStartTime:    progress.PauseStartTime,
-		UpdatedReplicas:   progress.UpdatedReplicas,
-		Replicas:          progress.Replicas,
-		OldImageTag:       progress.OldImageTag,
-		NewImageTag:       progress.NewImageTag,
+		DeployID:                record.ID.Hex(),
+		Status:                  string(record.Status),
+		StrategyID:              strategy.ID,
+		StrategyName:            strategy.Name,
+		Batches:                 releasestrategyserializer.NewBatchOutputObjs(strategy.Batches),
+		CurrentBatchIndex:       progress.CurrentBatchIndex,
+		BatchPhase:              string(progress.BatchPhase),
+		RolloutPhase:            progress.RolloutPhase,
+		Message:                 progress.Message,
+		PauseStartTime:          progress.PauseStartTime,
+		UpdatedReplicas:         progress.UpdatedReplicas,
+		Replicas:                progress.Replicas,
+		OldImageTag:             progress.OldImageTag,
+		NewImageTag:             progress.NewImageTag,
+		WorkloadUpdateRevision:  progress.WorkloadUpdateRevision,
+		WorkloadCurrentRevision: progress.WorkloadCurrentRevision,
 	}
 	return o
 }

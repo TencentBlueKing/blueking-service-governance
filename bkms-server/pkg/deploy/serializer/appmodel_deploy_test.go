@@ -286,15 +286,17 @@ var _ = Describe("AppModel deploy serializers", func() {
 		It("returns the progress with the strategy snapshot", func() {
 			pauseStartTime := time.Date(2026, 10, 22, 2, 0, 0, 0, time.UTC)
 			record.BatchProgress = &appmodeldeploy.BatchProgress{
-				CurrentBatchIndex: lo.ToPtr(int64(0)),
-				BatchPhase:        batchrelease.BatchPhaseManualPaused,
-				RolloutPhase:      "Running",
-				Message:           "Rollout is running canary step 0",
-				PauseStartTime:    &pauseStartTime,
-				UpdatedReplicas:   1,
-				Replicas:          4,
-				OldImageTag:       "v1",
-				NewImageTag:       "v2",
+				CurrentBatchIndex:       lo.ToPtr(int64(0)),
+				BatchPhase:              batchrelease.BatchPhaseManualPaused,
+				RolloutPhase:            "Running",
+				Message:                 "Rollout is running canary step 0",
+				PauseStartTime:          &pauseStartTime,
+				UpdatedReplicas:         1,
+				Replicas:                4,
+				OldImageTag:             "v1",
+				NewImageTag:             "v2",
+				WorkloadUpdateRevision:  "demo-d8db7cf84",
+				WorkloadCurrentRevision: "demo-7b697647cb",
 			}
 
 			output := new(serializer.BatchReleaseProgressOutputObj).FromModel(record)
@@ -307,15 +309,17 @@ var _ = Describe("AppModel deploy serializers", func() {
 					{Target: "1", PauseMode: "permanent"},
 					{Target: "50%", PauseMode: "duration", PauseSeconds: 600},
 				},
-				CurrentBatchIndex: lo.ToPtr(int64(0)),
-				BatchPhase:        "manual-paused",
-				RolloutPhase:      "Running",
-				Message:           "Rollout is running canary step 0",
-				PauseStartTime:    &pauseStartTime,
-				UpdatedReplicas:   1,
-				Replicas:          4,
-				OldImageTag:       "v1",
-				NewImageTag:       "v2",
+				CurrentBatchIndex:       lo.ToPtr(int64(0)),
+				BatchPhase:              "manual-paused",
+				RolloutPhase:            "Running",
+				Message:                 "Rollout is running canary step 0",
+				PauseStartTime:          &pauseStartTime,
+				UpdatedReplicas:         1,
+				Replicas:                4,
+				OldImageTag:             "v1",
+				NewImageTag:             "v2",
+				WorkloadUpdateRevision:  "demo-d8db7cf84",
+				WorkloadCurrentRevision: "demo-7b697647cb",
 			}))
 		})
 

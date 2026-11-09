@@ -294,6 +294,7 @@ CleaningCanary    清理上一轮灰度资源，workloadRevision 仍为旧值
 | `batchPhase` | `Status.BatchPhase(workload)` |
 | `message` | 批次出错（`currentStepPhase=Error`）时取 `stepStatus.message`，否则取 `status.message` |
 | `updatedReplicas` / `replicas` | GameDeployment `status.updatedReplicas` / `spec.replicas` |
+| `workloadUpdateRevision` / `workloadCurrentRevision` | GameDeployment `status.updateRevision` / `status.currentRevision`；初始进度中为空 |
 | `newImageTag` | 部署记录的镜像 |
 | `oldImageTag` | 创建部署记录时写入初始进度：取该环境 / 泳道**最近一次 `deployed` 记录**的镜像（没有则为空）。不取最新记录：最新记录可能已回滚或失败，其镜像不是旧版本实例所用的镜像 |
 
