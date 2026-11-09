@@ -478,10 +478,10 @@ func (h *Handler) GetInstanceTimeSeries(c *gin.Context) {
 	ginutils.OK(c, &serializer.InstanceTimeSeriesResp{Data: respData})
 }
 
-// RankInstances 按平均 CPU 使用量查询环境实例的 Top / Bottom N
+// RankInstances 按指定指标的平均值查询环境实例的 Top / Bottom N
 //
 //	@ID			RankInstances
-//	@Summary	按平均 CPU 使用量查询环境实例的 Top / Bottom N
+//	@Summary	按指定指标的平均值查询环境实例的 Top / Bottom N
 //	@Tags		bkintegrations-bkmonitor
 //	@Produce	json
 //	@Security	BkUserInfo
@@ -489,6 +489,7 @@ func (h *Handler) GetInstanceTimeSeries(c *gin.Context) {
 //	@Param		appID		path		string	true	"应用 ID"
 //	@Param		envName		path		string	true	"环境名称"
 //	@Param		limit		query		int		false	"取前 N 个实例，1~50，默认 10"
+//	@Param		rankBy		query		string	false	"排名指标"	Enums(cpu_limit_usage,memory_limit_usage,cpu_usage,memory_usage)
 //	@Param		rankType	query		string	false	"排名方向，默认 top"	Enums(top, bottom)
 //	@Param		startTime	query		int		true	"排名时间范围的开始时间（Unix 时间戳，秒）"
 //	@Param		endTime		query		int		true	"排名时间范围的结束时间（Unix 时间戳，秒）"
@@ -538,6 +539,7 @@ func (h *Handler) RankInstances(c *gin.Context) {
 		Namespace:    target.env.Cluster.Namespace,
 		WorkloadKind: workloadKind,
 		WorkloadName: workloadName,
+		RankBy:       queryInput.RankBy,
 		Method:       bkmmodel.AggMethod(queryInput.Method),
 		Limit:        queryInput.Limit,
 		RankType:     bkmmodel.RankType(queryInput.RankType),
@@ -553,7 +555,7 @@ func (h *Handler) RankInstances(c *gin.Context) {
 
 	ginutils.OK(c, &serializer.RankInstancesResp{
 		Data: lo.Map(ranks, func(r *bkmmodel.InstanceRank, _ int) *serializer.InstanceRankOutput {
-			return &serializer.InstanceRankOutput{Instance: r.Instance, Value: r.Value}
+			return &serializer.InstanceRankOutput{Instance: r.Instance, Value: r.Value, Unit: r.Unit}
 		}),
 	})
 }

@@ -6131,8 +6131,11 @@ definitions:
       instance:
         description: Instance 实例（Pod）名称
         type: string
+      unit:
+        description: Unit 排名指标的单位：percent（0~1）、cores、bytes
+        type: string
       value:
-        description: Value 时间范围内的平均 CPU 使用量（核数）
+        description: Value 排名指标在时间范围内的平均值（原始单位）
         type: number
     type: object
   serializer.InstanceTimeSeriesResp:
@@ -15652,6 +15655,15 @@ paths:
         in: query
         name: limit
         type: integer
+      - description: 排名指标
+        enum:
+        - cpu_limit_usage
+        - memory_limit_usage
+        - cpu_usage
+        - memory_usage
+        in: query
+        name: rankBy
+        type: string
       - description: 排名方向，默认 top
         enum:
         - top
@@ -15697,7 +15709,7 @@ paths:
       security:
       - BkUserInfo: []
       - BkUserCredential: []
-      summary: 按平均 CPU 使用量查询环境实例的 Top / Bottom N
+      summary: 按指定指标的平均值查询环境实例的 Top / Bottom N
       tags:
       - bkintegrations-bkmonitor
   /apps/{appID}/envs/{envName}/bkmonitor/instance-time-series:

@@ -37,9 +37,9 @@ const DefaultRankLimit = 10
 
 // 实例排名方向
 const (
-	// RankTypeTop 按平均 CPU 使用量从高到低取前 N 个（默认）
+	// RankTypeTop 按排名指标平均值从高到低取前 N 个（默认）
 	RankTypeTop = "top"
-	// RankTypeBottom 按平均 CPU 使用量从低到高取前 N 个
+	// RankTypeBottom 按排名指标平均值从低到高取前 N 个
 	RankTypeBottom = "bottom"
 )
 
@@ -209,7 +209,13 @@ func (r *GetInstanceTimeSeriesQueryInput) Normalize() {
 type RankInstancesQueryInput struct {
 	// Limit 取前 N 个实例，取值 1~50，默认 10
 	Limit int `form:"limit" binding:"omitempty,min=1,max=50"`
-	// RankType 排名方向：top 按平均 CPU 使用量从高到低、bottom 从低到高，默认 top
+	// RankBy 排名指标，默认 cpu_limit_usage：
+	//   - cpu_limit_usage: CPU 使用率（用量 / limits）
+	//   - memory_limit_usage: 内存使用率（Working Set / limits）
+	//   - cpu_usage: CPU 用量（核数）
+	//   - memory_usage: 内存用量（Working Set，字节）
+	RankBy string `form:"rankBy" binding:"omitempty,oneof=cpu_limit_usage memory_limit_usage cpu_usage memory_usage" enums:"cpu_limit_usage,memory_limit_usage,cpu_usage,memory_usage"` //nolint:lll
+	// RankType 排名方向：top 按排名指标平均值从高到低、bottom 从低到高，默认 top
 	RankType string `form:"rankType" binding:"omitempty,oneof=top bottom" enums:"top,bottom"`
 	// StartTime 排名时间范围的开始时间（Unix 时间戳，秒）
 	StartTime int64 `form:"startTime" binding:"required,min=1,ltefield=EndTime"`
@@ -221,10 +227,13 @@ type RankInstancesQueryInput struct {
 	Method string `form:"method" binding:"omitempty,oneof=sum max min count avg" enums:"sum,max,min,count,avg"`
 }
 
-// Normalize 设置默认的排名数量、方向、子查询步长与汇聚方法
+// Normalize 设置默认的排名数量、指标、方向、子查询步长与汇聚方法
 func (r *RankInstancesQueryInput) Normalize() {
 	if r.Limit <= 0 {
 		r.Limit = DefaultRankLimit
+	}
+	if r.RankBy == "" {
+		r.RankBy = bkmmodel.DefaultRankBy
 	}
 	if r.RankType == "" {
 		r.RankType = RankTypeTop
@@ -241,8 +250,10 @@ func (r *RankInstancesQueryInput) Normalize() {
 type InstanceRankOutput struct {
 	// Instance 实例（Pod）名称
 	Instance string `json:"instance"`
-	// Value 时间范围内的平均 CPU 使用量（核数）
+	// Value 排名指标在时间范围内的平均值（原始单位）
 	Value float64 `json:"value"`
+	// Unit 排名指标的单位：percent（0~1）、cores、bytes
+	Unit string `json:"unit"`
 }
 
 // RankInstancesResp 实例排名的响应，已按 rankType 排好序

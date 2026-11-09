@@ -20,6 +20,7 @@ package bkmonitor_test
 
 import (
 	"context"
+	"strings"
 
 	"github.com/bytedance/mockey"
 	. "github.com/onsi/ginkgo/v2"
@@ -50,34 +51,75 @@ var _ = Describe("InstanceRank", func() {
 	})
 
 	Describe("BuildInstanceRankPromQL", func() {
-		It("builds topk on average cpu usage filtered by workload", func() {
-			Expect(bkmonitor.BuildInstanceRankPromQL(query)).To(Equal(
-				`topk(10, avg_over_time((sum by(pod)(rate(container_cpu_usage_seconds_total{` +
-					`bcs_cluster_id="BCS-K8S-00000",namespace=~"^(demo-ns)$",` +
-					`workload_kind="GameDeployment",workload_name="demo",container_name!="POD"}[1m])))` +
-					`[3600s:60s]))`,
+		const (
+			workloadFilter = `bcs_cluster_id="BCS-K8S-00000",namespace=~"^(demo-ns)$",` +
+				`workload_kind="GameDeployment",workload_name="demo",container_name!="POD"`
+			namespaceFilter = `bcs_cluster_id="BCS-K8S-00000",namespace=~"^(demo-ns)$",container_name!="POD"`
+			cpuUsage        = `sum by(pod)(rate(container_cpu_usage_seconds_total{` + workloadFilter + `}[1m]))`
+			memoryUsage     = `sum by(pod)(container_memory_working_set_bytes{` + workloadFilter + `})`
+		)
+
+		build := func() string {
+			promql, err := bkmonitor.BuildInstanceRankPromQL(query)
+			Expect(err).NotTo(HaveOccurred())
+			return promql
+		}
+
+		It("ranks by cpu limit usage by default", func() {
+			Expect(build()).To(Equal(
+				`topk(10, avg_over_time((` + cpuUsage +
+					` / sum by(pod)(kube_pod_container_resource_limits_cpu_cores{` + namespaceFilter + `})` +
+					`)[3600s:60s]))`,
 			))
+		})
+
+		DescribeTable("builds the expression for each rank metric",
+			func(rankBy, expr string) {
+				query.RankBy = rankBy
+				Expect(build()).To(Equal(`topk(10, avg_over_time((` + expr + `)[3600s:60s]))`))
+			},
+			Entry("cpu limit usage", bkmonitor.MetricCPULimitUsage,
+				cpuUsage+` / sum by(pod)(kube_pod_container_resource_limits_cpu_cores{`+namespaceFilter+`})`),
+			Entry("memory limit usage", bkmonitor.MetricMemoryLimitUsage,
+				memoryUsage+` / sum by(pod)(kube_pod_container_resource_limits_memory_bytes{`+namespaceFilter+`})`),
+			Entry("cpu usage", bkmonitor.MetricCPUUsage, cpuUsage),
+			Entry("memory usage", bkmonitor.MetricMemoryUsage, memoryUsage),
+		)
+
+		It("applies the same aggregation method to numerator and denominator", func() {
+			query.Method = bkmonitor.AggMethodMax
+			numerator, denominator, found := strings.Cut(build(), " / ")
+			Expect(found).To(BeTrue())
+			Expect(numerator).To(ContainSubstring("((max by(pod)(rate("))
+			Expect(denominator).To(HavePrefix("max by(pod)(kube_pod_container_resource_limits_cpu_cores{"))
+		})
+
+		It("does not filter the limits denominator by workload", func() {
+			_, denominator, found := strings.Cut(build(), " / ")
+			Expect(found).To(BeTrue())
+			Expect(denominator).NotTo(ContainSubstring("workload_"))
 		})
 
 		It("uses bottomk for bottom ranking", func() {
 			query.RankType = bkmonitor.RankTypeBottom
-			Expect(bkmonitor.BuildInstanceRankPromQL(query)).To(HavePrefix("bottomk(10, avg_over_time(("))
-		})
-
-		It("applies the aggregation method", func() {
-			query.Method = bkmonitor.AggMethodMax
-			Expect(bkmonitor.BuildInstanceRankPromQL(query)).To(ContainSubstring("((max by(pod)(rate("))
+			Expect(build()).To(HavePrefix("bottomk(10, avg_over_time(("))
 		})
 
 		It("uses the interval as subquery step", func() {
 			query.Interval = 300
-			Expect(bkmonitor.BuildInstanceRankPromQL(query)).To(HaveSuffix("[3600s:300s]))"))
+			Expect(build()).To(HaveSuffix("[3600s:300s]))"))
 		})
 
 		It("raises step to 60s and range to at least one step", func() {
 			query.Interval = 0
 			query.StartTime = query.EndTime
-			Expect(bkmonitor.BuildInstanceRankPromQL(query)).To(HaveSuffix("[60s:60s]))"))
+			Expect(build()).To(HaveSuffix("[60s:60s]))"))
+		})
+
+		It("returns an error for unsupported rank metric", func() {
+			query.RankBy = bkmonitor.MetricNetworkReceive
+			_, err := bkmonitor.BuildInstanceRankPromQL(query)
+			Expect(err).To(MatchError(ContainSubstring("unsupported rank metric: network_receive")))
 		})
 	})
 
@@ -128,7 +170,9 @@ var _ = Describe("InstanceRank", func() {
 			Expect(captured.StartTime).To(Equal(query.StartTime))
 			Expect(captured.EndTime).To(Equal(query.EndTime))
 			Expect(captured.QueryConfigs).To(HaveLen(1))
-			Expect(captured.QueryConfigs[0].PromQL).To(Equal(bkmonitor.BuildInstanceRankPromQL(query)))
+			expected, err := bkmonitor.BuildInstanceRankPromQL(query)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(captured.QueryConfigs[0].PromQL).To(Equal(expected))
 		})
 
 		It("sorts by value descending for top and reads pod from any supported dimension", func() {
@@ -172,6 +216,29 @@ var _ = Describe("InstanceRank", func() {
 			_, err := bkmonitor.NewMetricTimeSeriesService().RankInstances(context.Background(), query)
 			Expect(err).To(MatchError(ContainSubstring("bkmonitor unavailable")))
 			Expect(err).To(MatchError(ContainSubstring("GameDeployment/demo")))
+			Expect(err).To(MatchError(ContainSubstring("by cpu_limit_usage")))
+		})
+
+		DescribeTable("returns the unit of the rank metric",
+			func(rankBy, unit string) {
+				query.RankBy = rankBy
+				resp.Series = []bkmapi.TimeSeriesData{series(map[string]string{"pod": "demo-0"}, 0.5)}
+				ranks, err := bkmonitor.NewMetricTimeSeriesService().RankInstances(context.Background(), query)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(ranks).To(HaveLen(1))
+				Expect(ranks[0].Unit).To(Equal(unit))
+			},
+			Entry("cpu limit usage", bkmonitor.MetricCPULimitUsage, "percent"),
+			Entry("memory limit usage", bkmonitor.MetricMemoryLimitUsage, "percent"),
+			Entry("cpu usage", bkmonitor.MetricCPUUsage, "cores"),
+			Entry("memory usage", bkmonitor.MetricMemoryUsage, "bytes"),
+		)
+
+		It("rejects unsupported rank metric without querying bkmonitor", func() {
+			query.RankBy = bkmonitor.MetricDiskUsage
+			_, err := bkmonitor.NewMetricTimeSeriesService().RankInstances(context.Background(), query)
+			Expect(err).To(MatchError(ContainSubstring("unsupported rank metric")))
+			Expect(captured).To(BeNil())
 		})
 	})
 })
