@@ -18,15 +18,16 @@
 
 import { computed, h, ref } from 'vue';
 
+import { useSessionStorage } from '@vueuse/core';
 import { InfoBox, Message } from 'bkui-vue';
 import { useI18n } from 'vue-i18n';
 import { DeployService } from '~/api/modules/v1';
-import usePersistentStorage from '~/composables/use-persistent-storage';
 
 import {
   type BatchReleaseAction,
   type BatchReleaseBannerAction,
   type BatchReleaseBannerView,
+  appendBatchReleaseDismissKey,
   buildBatchReleaseDismissKey,
   hasCanaryDeployRecord,
   isBatchReleaseBannerDismissed,
@@ -73,9 +74,9 @@ export interface UseBatchReleaseControlOptions {
  */
 export function useBatchReleaseControl(options: UseBatchReleaseControlOptions) {
   const { t } = useI18n();
-  const { useStorage } = usePersistentStorage();
-  // 完成态关闭记忆：值为 `${appID}:${envName}:${deployID}`，换应用/环境或新部署时自然失效。
-  const dismissedStorage = useStorage('batch-release-dismissed', '', { global: true });
+  // 完成态关闭记忆：已关闭的 `${appID}:${envName}:${deployID}` 列表，换应用/环境或新部署时自然失效。
+  // 列表而非单值：多个环境各自关闭互不覆盖；放 sessionStorage，重新打开浏览器后横幅重新出现。
+  const dismissedKeys = useSessionStorage<string[]>('batch-release-dismissed', []);
 
   const progress = ref<BatchReleaseProgressOutputObj | null>(null);
   const pendingAction = ref<BatchReleaseAction | null>(null);
@@ -88,6 +89,12 @@ export function useBatchReleaseControl(options: UseBatchReleaseControlOptions) {
 
   const rawView = computed<BatchReleaseBannerView | null>(() => resolveBatchReleaseBanner(progress.value));
 
+  /**
+   * 骨架占位可见性：仅在「还没有任何进度快照但正在回查」时展示（环境切换 / 首次加载）。
+   * 快照仍在（如已关闭的完成态横幅）时回查不打扰页面，否则关闭后每轮轮询都会闪出骨架。
+   */
+  const showSkeleton = computed(() => loading.value && !rawView.value);
+
   const dismissKey = computed(() =>
     buildBatchReleaseDismissKey(options.getAppID(), options.getEnvName(), progress.value?.deployID ?? ''),
   );
@@ -95,7 +102,7 @@ export function useBatchReleaseControl(options: UseBatchReleaseControlOptions) {
   /** 部署中展示批次控制横幅，已完成展示成功提示；关闭过的成功提示按 deployID 保持隐藏。 */
   const view = computed<BatchReleaseBannerView | null>(() => {
     if (!options.isEnabled()) return null;
-    if (isBatchReleaseBannerDismissed(rawView.value, dismissKey.value, dismissedStorage.value)) return null;
+    if (isBatchReleaseBannerDismissed(rawView.value, dismissKey.value, dismissedKeys.value)) return null;
     return rawView.value;
   });
 
@@ -112,6 +119,16 @@ export function useBatchReleaseControl(options: UseBatchReleaseControlOptions) {
     loading.value = false;
     // 换应用 / 环境时旧的「空进度」记忆失效，否则新环境可能被误判为无需查询。
     emptyQueriedDeployID.value = '';
+  }
+
+  /**
+   * 应用 / 环境切换时调用：立刻丢弃旧环境的进度快照并进入骨架等待态，
+   * 避免旧横幅一直展示到新数据返回时被「直接替换」。
+   * 后续 refresh 若确认无分批发布（reset）或回查完成（finally），会自然收掉 loading。
+   */
+  function resetForSwitch() {
+    reset();
+    loading.value = true;
   }
 
   /**
@@ -248,9 +265,10 @@ export function useBatchReleaseControl(options: UseBatchReleaseControlOptions) {
     });
   }
 
-  /** 完成态横幅关闭：按 deployID 记录，下一次发布重新出现。 */
+  /** 完成态横幅关闭：按 `应用:环境:deployID` 追加记录（保留其它环境的记忆），下一次发布重新出现。 */
   function handleClose() {
-    if (dismissKey.value) dismissedStorage.value = dismissKey.value;
+    if (!dismissKey.value) return;
+    dismissedKeys.value = appendBatchReleaseDismissKey(dismissedKeys.value, dismissKey.value);
   }
 
   return {
@@ -263,6 +281,8 @@ export function useBatchReleaseControl(options: UseBatchReleaseControlOptions) {
     progress,
     refresh,
     reset,
+    resetForSwitch,
+    showSkeleton,
     view,
   };
 }

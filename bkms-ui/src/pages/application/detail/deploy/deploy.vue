@@ -236,13 +236,21 @@
             @action="handleBatchReleaseAction"
             @back="showBatchReleaseProgress = false"
           />
-          <!-- 进度回查进行中的骨架占位，避免横幅数据返回后突然撑开布局 -->
-          <Layout.shape
-            v-else-if="batchReleaseLoading"
-            class="mb-[16px]"
-            :height="40"
-            :width="'100%'"
-          />
+          <!--
+            进度回查中的骨架占位，避免横幅数据返回后突然撑开布局。
+            仅在「还没有任何进度快照但正在回查」时展示（环境切换 / 首次加载）；
+            快照仍在（如已关闭的完成态横幅）时不展示，否则关闭后每轮轮询都会闪出骨架。
+          -->
+          <div
+            v-else-if="batchReleaseShowSkeleton"
+            data-testid="batch-release-skeleton"
+          >
+            <Layout.shape
+              class="mb-[16px]"
+              :height="30"
+              :width="'100%'"
+            />
+          </div>
           <!-- 构建状态提示 -->
           <Alert
             v-if="isBuildAlertVisible"
@@ -671,7 +679,8 @@
     busyReason: batchReleaseBusyReason,
     handleAction: handleBatchReleaseAction,
     handleClose: handleBatchReleaseClose,
-    loading: batchReleaseLoading,
+    resetForSwitch: resetBatchReleaseForSwitch,
+    showSkeleton: batchReleaseShowSkeleton,
     pendingAction: batchReleasePendingAction,
     progress: batchReleaseProgress,
     refresh: refreshBatchRelease,
@@ -701,6 +710,10 @@
   });
   watch(curEnv, () => {
     showBatchReleaseProgress.value = false;
+  });
+  // 应用 / 环境切换时立刻丢弃旧环境的分批发布快照并展示骨架，等待新环境回查结果，避免旧横幅被「直接替换」。
+  watch([() => appDetailStore.appID, () => trpcDeployStore.curEnvItem?.name], () => {
+    resetBatchReleaseForSwitch();
   });
 
   /** 仅部署总览、实例列表支持多环境；其余 Tab 关闭多选入口 */

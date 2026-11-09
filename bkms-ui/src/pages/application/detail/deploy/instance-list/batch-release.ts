@@ -313,14 +313,28 @@ export function hasCanaryDeployRecord(latest: LatestDeployStatus | null): boolea
 /** 已结束且无需干预的终态：可关闭，也不再阻塞新的部署入口。 */
 const DISMISSIBLE_KINDS = new Set<BatchReleaseKind>(['completed', 'rolledBack']);
 
-/** 仅完成 / 已回滚这两个终态可关闭；关闭记忆命中同一发布记录时隐藏横幅。 */
+/** 关闭记忆最多保留的条数：会话内持续累积，加上限避免无限增长。 */
+const MAX_DISMISSED_KEYS = 50;
+
+/** 追加一条关闭记忆：已存在则移到末尾，超过上限丢弃最旧的一条。 */
+export function appendBatchReleaseDismissKey(dismissedKeys: readonly string[], key: string): string[] {
+  const rest = dismissedKeys.filter(item => item && item !== key);
+  return key ? [...rest, key].slice(-MAX_DISMISSED_KEYS) : rest;
+}
+
+/**
+ * 仅完成 / 已回滚这两个终态可关闭；关闭记忆命中同一发布记录时隐藏横幅。
+ *
+ * 记忆是「多条记录」而不是单条：key 已带环境维度，多个环境各自关闭后要互不覆盖，
+ * 否则在环境 B 关闭会冲掉环境 A 的记录，切回环境 A 时横幅又冒出来。
+ */
 export function isBatchReleaseBannerDismissed(
   view: BatchReleaseBannerView | null,
   currentKey: string,
-  storedKey: string,
+  dismissedKeys: readonly string[],
 ): boolean {
   if (!view || !DISMISSIBLE_KINDS.has(view.kind)) return false;
-  return !!currentKey && currentKey === storedKey;
+  return !!currentKey && dismissedKeys.includes(currentKey);
 }
 
 /**
@@ -510,6 +524,20 @@ export function resolveInstanceCanaryState(image: string | undefined, newImageTa
   return tag === newImageTag ? 'new' : 'before';
 }
 
+/** 标题状态 Tag：定时暂停展示「定时暂停中 · mm:ss 后自动继续」，手动 / 永久暂停展示「等待手动继续」。 */
+export function resolvePausedStatusTag(
+  progress: BatchReleaseProgressOutputObj,
+  remainingSeconds: number,
+): BatchReleaseStatusTag {
+  if (progress.batchPhase !== 'timed-paused') return { key: '等待手动继续', theme: 'warning' };
+  if (remainingSeconds <= 0) return { key: '已暂停', theme: 'warning' };
+  return {
+    key: '定时暂停中 · {0} 后自动继续',
+    params: [formatPauseCountdown(remainingSeconds)],
+    theme: 'warning',
+  };
+}
+
 /**
  * timed-paused 剩余秒数：按 pauseStartTime + pauseSeconds 换算。
  * `now` 由调用方注入：组件传逐秒刷新的时间源即可让倒计时随秒跳动，轮询仅负责校准起点。
@@ -604,20 +632,6 @@ function resolveBatchPauseSubtitle(batch: {
     return { key: '暂停 {0} 秒 · 自动继续', params: [batch.pauseSeconds ?? 0] };
   }
   return { key: '不停 · 自动继续', params: [] };
-}
-
-/** 标题状态 Tag：定时暂停展示「定时暂停中 · mm:ss 后自动继续」，手动 / 永久暂停展示「等待手动继续」。 */
-export function resolvePausedStatusTag(
-  progress: BatchReleaseProgressOutputObj,
-  remainingSeconds: number,
-): BatchReleaseStatusTag {
-  if (progress.batchPhase !== 'timed-paused') return { key: '等待手动继续', theme: 'warning' };
-  if (remainingSeconds <= 0) return { key: '已暂停', theme: 'warning' };
-  return {
-    key: '定时暂停中 · {0} 后自动继续',
-    params: [formatPauseCountdown(remainingSeconds)],
-    theme: 'warning',
-  };
 }
 
 /**
