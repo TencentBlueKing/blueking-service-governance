@@ -87,6 +87,7 @@ import (
 	audithandler "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/misc/audit/handler"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/misc/frontendfeature"
 	frontendfeaturehandler "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/misc/frontendfeature/handler"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/apitracking"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/apm"
 	bkmalert "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/bkmonitor/alert"
 	bkmalerthandler "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/bkmonitor/alert/handler"
@@ -206,7 +207,10 @@ func RegisterRouter(ctx context.Context, cfg config.Config, serverRole string) (
 	if err != nil {
 		return nil, errors.Wrap(err, "new required auth middleware")
 	}
+	// apitracking 须在认证之前，以记录认证失败的请求
+	apiHandlerNames := apitracking.NewHandlerNames()
 	v1.Use(
+		apitracking.Middleware(apiHandlerNames),
 		bkerrs.ErrorHandler(),
 		requiredAuth,
 		tenant.Required(cfg.Tenant.EnableMultiTenantMode, tenantVerifier),
@@ -284,6 +288,7 @@ func RegisterRouter(ctx context.Context, cfg config.Config, serverRole string) (
 		platworkspacecfgswitchh.New(storereg.G()),
 		platmgt.RequirePlatformRole(storereg.G().DB, admin.RoleCodeAdmin),
 	)
+	apiHandlerNames.Load(ctx, r.Routes(), v1.BasePath())
 
 	return r, nil
 }

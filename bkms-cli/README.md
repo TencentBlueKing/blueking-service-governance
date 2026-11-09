@@ -35,6 +35,17 @@ npm i -g @blueking/bkms-cli@latest
 go install github.com/TencentBlueKing/blueking-service-governance/bkms-cli@latest
 ```
 
+## 使用数据
+
+bkms-server 会为每个请求记录一条日志，用于统计各 CLI 版本对 API 的调用情况，字段如下：
+
+- CLI 版本、操作系统、CPU 架构（来自 User-Agent）
+- 设备 ID：操作系统机器标识经 HMAC-SHA256 处理后的值（`X-Bkms-Device-Id`），不包含原始机器标识
+- 用户名、租户、客户端 IP
+- 调用的接口、请求路径、查询参数（token、secret 等敏感参数值已脱敏）、响应状态码
+
+不记录 access token、请求体与响应体。详见 [设计文档](../bkms-server/design_notes/api_tracking.md)。
+
 ## 项目结构
 
 ```

@@ -48,8 +48,10 @@ func OTelMiddleware(cfg config.BkMonitorConfig, serverRole string) gin.HandlerFu
 }
 
 // HTTPLogMiddleware 创建 slog-gin 请求日志中间件，记录每个 HTTP 请求/响应的结构化日志。
+// query 与 referer 中的敏感参数会被脱敏。
 func HTTPLogMiddleware() gin.HandlerFunc {
-	return sloggin.NewWithConfig(slog.Default(), sloggin.Config{
+	logger := slog.New(maskHandler{slog.Default().Handler()})
+	return sloggin.NewWithConfig(logger, sloggin.Config{
 		DefaultLevel:     slog.LevelInfo,
 		ClientErrorLevel: slog.LevelWarn,
 		ServerErrorLevel: slog.LevelError,
