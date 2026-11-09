@@ -38,6 +38,8 @@
         class="min-w-0 w-[50%] flex flex-col min-h-[130px]"
       >
         <ExploreChart
+          v-if="canQuery"
+          :key="queryId"
           ref="exploreChartRef"
           class="min-h-0 flex-1"
           :custom-options="customOptions"
@@ -115,14 +117,23 @@
   import { ExploreChart } from '@blueking/monitor-vue3-components';
   import { Table, TableColumn } from '@blueking/table';
   import * as echarts from 'echarts/core';
-  import { formatOffsetLabel, getCachedMetric, getColorByOffset, isPercentUnit } from '~/pages/application/detail/deploy/monitor-chart-bridge';
+  import {
+    type MonitorAggregationMethod,
+    type MonitorInstance,
+    type MonitorMetricTimeSeries,
+    formatOffsetLabel,
+    getCachedMetric,
+    getColorByOffset,
+    getMonitorInstanceLabel,
+    isPercentUnit,
+  } from '~/pages/application/detail/deploy/monitor-chart-bridge';
   import { useAppDetail } from '~/stores/app-detail';
 
   // 将所有 ExploreChart 加入同一 echarts group，实现跨图 tooltip 联动
   const CHART_GROUP = 'monitor-sideslider';
   echarts.connect(CHART_GROUP);
 
-  import type { MetricTimeSeries, TimeSeriesItem } from '~/@types/v1/bkintegrations-bkmonitor';
+  import type { TimeSeriesItem } from '~/@types/v1/bkintegrations-bkmonitor';
 
   interface IProps {
     /** 是否为面积图（true=堆叠面积，false=普通折线无填充），默认 true */
@@ -131,16 +142,21 @@
     chartHeight?: number | string;
     /** 时间对比偏移量列表（秒） */
     compareOffsets?: number[];
-    /** 环境名称（作为接口入参，单环境模式） */
-    envName?: string;
-    /** 实例 ID → 环境名称映射（多环境模式） */
-    instanceEnvMap?: Record<string, string>;
-    /** 实例名称列表 */
-    instances: string[];
+    endTime: number;
+    /** 查询的环境范围，用于统一图例标签格式。 */
+    envNames?: string[];
+    /** 排名或手选确定的实例名单，当前期和对比期共用。 */
+    instances: MonitorInstance[];
     /** 汇聚周期（秒） */
     interval?: number;
+    method?: MonitorAggregationMethod;
     /** 指标类型（同时作为接口入参与图表区分） */
     metricKey: string;
+    /** 容器测量与名单准备完成后，才挂载会立即请求的 ExploreChart。 */
+    queryEnabled?: boolean;
+    /** 筛选或刷新代次，用于隔离旧请求与缓存 */
+    queryId: number;
+    startTime: number;
     /** 标题文字（无 title 插槽时生效） */
     title?: string;
   }
@@ -150,11 +166,17 @@
     interval: 60,
     title: '',
     area: true,
+    method: 'sum',
+    queryEnabled: true,
   });
 
   const emits = defineEmits<{
     // (e: 'fullscreen'): void;
-    (e: 'metric-data', payload: { data: MetricTimeSeries | undefined; metricKey: string }): void;
+    (
+      e: 'metric-data',
+      payload: { data: MonitorMetricTimeSeries | undefined; metricKey: string; queryId: number },
+    ): void;
+    (e: 'plot-width-change', width: number): void;
   }>();
 
   defineSlots<{
@@ -164,16 +186,13 @@
 
   /** 图表容器 DOM ref，用于 ResizeObserver 获取实际宽度以计算绘图区宽度 */
   const chartContainerRef = ref<HTMLElement | null>(null);
-  /** 图表绘图区实际宽度（px），已排除纵坐标标签区域（~55px）。
-   *  通过 ResizeObserver 实时追踪，供父组件用于 auto 汇聚周期计算。 */
-  const plotWidth = ref(0);
-
   let resizeObserver: ResizeObserver | undefined;
   onMounted(() => {
     if (chartContainerRef.value) {
       resizeObserver = new ResizeObserver(([entry]) => {
         // 图表容器宽度 − 纵坐标标签区域（~55px）≈ 绘图区宽度
-        plotWidth.value = Math.max(entry.contentRect.width - 55, 0);
+        const width = Math.max(entry.contentRect.width - 55, 0);
+        if (width > 0) emits('plot-width-change', width);
       });
       resizeObserver.observe(chartContainerRef.value);
     }
@@ -182,14 +201,12 @@
     resizeObserver?.disconnect();
   });
 
-  defineExpose({ plotWidth });
-
   const appDetailStore = useAppDetail();
 
   const exploreChartRef = ref<InstanceType<typeof ExploreChart>>();
+  const canQuery = computed(() => props.queryEnabled && props.instances.length > 0);
 
-  // ExploreChart 由内部 useEcharts 通过全局 $api 拉数据；targets.data 携带自建接口所需参数，
-  // useEcharts 会把时间范围（来自父组件 provide 的 timeRange）并入 resultParams 后传入桥接。
+  // targets.data 使用侧栏提交的时间范围和名单，确保曲线与排名使用同一查询快照。
   const panel = computed(() => ({
     dashboardId: CHART_GROUP,
     title: props.title,
@@ -198,16 +215,19 @@
       {
         apiModule: 'bkmonitor',
         apiFunc: 'getInstanceTimeSeries',
-        // 不在 target 上设置 alias：包内 useEcharts 会回退到 item.alias（即桥接里设置的实例名 s.instance），
-        // 这样每条折线名称都能对应到具体实例。
+        // 不在 target 上设置 alias，保留桥接为每条曲线生成的标签；
+        // 多环境标签包含环境名，避免同名实例共享图例及显隐状态。
         data: {
           appID: appDetailStore.appID,
           compareOffsets: props.compareOffsets,
-          envName: props.envName,
-          instanceEnvMap: props.instanceEnvMap,
+          endTime: props.endTime,
+          envNames: props.envNames,
           instances: props.instances,
           metricKey: props.metricKey,
           interval: props.interval,
+          method: props.method,
+          queryId: props.queryId,
+          startTime: props.startTime,
         },
       },
     ],
@@ -252,23 +272,23 @@
   /** 表格 loading：接口请求期间显示加载状态 */
   const tableLoading = ref(true);
 
-
   function syncLegendRows() {
-    if (!props.instances?.length) {
+    if (!canQuery.value) {
       legendRows.value = [];
+      tableLoading.value = false;
       return;
     }
     // 优先从桥接缓存读取 API 返回的 stat（min/max/avg），作为 legendRows 的数据源，
     // 同时引用图表图例中的 color/show 属性保持联动
     const chartLegend = (exploreChartRef.value as unknown as ExploreChartInstance | undefined)?.legendData;
-    const metric = getCachedMetric(props.metricKey);
-    // 以 displayName（去 __CMP__ 前缀）为 key 反查原 series；
-    // bridge 的 alias/name 都是 displayName，因此图例 item.name / item.alias 可以直接命中
+    const metric = getCachedMetric(props.metricKey, props.queryId);
+    if (!metric) return;
+    // 与 bridge 一样按查询范围决定标签格式，即使排名结果只来自一个环境也保持名称一致。
+    const showEnvName = (props.envNames?.length ?? 0) > 1;
     const seriesByName = new Map<string, TimeSeriesItem>();
     if (metric?.series) {
       for (const s of metric.series) {
-        const inst = s.instance ?? '';
-        const displayName = inst.startsWith('__CMP__') ? inst.slice('__CMP__'.length) : inst;
+        const displayName = getMonitorInstanceLabel(s, showEnvName);
         if (displayName) seriesByName.set(displayName, s);
       }
     }
@@ -326,48 +346,42 @@
       if (dot === -1) return `${s}.00`;
       return `${s.slice(0, dot)}.${s.slice(dot + 1, dot + 3)}`;
     }
-    const rows: LegendRow[] = (chartLegend ?? []).map(item => {
-      // 优先读 ExploreChart 透传的 isCompare 字段，否则回退到反查 seriesItem 的原 instance 前缀
-      const seriesItem = seriesByName.get(item.name) ?? seriesByName.get(item.alias ?? '');
-      const isCompare = (item as LegendSourceItem).isCompare === true
-        || (!!seriesItem && (seriesItem.instance ?? '').startsWith('__CMP__'));
-      const stat = seriesItem?.stat;
-      const fmt = (v: number | undefined) => (v != null ? truncFixed2(v * percentScale * valueScale) + unitSuffix : '');
-      return {
-        name: item.name,
-        alias: item.alias ?? item.name,
-        color: item.color,
-        show: item.show,
-        min: fmt(stat?.min?.[1] as number | undefined),
-        max: fmt(stat?.max?.[1] as number | undefined),
-        avg: fmt(stat?.avg?.[1] as number | undefined),
-        isCompare,
-      } as LegendRow;
-    });
+    const rows: LegendRow[] = (chartLegend ?? [])
+      .filter(item => seriesByName.has(item.name) || seriesByName.has(item.alias ?? ''))
+      .map(item => {
+        // 优先读 ExploreChart 透传的 isCompare 字段，否则回退到反查 seriesItem 的原 instance 前缀
+        const seriesItem = seriesByName.get(item.name) ?? seriesByName.get(item.alias ?? '');
+        const isCompare =
+          (item as LegendSourceItem).isCompare === true ||
+          (!!seriesItem && (seriesItem.instance ?? '').startsWith('__CMP__'));
+        const stat = seriesItem?.stat;
+        const fmt = (v: number | undefined) =>
+          v != null ? truncFixed2(v * percentScale * valueScale) + unitSuffix : '';
+        return {
+          name: item.name,
+          alias: item.alias ?? item.name,
+          color: item.color,
+          show: item.show,
+          min: fmt(stat?.min?.[1] as number | undefined),
+          max: fmt(stat?.max?.[1] as number | undefined),
+          avg: fmt(stat?.avg?.[1] as number | undefined),
+          isCompare,
+        } as LegendRow;
+      });
 
     // 时间对比：对缺少数据的 offset 合成占位行
     if (props.compareOffsets?.length) {
-      // 用 formatOffsetLabel(offset) 做 label 匹配去重，避免 instance 名中 '-' 干扰
-      const existingLabels = new Set<string>();
-      for (const row of rows) {
-        if (!row.isCompare) continue;
-        for (const offset of props.compareOffsets) {
-          const label = formatOffsetLabel(offset);
-          if ((row.alias as string).startsWith(label + '-')) {
-            existingLabels.add(label);
-            break;
-          }
-        }
-      }
+      const existingNames = new Set(rows.map(row => row.alias));
       const synthesized: LegendRow[] = [];
       props.compareOffsets.forEach(offset => {
         const label = formatOffsetLabel(offset);
-        if (existingLabels.has(label)) return;
         const color = getColorByOffset(offset);
-        props.instances!.forEach(instance => {
+        props.instances.forEach(({ envName, instance }) => {
+          const name = getMonitorInstanceLabel({ envName, instance: `${label}-${instance}` }, showEnvName);
+          if (existingNames.has(name)) return;
           synthesized.push({
-            alias: `${label}-${instance}`,
-            name: `${label}-${instance}`,
+            alias: name,
+            name,
             color,
             show: true,
             min: '--',
@@ -395,13 +409,9 @@
   );
   /** 实例或汇聚周期变化时（即将发起新请求），先清空图例表格并显示 loading */
   watch(
-    () => [props.instances, props.interval],
+    [() => props.queryId, canQuery],
     () => {
-      if (!props.instances?.length) {
-        tableLoading.value = false;
-        return;
-      }
-      tableLoading.value = true;
+      tableLoading.value = canQuery.value;
       legendRows.value = [];
     },
     { immediate: true },
@@ -459,7 +469,8 @@
   /** ExploreChart 数据就绪（duration-change）后，从桥接缓存读取本指标时序回传父组件，以驱动表格聚合 */
   function onDurationChange() {
     syncLegendRows();
-    emits('metric-data', { metricKey: props.metricKey, data: getCachedMetric(props.metricKey) });
+    const data = getCachedMetric(props.metricKey, props.queryId, true);
+    if (data) emits('metric-data', { metricKey: props.metricKey, data, queryId: props.queryId });
   }
 
   /** 点击图例项（颜色圆点+名称），对齐 CommonLegend 的 selectLegend 事件：
@@ -486,9 +497,9 @@
   /* 图例表格中的颜色标识（与包内 CommonLegend 圆点风格一致） */
   .legend-color-dot {
     display: inline-block;
+    flex-shrink: 0;
     width: 12px;
     height: 4px;
     border-radius: 2px;
-    flex-shrink: 0;
   }
 </style>

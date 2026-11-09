@@ -216,15 +216,17 @@ func (g *DeployStateGetter) getBatchReleaseState(ctx context.Context) (*DeploySt
 	}
 
 	progress := &BatchProgress{
-		CurrentBatchIndex: status.CurrentStepIndex,
-		BatchPhase:        status.BatchPhase(snapshot),
-		RolloutPhase:      status.Phase,
-		Message:           status.ProgressMessage(),
-		PauseStartTime:    status.PauseStartTime,
-		UpdatedReplicas:   int32(snapshot.UpdatedReplicas), //nolint:gosec // G115: 副本数不会超过 int32
-		Replicas:          int32(snapshot.DesiredReplicas), //nolint:gosec // G115: 副本数不会超过 int32
-		OldImageTag:       g.oldImageTag,
-		NewImageTag:       g.imageTag,
+		CurrentBatchIndex:       status.CurrentStepIndex,
+		BatchPhase:              status.BatchPhase(snapshot),
+		RolloutPhase:            status.Phase,
+		Message:                 status.ProgressMessage(),
+		PauseStartTime:          status.PauseStartTime,
+		UpdatedReplicas:         int32(snapshot.UpdatedReplicas), //nolint:gosec // G115: 副本数不会超过 int32
+		Replicas:                int32(snapshot.DesiredReplicas), //nolint:gosec // G115: 副本数不会超过 int32
+		OldImageTag:             g.oldImageTag,
+		NewImageTag:             g.imageTag,
+		WorkloadUpdateRevision:  snapshot.UpdateRevision,
+		WorkloadCurrentRevision: snapshot.CurrentRevision,
 	}
 	state := &DeployState{Status: StatusDeploying, Message: progress.Message, BatchProgress: progress}
 	switch {

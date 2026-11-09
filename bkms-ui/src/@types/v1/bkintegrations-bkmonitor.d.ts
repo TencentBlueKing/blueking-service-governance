@@ -14,7 +14,7 @@ export interface GetApmServiceNameRequest {
   envName: string;
 }
 
-export interface GetInstanceTimeSeriesRequest {
+export interface RankInstancesRequest {
   /**
    * 应用 ID
    */
@@ -24,26 +24,41 @@ export interface GetInstanceTimeSeriesRequest {
    */
   envName: string;
   /**
-   * 实例名称列表
+   * 取前 N 个实例，1~50，默认 10
    */
-  instances: string[];
+  limit?: number;
   /**
-   * 指标标识
+   * 排名方向，默认 top
    */
-  metricKey: string;
+  rankType?: "top" | "bottom";
   /**
-   * 开始时间（Unix 时间戳）
+   * 排名时间范围的开始时间（Unix 时间戳，秒）
    */
   startTime: number;
   /**
-   * 结束时间（Unix 时间戳）
+   * 排名时间范围的结束时间（Unix 时间戳，秒）
    */
   endTime: number;
   /**
-   * 汇聚周期（秒），默认 60
+   * 子查询步长（秒），最小 60，默认 60
    */
   interval?: number;
+  /**
+   * 汇聚方法，默认 sum
+   */
+  method?: "sum" | "max" | "min" | "count" | "avg";
 }
+
+export type GetInstanceTimeSeriesRequest = GetInstanceTimeSeriesQueryInput & {
+  /**
+   * 应用 ID
+   */
+  appID: string;
+  /**
+   * 环境名称
+   */
+  envName: string;
+};
 
 export interface GetEnvApmRequest {
   /**
@@ -375,6 +390,47 @@ export interface DeleteUserGroupRequest {
 
 export interface GetApmServiceNameResp {
   data?: GetApmServiceNameOutput;
+}
+
+export interface RankInstancesResp {
+  data?: InstanceRankOutput[];
+}
+
+export interface GetInstanceTimeSeriesQueryInput {
+  /**
+   * EndTime 结束时间（Unix 时间戳，秒）
+   */
+  endTime: number;
+  /**
+   * Instances 实例（Pod）名称列表，过滤空白后需有 1~50 个；不校验实例是否属于该环境
+   */
+  instances?: string[];
+  /**
+   * Interval 汇聚周期（秒），最小为 60 秒
+   */
+  interval?: number;
+  /**
+   * Method 汇聚方法，同一 Pod 内多个容器的数据如何合并，默认 sum；
+   * 使用率类指标的分子与分母使用同一方法（count 时比值恒为 1）
+   */
+  method?: "sum" | "max" | "min" | "count" | "avg";
+  /**
+   * MetricKey 指定要查询的指标标识，可用值：
+   * - cpu_usage: CPU 使用量（核数）
+   * - cpu_request_usage: CPU Request 使用率
+   * - cpu_limit_usage: CPU Limit 使用率
+   * - memory_usage: 内存使用量（Working Set）
+   * - memory_request_usage: 内存 Request 使用率
+   * - memory_limit_usage: 内存 Limit 使用率
+   * - network_receive: 网络入带宽
+   * - network_transmit: 网络出带宽
+   * - disk_usage: 磁盘使用量
+   */
+  metricKey: string;
+  /**
+   * StartTime 开始时间（Unix 时间戳，秒）
+   */
+  startTime: number;
 }
 
 export interface InstanceTimeSeriesResp {
@@ -989,6 +1045,17 @@ export interface TimeSeriesItemStat {
    * Sum 数据点求和
    */
   sum?: number[];
+}
+
+export interface InstanceRankOutput {
+  /**
+   * Instance 实例（Pod）名称
+   */
+  instance?: string;
+  /**
+   * Value 时间范围内的平均 CPU 使用量（核数）
+   */
+  value?: number;
 }
 
 export interface GetApmServiceNameOutput {

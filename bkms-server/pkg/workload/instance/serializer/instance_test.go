@@ -169,6 +169,7 @@ var _ = Describe("Instance serializer", func() {
 				"metadata": map[string]any{
 					"name":              "pod-1",
 					"creationTimestamp": "2026-05-29T00:00:00Z",
+					"labels":            map[string]any{"controller-revision-hash": "demo-7b697647cb"},
 				},
 				"spec": map[string]any{
 					"containers": []any{
@@ -197,6 +198,7 @@ var _ = Describe("Instance serializer", func() {
 			Expect(output.IP).To(Equal("127.0.0.1"))
 			Expect(output.NodeIP).To(Equal("127.0.0.1"))
 			Expect(output.Image).To(Equal("example:v1"))
+			Expect(output.WorkloadRevision).To(Equal("demo-7b697647cb"))
 			Expect(output.RestartCount).To(Equal(int64(3)))
 			Expect(output.Status).To(Equal("Running"))
 			Expect(output.IsHealthy).To(BeTrue())

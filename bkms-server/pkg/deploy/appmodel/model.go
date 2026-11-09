@@ -188,6 +188,10 @@ type BatchProgress struct {
 	OldImageTag string `bson:"oldImageTag"`
 	// NewImageTag 新镜像标签
 	NewImageTag string `bson:"newImageTag"`
+	// WorkloadUpdateRevision 工作负载 status.updateRevision，新版本实例所在的版本；轮询任务读到工作负载前为空
+	WorkloadUpdateRevision string `bson:"workloadUpdateRevision,omitempty"`
+	// WorkloadCurrentRevision 工作负载 status.currentRevision，旧版本实例所在的版本；轮询任务读到工作负载前为空
+	WorkloadCurrentRevision string `bson:"workloadCurrentRevision,omitempty"`
 }
 
 // BuildAutoDeployInfo 表示构建阶段透传到部署记录中的构建信息快照。

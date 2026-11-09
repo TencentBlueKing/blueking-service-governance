@@ -48,6 +48,7 @@
     :env-name="monitorEnvName"
     :env-names="monitorEnvNames"
     :initial-selection="monitorSelection"
+    :instance-groups="monitorInstanceGroups"
   />
 </template>
 
@@ -61,6 +62,17 @@
   import InstanceLogSideslider from './actions/instance-log-sideslider.vue';
   import ManagementCommandSideslider from './actions/management-command-sideslider.vue';
   import WeightDialog from './actions/weight-dialog.vue';
+
+  import type { MonitorInstanceGroup } from '../types';
+
+  withDefaults(
+    defineProps<{
+      monitorInstanceGroups?: MonitorInstanceGroup[];
+    }>(),
+    {
+      monitorInstanceGroups: () => [],
+    },
+  );
 
   const weightVisible = ref(false);
   const weightEnvName = ref('');
