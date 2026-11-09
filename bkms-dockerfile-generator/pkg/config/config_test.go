@@ -53,6 +53,39 @@ var _ = Describe("Config load", func() {
 		Expect(cfg.ArtifactDir).To(Equal(" /dist "))
 	})
 
+	It("does not require builder image for python single-stage template", func() {
+		environ := append(validGeneratedEnviron("demo-api"),
+			EnvDockerfileLanguage+"=python",
+			EnvDockerfileBuilderImage+"=",
+		)
+
+		cfg, err := LoadFromEnviron(environ)
+
+		Expect(err).NotTo(HaveOccurred())
+		Expect(cfg.Language).To(Equal("python"))
+		Expect(cfg.BuilderImage).To(Equal(""))
+	})
+
+	It("still requires builder image for go", func() {
+		environ := append(validGeneratedEnviron("demo-api"), EnvDockerfileBuilderImage+"=")
+
+		_, err := LoadFromEnviron(environ)
+
+		Expect(err).To(MatchError("missing required environment variable " + EnvDockerfileBuilderImage))
+	})
+
+	It("still requires runner image for python", func() {
+		environ := append(validGeneratedEnviron("demo-api"),
+			EnvDockerfileLanguage+"=python",
+			EnvDockerfileBuilderImage+"=",
+			EnvDockerfileRunnerImage+"=",
+		)
+
+		_, err := LoadFromEnviron(environ)
+
+		Expect(err).To(MatchError("missing required environment variable " + EnvDockerfileRunnerImage))
+	})
+
 	It("returns error when generated config image name is unsafe", func() {
 		unsafeImageNames := []string{"demo/api", "demo:api", "demo api", ".", ".."}
 		for _, unsafeImageName := range unsafeImageNames {

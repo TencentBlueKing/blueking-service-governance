@@ -162,7 +162,8 @@ type PlatformBuildConfig struct {
 	ArtifactDir string `bson:"artifactDir,omitempty"`
 	// Commands 命令配置
 	Commands *BuildCommands `bson:"commands,omitempty"`
-	// ExtraFiles 相对构建目录的额外文件路径，runner 阶段从构建上下文 COPY 到 /app
+	// ExtraFiles 相对构建目录的额外文件路径。go / cpp 的 runner 阶段从构建上下文 COPY 到 /app；
+	// python 单阶段模板整体拷贝源码到产物目录，不再单独拷贝这些文件
 	ExtraFiles []string `bson:"extraFiles,omitempty"`
 }
 

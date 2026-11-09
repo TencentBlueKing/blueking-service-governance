@@ -139,25 +139,38 @@ var _ = Describe("Resolve", func() {
 			To(Equal(admincommand.ProtocolTAF))
 	})
 
+	It("supports platformBuild without builder image for trpc+python", func() {
+		set := mustResolve(appruntime.FrameworkTRPC, appruntime.LanguagePython)
+
+		props, err := set.PlatformBuild.Require()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(props.DockerfileLanguage).To(Equal(appruntime.LanguagePython))
+		Expect(props.RequiresBuilderImage).To(BeFalse())
+		// tRPC 放开 python 后，提前登记的 admin 布局随之生效
+		Expect(set.AdminCommand.Props.ConfigLayout).To(Equal(admincommand.TrpcLayoutNested))
+	})
+
+	It("requires builder image for trpc+go platformBuild", func() {
+		props, err := mustResolve(appruntime.FrameworkTRPC, appruntime.LanguageGo).PlatformBuild.Require()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(props.RequiresBuilderImage).To(BeTrue())
+	})
+
 	It("registers admin layouts for out-of-catalog languages while keeping them unreachable", func() {
-		Expect(admincommand.Spec.Resolve(appruntime.FrameworkTRPC, appruntime.LanguagePython).Props.ConfigLayout).
-			To(Equal(admincommand.TrpcLayoutNested))
 		Expect(admincommand.Spec.Resolve(appruntime.FrameworkTRPC, appruntime.LanguageNodeJS).Props.ConfigLayout).
 			To(Equal(admincommand.TrpcLayoutFlat))
 		Expect(admincommand.Spec.Resolve(appruntime.FrameworkTRPC, appruntime.LanguageJava).Props.ConfigLayout).
 			To(Equal(admincommand.TrpcLayoutNestedPrefixed))
 
-		// java 不在语言目录中；nodejs / python 只对 blank 开放，tRPC 组合不合法
+		// java 不在语言目录中；nodejs 只对 blank 开放，tRPC 组合不合法
 		_, err := mods.Resolve(appruntime.Stack{
 			Type: appruntime.AppTypeBKMSApp, Framework: appruntime.FrameworkTRPC, Language: appruntime.LanguageJava,
 		})
 		Expect(errors.Is(err, appruntime.ErrUnknownLanguage)).To(BeTrue())
-		for _, language := range []string{appruntime.LanguageNodeJS, appruntime.LanguagePython} {
-			_, err = mods.Resolve(appruntime.Stack{
-				Type: appruntime.AppTypeBKMSApp, Framework: appruntime.FrameworkTRPC, Language: language,
-			})
-			Expect(errors.Is(err, appruntime.ErrInvalidCombination)).To(BeTrue(), language)
-		}
+		_, err = mods.Resolve(appruntime.Stack{
+			Type: appruntime.AppTypeBKMSApp, Framework: appruntime.FrameworkTRPC, Language: appruntime.LanguageNodeJS,
+		})
+		Expect(errors.Is(err, appruntime.ErrInvalidCombination)).To(BeTrue())
 	})
 
 	DescribeTable("treats blank as a framework without framework capabilities",
@@ -320,7 +333,7 @@ var _ = Describe("Matrix", func() {
 			combinations = append(combinations, view.Framework+"+"+view.Language)
 		}
 		Expect(combinations).To(Equal([]string{
-			"blank+cpp", "blank+go", "blank+nodejs", "blank+python", "taf+cpp", "trpc+cpp", "trpc+go",
+			"blank+cpp", "blank+go", "blank+nodejs", "blank+python", "taf+cpp", "trpc+cpp", "trpc+go", "trpc+python",
 		}))
 	})
 

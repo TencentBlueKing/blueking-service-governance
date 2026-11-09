@@ -41,7 +41,7 @@ type CreateBKMSAppInput struct {
 	ID string `json:"id" binding:"required,app_id"`
 	// 框架：trpc、taf、blank，可选值见 /app-runtime-definitions
 	Framework string `json:"framework" binding:"required"`
-	// 语言：go、cpp、nodejs、python，须为框架支持的语言（nodejs、python 仅 blank 支持）
+	// 语言：go、cpp、nodejs、python，须为框架支持的语言（nodejs 仅 blank 支持，python 支持 blank 与 trpc）
 	Language string `json:"language" binding:"required"`
 	// 构建配置
 	BuildConfig *BuildConfigInput `json:"buildConfig" binding:"required"`

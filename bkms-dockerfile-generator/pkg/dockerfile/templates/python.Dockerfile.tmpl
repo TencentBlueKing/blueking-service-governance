@@ -1,0 +1,32 @@
+# -------------- runner container --------------
+# Python has no compiled artifact, so there is only one stage based on the runner image:
+# source code and dependencies are prepared directly in the artifact dir, which is also the working directory.
+FROM {{ .RunnerImage }} AS runner
+
+{{ range .DockerBuildArgNames -}}
+ARG {{ . }}
+{{ end -}}
+
+ENV BKMS_ARTIFACT_DIR={{ .ArtifactDir }}
+WORKDIR {{ .ArtifactDir }}
+
+# The whole build context is copied here, so extra files are not copied separately.
+COPY . .
+
+{{ range .PreBuildCommands -}}
+RUN {{ . }}
+{{ end -}}
+
+{{ range .BuildCommands -}}
+RUN {{ . }}
+{{ end -}}
+
+{{ range .RuntimeEnvCommands -}}
+RUN {{ . }}
+{{ end -}}
+
+RUN test -n "$(ls -A {{ .ArtifactDir }} 2>/dev/null)" || (echo "build output directory {{ .ArtifactDir }} is missing or empty" && exit 1)
+
+{{ if .StartCommand -}}
+ENTRYPOINT ["/bin/sh", "-ec", {{ quoteStartCommand .StartCommand }}]
+{{ end -}}
