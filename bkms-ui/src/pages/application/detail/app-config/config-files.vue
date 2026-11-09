@@ -589,7 +589,6 @@
     Tag,
   } from 'bkui-vue';
   import { RightShape } from 'bkui-vue/lib/icon';
-  import { languages } from 'monaco-editor';
   import { useI18n } from 'vue-i18n';
   import { onBeforeRouteLeave, onBeforeRouteUpdate } from 'vue-router';
   import { parse as parseYaml } from 'yaml';
@@ -612,6 +611,7 @@
     createMountDirRules,
     formatMountPathPreview,
     normalizeMountDir,
+    resolveEditorLang,
   } from '~/pages/application/detail/app-config/config-file-utils';
   import EnvPerspectiveSelect from '~/pages/application/detail/app-config/env-perspective-select.vue';
   import {
@@ -718,24 +718,13 @@
   const isIndependentConfig = computed(
     () => !(detail.value?.isUnifiedConfig ?? activeDef.value?.isUnifiedConfig ?? true),
   );
-  // 框架文件使用运行时声明的格式，普通文件按已注册语言的最长后缀匹配。
+  // 框架文件使用运行时声明的格式，普通文件按文件名解析高亮语言。
   const editorLang = computed(() => {
     if (isFrameworkFile.value) {
       const format = getFrameworkFileFormat(appDetailStore.runtime);
       return format === 'taf' ? 'xml' : format || 'plaintext';
     }
-    const fileName = (activeDef.value?.name || '').toLowerCase();
-    let language = 'plaintext';
-    let extensionLength = 0;
-    for (const { id, extensions = [] } of languages.getLanguages()) {
-      for (const extension of extensions) {
-        if (extension.length > extensionLength && fileName.endsWith(extension.toLowerCase())) {
-          language = id;
-          extensionLength = extension.length;
-        }
-      }
-    }
-    return language;
+    return resolveEditorLang(activeDef.value?.name || '');
   });
   // 框架文件和普通文件的名称、目录均以 def 为准。
   const activeDisplayName = computed(() => activeDef.value?.name || '');

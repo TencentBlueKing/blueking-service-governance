@@ -404,11 +404,21 @@ describe('配置文件格式识别与校验', () => {
   });
 
   it.each([
-    ['taf', 'xml'],
-    ['trpc', 'yaml'],
-  ])('%s 框架文件继续使用原有语言', async (appType, language) => {
+    ['taf', 'default', 'xml'],
+    ['trpc', 'app.json', 'yaml'],
+  ])('%s 框架文件（%s）无可识别后缀时按运行时格式使用 %s 语言', async (appType, name, language) => {
     mocks.appType = appType;
-    savedFile.name = 'app.json';
+    savedFile.name = name;
+    const view = await openEditor();
+    expect(view.getComponent({ name: 'MsEditor' }).props('lang')).toBe(language);
+  });
+
+  it.each([
+    ['trpc.go.yaml', 'yaml'],
+    ['taf.default.xml', 'xml'],
+  ])('taf 框架文件 %s 后缀可识别时使用 %s 高亮', async (name, language) => {
+    mocks.appType = 'taf';
+    savedFile.name = name;
     const view = await openEditor();
     expect(view.getComponent({ name: 'MsEditor' }).props('lang')).toBe(language);
   });
