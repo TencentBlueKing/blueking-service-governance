@@ -18,7 +18,7 @@
 /**
  * 场景级测试：部署管理 - 实例列表分批发布控制横幅（ROUTES 未收录，本头即场景说明）
  *
- * V = 10
+ * V = 11
  * 判定节点：① 最新记录是否为分批发布（决定是否请求进度与渲染横幅）
  *           ② deploying 展示控制横幅；deployed 展示成功 Alert；failed 展示失败 + 回退/回滚；
  *              rolled-back 展示已回滚提示；卸载/取消等不展示
@@ -34,21 +34,31 @@
  *           ⑫ 点击横幅「查看发布进度」隐藏横幅并切换为灰度发布进度视图（独立组件，互斥渲染）
  *           ⑬ 进度视图内操作按钮全部平铺（无「更多」），复用横幅同一操作链路
  *           ⑭ 进度视图点「返回实例列表」复原回横幅态
+ *           ⑮ 骨架占位仅在「loading 且无进度快照」时展示：环境切换收旧横幅进骨架态；
+ *              关闭后的完成态横幅在轮询补查期间不得闪出骨架
+ *           ⑯ 终态关闭记忆按「应用+环境+部署记录」多条累加：多环境各自关闭互不覆盖，
+ *              且只落 sessionStorage（重开浏览器后横幅恢复、不长期隐藏）
  * 路径：① 更新中→横幅 + 部署禁用 ② 暂停 ③ 回滚确认/取消 ④ 暂停态回退 + 跳过
  *       ⑤ 定时暂停继续发布 ⑥ 批次序号未回填仍展示按钮 ⑦ 已完成→成功 Alert + 关闭记忆
  *       ⑧ 失败→回退上一批 ⑨ 已回滚→提示 + 部署可用 ⑩ 非分批发布不请求 ⑪ 操作失败保留状态
  *       ⑫ 请求挂起→按钮置灰且不重发→返回后恢复 ⑬ 未部署环境不请求进度
  *       ⑭ 查看发布进度→横幅隐藏 + 面板呈现 ⑮ 面板平铺按钮复用确认链路 ⑯ 返回实例列表
+ *       ⑰ 切换环境→旧横幅收起 + 骨架占位→新环境进度返回后展示新横幅 ⑱ 关闭后轮询补查→骨架不出现
+ *       ⑲ 两个环境分别关闭→切回已关闭环境仍隐藏 + 记忆落 sessionStorage（localStorage 无残留）
+ * 变异验证：M1 环境切换不重置快照（deploy.vue watch 注销）→ ⑰ 红；M2 showSkeleton 退化为只看
+ *           loading → ⑱ 红；M3 resetForSwitch 保留旧进度快照 → ⑰ 红；M4 关闭记忆回到「单值覆盖 +
+ *           localStorage」旧实现 → ⑲ 红；逐轮还原后 21/21 全绿。
  * stub/mock：DeployService（进度/操作）、Message/InfoBox 命令式 API、Dropdown 只渲染插槽、
  *            InstanceList / 部署总览 / 部署历史等非验证目标子组件、EnvSelectPanel 仅 emit envList、
  *            CanaryInstanceTable 仅验证面板接线（灰度筛选口径由 resolveInstanceCanaryState 纯函数单测覆盖）。
  */
+import { h } from 'vue';
+import type { SetupContext } from 'vue';
+
 import userEvent from '@testing-library/user-event';
 import { render, screen, waitFor, within } from '@testing-library/vue';
 import { createPinia, setActivePinia } from 'pinia';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { defineComponent, h } from 'vue';
-import type { VNode } from 'vue';
 import DeployPage from '~/pages/application/detail/deploy/deploy.vue';
 import { useAppDetail } from '~/stores/app-detail';
 import { useTrpcDeployStore } from '~/stores/trpc-deploy';
@@ -211,14 +221,13 @@ vi.mock('~/pages/application/detail/components/view-build-log/index.vue', () => 
 
 const FlexRowStub = { template: '<div><slot name="left" /><slot name="right" /></div>' };
 
-/** 递归提取 vnode 的纯文本（数字/版本号等插值内容），供 i18n-t stub 拼接。 */
-function vnodeText(node: VNode | string): string {
+/** 递归收集节点纯文本（数字/版本号等插值内容），供 i18n-t stub 拼接。 */
+function collectText(node: unknown): string {
   if (typeof node === 'string') return node;
-  const children = node.children;
+  if (typeof node === 'number') return String(node);
+  const children = (node as null | { children?: unknown })?.children;
   if (typeof children === 'string') return children;
-  if (Array.isArray(children)) {
-    return children.map(child => vnodeText(child as VNode | string)).join('');
-  }
+  if (Array.isArray(children)) return children.map(collectText).join('');
   return '';
 }
 
@@ -226,30 +235,36 @@ function vnodeText(node: VNode | string): string {
  * i18n-t stub（本文件专用）：把 keypath 的 {0}/{1} 占位符替换为默认插槽子节点的纯文本，
  * 使「共 3 批」「已更新 8/20 个实例」这类插值文案可被 getByText 直接命中
  * （共享 I18nTStub 只直译 keypath）。命名插槽（如横幅的 #index/#version）非断言目标，忽略。
+ *
+ * 用普通对象而非 defineComponent 声明：测试文件里已有多个 mock 组件，
+ * 再调用 defineComponent 会触发 vue/one-component-per-file，普通对象同样支持 setup 返回渲染函数。
  */
-const I18nTInterp = defineComponent({
-  name: 'I18nTInterp',
+const I18nTWithSlots = {
+  name: 'batchReleaseI18nT',
   props: {
     keypath: { type: String, default: '' },
     tag: { type: String, default: 'span' },
   },
-  setup(props, { slots }) {
+  setup(props: { keypath: string; tag: string }, { slots }: SetupContext) {
     return () => {
       const children = slots.default?.() ?? [];
       let text = props.keypath;
       for (let i = children.length - 1; i >= 0; i -= 1) {
-        text = text.replace(new RegExp(`\\{${i}\\}`), vnodeText(children[i]));
+        text = text.replace(new RegExp(`\\{${i}\\}`), collectText(children[i]));
       }
-      return h(props.tag, text);
+      return h(props.tag || 'span', text);
     };
   },
-});
+};
 
 // 接口契约里 currentBatchIndex 在批次序号未回填时为 null（d.ts 仅标注 number），测试按真实取值放宽
-function buildProgress(
-  overrides: Partial<BatchReleaseProgressOutputObj> & { currentBatchIndex?: null | number } = {},
-): BatchReleaseProgressOutputObj {
-  return {
+type ProgressOverrides = Partial<Omit<BatchReleaseProgressOutputObj, 'currentBatchIndex'>> & {
+  currentBatchIndex?: null | number;
+};
+
+function buildProgress(overrides: ProgressOverrides = {}): BatchReleaseProgressOutputObj {
+  const { currentBatchIndex, ...rest } = overrides;
+  const progress: BatchReleaseProgressOutputObj = {
     batchPhase: 'updating',
     batches: [
       { target: '1', pauseMode: 'permanent' },
@@ -264,8 +279,12 @@ function buildProgress(
     replicas: 20,
     status: 'deploying',
     updatedReplicas: 8,
-    ...overrides,
+    ...rest,
   };
+  // 未显式传入时保留上面的默认批次序号；null（未回填）归一到 undefined，与 d.ts 的 number 契约对齐，
+  // 组件本身也只用 typeof number / === -1 判定，两者行为一致。
+  if (currentBatchIndex !== undefined) progress.currentBatchIndex = currentBatchIndex ?? undefined;
+  return progress;
 }
 
 /** 横幅内按钮文案（按 DOM 顺序），用于校验「主操作 → 更多 → 回滚」的排布；无按钮时返回空数组。 */
@@ -289,7 +308,7 @@ function mountPage() {
   return render(DeployPage, {
     global: {
       mocks: i18nGlobalMocks,
-      components: { 'i18n-t': I18nTInterp },
+      components: { 'i18n-t': I18nTWithSlots },
       stubs: {
         ColorIcon: true,
         FlexRow: FlexRowStub,
@@ -305,6 +324,7 @@ function mountPage() {
 beforeEach(() => {
   vi.clearAllMocks();
   window.localStorage.clear();
+  window.sessionStorage.clear();
   setActivePinia(createPinia());
   const appStore = useAppDetail();
   appStore.updateAppID('app-a');
@@ -446,6 +466,7 @@ describe('实例列表分批发布控制：横幅与操作', () => {
     mocks.progress.mockResolvedValue(
       buildProgress({
         batchPhase: 'updating',
+        // 接口在批次序号未回填时返回 null，d.ts 未覆盖该取值（由 ProgressOverrides 放宽）
         currentBatchIndex: null,
         message: 'All steps are completed, updating primary workload',
       }),
@@ -462,6 +483,7 @@ describe('实例列表分批发布控制：横幅与操作', () => {
   });
 
   it('当本批尚未开始（pending）时，应展示暂停与回滚，更多里没有回退上一批', async () => {
+    // 同上：本批尚未开始时 currentBatchIndex 仍未回填（null）
     mocks.progress.mockResolvedValue(buildProgress({ batchPhase: 'pending', currentBatchIndex: null }));
     mountPage();
     const banner = await findBanner();
@@ -504,6 +526,116 @@ describe('实例列表分批发布控制：横幅与操作', () => {
     mountPage();
     await waitFor(() => expect(mocks.progress).toHaveBeenCalledTimes(2));
     expect(screen.queryByTestId('batch-release-banner')).toBeNull();
+  });
+
+  it('当在多个环境分别关闭完成态横幅后，切回已关闭的环境仍保持关闭，且记忆只存在 sessionStorage', async () => {
+    const envB = { ...mocks.env, name: 'prod-b' };
+    // 每个环境各自一条完成态的分批发布记录
+    mocks.progress.mockImplementation((params: { envName: string }) =>
+      Promise.resolve(
+        buildProgress({
+          batchPhase: 'completed',
+          deployID: params.envName === 'prod-b' ? 'deploy-b' : 'deploy-1',
+          status: 'deployed',
+        }),
+      ),
+    );
+    // 完成后 inProgressReleaseMode 已清空，仅靠 releaseMode=canary 补查一次以拿到完成态结果。
+    mocks.latest.mockResolvedValue({
+      deployID: 'deploy-1',
+      inProgressReleaseMode: '',
+      releaseMode: 'canary',
+      stage: 'deploy',
+      status: 'deployed',
+    });
+    const progressCallsFor = (envName: string) =>
+      mocks.progress.mock.calls.filter(([params]) => (params as { envName: string }).envName === envName).length;
+
+    mountPage();
+
+    // 环境 A 关闭完成态横幅
+    const bannerA = await findBanner();
+    expect(bannerA).toHaveAttribute('data-kind', 'completed');
+    await userEvent.click(bannerA.querySelector('.bk-alert-close') as HTMLElement);
+    await waitFor(() => expect(screen.queryByTestId('batch-release-banner')).toBeNull());
+
+    // 切到环境 B：新横幅正常展示，关闭它
+    useTrpcDeployStore().updateCurEnvItem(envB as never);
+    const bannerB = await findBanner();
+    expect(bannerB).toHaveAttribute('data-kind', 'completed');
+    await userEvent.click(bannerB.querySelector('.bk-alert-close') as HTMLElement);
+    await waitFor(() => expect(screen.queryByTestId('batch-release-banner')).toBeNull());
+
+    // 切回环境 A：记忆必须按环境各自保留，不能因为环境 B 的关闭被冲掉
+    useTrpcDeployStore().updateCurEnvItem(mocks.env as never);
+    await waitFor(() => expect(progressCallsFor('prod')).toBeGreaterThanOrEqual(2));
+    await waitFor(() => expect(screen.queryByTestId('batch-release-skeleton')).toBeNull());
+    expect(screen.queryByTestId('batch-release-banner')).toBeNull();
+
+    // 关闭记忆落在 sessionStorage（重开浏览器即清空、横幅重新出现），不再写 localStorage 长期隐藏
+    const sessionValue = window.sessionStorage.getItem('batch-release-dismissed') ?? '';
+    expect(sessionValue).toContain('app-a:prod:deploy-1');
+    expect(sessionValue).toContain('app-a:prod-b:deploy-b');
+    expect(window.localStorage.getItem('batch-release-dismissed')).toBeNull();
+    expect(window.localStorage.getItem('global_batch-release-dismissed')).toBeNull();
+  });
+
+  it('当切换环境重新加载横幅时，应先展示骨架占位而不是直接替换旧横幅', async () => {
+    const envB = { ...mocks.env, name: 'prod-b' };
+    // 第二次进度请求（新环境）挂起，保证骨架窗口可观测
+    let releaseB: (value?: BatchReleaseProgressOutputObj) => void = () => {};
+    mocks.progress.mockResolvedValueOnce(buildProgress()).mockImplementationOnce(
+      () =>
+        new Promise(resolve => {
+          releaseB = resolve;
+        }),
+    );
+    mountPage();
+    const bannerA = await findBanner();
+    expect(bannerA).toHaveAttribute('data-kind', 'updating');
+
+    // 切换环境：旧环境的横幅立刻收起，进入骨架等待态
+    useTrpcDeployStore().updateCurEnvItem(envB as never);
+    await waitFor(() => expect(screen.queryByTestId('batch-release-banner')).toBeNull());
+    expect(await screen.findByTestId('batch-release-skeleton')).toBeInTheDocument();
+
+    // 新环境进度返回：骨架收起，展示新环境的横幅（manual-paused）
+    releaseB(buildProgress({ currentBatchIndex: 1, batchPhase: 'manual-paused' }));
+    const bannerB = await findBanner();
+    expect(bannerB).toHaveAttribute('data-kind', 'paused');
+    expect(screen.queryByTestId('batch-release-skeleton')).toBeNull();
+  });
+
+  it('完成态横幅关闭后，即使轮询仍在补查进度也不应闪出骨架屏', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      mocks.progress
+        .mockResolvedValueOnce(buildProgress({ batchPhase: 'completed', status: 'deployed' }))
+        // 完成后 inProgressReleaseMode 仍为 canary 时每轮轮询都会补查；让补查挂起，
+        // 若骨架条件只看 loading，骨架会一直挂在页面上（回归信号稳定可断言）。
+        .mockImplementationOnce(() => new Promise(() => {}));
+      mocks.latest.mockResolvedValue({
+        deployID: 'deploy-1',
+        inProgressReleaseMode: 'canary',
+        releaseMode: 'canary',
+        stage: 'deploy',
+        status: 'deployed',
+      });
+      mountPage();
+      const banner = await findBanner();
+      expect(banner).toHaveAttribute('data-kind', 'completed');
+
+      await userEvent.click(banner.querySelector('.bk-alert-close') as HTMLElement);
+      await waitFor(() => expect(screen.queryByTestId('batch-release-banner')).toBeNull());
+
+      // 推进一个轮询周期：补查已发起（完成信号），但骨架不得出现，横幅保持关闭
+      await vi.advanceTimersByTimeAsync(5000);
+      await waitFor(() => expect(mocks.progress).toHaveBeenCalledTimes(2));
+      expect(screen.queryByTestId('batch-release-skeleton')).toBeNull();
+      expect(screen.queryByTestId('batch-release-banner')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('当分批发布失败时，应展示失败原因并提供回退上一批与回滚入口（无重试）', async () => {

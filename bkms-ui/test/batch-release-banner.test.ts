@@ -25,10 +25,12 @@
  *   4. 进度补查门控：非分批发布不查、同一 deployID 终态不重复查、新部署重新查
  *   5. 灰度发布进度视图的批次步骤视图模型（buildBatchReleaseSteps）
  *   6. 实例灰度归属判定（resolveInstanceCanaryState，与进度视图灰度列表筛选同口径）
+ *   7. 终态关闭记忆是「多条记录」：多个环境各自关闭互不覆盖，追加时去重并限制条数
  */
 import { describe, expect, it } from 'vitest';
 import {
   type BatchReleaseBannerView,
+  appendBatchReleaseDismissKey,
   buildBatchReleaseDismissKey,
   buildBatchReleaseSteps,
   hasCanaryDeployRecord,
@@ -282,27 +284,61 @@ describe('终态关闭记忆', () => {
   });
 
   it('已完成与已回滚都参与关闭记忆', () => {
-    expect(isBatchReleaseBannerDismissed(completed, key, key)).toBe(true);
-    expect(isBatchReleaseBannerDismissed(rolledBack, key, key)).toBe(true);
+    expect(isBatchReleaseBannerDismissed(completed, key, [key])).toBe(true);
+    expect(isBatchReleaseBannerDismissed(rolledBack, key, [key])).toBe(true);
   });
 
   it('命中同一发布记录时隐藏，新 deployID 重新出现', () => {
-    expect(isBatchReleaseBannerDismissed(completed, key, 'app-1:stag:deploy-2')).toBe(false);
+    expect(isBatchReleaseBannerDismissed(completed, key, ['app-1:stag:deploy-2'])).toBe(false);
     expect(
       isBatchReleaseBannerDismissed(
         resolveBatchReleaseBanner(buildProgress({ deployID: 'deploy-2', status: 'deployed' })),
         buildBatchReleaseDismissKey('app-1', 'stag', 'deploy-2'),
-        key,
+        [key],
       ),
     ).toBe(false);
   });
 
+  it('多个环境的关闭记忆同时生效，互不覆盖', () => {
+    const keyStag = buildBatchReleaseDismissKey('app-1', 'stag', 'deploy-1');
+    const keyProd = buildBatchReleaseDismissKey('app-1', 'prod', 'deploy-9');
+    const dismissed = [keyStag, keyProd];
+
+    expect(isBatchReleaseBannerDismissed(completed, keyStag, dismissed)).toBe(true);
+    expect(isBatchReleaseBannerDismissed(completed, keyProd, dismissed)).toBe(true);
+    // 未关闭过的环境照常展示
+    const keyTest = buildBatchReleaseDismissKey('app-1', 'test', 'deploy-1');
+    expect(isBatchReleaseBannerDismissed(completed, keyTest, dismissed)).toBe(false);
+  });
+
   it('进行中 / 失败态不参与关闭记忆', () => {
-    expect(isBatchReleaseBannerDismissed(resolveBatchReleaseBanner(buildProgress()), key, key)).toBe(false);
+    expect(isBatchReleaseBannerDismissed(resolveBatchReleaseBanner(buildProgress()), key, [key])).toBe(false);
     expect(
-      isBatchReleaseBannerDismissed(resolveBatchReleaseBanner(buildProgress({ status: 'failed' })), key, key),
+      isBatchReleaseBannerDismissed(resolveBatchReleaseBanner(buildProgress({ status: 'failed' })), key, [key]),
     ).toBe(false);
-    expect(isBatchReleaseBannerDismissed(null, key, key)).toBe(false);
+    expect(isBatchReleaseBannerDismissed(null, key, [key])).toBe(false);
+    // 空 key（进度尚未返回）不得命中任何记录
+    expect(isBatchReleaseBannerDismissed(completed, '', [''])).toBe(false);
+  });
+
+  it('追加关闭记忆时保留其它环境记录、去重后置末，并限制最大条数', () => {
+    const keyA = buildBatchReleaseDismissKey('app-1', 'stag', 'deploy-1');
+    const keyB = buildBatchReleaseDismissKey('app-1', 'prod', 'deploy-2');
+
+    expect(appendBatchReleaseDismissKey([], keyA)).toEqual([keyA]);
+    // 在环境 B 关闭不能冲掉环境 A 的记录
+    expect(appendBatchReleaseDismissKey([keyA], keyB)).toEqual([keyA, keyB]);
+    // 重复关闭同一记录只保留一条（且移到末尾）
+    expect(appendBatchReleaseDismissKey([keyA, keyB], keyA)).toEqual([keyB, keyA]);
+    // 空 key 不写入
+    expect(appendBatchReleaseDismissKey([keyA], '')).toEqual([keyA]);
+
+    // 超过上限时丢弃最旧记录，新记录必定保留
+    const many = Array.from({ length: 50 }, (_, index) => `app-1:stag:deploy-${index}`);
+    const appended = appendBatchReleaseDismissKey(many, 'app-1:stag:deploy-new');
+    expect(appended).toHaveLength(50);
+    expect(appended[0]).toBe('app-1:stag:deploy-1');
+    expect(appended.at(-1)).toBe('app-1:stag:deploy-new');
   });
 });
 
@@ -335,10 +371,7 @@ describe('进度补查门控', () => {
     ['deployed', 'failed', 'rolled-back'].forEach(status => {
       // 真实数据：分批发布结束后后端会清空 inProgressReleaseMode。
       expect(
-        shouldFetchBatchReleaseProgress(
-          buildLatest({ status, inProgressReleaseMode: '' }),
-          buildProgress({ status }),
-        ),
+        shouldFetchBatchReleaseProgress(buildLatest({ status, inProgressReleaseMode: '' }), buildProgress({ status })),
       ).toBe(false);
     });
   });
