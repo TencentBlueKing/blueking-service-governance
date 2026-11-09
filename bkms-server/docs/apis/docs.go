@@ -23266,6 +23266,10 @@ const docTemplate = `{
                 "status": {
                     "description": "状态，由 pod.status.phase 等解析获得",
                     "type": "string"
+                },
+                "workloadRevision": {
+                    "description": "实例所属的工作负载版本（Pod 的 controller-revision-hash 标签）",
+                    "type": "string"
                 }
             }
         },
@@ -24409,6 +24413,14 @@ const docTemplate = `{
                 "updatedReplicas": {
                     "description": "已更新为新版本的实例数",
                     "type": "integer"
+                },
+                "workloadCurrentRevision": {
+                    "description": "旧版本：工作负载 status.currentRevision；轮询任务读到工作负载前为空",
+                    "type": "string"
+                },
+                "workloadUpdateRevision": {
+                    "description": "新版本：工作负载 status.updateRevision，实例 workloadRevision 与之相等即为新版本实例；轮询任务读到工作负载前为空",
+                    "type": "string"
                 }
             }
         },
