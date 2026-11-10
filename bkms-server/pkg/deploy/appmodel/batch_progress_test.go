@@ -49,14 +49,17 @@ const (
 	fakeDeployID    = "6560f1a2b3c4d5e6f7a8b9c0"
 )
 
-// fakeGameDeployWithStatus 生成带 status 的 GameDeployment，4 副本均就绪，其中 updated 个为新版本
+// fakeGameDeployWithStatus 生成属于部署 fakeDeployID、带 status 的 GameDeployment，4 副本均就绪，其中 updated 个为新版本
 func fakeGameDeployWithStatus(updated int64) map[string]any {
 	currentRevision := lo.Ternary(updated == 4, fakeNewRevision, fakeOldRevision)
 	return map[string]any{
 		"apiVersion": "tkex.tencent.com/v1alpha1",
 		"kind":       "GameDeployment",
-		"metadata":   map[string]any{"name": "demo", "namespace": "demo-ns", "generation": 3},
-		"spec":       map[string]any{"replicas": 4, "updateStrategy": map[string]any{"partition": 4 - updated}},
+		"metadata": map[string]any{
+			"name": "demo", "namespace": "demo-ns", "generation": 3,
+			"annotations": map[string]any{AnnotationKeyDeployID: fakeDeployID},
+		},
+		"spec": map[string]any{"replicas": 4, "updateStrategy": map[string]any{"partition": 4 - updated}},
 		"status": map[string]any{
 			"observedGeneration":   3,
 			"updateRevision":       fakeNewRevision,
@@ -273,6 +276,23 @@ var _ = Describe("DeployStateGetter for batch release", func() {
 		Entry("previous deploy", bson.NewObjectID().Hex()),
 		Entry("no deploy id", ""),
 	)
+
+	It("rejects the finished round before the workload is updated by the deploy record", func() {
+		// 新 Rollout 已下发，主工作负载仍是上一次部署、已全部更新就绪，不校验工作负载会判为已完成
+		gameDeploy := fakeGameDeployWithStatus(4)
+		gameDeploy["metadata"].(map[string]any)["annotations"] = map[string]any{
+			AnnotationKeyDeployID: bson.NewObjectID().Hex(),
+		}
+		fake.gameDeploys["demo"] = gameDeploy
+		fake.rollouts["demo"] = fakeRolloutWithStatus(map[string]any{
+			"phase": "Healthy", "paused": "false", "workloadRevision": fakeNewRevision, "stepStatus": map[string]any{},
+		})
+
+		_, err := NewDeployStateGetter(record).Get(ctx)
+		Expect(err).To(MatchError(batchrelease.ErrReleaseSwitching))
+		_, err = GetLiveBatchReleaseState(ctx, record)
+		Expect(err).To(MatchError(batchrelease.ErrReleaseSwitching))
+	})
 
 	It("reads the live progress from the rollout owned by the deploy record", func() {
 		fake.gameDeploys["demo"] = fakeGameDeployWithStatus(1)

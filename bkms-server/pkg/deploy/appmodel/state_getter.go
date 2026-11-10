@@ -78,12 +78,10 @@ func NewDeployStateGetter(record *Record) *DeployStateGetter {
 		releaseMode:  record.GetReleaseMode(),
 		imageTag:     record.ImageTag,
 		deployID:     record.ID.Hex(),
+		batchCount:   record.BatchCount(),
 	}
 	if record.BatchProgress != nil {
 		getter.oldImageTag = record.BatchProgress.OldImageTag
-	}
-	if record.ReleaseStrategy != nil {
-		getter.batchCount = len(record.ReleaseStrategy.Batches)
 	}
 	return getter
 }
@@ -205,8 +203,8 @@ func (g *DeployStateGetter) getWorkloadHealth(ctx context.Context) (*k8sstatus.R
 
 // getBatchReleaseState 读取与主工作负载（GameDeployment）同名的 Rollout，得到分批发布的状态与进度：
 // 回滚完成为已回滚，批次状态为已完成时为已部署，其余仍为部署中。
-// 主工作负载不存在视为部署失败；读取 Rollout 失败（含被删除）返回错误，由上层保留上一次进度并重试。
-// Rollout 的部署 ID 注解不等于该记录时返回 ErrReleaseSwitching
+// 主工作负载不存在视为部署失败；读取 Rollout 失败（含被删除）返回错误，由上层保留上一次进度并重试；
+// 主工作负载或 Rollout 不属于该记录时返回 ErrReleaseSwitching。
 func (g *DeployStateGetter) getBatchReleaseState(ctx context.Context) (*DeployState, error) {
 	kind, name := g.getMainWorkload()
 	if kind != k8skind.GameDeploy || name == "" {
@@ -221,23 +219,18 @@ func (g *DeployStateGetter) getBatchReleaseState(ctx context.Context) (*DeploySt
 	if err != nil {
 		return nil, errors.Wrapf(err, "get %s %s", kind, name)
 	}
+	// 再次部署时先下发新 Rollout、再更新主工作负载。这期间 Rollout 已属于该记录，状态仍是上一轮结束后的 Healthy，
+	// 工作负载也仍是上一次部署、实例全部就绪，不校验工作负载会把刚开始的发布判为已完成
+	if err = verifyDeployOwner(workload, g.deployID); err != nil {
+		return nil, err
+	}
 	snapshot, err := batchrelease.ParseWorkloadSnapshot(workload.Object)
 	if err != nil {
 		return nil, errors.Wrapf(err, "%s %s", kind, name)
 	}
-	rollout, err := batchrelease.NewRolloutClient(clusterCfg).Get(ctx, g.namespace, name)
+	_, status, err := getOwnedRollout(ctx, batchrelease.NewRolloutClient(clusterCfg), g.namespace, name, g.deployID)
 	if err != nil {
-		return nil, errors.Wrap(err, "get rollout")
-	}
-	if deployID := rollout.GetAnnotations()[AnnotationKeyDeployID]; deployID != g.deployID {
-		return nil, errors.Wrapf(
-			batchrelease.ErrReleaseSwitching, "rollout %s/%s belongs to deploy %q rather than deploy record %s",
-			g.namespace, name, deployID, g.deployID,
-		)
-	}
-	status, err := batchrelease.ParseStatus(rollout.Object)
-	if err != nil {
-		return nil, errors.Wrapf(err, "rollout %s/%s", g.namespace, name)
+		return nil, err
 	}
 
 	// 跳过剩余批次后、Kourse 处理前批次序号等于批次总数，与 Kourse 处理后一样视为不在任何批次中

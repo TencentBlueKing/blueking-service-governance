@@ -87,13 +87,13 @@ func (h *Handler) GetBatchReleaseProgress(c *gin.Context) {
 	// 从集群内实时获取 rollout 状态，避免依赖轮询任务导致的数据延迟
 	if record.IsBatchReleasing() {
 		state, err := appmodeldeploy.GetLiveBatchReleaseState(ctx, record)
-		if err == nil && state.BatchProgress == nil {
-			// 主工作负载缺失等情况只有状态没有进度，由轮询任务把记录置为失败
-			err = errors.New(state.Message)
-		}
 		if err != nil {
 			log.Warnf(ctx, "get live batch release progress of deploy record %s failed, use the recorded one: %v",
 				record.ID.Hex(), err)
+		} else if state.BatchProgress == nil {
+			// 主工作负载缺失等情况只有状态没有进度，由轮询任务把记录置为失败
+			log.Warnf(ctx, "live batch release state of deploy record %s has no progress, use the recorded one: %s",
+				record.ID.Hex(), state.Message)
 		} else {
 			record.Status, record.BatchProgress = state.Status, state.BatchProgress
 		}
