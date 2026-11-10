@@ -203,18 +203,6 @@ func DefaultProjectCode(workspaceID string) string {
 	return "bkms-" + workspaceID
 }
 
-// bkciProjectCodePrefix 返回多租户蓝盾项目 Code 的租户前缀（{tenantID}.），非多租户模式或 ctx 无租户时返回空
-func bkciProjectCodePrefix(ctx context.Context) string {
-	if config.G == nil || !config.G.Tenant.EnableMultiTenantMode {
-		return ""
-	}
-	tenantID, ok := tenant.GetTenantID(ctx)
-	if !ok {
-		return ""
-	}
-	return tenantID + "."
-}
-
 // bkciProjectCode 为项目 Code 补齐租户前缀，得到蓝盾侧的项目 Code（多租户蓝盾为 {tenantID}.{code}）。
 // 已带前缀（如从蓝盾项目列表中选择的已有项目）时原样返回。
 func bkciProjectCode(ctx context.Context, code string) string {
@@ -228,6 +216,18 @@ func bkciProjectCode(ctx context.Context, code string) string {
 // trimBKCIProjectTenantPrefix 去掉项目 Code 的租户前缀，是 bkciProjectCode 的逆操作
 func trimBKCIProjectTenantPrefix(ctx context.Context, code string) string {
 	return strings.TrimPrefix(code, bkciProjectCodePrefix(ctx))
+}
+
+// bkciProjectCodePrefix 返回多租户蓝盾项目 Code 的租户前缀（{tenantID}.），非多租户模式或 ctx 无租户时返回空
+func bkciProjectCodePrefix(ctx context.Context) string {
+	if config.G == nil || !config.G.Tenant.EnableMultiTenantMode {
+		return ""
+	}
+	tenantID, ok := tenant.GetTenantID(ctx)
+	if !ok {
+		return ""
+	}
+	return tenantID + "."
 }
 
 // PipelineManager 蓝盾流水线管理

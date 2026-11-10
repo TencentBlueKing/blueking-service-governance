@@ -73,8 +73,7 @@ type FeatureIntegrationsConfig struct {
 	// 为 true：蓝盾始终新建；新建容器则创建 BCS 项目，绑定已有容器则绑定已有 BCS 项目。
 	// 为 false：新建/绑定都按蓝盾项目处理，BCS ID/Code 复用蓝盾项目。
 	EnableIndependentBCSProject bool
-	// DisableBuiltinDockerfilePipeline 关闭内置的 Dockerfile 构建流水线，用于蓝盾未安装
-	// 「构建并推送 Docker 镜像」插件的环境：创建工作空间时不预建，构建时直接报错。
+	// DisableBuiltinDockerfilePipeline 关闭内置的 Dockerfile 构建流水线
 	DisableBuiltinDockerfilePipeline bool
 }
 
