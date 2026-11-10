@@ -42,7 +42,7 @@ import (
 
 // NewAppBscpCfgMgrCmd 创建 app-bscpcfg-mgr 命令，用于初始化应用的 bscp 配置。
 //
-// 配置管理是否可用由空间级开关决定（平台管理员在平台管理中设置），本命令不再负责开关。
+// 配置管理是否可用由空间级配置开关决定（平台管理员在平台管理中设置），本命令不再负责开关。
 func NewAppBscpCfgMgrCmd() *cobra.Command {
 	var srvCfg string
 	var operator string
@@ -52,7 +52,7 @@ func NewAppBscpCfgMgrCmd() *cobra.Command {
 		Use:   "app-bscpcfg-mgr",
 		Short: "Manage app bscp config",
 		Long: "Initialize BSCP config management for apps (post hook and metadata). " +
-			"Whether config management takes effect is controlled by the workspace feature flag, " +
+			"Whether config management takes effect is controlled by the workspace cfg switch, " +
 			"which is set by platform administrators.",
 	}
 	cmd.PersistentFlags().StringVar(&srvCfg, "srvCfg", "", "server config file")

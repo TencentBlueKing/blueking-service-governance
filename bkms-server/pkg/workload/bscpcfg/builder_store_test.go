@@ -37,14 +37,14 @@ import (
 
 var _ = Describe("BuildFromStore", func() {
 	var (
-		ctx       context.Context
-		db        *mongo.Database
-		switches  *cfgswitchmodel.WorkspaceCfgSwitchStore
-		metas     *model.MetadataStore
-		bindings  *model.EnvBindingStore
-		ws        *workspace.Workspace
-		appID     string
-		oldBSCPCf svccfg.BSCPConfig
+		ctx        context.Context
+		db         *mongo.Database
+		switches   *cfgswitchmodel.WorkspaceCfgSwitchStore
+		metas      *model.MetadataStore
+		bindings   *model.EnvBindingStore
+		ws         *workspace.Workspace
+		appID      string
+		oldBSCPCfg svccfg.BSCPConfig
 	)
 
 	setBscpEnabled := func(enabled bool) {
@@ -89,7 +89,7 @@ var _ = Describe("BuildFromStore", func() {
 		}
 		appID = "test-app-" + stringx.Random(5)
 
-		oldBSCPCf = svccfg.G.BSCP
+		oldBSCPCfg = svccfg.G.BSCP
 		svccfg.G.BSCP = svccfg.BSCPConfig{
 			FeedAddr:     "bscp-feed.example.com",
 			InitImage:    "bscp-init:test",
@@ -98,7 +98,7 @@ var _ = Describe("BuildFromStore", func() {
 	})
 
 	AfterEach(func() {
-		svccfg.G.BSCP = oldBSCPCf
+		svccfg.G.BSCP = oldBSCPCfg
 		_, _ = bindings.DeleteMany(ctx, model.ByApp(appID))
 		_ = metas.DeleteIfExists(ctx, model.ByApp(appID))
 		Expect(testutil.CleanupMetaColl(cfgswitchmodel.WorkspaceCfgSwitchMeta)).To(Succeed())

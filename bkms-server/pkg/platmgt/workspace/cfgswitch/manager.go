@@ -61,6 +61,8 @@ func (m *Manager) scopeToWorkspace(
 }
 
 // List 按定义顺序返回空间的全部配置开关，从未设置过的开关为关闭状态
+//
+// 涉及的模型：workspaces、workspace_cfg_switches
 func (m *Manager) List(ctx context.Context, workspaceID string) ([]model.WorkspaceCfgSwitch, error) {
 	ctx, ws, err := m.scopeToWorkspace(ctx, workspaceID)
 	if err != nil {
@@ -70,6 +72,8 @@ func (m *Manager) List(ctx context.Context, workspaceID string) ([]model.Workspa
 }
 
 // Update 设置空间的一项配置开关，取值没有变化时不写库。开关标识未定义时返回 ErrUnknownSwitch
+//
+// 涉及的模型：workspaces、workspace_cfg_switches
 func (m *Manager) Update(
 	ctx context.Context, workspaceID string, key model.SwitchKey, enabled bool,
 ) (*model.WorkspaceCfgSwitch, error) {

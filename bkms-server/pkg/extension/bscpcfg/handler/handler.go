@@ -57,6 +57,8 @@ func (h *Handler) newManager(c *gin.Context) (*svc.Manager, error) {
 
 // validateApp 校验应用权限，并要求应用所在空间已开启配置管理（BSCP）。
 // 本包所有接口都须经过它或 validateAppEnv，开关关闭时读写接口一律不可用
+//
+// 涉及的模型：applications、workspace_cfg_switches
 func (h *Handler) validateApp(
 	ctx context.Context, appID string, permType perm.Type,
 ) (*bkmsapp.Application, error) {
@@ -71,6 +73,8 @@ func (h *Handler) validateApp(
 }
 
 // validateAppEnv 校验应用与环境权限，并要求应用所在空间已开启配置管理（BSCP）
+//
+// 涉及的模型：applications、environments、workspace_cfg_switches
 func (h *Handler) validateAppEnv(
 	ctx context.Context, appID, envName string, permType perm.Type,
 ) (*bkmsapp.Application, *envmodel.Environment, error) {
@@ -88,7 +92,7 @@ func (h *Handler) validateAppEnv(
 func (h *Handler) requireBscpEnabled(ctx context.Context, workspaceID string) error {
 	enabled, err := cfgswitchmodel.IsEnabled(ctx, h.registry.DB, workspaceID, cfgswitchmodel.SwitchBscp)
 	if err != nil {
-		return bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "check workspace bscp feature")
+		return bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "check bscp cfg switch of workspace")
 	}
 	if !enabled {
 		return bkerrs.Errorf(

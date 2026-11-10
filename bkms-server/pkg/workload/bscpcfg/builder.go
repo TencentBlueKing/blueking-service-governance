@@ -175,7 +175,7 @@ func BuildFromStore(
 ) (*PodFragment, error) {
 	enabled, err := cfgswitchmodel.IsEnabled(ctx, db, ws.ID, cfgswitchmodel.SwitchBscp)
 	if err != nil {
-		return nil, errors.Wrap(err, "checking workspace bscp feature")
+		return nil, errors.Wrapf(err, "checking bscp cfg switch of workspace %s", ws.ID)
 	}
 	if !enabled {
 		return nil, nil
