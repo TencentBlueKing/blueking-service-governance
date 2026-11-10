@@ -67,7 +67,7 @@ export interface InstancePodWatchEvent {
 }
 
 /** 行操作类型 */
-export type InstanceRowAction = 'gray' | 'log' | 'login' | 'monitor' | 'weight';
+export type InstanceRowAction = 'gray' | 'log' | 'login' | 'monitor' | 'weight' | 'weterm';
 
 /** 行操作事件载荷 */
 export interface InstanceRowActionPayload {

@@ -25,12 +25,15 @@ import type { VNodeChild } from 'vue';
  * 路径清单（V = 5）：成功记录、失败记录、无记录占位符、未知状态、详情字段缺省值。
  * 热更新数据由父组件通过 data 传入；本文件只隔离表格与 UI 组件契约，不连接 API、SSE 或真实 Popover。
  */
-import { render, screen, within } from '@testing-library/vue';
+import { fireEvent, render, screen, within } from '@testing-library/vue';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { I18nTStub } from '../helpers/mock-i18n';
 
 import type { AppInstanceOutputObj } from '~/@types/v1/instance';
+
+/* 场景测试需要多个内联组件桩，非单文件单组件约束范围。 */
+/* eslint-disable vue/one-component-per-file */
 
 type TableColumnVNode = {
   children?: null | {
@@ -97,10 +100,19 @@ vi.mock('bkui-vue', async () => {
     });
   const dropdownMenu = passthrough('DropdownMenu', 'div');
   const dropdownItem = passthrough('DropdownItem', 'div');
-  const dropdown = Object.assign(passthrough('Dropdown', 'div'), {
-    DropdownMenu: dropdownMenu,
-    DropdownItem: dropdownItem,
-  });
+  // 下拉菜单项在 content 插槽内，stub 需一并渲染才能断言行操作入口。
+  const dropdown = Object.assign(
+    defineComponent({
+      name: 'DropdownStub',
+      setup(_, { slots }) {
+        return () => h('div', [slots.default?.(), slots.content?.()]);
+      },
+    }),
+    {
+      DropdownMenu: dropdownMenu,
+      DropdownItem: dropdownItem,
+    },
+  );
   const popover = defineComponent({
     name: 'PopoverStub',
     setup(_, { slots }) {
@@ -260,6 +272,26 @@ describe('实例列表：热更新列', () => {
 
     expect(screen.getAllByText('publishing')).toHaveLength(2);
     expect(screen.queryByTestId('publish-status-dot')).not.toBeInTheDocument();
+  });
+});
+
+describe('实例列表：WeTerm 入口', () => {
+  it('运行中实例点击 WeTerm 向上抛出 weterm 行操作', async () => {
+    const { emitted } = await renderTable([{ id: 'pod-running', status: 'Running' }]);
+
+    await fireEvent.click(screen.getByText('WeTerm'));
+
+    expect(emitted()['row-action']).toEqual([
+      [{ action: 'weterm', envName: 'prod', instance: { id: 'pod-running', status: 'Running' } }],
+    ]);
+  });
+
+  it('非运行中实例的 WeTerm 入口点击无效', async () => {
+    const { emitted } = await renderTable([{ id: 'pod-pending', status: 'Pending' }]);
+
+    await fireEvent.click(screen.getByText('WeTerm'));
+
+    expect(emitted()['row-action']).toBeUndefined();
   });
 });
 

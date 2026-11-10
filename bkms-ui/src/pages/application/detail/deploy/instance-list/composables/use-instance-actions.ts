@@ -28,6 +28,7 @@ import { useAppDetail } from '~/stores/app-detail';
 
 import { canAdjustInstanceWeight, renderDeleteInfoBoxContent } from '../instance-utils';
 import { provideInstanceActionContext } from './use-instance-action-context';
+import { useWeTermLogin } from './use-weterm-login';
 
 import type { default as InstanceActionsHost } from '../components/instance-actions-host.vue';
 import type { InstanceActionContext, InstanceRowAction } from '../types';
@@ -56,6 +57,7 @@ export function useInstanceActions(
   const { t } = useI18n();
   const appDetailStore = useAppDetail();
   const { login } = useLoginInstance();
+  const { loginWithWeTerm } = useWeTermLogin();
   const { showDeleteDialog } = useDeleteInstances(options);
 
   provideInstanceActionContext({
@@ -145,6 +147,11 @@ export function useInstanceActions(
     await login(instance, resolvedEnvName);
   }
 
+  async function handleWeTermLogin(instance: AppInstanceOutputObj, envName?: string) {
+    const resolvedEnvName = envName || options.getEnvName({ instance });
+    await loginWithWeTerm(instance, resolvedEnvName);
+  }
+
   /** 统一行操作分发 */
   function handleRowAction(payload: {
     action: InstanceRowAction | string;
@@ -152,7 +159,11 @@ export function useInstanceActions(
     instance: AppInstanceOutputObj;
   }) {
     const { action, envName, instance } = payload;
-    if (!(['gray', 'log', 'login', 'monitor', 'weight'] as InstanceRowAction[]).includes(action as InstanceRowAction)) {
+    if (
+      !(['gray', 'log', 'login', 'monitor', 'weight', 'weterm'] as InstanceRowAction[]).includes(
+        action as InstanceRowAction,
+      )
+    ) {
       return;
     }
 
@@ -172,12 +183,16 @@ export function useInstanceActions(
       case 'weight':
         openWeight(instance, envName);
         break;
+      case 'weterm':
+        handleWeTermLogin(instance, envName);
+        break;
     }
   }
 
   return {
     handleLogin,
     handleRowAction,
+    handleWeTermLogin,
     openAdminCommand,
     openDelete,
     openGray,

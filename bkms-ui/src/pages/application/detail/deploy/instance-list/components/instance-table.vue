@@ -694,6 +694,19 @@
                     <Dropdown.DropdownItem @click="emitRowAction('monitor', row)">
                       {{ $t('监控') }}
                     </Dropdown.DropdownItem>
+                    <!-- 部署未配置 WeTerm 环境（NOT_IMPLEMENTED）时隐藏入口 -->
+                    <Dropdown.DropdownItem
+                      v-if="!isWeTermUnsupported"
+                      v-bk-tooltips="{
+                        content: $t('实例当前未处于运行状态，无法登录'),
+                        disabled: canLogin(row),
+                        placement: 'left',
+                      }"
+                      :class="{ 'is-disabled': !canLogin(row) }"
+                      @click="canLogin(row) && emitRowAction('weterm', row)"
+                    >
+                      WeTerm
+                    </Dropdown.DropdownItem>
                     <Dropdown.DropdownItem
                       v-if="isEnglish"
                       v-bk-tooltips="{
@@ -747,6 +760,7 @@
     sortInstancesByRestart,
   } from '../composables/instance-watch-utils';
   import { useInstanceListWatch } from '../composables/use-instance-list-watch';
+  import { isWeTermUnsupported } from '../composables/use-weterm-login';
   import {
     canAdjustInstanceWeight,
     canInstanceGrayDeploy,
