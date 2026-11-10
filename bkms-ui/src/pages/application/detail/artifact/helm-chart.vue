@@ -202,10 +202,10 @@
               class="flex flex-wrap gap-[4px]"
             >
               <Tag
-                v-for="item in getDeployedEnvTags(row.deployedEnvs)"
+                v-for="item in groupDeployedEnvs(row.deployedEnvs, getEnvDisplayName)"
                 :key="item.key"
-                v-bk-tooltips="{ content: getEnvTooltipContent(item.envNames) }"
-                :class="envTypeTagClassMap[item.key]"
+                v-bk-tooltips="{ content: item.displayNames.join('、') }"
+                :class="item.tagClass"
               >
                 {{ item.label }}（{{ item.count }}）
               </Tag>
@@ -242,7 +242,8 @@
   import { AppHelmChartOutputObj } from '~/@types/v1/helm-charts';
   import { HelmChartsService } from '~/api/modules/v1';
   import Layout from '~/components/skeleton/skeleton-layout';
-  import { envTypeMap, envTypeTagClassMap } from '~/composables/use-env-manager';
+  import useAppEnvNameMapping from '~/composables/use-app-env-name-mapping';
+  import { groupDeployedEnvs } from '~/composables/use-deployed-envs';
   import usePageConf from '~/composables/use-page';
   import { useSearchPlaceholder } from '~/composables/use-search-placeholder';
   import useTableEmpty from '~/composables/use-table-empty';
@@ -255,20 +256,11 @@
 
   import type { BuildStatus } from './components/helm-chart-build-records.vue';
 
-  const DEPLOYED_ENV_TYPES = ['development', 'test', 'staging', 'production'] as const;
-
-  type DeployedEnvTag = {
-    count: number;
-    envNames: string[];
-    key: (typeof DEPLOYED_ENV_TYPES)[number];
-    label: string;
-  };
-  type DeployedEnvType = (typeof DEPLOYED_ENV_TYPES)[number];
-
   const { createPlaceholder } = useSearchPlaceholder();
   const { formatDateString } = useTime();
   const appDetailStore = useAppDetail();
   const { t } = useI18n();
+  const { fetchEnvNameDisplayMap, getEnvDisplayName } = useAppEnvNameMapping();
 
   const isNotGitRepo = computed(() => appDetailStore?.appDetail?.helmSpec?.helmSource?.repoType !== 'GitRepo');
 
@@ -330,33 +322,6 @@
   function formatDigest(digest?: string) {
     if (!digest) return '';
     return digest.includes(':') ? digest.split(':')[1].slice(0, 8) : digest.slice(0, 8);
-  }
-
-  function getDeployedEnvTags(deployedEnvs: AppHelmChartOutputObj['deployedEnvs']): DeployedEnvTag[] {
-    if (!deployedEnvs?.length) return [];
-
-    const typeEnvNamesMap: Record<DeployedEnvType, string[]> = {
-      development: [],
-      staging: [],
-      production: [],
-      test: [],
-    };
-
-    deployedEnvs.forEach(({ envName, envType }) => {
-      if (!envType || !DEPLOYED_ENV_TYPES.includes(envType as DeployedEnvType)) return;
-      typeEnvNamesMap[envType as DeployedEnvType].push(envName ?? '');
-    });
-
-    return DEPLOYED_ENV_TYPES.filter(envType => typeEnvNamesMap[envType].length > 0).map(envType => ({
-      count: typeEnvNamesMap[envType].length,
-      envNames: typeEnvNamesMap[envType],
-      key: envType,
-      label: envTypeMap[envType]?.name || envType,
-    }));
-  }
-
-  function getEnvTooltipContent(envNames: string[]) {
-    return envNames.join('、');
   }
 
   /** 构建状态变化回调 */
@@ -433,8 +398,8 @@
 
   watch(
     () => appDetailStore.appID,
-    async () => {
-      await fetchChartList();
+    async appID => {
+      await Promise.all([appID ? fetchEnvNameDisplayMap(appID) : Promise.resolve({}), fetchChartList()]);
     },
     {
       immediate: true,

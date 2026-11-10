@@ -233,10 +233,10 @@
               class="flex flex-wrap gap-[4px]"
             >
               <Tag
-                v-for="item in getDeployedEnvTags(row.deployedEnvs)"
+                v-for="item in groupDeployedEnvs(row.deployedEnvs, getEnvDisplayName)"
                 :key="item.key"
-                v-bk-tooltips="{ content: getEnvTooltipContent(item.envNames) }"
-                :class="envTypeTagClassMap[item.key]"
+                v-bk-tooltips="{ content: item.displayNames.join('、') }"
+                :class="item.tagClass"
               >
                 {{ item.label }}（{{ item.count }}）
               </Tag>
@@ -310,7 +310,7 @@
                 :key="env.envName"
                 :class="envTypeTagClassMap[env.envType || '']"
               >
-                {{ getEnvDisplayName(env?.envName ?? '') }}
+                {{ resolveDeployedEnvDisplayName(env, getEnvDisplayName) }}
               </Tag>
               <span v-if="!promoteRow?.deployedEnvs?.length">--</span>
             </div>
@@ -324,7 +324,7 @@
         <Tag
           v-for="envName in productionEnvNames"
           :key="envName"
-          :class="getEnvTagClass(envName)"
+          :class="envTypeTagClassMap[envNameTypeMap[envName] || '']"
         >
           {{ getEnvDisplayName(envName) }}
         </Tag>
@@ -382,13 +382,14 @@
   import { sourceMaterialText } from '~/components/code-revision/revision';
   import FieldItem from '~/components/field-item.vue';
   import Layout from '~/components/skeleton/skeleton-layout';
-  import { envTypeMap, envTypeTagClassMap } from '~/composables/use-env-manager';
+  import useAppEnvNameMapping from '~/composables/use-app-env-name-mapping';
+  import { groupDeployedEnvs, resolveDeployedEnvDisplayName } from '~/composables/use-deployed-envs';
+  import { envTypeTagClassMap } from '~/composables/use-env-manager';
   import usePageConf from '~/composables/use-page';
   import { useSearchPlaceholder } from '~/composables/use-search-placeholder';
   import useTableEmpty from '~/composables/use-table-empty';
   import useTime from '~/composables/use-time';
   import { useAppDetail } from '~/stores/app-detail';
-  import { useSpaceStore } from '~/stores/space';
 
   import DeleteImageTagDialog from './components/delete-image-tag-dialog.vue';
   import PermErrorDialog from './components/perm-error-dialog.vue';
@@ -400,16 +401,6 @@
   import 'tippy.js/themes/light.css';
 
   const ARTIFACT_POLLING_INTERVAL = 60 * 1000;
-  const DEPLOYED_ENV_TYPES = ['development', 'test', 'staging', 'production'] as const;
-
-  type DeployedEnvTag = {
-    count: number;
-    envNames: string[];
-    key: (typeof DEPLOYED_ENV_TYPES)[number];
-    label: string;
-  };
-
-  type DeployedEnvType = (typeof DEPLOYED_ENV_TYPES)[number];
 
   const ExpandContent = defineAsyncComponent(() => import('./components/artifact-expand.vue'));
 
@@ -418,10 +409,8 @@
   const { formatDateString, formatRelativeTime } = useTime();
 
   const appDetailStore = useAppDetail();
-  const spaceStore = useSpaceStore();
 
-  /** 环境 name → displayName 映射 */
-  const envNameDisplayMap = ref<Record<string, string>>({});
+  const { envNameDisplayMap, fetchEnvNameDisplayMap, getEnvDisplayName } = useAppEnvNameMapping();
   /** 环境 name → type 映射 */
   const envNameTypeMap = ref<Record<string, string>>({});
 
@@ -543,16 +532,14 @@
     }
   }
 
-  /** 获取环境列表（仅页面初始化时调用一次） */
-  async function fetchEnvList() {
-    const envList = await EnvService.listEnvs({ workspaceID: spaceStore.currentSpace }).catch(() => []);
-    const displayMap: Record<string, string> = {};
+  /** 获取本应用可用环境列表（含特性环境）的环境类型映射，仅页面初始化时调用一次 */
+  async function fetchEnvTypeMap() {
+    if (!appDetailStore.appID) return;
+    const envList = await EnvService.listAppEnvs({ appID: appDetailStore.appID }).catch(() => []);
     const typeMap: Record<string, string> = {};
-    (envList as Array<{ displayName: string; name: string; type?: string }>).forEach(env => {
-      displayMap[env.name] = env.displayName || env.name;
-      if (env.type) typeMap[env.name] = env.type;
+    envList.forEach(env => {
+      if (env.name && env.type) typeMap[env.name] = env.type;
     });
-    envNameDisplayMap.value = displayMap;
     envNameTypeMap.value = typeMap;
   }
 
@@ -560,36 +547,6 @@
   function formatDigest(digest?: string) {
     if (!digest) return '';
     return digest.includes(':') ? digest.split(':')[1].slice(0, 8) : digest.slice(0, 8);
-  }
-
-  function getDeployedEnvTags(deployedEnvs: AppImageOutputObj['deployedEnvs']): DeployedEnvTag[] {
-    if (!deployedEnvs?.length) return [];
-
-    const typeEnvNamesMap: Record<DeployedEnvType, string[]> = {
-      development: [],
-      staging: [],
-      production: [],
-      test: [],
-    };
-
-    deployedEnvs.forEach(({ envName, envType }) => {
-      if (!envType || !DEPLOYED_ENV_TYPES.includes(envType as DeployedEnvType)) return;
-      typeEnvNamesMap[envType as DeployedEnvType].push(envName ?? '');
-    });
-
-    return DEPLOYED_ENV_TYPES.filter(envType => typeEnvNamesMap[envType].length > 0).map(envType => ({
-      count: typeEnvNamesMap[envType].length,
-      envNames: typeEnvNamesMap[envType],
-      key: envType,
-      label: envTypeMap[envType]?.name || envType,
-    }));
-  }
-  function getEnvDisplayName(envName: string) {
-    return envNameDisplayMap.value[envName] || envName;
-  }
-
-  function getEnvTagClass(envName: string) {
-    return envTypeTagClassMap[envNameTypeMap.value[envName]];
   }
 
   function getEnvTooltipContent(envNames: string[]) {
@@ -733,8 +690,12 @@
 
   watch(
     () => appDetailStore.appID,
-    async () => {
-      await Promise.all([fetchEnvList(), fetchArtifactList()]);
+    async appID => {
+      await Promise.all([
+        appID ? fetchEnvNameDisplayMap(appID) : Promise.resolve({}),
+        fetchEnvTypeMap(),
+        fetchArtifactList(),
+      ]);
     },
     {
       immediate: true,
