@@ -135,7 +135,7 @@
             width="150"
           >
             <template #default="{ row }">
-              {{ envNameMapping[row.group?.envName || ''] || row.group?.envName || '--' }}
+              {{ getEnvColumnText(row?.group) }}
             </template>
           </TableColumn>
           <TableColumn
@@ -184,7 +184,6 @@
     </Skeleton>
     <OperationDetailSideslider
       v-model:is-show="isShow"
-      :env-name-mapping="envNameMapping"
       :record="curRow"
       :result-display-name="getResultDisplayName(curRow?.result || '')"
     />
@@ -198,13 +197,13 @@
   import { useI18n } from 'vue-i18n';
   import {
     ListOperationRecordsRequest,
+    OperationGroupOutputObj,
     OperationRecordFilterOptionsOutputObj,
     OperationRecordOutputObj,
   } from '~/@types/v1/operation-audit';
   import { OperationAuditService } from '~/api/modules/v1';
   import { formatTimeByTimezone, mapKeys } from '~/common/util';
   import Layout from '~/components/skeleton/skeleton-layout';
-  import useEnvManager from '~/composables/use-env-manager';
   import useSearchFilter from '~/composables/use-search-filter';
   import { useSearchPlaceholder } from '~/composables/use-search-placeholder';
   import useTableEmpty from '~/composables/use-table-empty';
@@ -220,7 +219,6 @@
   // 引入国际化
   const { t } = useI18n();
   const { createPlaceholder } = useSearchPlaceholder();
-  const { envNameMapping, generateEnvNameMapping, getAppEnvList } = useEnvManager();
   const spaceStore = useSpaceStore();
   const appDetailStore = useAppDetail();
   const { maxHeight } = useDynamicsHeight(96, ['.header-right', '.container-header']);
@@ -285,10 +283,9 @@
     filters: [searchValue, dateRange],
   });
 
-  /** 生成环境名称映射关系 */
-  async function GenerateEnvNameMapping() {
-    await getAppEnvList(appDetailStore.appID);
-    generateEnvNameMapping();
+  /** 环境列：优先用后端返回的展示名，环境已删除时回退内部名 */
+  function getEnvColumnText(group?: OperationGroupOutputObj) {
+    return group?.envDisplayName || group?.envName || '--';
   }
 
   function getResultDisplayName(result: string): string {
@@ -363,7 +360,6 @@
       if (val) {
         handleListRecord();
         initFilterOptions();
-        GenerateEnvNameMapping();
       }
     },
     { immediate: true },

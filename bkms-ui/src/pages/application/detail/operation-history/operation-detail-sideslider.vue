@@ -99,7 +99,6 @@
   import type { OperationRecordOutputObj } from '~/@types/v1/operation-audit';
 
   const props = defineProps<{
-    envNameMapping: Record<string, string>;
     record?: OperationRecordOutputObj;
     resultDisplayName: string;
   }>();
@@ -134,7 +133,7 @@
       {
         field: 'envName',
         label: t('环境'),
-        value: props.envNameMapping[row.group?.envName || ''] || row.group?.envName || '--',
+        value: row.group?.envDisplayName || row.group?.envName || '--',
       },
       { field: 'resourceID', label: t('目标实例'), value: row.resourceID || '--' },
       { field: 'username', label: t('操作人'), value: row.username || '--' },

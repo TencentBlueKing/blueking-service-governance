@@ -59,7 +59,7 @@
       <Table
         v-if="hasUsages"
         class="mb-[16px]"
-        :data="imageUsages?.usages || []"
+        :data="usageRows"
       >
         <TableColumn
           field="envName"
@@ -137,6 +137,7 @@
   import { copyText } from '~/common/util';
   import StatusIcon from '~/components/status-icon.vue';
   import { useDeployStatusMap } from '~/composables/use-deploy-status';
+  import { isDeployedEnvType, isFeatureEnvKind } from '~/composables/use-deployed-envs';
   import { useErrorHandler } from '~/composables/use-error-handler';
   import { useAppDetail } from '~/stores/app-detail';
 
@@ -156,6 +157,10 @@
   }
 
   interface IProps {
+    /** 环境 name → kind 映射，占用列表只返回环境内部名，需据此识别特性环境 */
+    envKindMap?: Record<string, string>;
+    /** 环境 name → type 映射，用于给特性环境补上环境分类 */
+    envNameTypeMap?: Record<string, string>;
     imageUsages: ImageTagUsagesOutputObj | null;
     isLoadingUsages: boolean;
     row: AppImageOutputObj | null;
@@ -181,6 +186,21 @@
 
   const hasUsages = computed(() => Boolean(props.imageUsages?.usages?.length));
   const statusMaps = computed(() => getDeployStatusMaps(appDetailStore.appType as AppType));
+
+  /** 特性环境的环境分类，非特性环境或类型未知时返回空串 */
+  function getFeatureEnvType(envName?: string) {
+    if (!envName || !isFeatureEnvKind(props.envKindMap?.[envName])) return '';
+    const envType = props.envNameTypeMap?.[envName];
+    return isDeployedEnvType(envType) ? envType : '';
+  }
+
+  /** 占用列表补上特性环境的环境分类，供表格直接渲染 */
+  const usageRows = computed(() =>
+    (props.imageUsages?.usages || []).map(usage => ({
+      ...usage,
+      featureEnvType: getFeatureEnvType(usage.envName),
+    })),
+  );
 
   // 每次打开弹窗时重置输入与提交状态
   watch(isShow, open => {

@@ -131,7 +131,7 @@
           width="150"
         >
           <template #default="{ row }">
-            {{ envNameMapping?.[row?.group?.envName] || '--' }}
+            {{ getEnvColumnText(row?.group) }}
           </template>
         </TableColumn>
         <TableColumn
@@ -218,12 +218,15 @@
   import { Table, TableColumn } from '@blueking/table';
   import { Button, DatePicker, Loading, SearchSelect, Sideslider } from 'bkui-vue';
   import { useI18n } from 'vue-i18n';
-  import { OperationRecordFilterOptionsOutputObj, OperationRecordOutputObj } from '~/@types/v1/operation-audit';
+  import {
+    OperationGroupOutputObj,
+    OperationRecordFilterOptionsOutputObj,
+    OperationRecordOutputObj,
+  } from '~/@types/v1/operation-audit';
   import { OperationAuditService } from '~/api/modules/v1';
   import { convertToYaml, formatTimeByTimezone, mapKeys } from '~/common/util';
   import MsEditor from '~/components/monaco-editor/ms-editor.vue';
   import Layout from '~/components/skeleton/skeleton-layout';
-  import useEnvManager from '~/composables/use-env-manager';
   import useSearchFilter from '~/composables/use-search-filter';
   import { useSearchPlaceholder } from '~/composables/use-search-placeholder';
   import useTableEmpty from '~/composables/use-table-empty';
@@ -242,7 +245,6 @@
   // 引入国际化
   const { t } = useI18n();
   const { createPlaceholder } = useSearchPlaceholder();
-  const { envNameMapping, generateEnvNameMapping, handleGetEnvList } = useEnvManager();
   const spaceStore = useSpaceStore();
   const { maxHeight } = useDynamicsHeight(96, ['.header-right', '.container-header']);
 
@@ -305,10 +307,9 @@
     filters: [searchValue, dateRange],
   });
 
-  /** 生成环境名称映射关系 */
-  async function GenerateEnvNameMapping() {
-    await handleGetEnvList();
-    generateEnvNameMapping();
+  /** 环境列：优先用后端返回的展示名，环境已删除时回退内部名 */
+  function getEnvColumnText(group?: OperationGroupOutputObj) {
+    return group?.envDisplayName || group?.envName || '--';
   }
 
   function getResultDisplayName(result: string): string {
@@ -383,7 +384,6 @@
   onMounted(() => {
     handleListRecord();
     initFilterOptions();
-    GenerateEnvNameMapping();
   });
 </script>
 
