@@ -128,12 +128,7 @@ func ExecuteBKCIPipelineBuild(
 		return nil, nil, errors.Wrapf(err, "get workspace %s type %s pipeline", app.WorkspaceID, cfg.PipelineType)
 	}
 
-	// 内置流水线由虚拟账号执行，自定义流水线由请求用户执行
-	caller := platformaccount.MustGetCaller(ctx)
-	if cfg.SourceType == SourceTypePipeline {
-		caller = auth.MustGetUser(ctx)
-	}
-	client, err := bkciapi.New(caller)
+	client, err := bkciapi.New(pipelineBuildCaller(ctx, cfg.SourceType))
 	if err != nil {
 		return nil, nil, errors.Wrapf(err, "init bkci client")
 	}
@@ -148,6 +143,14 @@ func ExecuteBKCIPipelineBuild(
 		return nil, nil, errors.Wrapf(err, "get pipeline build %s", buildRef.ID)
 	}
 	return buildState, params, nil
+}
+
+// pipelineBuildCaller 返回执行流水线构建的身份：内置流水线由虚拟账号执行，自定义流水线由请求用户执行
+func pipelineBuildCaller(ctx context.Context, sourceType SourceType) auth.User {
+	if sourceType == SourceTypePipeline {
+		return auth.MustGetUser(ctx)
+	}
+	return platformaccount.MustGetCaller(ctx)
 }
 
 // genPipelineBuildParams 生成蓝盾流水线构建参数
