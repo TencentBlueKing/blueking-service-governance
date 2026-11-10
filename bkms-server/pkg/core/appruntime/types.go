@@ -29,8 +29,10 @@ const (
 	// AppTypeBKMSApp 使用 AppModel 管理的默认应用类型。
 	AppTypeBKMSApp = "bkmsApp"
 	// AppTypeTRPC 旧持久化值，桥接期仍有效。
+	// 已废弃：存量已迁移为 bkmsApp + framework=trpc，旧字段清理后删除，见 design_notes/bkms_app_runtime_model_migration.md §7。
 	AppTypeTRPC = "trpc"
 	// AppTypeTAF 旧持久化值，桥接期仍有效。
+	// 已废弃：存量已迁移为 bkmsApp + framework=taf，旧字段清理后删除，见 design_notes/bkms_app_runtime_model_migration.md §7。
 	AppTypeTAF = "taf"
 )
 

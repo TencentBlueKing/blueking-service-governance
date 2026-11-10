@@ -19,10 +19,6 @@
 // Package serializer 定义 TAF 应用相关的 Gin input/output 序列化结构和转换方法。
 package serializer
 
-import (
-	tafapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/framework/taf"
-)
-
 // TafSpecInput is the TAF spec input.
 type TafSpecInput struct {
 	// 配置文件名，创建应用时必填，写入 framework def，应用模型不保存。
@@ -43,41 +39,6 @@ type TafSpecOutputObj struct {
 	// 配置文件路径。
 	// todo 兼容：详情仍返回该字段，值从 framework def 填回。调用方改读 def 后删除。
 	FilePath string `json:"filePath"`
-	// 配置文件内容
+	// 框架配置文件的默认内容
 	FileContent string `json:"fileContent"`
-}
-
-// ToTafCreateParams 将 AppModelSpecInput 转换为 taf 内部创建参数类型
-func (input *AppModelSpecInput) ToTafCreateParams() *tafapp.CreateParams {
-	params := &tafapp.CreateParams{
-		Command:   input.Command,
-		Args:      input.Args,
-		ShCommand: input.ShCommand,
-		EnvVars:   variableInputsToModel(input.EnvVars),
-	}
-	if input.TafSpec != nil {
-		params.TafConfig = &tafapp.TafConfigParams{
-			FileName:    input.TafSpec.FileName,
-			FilePath:    input.TafSpec.FilePath,
-			FileContent: input.TafSpec.FileContent,
-		}
-	}
-	return params
-}
-
-// ToTafUpdateParams 将 AppModelSpecInput 转换为 taf 内部更新参数类型
-func (input *AppModelSpecInput) ToTafUpdateParams() *tafapp.UpdateParams {
-	// 更新 Spec 时忽略 EnvVars 以兼容旧客户端，应用环境变量应通过独立 CRUD 接口修改。
-	params := &tafapp.UpdateParams{
-		Command:   input.Command,
-		Args:      input.Args,
-		ShCommand: input.ShCommand,
-	}
-	if input.TafSpec != nil {
-		params.TafConfig = &tafapp.TafConfigParams{
-			FileName: input.TafSpec.FileName,
-			FilePath: input.TafSpec.FilePath,
-		}
-	}
-	return params
 }

@@ -44,6 +44,8 @@ var _ = serializer.EmptyOutput{}
 //	@Param		pageSize		query		int		true	"分页大小"
 //	@Success	200				{object}	serializer.ListAppModelDeployRecordsOutput
 //	@Failure	400				{object}	bkerrs.GinErrorOutput
+//	@Description	已废弃，请改用 GET /apps/{appID}/envs/{envName}/bkmsapp-deploys
+//	@Deprecated
 //	@Router		/apps/{appID}/envs/{envName}/trpc-deploys [get]
 func (h *Handler) ListTrpcDeployRecords(c *gin.Context) {
 	h.listAppModelDeployRecords(c)
@@ -62,6 +64,8 @@ func (h *Handler) ListTrpcDeployRecords(c *gin.Context) {
 //	@Success	200		{object}	serializer.DeployPreCheckOutput
 //	@Failure	400		{object}	bkerrs.GinErrorOutput
 //	@Failure	404		{object}	bkerrs.GinErrorOutput
+//	@Description	已废弃，请改用 GET /apps/{appID}/envs/{envName}/bkmsapp-deploys/precheck
+//	@Deprecated
 //	@Router		/apps/{appID}/envs/{envName}/trpc-deploys/precheck [get]
 func (h *Handler) PreCheckTrpcDeploy(c *gin.Context) {
 	h.preCheckDeploy(c, appruntime.FrameworkTRPC)
@@ -81,6 +85,8 @@ func (h *Handler) PreCheckTrpcDeploy(c *gin.Context) {
 //	@Param		body	body		serializer.CreateAppModelDeployInput	true	"创建 Trpc 部署请求"
 //	@Success	200		{object}	serializer.EmptyOutput
 //	@Failure	400		{object}	bkerrs.GinErrorOutput
+//	@Description	已废弃，请改用 POST /apps/{appID}/envs/{envName}/bkmsapp-deploys
+//	@Deprecated
 //	@Router		/apps/{appID}/envs/{envName}/trpc-deploys [post]
 func (h *Handler) CreateTrpcDeploy(c *gin.Context) {
 	h.createAppModelDeploy(c)
@@ -99,6 +105,8 @@ func (h *Handler) CreateTrpcDeploy(c *gin.Context) {
 //	@Param		trafficLaneName	query		string	false	"部署的泳道名称（空字符串表示不使用泳道）"
 //	@Success	200				{object}	serializer.EmptyOutput
 //	@Failure	400				{object}	bkerrs.GinErrorOutput
+//	@Description	已废弃，请改用 DELETE /apps/{appID}/envs/{envName}/bkmsapp-deploys
+//	@Deprecated
 //	@Router		/apps/{appID}/envs/{envName}/trpc-deploys [delete]
 func (h *Handler) DeleteTrpcDeploy(c *gin.Context) {
 	h.deleteAppModelDeploy(c)
@@ -119,6 +127,8 @@ func (h *Handler) DeleteTrpcDeploy(c *gin.Context) {
 //	@Param		pageSize	query		int		true	"分页大小"
 //	@Success	200			{object}	serializer.ListAppModelResourceSnapshotsOutput
 //	@Failure	400			{object}	bkerrs.GinErrorOutput
+//	@Description	已废弃，请改用 GET /apps/{appID}/envs/{envName}/bkmsapp-deploys/{deployID}/resource-snapshots
+//	@Deprecated
 //	@Router		/apps/{appID}/envs/{envName}/trpc-deploys/{deployID}/resource-snapshots [get]
 func (h *Handler) ListTrpcResourceSnapshots(c *gin.Context) {
 	h.listAppModelResourceSnapshots(c)
@@ -138,6 +148,8 @@ func (h *Handler) ListTrpcResourceSnapshots(c *gin.Context) {
 //	@Param		snapshotID	path		string	true	"资源清单快照 ID"
 //	@Success	200			{object}	serializer.GetAppModelResourceSnapshotOutput
 //	@Failure	400			{object}	bkerrs.GinErrorOutput
+//	@Description	已废弃，请改用 bkmsapp-deploys 下的同名接口
+//	@Deprecated
 //	@Router		/apps/{appID}/envs/{envName}/trpc-deploys/{deployID}/resource-snapshots/{snapshotID} [get]
 func (h *Handler) GetTrpcResourceSnapshot(c *gin.Context) {
 	h.getAppModelResourceSnapshot(c)
@@ -156,6 +168,8 @@ func (h *Handler) GetTrpcResourceSnapshot(c *gin.Context) {
 //	@Param		trafficLaneName	query		string	false	"部署的泳道名称（空字符串表示不使用泳道）"
 //	@Success	200				{object}	serializer.GetLatestAppModelDeployStatusOutput
 //	@Failure	400				{object}	bkerrs.GinErrorOutput
+//	@Description	已废弃，请改用 GET /apps/{appID}/envs/{envName}/bkmsapp-deploys/latest-status
+//	@Deprecated
 //	@Router		/apps/{appID}/envs/{envName}/trpc-deploys/latest-status [get]
 func (h *Handler) GetLatestTrpcDeployStatus(c *gin.Context) {
 	h.getLatestAppModelDeployStatus(c, appruntime.FrameworkTRPC)

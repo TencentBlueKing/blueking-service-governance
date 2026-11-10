@@ -21,7 +21,6 @@ package serializer
 
 import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
-	trpcapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/framework/trpc"
 )
 
 // TrpcSpecInput is the tRPC spec input.
@@ -48,45 +47,8 @@ type TrpcSpecOutputObj struct {
 	// 配置文件路径。
 	// todo 兼容：详情仍返回该字段，值从 framework def 填回。调用方改读 def 后删除。
 	FilePath string `json:"filePath"`
-	// 配置文件内容
+	// 框架配置文件的默认内容
 	FileContent string `json:"fileContent"`
-}
-
-// ToTrpcCreateParams 将 AppModelSpecInput 转换为 trpc 内部创建参数类型
-func (input *AppModelSpecInput) ToTrpcCreateParams() *trpcapp.CreateParams {
-	params := &trpcapp.CreateParams{
-		Command:   input.Command,
-		Args:      input.Args,
-		ShCommand: input.ShCommand,
-		EnvVars:   variableInputsToModel(input.EnvVars),
-	}
-	if input.TrpcSpec != nil {
-		params.TrpcConfig = &trpcapp.TrpcConfigParams{
-			Language:    input.TrpcSpec.Language,
-			FileName:    input.TrpcSpec.FileName,
-			FilePath:    input.TrpcSpec.FilePath,
-			FileContent: input.TrpcSpec.FileContent,
-		}
-	}
-	return params
-}
-
-// ToTrpcUpdateParams 将 AppModelSpecInput 转换为 trpc 内部更新参数类型
-func (input *AppModelSpecInput) ToTrpcUpdateParams() *trpcapp.UpdateParams {
-	// 更新 Spec 时忽略 EnvVars 以兼容旧客户端，应用环境变量应通过独立 CRUD 接口修改。
-	params := &trpcapp.UpdateParams{
-		Command:   input.Command,
-		Args:      input.Args,
-		ShCommand: input.ShCommand,
-	}
-	if input.TrpcSpec != nil {
-		params.TrpcConfig = &trpcapp.TrpcConfigParams{
-			Language: input.TrpcSpec.Language,
-			FileName: input.TrpcSpec.FileName,
-			FilePath: input.TrpcSpec.FilePath,
-		}
-	}
-	return params
 }
 
 // variableInputsToModel 将 VariableInput 切片转换为 appmodel.Variable 切片

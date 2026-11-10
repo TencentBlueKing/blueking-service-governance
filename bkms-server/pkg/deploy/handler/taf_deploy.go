@@ -45,6 +45,8 @@ var _ = serializer.EmptyOutput{}
 //	@Param		pageSize		query		int		true	"分页大小"
 //	@Success	200				{object}	serializer.ListAppModelDeployRecordsOutput
 //	@Failure	400				{object}	bkerrs.GinErrorOutput
+//	@Description	已废弃，请改用 GET /apps/{appID}/envs/{envName}/bkmsapp-deploys
+//	@Deprecated
 //	@Router		/apps/{appID}/envs/{envName}/taf-deploys [get]
 func (h *Handler) ListTafDeployRecords(c *gin.Context) {
 	h.listAppModelDeployRecords(c)
@@ -63,6 +65,8 @@ func (h *Handler) ListTafDeployRecords(c *gin.Context) {
 //	@Success	200		{object}	serializer.DeployPreCheckOutput
 //	@Failure	400		{object}	bkerrs.GinErrorOutput
 //	@Failure	404		{object}	bkerrs.GinErrorOutput
+//	@Description	已废弃，请改用 GET /apps/{appID}/envs/{envName}/bkmsapp-deploys/precheck
+//	@Deprecated
 //	@Router		/apps/{appID}/envs/{envName}/taf-deploys/precheck [get]
 func (h *Handler) PreCheckTafDeploy(c *gin.Context) {
 	h.preCheckDeploy(c, appruntime.FrameworkTAF)
@@ -82,6 +86,8 @@ func (h *Handler) PreCheckTafDeploy(c *gin.Context) {
 //	@Param		body	body		serializer.CreateAppModelDeployInput	true	"创建 TAF 部署请求"
 //	@Success	200		{object}	serializer.EmptyOutput
 //	@Failure	400		{object}	bkerrs.GinErrorOutput
+//	@Description	已废弃，请改用 POST /apps/{appID}/envs/{envName}/bkmsapp-deploys
+//	@Deprecated
 //	@Router		/apps/{appID}/envs/{envName}/taf-deploys [post]
 func (h *Handler) CreateTafDeploy(c *gin.Context) {
 	h.createAppModelDeploy(c)
@@ -100,6 +106,8 @@ func (h *Handler) CreateTafDeploy(c *gin.Context) {
 //	@Param		trafficLaneName	query		string	false	"部署的泳道名称（空字符串表示不使用泳道）"
 //	@Success	200				{object}	serializer.EmptyOutput
 //	@Failure	400				{object}	bkerrs.GinErrorOutput
+//	@Description	已废弃，请改用 DELETE /apps/{appID}/envs/{envName}/bkmsapp-deploys
+//	@Deprecated
 //	@Router		/apps/{appID}/envs/{envName}/taf-deploys [delete]
 func (h *Handler) DeleteTafDeploy(c *gin.Context) {
 	h.deleteAppModelDeploy(c)
@@ -120,6 +128,8 @@ func (h *Handler) DeleteTafDeploy(c *gin.Context) {
 //	@Param		pageSize	query		int		true	"分页大小"
 //	@Success	200			{object}	serializer.ListAppModelResourceSnapshotsOutput
 //	@Failure	400			{object}	bkerrs.GinErrorOutput
+//	@Description	已废弃，请改用 GET /apps/{appID}/envs/{envName}/bkmsapp-deploys/{deployID}/resource-snapshots
+//	@Deprecated
 //	@Router		/apps/{appID}/envs/{envName}/taf-deploys/{deployID}/resource-snapshots [get]
 func (h *Handler) ListTafResourceSnapshots(c *gin.Context) {
 	h.listAppModelResourceSnapshots(c)
@@ -139,6 +149,8 @@ func (h *Handler) ListTafResourceSnapshots(c *gin.Context) {
 //	@Param		snapshotID	path		string	true	"资源清单快照 ID"
 //	@Success	200			{object}	serializer.GetAppModelResourceSnapshotOutput
 //	@Failure	400			{object}	bkerrs.GinErrorOutput
+//	@Description	已废弃，请改用 bkmsapp-deploys 下的同名接口
+//	@Deprecated
 //	@Router		/apps/{appID}/envs/{envName}/taf-deploys/{deployID}/resource-snapshots/{snapshotID} [get]
 func (h *Handler) GetTafResourceSnapshot(c *gin.Context) {
 	h.getAppModelResourceSnapshot(c)
@@ -157,6 +169,8 @@ func (h *Handler) GetTafResourceSnapshot(c *gin.Context) {
 //	@Param		trafficLaneName	query		string	false	"部署的泳道名称（空字符串表示不使用泳道）"
 //	@Success	200				{object}	serializer.GetLatestAppModelDeployStatusOutput
 //	@Failure	400				{object}	bkerrs.GinErrorOutput
+//	@Description	已废弃，请改用 GET /apps/{appID}/envs/{envName}/bkmsapp-deploys/latest-status
+//	@Deprecated
 //	@Router		/apps/{appID}/envs/{envName}/taf-deploys/latest-status [get]
 func (h *Handler) GetLatestTafDeployStatus(c *gin.Context) {
 	h.getLatestAppModelDeployStatus(c, appruntime.FrameworkTAF)
