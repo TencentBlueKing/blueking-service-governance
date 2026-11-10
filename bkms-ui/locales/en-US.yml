@@ -223,6 +223,7 @@ tag不能为空: Tag cannot be empty
 删除后，将不可恢复，请谨慎操作！: Once deleted, it cannot be restored. Please proceed with caution!
 实例列表: list
 观测数据: observability
+在新标签页打开: Open in a new tab
 操作记录: record
 操作时间: time
 操作人: operator
