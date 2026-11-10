@@ -68,15 +68,21 @@ const EXT_LANG_FALLBACKS: Record<string, string> = {
 };
 
 /**
- * 按文件名解析 Monaco 高亮语言：优先取已注册语言的最长后缀匹配，
- * 未命中时走回退表，兜底 plaintext。回退表仅在后缀未注册时生效，
- * 如 x.cnf.json 仍按 .json 高亮。
+ * 按文件名解析 Monaco 高亮语言：先精确匹配语言注册的文件名（如 Dockerfile），
+ * 再取已注册语言的最长后缀匹配，未命中时走回退表，兜底 plaintext。
+ * 回退表仅在后缀未注册时生效，如 x.cnf.json 仍按 .json 高亮。
  */
 export function resolveEditorLang(fileName: string): string {
   const name = (fileName || '').toLowerCase();
+  const registered = languages.getLanguages();
+  const byFileName = registered.find(({ filenames = [] }) =>
+    filenames.some(filename => filename.toLowerCase() === name),
+  );
+  if (byFileName) return byFileName.id;
+
   let language = '';
   let extensionLength = 0;
-  for (const { id, extensions = [] } of languages.getLanguages()) {
+  for (const { id, extensions = [] } of registered) {
     for (const extension of extensions) {
       if (extension.length > extensionLength && name.endsWith(extension.toLowerCase())) {
         language = id;

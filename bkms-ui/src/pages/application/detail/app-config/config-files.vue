@@ -404,6 +404,7 @@
                                 :lang="editorLang"
                                 :model-value="editableDraft"
                                 :readonly="isEditorReadonly"
+                                :require-yaml-map-root="isFrameworkFile"
                                 :title="editorLang"
                                 @change="handleEditorChange"
                                 @error="handleEditorErr"

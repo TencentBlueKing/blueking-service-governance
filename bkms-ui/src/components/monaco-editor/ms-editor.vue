@@ -101,6 +101,8 @@
     isDiff: { type: Boolean, default: () => false }, // 开启diff模式
     original: { type: String, default: () => '' }, // 只有在diff模式下有效, diff数据
     lang: { type: String, default: 'yaml' },
+    /** YAML 是否要求根节点为 key-value 结构（values.yaml 类配置）；普通配置文件只校验语法时传 false */
+    requireYamlMapRoot: { type: Boolean, default: true },
     theme: { type: String as PropType<'hc-black' | 'hc-light' | 'vs' | 'vs-dark'>, default: 'vs-dark' },
     readonly: { type: Boolean, default: false },
     showCopy: { type: Boolean, default: true }, // 是否显示复制按钮
@@ -413,7 +415,7 @@
 
     // 校验不同语言格式（空内容时不跑 YAML 校验）
     const value = getValue() || '';
-    const yamlErrors = value && props.lang === 'yaml' ? validateYAML(value) : [];
+    const yamlErrors = value && props.lang === 'yaml' ? validateYAML(value, props.requireYamlMapRoot) : [];
     // 自定义校验（调用每个 validator 函数，传入当前值）
     const customErrors = props.validator.flatMap(fn => fn(value));
     const errors = [...yamlErrors, ...customErrors];
@@ -458,6 +460,12 @@
       initAutoCompletion();
       validate();
     },
+  );
+
+  // 根节点结构约束随「框架文件/普通文件」切换，语言不变时也要重新校验同一份内容
+  watch(
+    () => props.requireYamlMapRoot,
+    () => validate(),
   );
 
   watch(

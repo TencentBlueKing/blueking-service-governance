@@ -75,8 +75,8 @@ function lastErrors() {
   return wrapper.emitted('error')!.at(-1)![0];
 }
 
-function mountEditor(modelValue: string, lang = 'yaml') {
-  wrapper = shallowMount(MsEditor, { props: { modelValue, lang }, global: { mocks: i18nGlobalMocks } });
+function mountEditor(modelValue: string, lang = 'yaml', props: Record<string, unknown> = {}) {
+  wrapper = shallowMount(MsEditor, { props: { modelValue, lang, ...props }, global: { mocks: i18nGlobalMocks } });
   return wrapper;
 }
 
@@ -134,6 +134,35 @@ describe('编辑器 YAML 校验状态', () => {
     mountEditor('key: [invalid', lang);
     expect(wrapper.vm.validate()).toBe(false);
     expect(lastErrors()).toEqual([]);
+  });
+
+  // values.yaml 类配置要求根节点是 key-value 结构
+  it.each(['hello', '42', 'true'])('默认要求 YAML 根节点为 map，%s 被判为错误', value => {
+    mountEditor(value);
+    expect(wrapper.vm.validate()).toBe(true);
+    expect(lastErrors()).toHaveLength(1);
+  });
+
+  // 普通配置文件只关心能否解析，合法标量不应阻止保存
+  it.each(['hello', '42', 'true', '{a: 1}', '- a\n- b'])('关闭根节点结构约束后，合法 YAML %s 不再报错', value => {
+    mountEditor(value, 'yaml', { requireYamlMapRoot: false });
+    expect(wrapper.vm.validate()).toBe(false);
+    expect(lastErrors()).toEqual([]);
+  });
+
+  it('关闭根节点结构约束后，语法错误仍然报错', () => {
+    mountEditor('key: [invalid', 'yaml', { requireYamlMapRoot: false });
+    expect(wrapper.vm.validate()).toBe(true);
+    expect(lastErrors()).toHaveLength(1);
+  });
+
+  it('切换根节点结构约束时重新校验同一份内容', async () => {
+    mountEditor('hello');
+    expect(lastErrors()).toHaveLength(1);
+    await wrapper.setProps({ requireYamlMapRoot: false });
+    expect(lastErrors()).toEqual([]);
+    await wrapper.setProps({ requireYamlMapRoot: true });
+    expect(lastErrors()).toHaveLength(1);
   });
 
   it('初始化时保留已有的自定义校验', () => {

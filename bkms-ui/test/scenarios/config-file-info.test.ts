@@ -96,7 +96,7 @@ vi.mock('bkui-vue', async importOriginal => {
 vi.mock('~/components/monaco-editor/ms-editor.vue', () => ({
   default: {
     name: 'MsEditor',
-    props: ['lang'],
+    props: ['lang', 'requireYamlMapRoot'],
     template: '<div><slot name="title" /></div>',
     methods: {
       setValue(value: string) {
@@ -145,10 +145,11 @@ beforeEach(() => {
     { id: 'yaml', extensions: ['.yaml', '.yml'] },
     { id: 'json', extensions: ['.json'] },
     { id: 'xml', extensions: ['.xml'] },
-    { id: 'ini', extensions: ['.ini', '.properties'] },
+    { id: 'ini', extensions: ['.ini', '.properties'], filenames: ['config'] },
     { id: 'shell', extensions: ['.sh', '.bash'] },
     { id: 'typescript', extensions: ['.ts'] },
     { id: 'custom', extensions: ['.config.ts'] },
+    { id: 'dockerfile', extensions: ['.dockerfile'], filenames: ['Dockerfile'] },
     { id: 'plaintext' },
   ]);
   savedFile = {
@@ -395,29 +396,35 @@ describe('配置文件格式识别与校验', () => {
     ['app.properties', 'ini'],
     ['start.sh', 'shell'],
     ['app.config.ts', 'custom'],
+    ['Dockerfile', 'dockerfile'],
+    ['config', 'ini'],
     ['app.unknown', 'plaintext'],
-    ['config', 'plaintext'],
+    ['no-extension', 'plaintext'],
   ])('普通文件 %s 使用 %s 高亮', async (name, language) => {
     savedFile = { ...savedFile, configKind: 'plain', name, fileFormat: 'yaml' };
     const view = await openEditor();
     expect(view.getComponent({ name: 'MsEditor' }).props('lang')).toBe(language);
   });
 
+  // 普通文件只校验 YAML 语法；values.yaml 类框架文件才额外约束根节点为 key-value 结构。
   it.each([
-    ['taf', 'default', 'xml'],
-    ['trpc', 'app.json', 'yaml'],
-  ])('%s 框架文件（%s）无可识别后缀时按运行时格式使用 %s 语言', async (appType, name, language) => {
-    mocks.appType = appType;
-    savedFile.name = name;
+    ['framework', true],
+    ['plain', false],
+  ])('%s 文件的 YAML 根节点结构约束为 %s', async (configKind, requireYamlMapRoot) => {
+    savedFile = { ...savedFile, configKind, name: 'app.yaml' };
     const view = await openEditor();
-    expect(view.getComponent({ name: 'MsEditor' }).props('lang')).toBe(language);
+    expect(view.getComponent({ name: 'MsEditor' }).props('requireYamlMapRoot')).toBe(requireYamlMapRoot);
   });
 
+  // 框架文件的格式由运行时声明，与文件名后缀无关。
   it.each([
-    ['trpc.go.yaml', 'yaml'],
-    ['taf.default.xml', 'xml'],
-  ])('taf 框架文件 %s 后缀可识别时使用 %s 高亮', async (name, language) => {
-    mocks.appType = 'taf';
+    ['taf', 'default', 'xml'],
+    ['taf', 'taf.default.xml', 'xml'],
+    ['taf', 'trpc.go.yaml', 'xml'],
+    ['trpc', 'app.json', 'yaml'],
+    ['trpc', 'trpc.go.yaml', 'yaml'],
+  ])('%s 框架文件（%s）始终按运行时声明的格式使用 %s 高亮', async (appType, name, language) => {
+    mocks.appType = appType;
     savedFile.name = name;
     const view = await openEditor();
     expect(view.getComponent({ name: 'MsEditor' }).props('lang')).toBe(language);
