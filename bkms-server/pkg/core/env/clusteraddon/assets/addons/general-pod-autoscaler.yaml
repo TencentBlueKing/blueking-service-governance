@@ -17,7 +17,7 @@ chartInfo:
         memory: 512Mi
 requiredForAppTypes: []
 optionalForAppTypes:
-  # trpc / taf 为旧登记值，待废弃（M9 删除）
+  # trpc / taf 为旧登记值，已废弃，存量迁移完成后删除（见 bkms_app_runtime_model_migration.md §7）
   - trpc
   - taf
   - bkmsApp

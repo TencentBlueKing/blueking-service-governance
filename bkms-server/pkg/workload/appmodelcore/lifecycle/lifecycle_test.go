@@ -244,4 +244,88 @@ var _ = Describe("Lifecycle", func() {
 			Expect(err).To(MatchError(lifecycle.ErrInvalidParams))
 		})
 	})
+
+	Describe("UpdateSpecCompat", func() {
+		var app *bkmsapp.Application
+
+		BeforeEach(func() {
+			app = newApp(appruntime.FrameworkTRPC, appruntime.LanguageGo)
+			Expect(svc.Create(ctx, app, &lifecycle.CreateParams{
+				Command:       []string{"/app/server"},
+				FrameworkFile: &lifecycle.FrameworkFileParams{Name: "trpc_go.yaml", MountDir: "/usr/local/trpc/bin"},
+			})).To(Succeed())
+		})
+
+		It("updates the start config and syncs the framework file location for bkmsApp apps", func() {
+			oldModel, newModel, err := svc.UpdateSpecCompat(ctx, app, &lifecycle.SpecCompatParams{
+				Framework: appruntime.FrameworkTRPC,
+				Args:      []string{"--debug"},
+				Language:  appruntime.LanguageGo,
+				FileName:  "trpc_go.yaml",
+				FilePath:  "/data/conf/",
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(oldModel.Workload.Command).To(Equal([]string{"/app/server"}))
+			Expect(newModel.Workload.Command).To(BeEmpty())
+			Expect(newModel.Workload.Args).To(Equal([]string{"--debug"}))
+
+			defs := frameworkDefs(app.ID)
+			Expect(defs).To(HaveLen(1))
+			Expect(defs[0].Name).To(Equal("trpc_go.yaml"))
+			Expect(defs[0].MountDir).To(Equal("/data/conf"))
+		})
+
+		It("treats legacy apps the same way and leaves legacy fields untouched", func() {
+			model, err := store.Of(db, appmodel.AppModelMeta).Get(ctx, appmodel.ByApp(app.ID))
+			Expect(err).NotTo(HaveOccurred())
+			model.Workload.Type = appmodel.WorkloadTypeTrpc
+			model.Workload.TrpcConfig = appmodel.TrpcConfig{Language: appruntime.LanguageGo, FileContent: "legacy"}
+			Expect(appmodel.UpdateAppModel(ctx, db, model)).To(Succeed())
+			legacy := *app
+			legacy.Type, legacy.Framework, legacy.Language = bkmsapp.AppTypeTRPC, "", ""
+			legacy.TrpcSpec = &bkmsapp.TrpcSpec{Language: appruntime.LanguageGo}
+
+			_, newModel, err := svc.UpdateSpecCompat(ctx, &legacy, &lifecycle.SpecCompatParams{
+				Framework: appruntime.FrameworkTRPC,
+				ShCommand: "./start.sh",
+				Language:  appruntime.LanguageGo,
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(newModel.Workload.ShCommand).To(Equal("./start.sh"))
+			Expect(newModel.Workload.Type).To(Equal(appmodel.WorkloadTypeTrpc))
+			Expect(newModel.Workload.TrpcConfig).To(Equal(
+				appmodel.TrpcConfig{Language: appruntime.LanguageGo, FileContent: "legacy"},
+			))
+			Expect(frameworkDefs(app.ID)[0].Name).To(Equal("trpc_go.yaml"))
+		})
+
+		It("accepts any language for legacy apps without a recorded language and does not write it", func() {
+			legacy := *app
+			legacy.Type, legacy.Framework, legacy.Language = bkmsapp.AppTypeTRPC, "", ""
+
+			_, newModel, err := svc.UpdateSpecCompat(ctx, &legacy, &lifecycle.SpecCompatParams{
+				Framework: appruntime.FrameworkTRPC,
+				ShCommand: "./start.sh",
+				Language:  appruntime.LanguageCpp,
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(newModel.Workload.ShCommand).To(Equal("./start.sh"))
+			Expect(newModel.Workload.TrpcConfig.Language).To(BeEmpty())
+		})
+
+		DescribeTable("rejects requests without changing the model",
+			func(params lifecycle.SpecCompatParams) {
+				_, _, err := svc.UpdateSpecCompat(ctx, app, &params)
+				Expect(err).To(MatchError(lifecycle.ErrInvalidParams))
+
+				persisted, err := store.Of(db, appmodel.AppModelMeta).Get(ctx, appmodel.ByApp(app.ID))
+				Expect(err).NotTo(HaveOccurred())
+				Expect(persisted.Workload.Command).To(Equal([]string{"/app/server"}))
+			},
+			Entry("changing language", lifecycle.SpecCompatParams{
+				Framework: appruntime.FrameworkTRPC, Language: appruntime.LanguageCpp,
+			}),
+			Entry("framework mismatch", lifecycle.SpecCompatParams{Framework: appruntime.FrameworkTAF}),
+		)
+	})
 })

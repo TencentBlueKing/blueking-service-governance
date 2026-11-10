@@ -39,7 +39,8 @@ tests {
     // Verify the tRPC app we created is in the list
     const trpcApp = res.body.data.find(app => app.name === bru.getVar('newTrpcAppName'));
     expect(trpcApp).to.not.be.undefined;
-    expect(trpcApp.type).to.equal('trpc');
+    expect(trpcApp.type).to.equal('bkmsApp');
+    expect(trpcApp.framework).to.equal('trpc');
     
     // Verify we have different types of apps
     const appTypes = [...new Set(res.body.data.map(app => app.type))];

@@ -858,13 +858,8 @@ func (b *Builder) ComputeAppModel(
 		if err != nil {
 			return nil, errors.Wrap(err, "resolve dev mode props")
 		}
+		// 路径只取能力参数，AppSpec 中持久化的 workPath / mountPath 已废弃，不再覆盖
 		b.devModeConfig = devmode.CreateDevModeConfig(appModel, devModeProps, env.Type, true)
-		if effectiveAppSpec.DevMode.WorkPath != nil {
-			b.devModeConfig.Props.WorkPath = *effectiveAppSpec.DevMode.WorkPath
-		}
-		if effectiveAppSpec.DevMode.MountPath != nil {
-			b.devModeConfig.Props.MountPath = *effectiveAppSpec.DevMode.MountPath
-		}
 	}
 
 	return appModel, nil

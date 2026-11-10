@@ -40,6 +40,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/serializer"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime/runtimemod/mods"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	appmodeldeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/appmodel"
@@ -94,6 +95,7 @@ func (h *Handler) buildConfigs() *imagebuild.ConfigStore {
 //
 //	@ID			CreateApp
 //	@Summary	创建应用
+//	@Description	type 为 trpc / taf 已废弃，请改用 bkmsapps 接口；仍按 bkmsApp 创建，响应 type 为 bkmsApp
 //	@Tags		app
 //	@Accept		json
 //	@Produce	json
@@ -118,6 +120,12 @@ func (h *Handler) CreateApp(c *gin.Context) {
 		return
 	}
 
+	// 旧客户端创建 trpc / taf 应用：按 bkmsApp 创建，不再产生旧类型数据
+	if input.Type == bkmsapp.AppTypeTRPC || input.Type == bkmsapp.AppTypeTAF {
+		h.createBKMSAppCompat(c, uriInput.WorkspaceID, &input)
+		return
+	}
+
 	// 构建 Application 模型
 	app := &bkmsapp.Application{
 		ID:          input.ID,
@@ -131,13 +139,7 @@ func (h *Handler) CreateApp(c *gin.Context) {
 
 	// 设置类型特定字段
 	var err error
-	if input.Type == bkmsapp.AppTypeTRPC {
-		// TrpcSpec/AppModelSpec 由 struct-level validator 强制要求；
-		// 这里保留 nil 防御，避免 validator 后续被改动时导致 panic。
-		if input.AppModelSpec != nil && input.AppModelSpec.TrpcSpec != nil {
-			app.TrpcSpec = &bkmsapp.TrpcSpec{Language: input.AppModelSpec.TrpcSpec.Language}
-		}
-	} else if appruntime.IsHelmBasedType(input.Type) {
+	if appruntime.IsHelmBasedType(input.Type) {
 		if len(input.HelmSpec.HelmSource.ValueFiles) == 0 {
 			input.HelmSpec.HelmSource.ValueFiles = []string{"values.yaml"}
 		}
@@ -420,27 +422,30 @@ func (h *Handler) GetApp(c *gin.Context) {
 		}
 	}
 
-	fileName, filePath, err := h.frameworkFileLocation(ctx, app)
+	frameworkSpec, err := h.frameworkSpecView(ctx, app)
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "load framework config file"))
 		return
 	}
 	outputObj := new(serializer.AppDetailOutputObj).FromModel(
-		app, buildConfig, appModel, components, fileName, filePath,
+		app, buildConfig, appModel, components, frameworkSpec,
 	)
 	ginutils.OK(c, serializer.GetAppOutput{Data: outputObj})
 }
 
-// frameworkFileLocation 返回该应用唯一 framework def 的文件名和挂载目录。
-// 非 trpc/taf，或没有唯一 def 时返回空字符串，详情接口不因此失败。
-// todo 兼容：详情仍把这两个值填进 spec。调用方改读 def 后删除。
-func (h *Handler) frameworkFileLocation(
+// frameworkSpecView 按新模型准备详情中 trpcSpec / tafSpec 的取值：框架与语言取应用技术栈，
+// 文件名、挂载目录与默认内容取该应用唯一的 framework def。没有唯一 def 时文件字段为空，详情接口不因此失败。
+//
+// Deprecated: 仅供详情的 trpcSpec / tafSpec 兼容输出，旧客户端不再读取后删除。
+func (h *Handler) frameworkSpecView(
 	ctx context.Context,
 	app *bkmsapp.Application,
-) (string, string, error) {
+) (serializer.FrameworkSpecView, error) {
 	if !appruntime.IsAppModelType(app.Type) {
-		return "", "", nil
+		return serializer.FrameworkSpecView{}, nil
 	}
+	stack := mods.Of(app).Stack
+	view := serializer.FrameworkSpecView{Framework: stack.Framework, Language: stack.Language}
 	defs, err := appcfg.ListDefsByApp(
 		ctx,
 		store.Of(h.registry.DB, appcfg.AppConfigFileDefMeta),
@@ -448,12 +453,17 @@ func (h *Handler) frameworkFileLocation(
 		appcfg.DefFilterConfigKind(appcfg.ConfigKindFramework),
 	)
 	if err != nil {
-		return "", "", errors.Wrapf(err, "list framework defs for app %s", app.ID)
+		return view, errors.Wrapf(err, "list framework defs for app %s", app.ID)
 	}
 	if len(defs) != 1 {
-		return "", "", nil
+		return view, nil
 	}
-	return defs[0].Name, defs[0].MountDir, nil
+	file, err := appcfg.NewMountableFileProvider(h.registry.DB).GetFrameworkMountableFile(ctx, app.ID, "")
+	if err != nil {
+		return view, errors.Wrapf(err, "get framework config file for app %s", app.ID)
+	}
+	view.FileName, view.FilePath, view.FileContent = file.Name, file.MountDir, file.Content
+	return view, nil
 }
 
 // ListApps 查询 app 列表，只返回基本信息。
@@ -912,14 +922,6 @@ func (h *Handler) createAppByType(
 	input *serializer.CreateAppInput,
 ) error {
 	switch app.Type {
-	case bkmsapp.AppTypeTRPC:
-		if err := h.createTrpcApp(ctx, app, input.AppModelSpec); err != nil {
-			return bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "create trpc app resources")
-		}
-	case bkmsapp.AppTypeTAF:
-		if err := h.createTafApp(ctx, app, input.AppModelSpec); err != nil {
-			return bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "create taf app resources")
-		}
 	// Helm，Agones 底层实现都是基于 Helm Chart
 	case bkmsapp.AppTypeHelm, bkmsapp.AppTypeAgones:
 		if err := h.createHelmApp(ctx, app); err != nil {

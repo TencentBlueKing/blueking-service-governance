@@ -259,7 +259,8 @@ var _ = Describe("App serializers", func() {
 			ScopeEnvNames:        []string{"prod"},
 		}}
 
-		output := new(serializer.AppDetailOutputObj).FromModel(app, buildConfig, appModel, components, "", "")
+		output := new(serializer.AppDetailOutputObj).FromModel(app, buildConfig, appModel, components,
+			serializer.FrameworkSpecView{Framework: "trpc", Language: "go", FileContent: "content"})
 
 		Expect(output).To(Equal(&serializer.AppDetailOutputObj{
 			ID:              "app-id",
@@ -316,7 +317,7 @@ var _ = Describe("App serializers", func() {
 			Creator:     "tester",
 		}
 
-		output := new(serializer.AppDetailOutputObj).FromModel(app, nil, nil, nil, "", "")
+		output := new(serializer.AppDetailOutputObj).FromModel(app, nil, nil, nil, serializer.FrameworkSpecView{})
 
 		Expect(output.BuildConfig).To(BeNil())
 		Expect(output.HelmSpec).To(BeNil())
@@ -333,7 +334,7 @@ var _ = Describe("App serializers", func() {
 			VisibleEnvNames: []string{"test", "stag"},
 		}
 
-		output := new(serializer.AppDetailOutputObj).FromModel(app, nil, nil, nil, "", "")
+		output := new(serializer.AppDetailOutputObj).FromModel(app, nil, nil, nil, serializer.FrameworkSpecView{})
 
 		Expect(output.VisibleEnvNames).To(Equal([]string{"test", "stag"}))
 	})
@@ -445,7 +446,7 @@ var _ = Describe("App serializers", func() {
 			ScopeType: "global",
 		}}
 
-		output := new(serializer.AppModelSpecOutputObj).FromModel(appModel, components, "", "")
+		output := new(serializer.AppModelSpecOutputObj).FromModel(appModel, components, serializer.FrameworkSpecView{})
 
 		Expect(output.Command).To(Equal([]string{}))
 		Expect(output.Args).To(Equal([]string{}))
@@ -470,17 +471,15 @@ var _ = Describe("App serializers", func() {
 	It("maps app model spec output with taf config", func() {
 		appModel := &appmodel.AppModel{
 			Workload: appmodel.Workload{
-				Type:    appmodel.WorkloadTypeTaf,
 				Command: []string{"run"},
 				Args:    []string{"--taf"},
 				EnvVars: []appmodel.Variable{{Key: "MODE", Value: "taf"}},
-				TafConfig: appmodel.TafConfig{
-					FileContent: "taf-content",
-				},
 			},
 		}
 
-		output := new(serializer.AppModelSpecOutputObj).FromModel(appModel, nil, "", "")
+		output := new(serializer.AppModelSpecOutputObj).FromModel(
+			appModel, nil, serializer.FrameworkSpecView{Framework: "taf", FileContent: "taf-content"},
+		)
 
 		Expect(output).To(Equal(&serializer.AppModelSpecOutputObj{
 			Command:    []string{"run"},
@@ -493,21 +492,38 @@ var _ = Describe("App serializers", func() {
 		}))
 	})
 
-	It("fills framework file name and path from def", func() {
+	It("fills framework spec from the new model and ignores legacy fields", func() {
 		appModel := &appmodel.AppModel{
 			Workload: appmodel.Workload{
-				Type:       appmodel.WorkloadTypeTrpc,
-				TrpcConfig: appmodel.TrpcConfig{Language: "go"},
+				Type:       appmodel.WorkloadTypeTaf,
+				TrpcConfig: appmodel.TrpcConfig{Language: "cpp", FileContent: "legacy"},
 			},
 		}
 
+		output := new(serializer.AppModelSpecOutputObj).FromModel(appModel, nil, serializer.FrameworkSpecView{
+			Framework:   "trpc",
+			Language:    "go",
+			FileName:    "trpc_go.yaml",
+			FilePath:    "/usr/local/trpc/bin",
+			FileContent: "server: {}",
+		})
+
+		Expect(output.TafSpec).To(BeNil())
+		Expect(output.TrpcSpec).To(Equal(&serializer.TrpcSpecOutputObj{
+			Language:    "go",
+			FileName:    "trpc_go.yaml",
+			FilePath:    "/usr/local/trpc/bin",
+			FileContent: "server: {}",
+		}))
+	})
+
+	It("does not output trpcSpec or tafSpec for blank apps", func() {
 		output := new(serializer.AppModelSpecOutputObj).FromModel(
-			appModel, nil, "trpc_go.yaml", "/usr/local/trpc/bin",
+			&appmodel.AppModel{}, nil, serializer.FrameworkSpecView{Framework: "blank", Language: "go"},
 		)
 
-		Expect(output.TrpcSpec.FileName).To(Equal("trpc_go.yaml"))
-		Expect(output.TrpcSpec.FilePath).To(Equal("/usr/local/trpc/bin"))
-		Expect(output.TrpcSpec.Language).To(Equal("go"))
+		Expect(output.TrpcSpec).To(BeNil())
+		Expect(output.TafSpec).To(BeNil())
 	})
 
 	DescribeTable(

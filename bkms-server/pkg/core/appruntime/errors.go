@@ -24,7 +24,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-// 本文件的错误与 issue code 分为两组，用 BRIDGE-ONLY 标记区分，便于阶段 6 收缩时检索：
+// 本文件的错误与 issue code 分为两组，用 BRIDGE-ONLY 标记区分，便于旧字段清理后检索删除：
 //
 //   - 未标记的属于新模型自身的校验，迁移完成后仍然需要，调用方用 errors.Is 匹配。
 //   - 标记 BRIDGE-ONLY 的仅服务于桥接期。它们描述的是"同一份技术栈散落在多个持久化
@@ -42,7 +42,7 @@ const (
 )
 
 // BRIDGE-ONLY: 以下 issue code 全部源自新旧字段并存。
-// 阶段 6 删除 TrpcSpec / Workload.Type / TrpcConfig / TafConfig 之后，这些冲突在数据
+// 旧字段清理（删除 TrpcSpec / Workload.Type / TrpcConfig / TafConfig）之后，这些冲突在数据
 // 结构上不再可能出现，应连同 Inspect 中对应的判断分支一起删除。
 const (
 	IssueLanguageConflict        = "language_conflict"

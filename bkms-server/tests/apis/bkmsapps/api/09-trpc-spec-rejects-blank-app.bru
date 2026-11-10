@@ -1,5 +1,5 @@
 meta {
-  name: 09-trpc-spec-rejects-bkmsapp
+  name: 09-trpc-spec-rejects-blank-app
   type: http
   seq: 9
 }
@@ -24,8 +24,8 @@ assert {
 }
 
 tests {
-  test("should ask bkmsApp apps to use startup-config", () => {
-    expect(JSON.stringify(res.body)).to.include("bkmsApp app must use startup-config");
+  test("should reject a framework other than trpc", () => {
+    expect(JSON.stringify(res.body)).to.include("does not match");
   });
 }
 
