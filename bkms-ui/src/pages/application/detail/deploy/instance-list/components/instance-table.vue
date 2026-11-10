@@ -703,7 +703,7 @@
                       :class="{ 'is-disabled': !canLogin(row) }"
                       @click="canLogin(row) && emitRowAction('weterm', row)"
                     >
-                      WeTerm
+                      WeTERM
                     </Dropdown.DropdownItem>
                     <Dropdown.DropdownItem
                       v-if="isEnglish"
