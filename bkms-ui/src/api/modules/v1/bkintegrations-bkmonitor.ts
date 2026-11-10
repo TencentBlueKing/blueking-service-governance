@@ -26,7 +26,7 @@ export const BkintegrationsBkmonitorService = {
     config?: Config,
   ) => await v1Fetch.get<Request, ResponseData>('/apps/{appID}/envs/{envName}/bkmonitor/apm-service-name')(params, config),
   /**
-   * 按平均 CPU 使用量查询环境实例的 Top / Bottom N
+   * 按指定指标的平均值查询环境实例的 Top / Bottom N
    *
    * @method GET
    * @path /apps/{appID}/envs/{envName}/bkmonitor/instance-ranks
@@ -34,6 +34,7 @@ export const BkintegrationsBkmonitorService = {
    * @param appID path string required 应用 ID
    * @param envName path string required 环境名称
    * @param limit query number 取前 N 个实例，1~50，默认 10
+   * @param rankBy query "cpu_limit_usage" | "memory_limit_usage" | "cpu_usage" | "memory_usage" 排名指标
    * @param rankType query "top" | "bottom" 排名方向，默认 top
    * @param startTime query number required 排名时间范围的开始时间（Unix 时间戳，秒）
    * @param endTime query number required 排名时间范围的结束时间（Unix 时间戳，秒）
