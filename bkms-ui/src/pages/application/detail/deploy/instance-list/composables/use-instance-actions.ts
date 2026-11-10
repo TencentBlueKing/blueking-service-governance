@@ -27,11 +27,11 @@ import { useTabManager } from '~/composables/use-tab-manager';
 import { useAppDetail } from '~/stores/app-detail';
 
 import { canAdjustInstanceWeight, renderDeleteInfoBoxContent } from '../instance-utils';
+import { type InstanceActionContext, type InstanceRowAction, isInstanceRowAction } from '../types';
 import { provideInstanceActionContext } from './use-instance-action-context';
 import { useWeTermLogin } from './use-weterm-login';
 
 import type { default as InstanceActionsHost } from '../components/instance-actions-host.vue';
-import type { InstanceActionContext, InstanceRowAction } from '../types';
 
 export interface UseInstanceActionsOptions extends InstanceActionContext {
   /** 是否选中了所有实例 */
@@ -159,15 +159,9 @@ export function useInstanceActions(
     instance: AppInstanceOutputObj;
   }) {
     const { action, envName, instance } = payload;
-    if (
-      !(['gray', 'log', 'login', 'monitor', 'weight', 'weterm'] as InstanceRowAction[]).includes(
-        action as InstanceRowAction,
-      )
-    ) {
-      return;
-    }
+    if (!isInstanceRowAction(action)) return;
 
-    switch (action as InstanceRowAction) {
+    switch (action) {
       case 'gray':
         openGray(instance, envName);
         break;
