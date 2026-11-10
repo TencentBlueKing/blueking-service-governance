@@ -214,6 +214,8 @@ svcConf:
     enableBkLoginUserinfoAuth: false
     # 用 bk-user 校验用户所属租户/状态
     enableBkUserTenantVerify: false
+    # 制品库为独立部署：不接入权限中心，接口使用制品库账号 Basic 认证，制品库成员需在制品库侧自行管理
+    enableIndependentBkRepo: false
   # 平台级虚拟账号，未启用时使用请求用户本人调用外部系统
   # 启用前须先用开启了虚拟账号的配置执行 grant_platform_account 命令为存量空间补发权限
   platformAccount:
@@ -274,7 +276,8 @@ svcConf:
   # 蓝盾制品库配置，用于项目 & 仓库初始化
   bkrepo:
     baseUrl: https://bkrepo.example.com
-    # 管理账号配置，需由制品库管理员提供
+    # 管理账号配置，需由制品库管理员提供：默认为平台账号（AccessKey / SecretKey），
+    # 开启 featureIntegrations.enableIndependentBkRepo 时为制品库管理员的用户名 / 密码
     username: bkms
     password: <masked>
     # 仓库初始化配置

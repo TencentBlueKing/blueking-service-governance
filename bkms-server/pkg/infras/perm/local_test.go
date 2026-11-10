@@ -208,15 +208,22 @@ var _ = Describe("LocalManager", func() {
 	)
 
 	var (
-		fake *fakeIAMServicer
-		mgr  *LocalManager
-		ctx  context.Context
+		fake        *fakeIAMServicer
+		mgr         *LocalManager
+		ctx         context.Context
+		originalCfg *config.Config
 	)
 
 	BeforeEach(func() {
 		fake = newFakeIAMServicer()
 		mgr = &LocalManager{svc: fake}
 		ctx = ctxWithUser(testUser)
+		originalCfg = config.G
+		config.G = &config.Config{}
+	})
+
+	AfterEach(func() {
+		config.G = originalCfg
 	})
 
 	Context("HasCreateWorkspacePerm", func() {
@@ -316,6 +323,29 @@ var _ = Describe("LocalManager", func() {
 			Expect(fake.gotCreateWSData.BKRepo).NotTo(BeNil())
 			Expect(fake.gotCreateWSData.BKRepo.ProjectID).To(Equal(bkRepoID))
 			Expect(fake.gotCreateWSData.BKRepo.ProjectName).To(Equal(bkRepoID))
+		})
+	})
+
+	Context("independent bkrepo", func() {
+		BeforeEach(func() {
+			config.G.FeatureIntegrations.EnableIndependentBkRepo = true
+		})
+
+		It("does not grant bkrepo scopes to workspace admin", func() {
+			fake.createWSAdminResp = &role.Role{ID: "r-admin"}
+			Expect(mgr.CreateWorkspaceAdmin(
+				ctx, testWS, displayName, []string{"u1"}, bkCIID, bcsID, bkRepoID,
+			)).To(Succeed())
+			Expect(fake.gotCreateWSData.BKCI).NotTo(BeNil())
+			Expect(fake.gotCreateWSData.BKRepo).To(BeNil())
+		})
+
+		It("does not grant bkrepo scopes to builtin roles", func() {
+			Expect(mgr.CreateWorkspaceScopeBuiltinRoles(
+				ctx, testWS, displayName, bkCIID, bcsID, bkRepoID,
+			)).To(Succeed())
+			Expect(fake.gotCreateBuiltinData.BKCI).NotTo(BeNil())
+			Expect(fake.gotCreateBuiltinData.BKRepo).To(BeNil())
 		})
 	})
 
