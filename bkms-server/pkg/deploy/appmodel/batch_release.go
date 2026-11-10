@@ -236,26 +236,12 @@ func OperateBatchRelease(
 	}
 
 	rollouts := batchrelease.NewRolloutClient(cluster.NewConfig(record.ClusterID))
-	rollout, err := rollouts.Get(ctx, record.Namespace, name)
+	// 不能操作上一次发布的 Rollout：批次数等都与最新记录对不上
+	rollout, status, err := getOwnedRollout(ctx, rollouts, record.Namespace, name, record.ID.Hex())
 	if err != nil {
-		return nil, errors.Wrap(err, "get rollout")
+		return nil, err
 	}
-	// 再次部署时部署记录先于 Rollout 切换，这期间集群中仍是上一次发布的 Rollout，批次数等都与最新记录对不上
-	if deployID := rollout.GetAnnotations()[AnnotationKeyDeployID]; deployID != record.ID.Hex() {
-		return nil, errors.Wrapf(
-			batchrelease.ErrReleaseSwitching, "rollout %s/%s belongs to deploy %q rather than deploy record %s",
-			record.Namespace, name, deployID, record.ID.Hex(),
-		)
-	}
-	status, err := batchrelease.ParseStatus(rollout.Object)
-	if err != nil {
-		return nil, errors.Wrapf(err, "rollout %s/%s", record.Namespace, name)
-	}
-	var batchCount int
-	if record.ReleaseStrategy != nil {
-		batchCount = len(record.ReleaseStrategy.Batches)
-	}
-	patch, err := status.ActionPatch(action, batchCount)
+	patch, err := status.ActionPatch(action, record.BatchCount())
 	if err != nil {
 		return nil, err
 	}
@@ -264,6 +250,36 @@ func OperateBatchRelease(
 		return nil, errors.Wrapf(err, "%s batch release of deploy record %s", action, record.ID.Hex())
 	}
 	return record, nil
+}
+
+// getOwnedRollout 读取与主工作负载同名的 Rollout 并解析状态，Rollout 不属于部署 deployID 时返回 ErrReleaseSwitching：
+// 再次部署时部署记录先于 Rollout 切换，旧 Rollout 删除前集群中仍是上一次发布的 Rollout
+func getOwnedRollout(
+	ctx context.Context, rollouts *batchrelease.RolloutClient, namespace, name, deployID string,
+) (*unstructured.Unstructured, batchrelease.Status, error) {
+	rollout, err := rollouts.Get(ctx, namespace, name)
+	if err != nil {
+		return nil, batchrelease.Status{}, errors.Wrap(err, "get rollout")
+	}
+	if err = verifyDeployOwner(rollout, deployID); err != nil {
+		return nil, batchrelease.Status{}, err
+	}
+	status, err := batchrelease.ParseStatus(rollout.Object)
+	if err != nil {
+		return nil, batchrelease.Status{}, errors.Wrapf(err, "rollout %s/%s", namespace, name)
+	}
+	return rollout, status, nil
+}
+
+// verifyDeployOwner 确认集群资源的部署 ID 注解等于 deployID，否则返回 ErrReleaseSwitching
+func verifyDeployOwner(obj *unstructured.Unstructured, deployID string) error {
+	if owner := obj.GetAnnotations()[AnnotationKeyDeployID]; owner != deployID {
+		return errors.Wrapf(
+			batchrelease.ErrReleaseSwitching, "%s %s/%s belongs to deploy %q rather than deploy record %s",
+			obj.GetKind(), obj.GetNamespace(), obj.GetName(), owner, deployID,
+		)
+	}
+	return nil
 }
 
 // deleteRollout 删除与部署记录中主工作负载同名的 Rollout CR。主工作负载不是 GameDeployment 时不会有 Rollout，

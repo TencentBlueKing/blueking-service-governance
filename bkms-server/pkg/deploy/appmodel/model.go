@@ -327,3 +327,11 @@ func (r *Record) IsBatchReleasing() bool {
 	}
 	return r.GetReleaseMode() == ReleaseModeCanary && r.Status == StatusDeploying
 }
+
+// BatchCount 分批发布的批次总数，没有发布策略快照时为 0
+func (r *Record) BatchCount() int {
+	if r.ReleaseStrategy == nil {
+		return 0
+	}
+	return len(r.ReleaseStrategy.Batches)
+}

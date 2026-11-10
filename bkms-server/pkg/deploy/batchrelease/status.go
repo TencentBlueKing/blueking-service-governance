@@ -163,7 +163,7 @@ func ParseStatus(rollout map[string]any) (Status, error) {
 //   - 回滚中（批次序号 < 0）视为更新中；回滚后步骤阶段仍保留回滚前的值，必须先于暂停判断
 //   - UpdatingPrimary / CleaningCanary 视为更新中
 //   - Healthy 仅在 Rollout 跟踪的版本即工作负载目标版本、且所有实例已更新就绪时视为已完成，否则视为未开始
-//   - 其余情况人工暂停标记优先于步骤阶段，其次按步骤阶段区分暂停方式；步骤阶段为空表示本批尚未开始
+//   - 其余情况按 paused 区分暂停方式，未暂停时步骤阶段为空表示本批尚未开始，否则为更新中
 func (s Status) BatchPhase(workload WorkloadSnapshot) BatchPhase {
 	if s.isRollingBack() {
 		return BatchPhaseUpdating
@@ -203,12 +203,16 @@ func (s Status) isRollingBack() bool {
 	return s.CurrentStepIndex != nil && *s.CurrentStepIndex < 0
 }
 
-// stepBatchPhase 执行步骤期间的批次状态
+// stepBatchPhase 执行步骤期间的批次状态。
+//
+// 是否暂停只看 paused：Kourse 进入暂停时总是同时写入 paused 与暂停类的步骤阶段，而继续、跳过等手动操作
+// 只把 paused 改为 "false"，步骤阶段要等 Kourse 处理后才更新。paused 为 "false" 时残留的暂停类步骤阶段
+// 表示操作已提交、等待 Kourse 执行，按更新中处理
 func (s Status) stepBatchPhase() BatchPhase {
 	switch {
-	case s.Paused == PausedTrue || s.Paused == PausedManually || s.CurrentStepPhase == StepPhasePausedPermanently:
+	case s.Paused == PausedTrue || s.Paused == PausedManually:
 		return BatchPhaseManualPaused
-	case s.Paused == PausedTemporary || s.CurrentStepPhase == StepPhasePausedTemporarily:
+	case s.Paused == PausedTemporary:
 		return BatchPhaseTimedPaused
 	case s.CurrentStepPhase == "":
 		return BatchPhasePending

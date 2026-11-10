@@ -7927,7 +7927,7 @@ const docTemplate = `{
                         "BkUserCredential": []
                     }
                 ],
-                "description": "返回环境 / 泳道最新部署记录的分批发布进度，进度由部署轮询任务写入，不实时请求集群；\n没有部署记录或最新记录不是分批发布时 data 为 null",
+                "description": "返回环境 / 泳道最新部署记录的分批发布进度\n没有部署记录或最新记录不是分批发布时 data 为 null",
                 "produces": [
                     "application/json"
                 ],
@@ -24427,11 +24427,11 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "workloadCurrentRevision": {
-                    "description": "旧版本：工作负载 status.currentRevision；轮询任务读到工作负载前为空",
+                    "description": "旧版本：工作负载 status.currentRevision；尚未读到工作负载时为空",
                     "type": "string"
                 },
                 "workloadUpdateRevision": {
-                    "description": "新版本：工作负载 status.updateRevision，实例 workloadRevision 与之相等即为新版本实例；轮询任务读到工作负载前为空",
+                    "description": "新版本：工作负载 status.updateRevision，实例 workloadRevision 与之相等即为新版本实例；尚未读到工作负载时为空",
                     "type": "string"
                 }
             }
