@@ -137,9 +137,9 @@ function getQuantityControl(label: string, selector: string) {
   return control;
 }
 
-/** 编辑态下唯一的类型为 number 的输入框即「实例数」（bkui FormItem label 未做 aria 关联） */
+/** BKUI FormItem 的标签没有关联到输入框，用所属字段定位。 */
 function getReplicasInput() {
-  return screen.getByRole('spinbutton');
+  return getQuantityControl('实例数', 'input[type="number"]');
 }
 
 /** 驱动环境数据加载，并等待查看态渲染出实例数（正向信号：数据已回填） */
@@ -157,7 +157,7 @@ async function openCustomQuantity(label: string) {
     return within(openMenu);
   });
   await userEvent.click(popup.getByRole('button', { name: '自定义' }));
-  return popup;
+  return { popup, input: popup.getByRole('spinbutton', { name: '自定义' }) };
 }
 
 function renderResourcesForm() {
@@ -174,8 +174,7 @@ function renderResourcesForm() {
 }
 
 async function setCustomQuantity(label: string, amount: string) {
-  const popup = await openCustomQuantity(label);
-  const input = popup.getByRole('textbox', { name: '自定义' });
+  const { popup, input } = await openCustomQuantity(label);
   await userEvent.clear(input);
   await userEvent.type(input, amount);
   await userEvent.click(popup.getByRole('button', { name: '确定' }));
@@ -270,16 +269,14 @@ describe('配置编辑：资源规格多态切换', () => {
     await enterEditMode();
 
     const requestLabel = '内存预留 (Requests)';
-    const requestPopup = await openCustomQuantity(requestLabel);
-    const input = requestPopup.getByRole('textbox', { name: '自定义' });
-    const units = within(requestPopup.getByRole('group', { name: '内存单位' }));
-    expect(input).toHaveValue('');
-    expect(units.getByRole('button', { name: 'Gi', pressed: true })).toBeInTheDocument();
+    const { popup: requestPopup, input } = await openCustomQuantity(requestLabel);
+    expect(input).toHaveValue(null);
 
     await userEvent.type(input, '768');
-    await userEvent.click(units.getByRole('button', { name: 'Mi' }));
-    expect(units.getByRole('button', { name: 'Mi', pressed: true })).toBeInTheDocument();
-    expect(input).toHaveValue('768');
+    await userEvent.click(requestPopup.getByRole('button', { name: '内存单位 Gi', expanded: false }));
+    await userEvent.click(await requestPopup.findByText('Mi', { exact: true }));
+    expect(requestPopup.getByRole('button', { name: '内存单位 Mi', expanded: false })).toBeVisible();
+    expect(input).toHaveValue(768);
     expect(getQuantityControl(requestLabel, '.bk-select-trigger input')).toHaveValue('1Gi');
 
     await userEvent.click(requestPopup.getByRole('button', { name: '确定' }));
@@ -287,12 +284,82 @@ describe('配置编辑：资源规格多态切换', () => {
     expect(requestPopup.getByRole('button', { name: '自定义' })).toBeVisible();
 
     const limitLabel = '内存限制 (Limits)';
-    const limitPopup = await openCustomQuantity(limitLabel);
-    expect(limitPopup.getByRole('button', { name: 'Gi', pressed: true })).toBeInTheDocument();
-    await userEvent.click(limitPopup.getByRole('button', { name: 'Mi' }));
-    await userEvent.type(limitPopup.getByRole('textbox', { name: '自定义' }), '1536');
+    const { popup: limitPopup, input: limitInput } = await openCustomQuantity(limitLabel);
+    await userEvent.click(limitPopup.getByRole('button', { name: '内存单位 Gi', expanded: false }));
+    await userEvent.click(await limitPopup.findByText('Mi', { exact: true }));
+    await userEvent.type(limitInput, '1536');
     await userEvent.click(limitPopup.getByRole('button', { name: '取消' }));
     expect(getQuantityControl(limitLabel, '.bk-select-trigger input')).toHaveValue('2Gi');
+  });
+
+  it('当用户键入或粘贴非法字符时，应只保留合法的小数输入', async () => {
+    const user = userEvent.setup();
+    mocks.getDefault.mockResolvedValue(DEFAULT_SPEC);
+    renderResourcesForm();
+    await loadEnv(DEFAULT_ENV, '2');
+    await enterEditMode();
+
+    const label = 'CPU 预留 (Requests)';
+    const { input } = await openCustomQuantity(label);
+    await user.clear(input);
+    await user.type(input, '0e-+a.4');
+    expect(input).toHaveValue(0.4);
+
+    await user.paste('e2');
+    expect(input).toHaveValue(0.4);
+    await user.keyboard('{Enter}');
+    expect(getQuantityControl(label, '.bk-select-trigger input')).toHaveValue('0.4 核');
+  });
+
+  it('当用户用上下键调整 CPU 时，应每次加减 1 并拦截零值', async () => {
+    const user = userEvent.setup();
+    mocks.getDefault.mockResolvedValue(DEFAULT_SPEC);
+    renderResourcesForm();
+    await loadEnv(DEFAULT_ENV, '2');
+    await enterEditMode();
+
+    const label = 'CPU 限制 (Limits)';
+    const { input } = await openCustomQuantity(label);
+    expect(input).toHaveFocus();
+    expect(input).toHaveValue(2);
+
+    await user.keyboard('{ArrowDown}');
+    expect(input).toHaveValue(1);
+    await user.keyboard('{ArrowDown}');
+    expect(input).toHaveValue(1);
+    await user.keyboard('{ArrowUp}');
+    expect(input).toHaveValue(2);
+
+    await user.clear(input);
+    await user.type(input, '0');
+    await user.keyboard('{Enter}');
+    expect(input).toHaveAttribute('aria-invalid', 'true');
+    expect(getQuantityControl(label, '.bk-select-trigger input')).toHaveValue('2 核');
+  });
+
+  it('当用户用上下键调整内存时，应从 1 开始并保留小数部分', async () => {
+    const user = userEvent.setup();
+    mocks.getDefault.mockResolvedValue(DEFAULT_SPEC);
+    renderResourcesForm();
+    await loadEnv(DEFAULT_ENV, '2');
+    await enterEditMode();
+
+    const label = '内存预留 (Requests)';
+    const { input } = await openCustomQuantity(label);
+    expect(input).toHaveFocus();
+    await user.keyboard('{ArrowDown}');
+    expect(input).toHaveValue(null);
+    await user.keyboard('{ArrowUp}');
+    expect(input).toHaveValue(1);
+
+    await user.clear(input);
+    await user.type(input, '1.4');
+    await user.keyboard('{ArrowDown}');
+    expect(input).toHaveValue(0.4);
+    await user.keyboard('{ArrowDown}');
+    expect(input).toHaveValue(0.4);
+    await user.keyboard('{Enter}');
+    expect(getQuantityControl(label, '.bk-select-trigger input')).toHaveValue('0.4Gi');
   });
 
   it('当用户在普通环境保存配置时，应写入该环境的覆盖配置', async () => {
@@ -315,9 +382,9 @@ describe('配置编辑：资源规格多态切换', () => {
     await userEvent.clear(replicasInput);
     await userEvent.type(replicasInput, '5');
     await userEvent.click(getQuantityControl('CPU 预留 (Requests)', '.bkms-icon-return'));
-    const requestDraft = await openCustomQuantity('CPU 预留 (Requests)');
-    expect(requestDraft.getByRole('textbox', { name: '自定义' })).toHaveValue('0.2');
-    await userEvent.click(requestDraft.getByRole('button', { name: '确定' }));
+    const { popup, input } = await openCustomQuantity('CPU 预留 (Requests)');
+    expect(input).toHaveValue(0.2);
+    await userEvent.click(popup.getByRole('button', { name: '确定' }));
     await userEvent.click(getQuantityControl('CPU 限制 (Limits)', '.bkms-icon-return'));
     await setCustomQuantity('CPU 限制 (Limits)', '89');
     await setCustomQuantity('内存限制 (Limits)', '128');
@@ -365,9 +432,9 @@ describe('配置编辑：资源规格多态切换', () => {
     await enterEditMode();
 
     // 打开自定义预填当前值，点取消丢弃草稿后已选值保持原样
-    const requestDraft = await openCustomQuantity('CPU 预留 (Requests)');
-    expect(requestDraft.getByRole('textbox', { name: '自定义' })).toHaveValue('2');
-    await userEvent.click(requestDraft.getByRole('button', { name: '取消' }));
+    const { popup, input } = await openCustomQuantity('CPU 预留 (Requests)');
+    expect(input).toHaveValue(2);
+    await userEvent.click(popup.getByRole('button', { name: '取消' }));
     await setCustomQuantity('CPU 限制 (Limits)', '1');
     await setCustomQuantity('内存限制 (Limits)', '0.5');
     await userEvent.click(screen.getByRole('button', { name: '保存' }));

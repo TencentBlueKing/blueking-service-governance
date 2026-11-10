@@ -31,39 +31,45 @@
       :value="option"
     />
     <template #extension>
-      <Button
+      <button
         v-if="!isDraftOpen"
-        class="ml-[12px]"
-        text
-        theme="primary"
+        class="flex h-full w-full cursor-pointer items-center justify-center gap-[6px] px-[12px] text-[12px] text-[#4D4F56] hover:bg-[#F0F1F5]"
+        type="button"
         @click="openDraft"
       >
+        <i
+          aria-hidden="true"
+          class="bkms-icon bkms-icon-plus-circle text-[14px] text-[#979BA5]"
+        ></i>
         {{ $t('自定义') }}
-      </Button>
+      </button>
       <div
         v-else
-        class="flex w-full items-center"
-        :class="kind === 'memory' ? 'gap-[8px] px-[12px]' : 'gap-[4px] px-[8px]'"
-        @keydown.esc.prevent="closeDraft"
+        class="flex w-full items-center gap-[4px] px-[12px]"
+        @keydown.esc.prevent="onDraftEscape"
         @keydown.stop
       >
         <div
-          class="flex min-w-0 flex-1 items-center rounded-[2px] border bg-white"
-          :class="[
-            kind === 'memory' ? 'h-[26px]' : 'h-[32px]',
-            showDraftError ? 'border-[#EA3636]' : 'border-[#C4C6CC] focus-within:border-[#3A84FF]',
-          ]"
+          class="flex h-[32px] min-w-0 flex-1 items-center rounded-[2px] border bg-white text-[12px] text-[#63656E]"
+          :class="showDraftError ? 'border-[#EA3636]' : 'border-[#C4C6CC] focus-within:border-[#3A84FF]'"
         >
           <input
             ref="draftInputRef"
-            v-model="draft"
             :aria-invalid="showDraftError"
             :aria-label="$t('自定义')"
-            class="h-full min-w-0 flex-1 bg-transparent px-[10px] text-[12px] text-[#63656E] outline-none placeholder:text-[#C4C6CC]"
+            class="draft-number-input h-full min-w-0 flex-1 bg-transparent px-[10px] outline-none placeholder:text-[#C4C6CC]"
             inputmode="decimal"
+            min="0"
             :placeholder="$t('请输入')"
-            type="text"
+            step="any"
+            type="number"
+            :value="draft"
+            @beforeinput="onBeforeDraftInput"
+            @focus="unitSelectRef?.hidePopover()"
+            @input="onDraftInput"
+            @keydown.down.prevent="stepDraft(-1)"
             @keydown.enter="onDraftEnter"
+            @keydown.up.prevent="stepDraft(1)"
           />
           <span
             v-if="showDraftError"
@@ -73,49 +79,67 @@
           >
             <ExclamationCircleShape />
           </span>
-        </div>
-        <div
-          v-if="kind === 'memory'"
-          :aria-label="$t('内存单位')"
-          class="flex shrink-0 overflow-hidden rounded-[2px] border border-[#C4C6CC]"
-          role="group"
-        >
-          <button
-            v-for="memoryUnit in MEMORY_UNITS"
-            :key="memoryUnit"
-            :aria-pressed="unit === memoryUnit"
-            class="h-[26px] cursor-pointer px-[8px] text-[12px] focus-visible:outline focus-visible:outline-[1px] focus-visible:outline-offset-[-1px] focus-visible:outline-[#3A84FF]"
-            :class="unit === memoryUnit ? 'bg-[#E1ECFF] text-[#3A84FF]' : 'bg-white text-[#63656E]'"
-            type="button"
-            @click="unit = memoryUnit"
+          <Select
+            v-if="kind === 'memory'"
+            ref="unitSelectRef"
+            v-model="unit"
+            class="shrink-0 border-l border-[#DCDEE5]"
+            :clearable="false"
+            :popover-min-width="64"
+            :popover-options="{ boundary: 'parent' }"
+            :with-validate="false"
+            @toggle="isUnitSelectOpen = $event"
           >
-            {{ memoryUnit }}
-          </button>
+            <template #trigger>
+              <button
+                :aria-expanded="isUnitSelectOpen"
+                :aria-label="`${$t('内存单位')} ${unit}`"
+                class="flex h-[30px] w-[47px] cursor-pointer items-center justify-between pl-[8px] pr-[4px] outline-none focus-visible:bg-[#E1ECFF]"
+                type="button"
+                @keydown.down.prevent="unit = 'Mi'"
+                @keydown.tab="unitSelectRef?.hidePopover()"
+                @keydown.up.prevent="unit = 'Gi'"
+              >
+                {{ unit }}
+                <AngleDown
+                  aria-hidden="true"
+                  class="text-[#979BA5]"
+                  :class="{ 'rotate-180': isUnitSelectOpen }"
+                  :height="18"
+                  :width="18"
+                />
+              </button>
+            </template>
+            <Select.Option
+              v-for="memoryUnit in MEMORY_UNITS"
+              :key="memoryUnit"
+              :label="memoryUnit"
+              :value="memoryUnit"
+            />
+          </Select>
         </div>
         <button
           :aria-label="$t('确定')"
-          class="flex h-[24px] shrink-0 cursor-pointer items-center justify-center"
-          :class="kind === 'memory' ? 'w-[16px]' : 'w-[20px]'"
+          class="flex h-[24px] w-[24px] shrink-0 cursor-pointer items-center justify-center text-[#2CAF5E] hover:text-[#299E56]"
           type="button"
           @click="confirmDraft"
         >
           <Done
-            fill="#2CAF5E"
-            :height="18"
-            :width="18"
+            fill="currentColor"
+            :height="24"
+            :width="24"
           />
         </button>
         <button
           :aria-label="$t('取消')"
-          class="flex h-[24px] shrink-0 cursor-pointer items-center justify-center"
-          :class="kind === 'memory' ? 'w-[14px]' : 'w-[20px]'"
+          class="flex h-[24px] w-[24px] shrink-0 cursor-pointer items-center justify-center text-[#979BA5] hover:text-[#63656E]"
           type="button"
           @click="closeDraft"
         >
           <Error
-            fill="#979BA5"
-            :height="14"
-            :width="14"
+            fill="currentColor"
+            :height="18"
+            :width="18"
           />
         </button>
       </div>
@@ -126,8 +150,8 @@
 <script setup lang="ts">
   import { computed, nextTick, ref } from 'vue';
 
-  import { Button, Select } from 'bkui-vue';
-  import { Done, Error, ExclamationCircleShape } from 'bkui-vue/lib/icon';
+  import { Select } from 'bkui-vue';
+  import { AngleDown, Done, Error, ExclamationCircleShape } from 'bkui-vue/lib/icon';
   import { useI18n } from 'vue-i18n';
   import { formatCpuCores, parseCpuCores, parseMemoryToMiB } from '~/common/resource-quantity';
 
@@ -136,14 +160,17 @@
   const CPU_OPTIONS = ['0.1', '0.2', '0.5', '1', '2', '4', '8', '16', '32'];
   const MEMORY_OPTIONS = ['256Mi', '512Mi', '1Gi', '2Gi', '4Gi', '8Gi', '16Gi', '32Gi', '64Gi'];
   const MEMORY_UNITS: MemoryUnit[] = ['Gi', 'Mi'];
+  const DRAFT_INPUT_PATTERN = /^\d*\.?\d*$/;
 
   const props = defineProps<{ kind: 'cpu' | 'memory' }>();
   const model = defineModel<string>({ required: true });
 
   const { t } = useI18n();
   const selectRef = ref<InstanceType<typeof Select>>();
+  const unitSelectRef = ref<InstanceType<typeof Select>>();
   const draftInputRef = ref<HTMLInputElement>();
   const isDraftOpen = ref(false);
+  const isUnitSelectOpen = ref(false);
   const draft = ref('');
   const unit = ref<MemoryUnit>('Gi');
   const triedConfirm = ref(false);
@@ -155,11 +182,11 @@
     return [...presets.filter(option => option !== currentQuantity.value), model.value];
   });
 
-  const draftAmount = computed(() => draft.value.trim());
-  const draftError = computed(() => getDraftError(draftAmount.value));
-  const showDraftError = computed(() => Boolean(draftError.value && (draftAmount.value || triedConfirm.value)));
+  const draftError = computed(() => getDraftError(draft.value));
+  const showDraftError = computed(() => Boolean(draftError.value && (draft.value || triedConfirm.value)));
 
   function closeDraft() {
+    isUnitSelectOpen.value = false;
     isDraftOpen.value = false;
   }
 
@@ -167,8 +194,7 @@
     triedConfirm.value = true;
     if (draftError.value) return;
 
-    const amount = draftAmount.value;
-    const quantity = props.kind === 'cpu' ? amount : `${amount}${unit.value}`;
+    const quantity = props.kind === 'cpu' ? draft.value : `${draft.value}${unit.value}`;
     // 等量 CPU 保留原始写法，避免把继承的毫核值变成环境覆盖。
     if (quantity !== currentQuantity.value) model.value = quantity;
     closeDraft();
@@ -188,10 +214,33 @@
       : t('请输入不小于 256Mi 的数字');
   }
 
+  function onBeforeDraftInput(event: InputEvent) {
+    const text = event.data ?? event.dataTransfer?.getData('text/plain');
+    if (text && !DRAFT_INPUT_PATTERN.test(text)) event.preventDefault();
+  }
+
   function onDraftEnter(event: KeyboardEvent) {
     if (event.isComposing) return;
     event.preventDefault();
     confirmDraft();
+  }
+
+  function onDraftEscape() {
+    if (isUnitSelectOpen.value) {
+      unitSelectRef.value?.hidePopover();
+    } else {
+      closeDraft();
+    }
+  }
+
+  function onDraftInput() {
+    const input = draftInputRef.value;
+    if (!input) return;
+    if (DRAFT_INPUT_PATTERN.test(input.value)) {
+      draft.value = input.value;
+    } else {
+      input.value = draft.value;
+    }
   }
 
   function onToggle(open: boolean) {
@@ -206,4 +255,24 @@
     isDraftOpen.value = true;
     nextTick(() => draftInputRef.value?.focus());
   }
+
+  function stepDraft(step: -1 | 1) {
+    // 只调整整数部分，避免小数步进时产生浮点误差。
+    const [integer, fraction] = draft.value.split('.');
+    const nextInteger = BigInt(integer) + BigInt(step);
+    const nextDraft = fraction ? `${nextInteger}.${fraction}` : String(nextInteger);
+    const nextAmount = Number(nextDraft);
+    if (Number.isFinite(nextAmount) && nextAmount > 0) draft.value = nextDraft;
+  }
 </script>
+
+<style scoped>
+  .draft-number-input {
+    appearance: textfield;
+  }
+
+  .draft-number-input::-webkit-inner-spin-button,
+  .draft-number-input::-webkit-outer-spin-button {
+    appearance: none;
+  }
+</style>
