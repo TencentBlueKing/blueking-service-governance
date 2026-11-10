@@ -202,7 +202,7 @@
               class="flex flex-wrap gap-[4px]"
             >
               <Tag
-                v-for="item in groupDeployedEnvs(row.deployedEnvs)"
+                v-for="item in groupDeployedEnvs(row.deployedEnvs, getEnvDisplayName)"
                 :key="item.key"
                 v-bk-tooltips="{ content: item.displayNames.join('、') }"
                 :class="item.tagClass"
@@ -242,6 +242,7 @@
   import { AppHelmChartOutputObj } from '~/@types/v1/helm-charts';
   import { HelmChartsService } from '~/api/modules/v1';
   import Layout from '~/components/skeleton/skeleton-layout';
+  import useAppEnvNameMapping from '~/composables/use-app-env-name-mapping';
   import { groupDeployedEnvs } from '~/composables/use-deployed-envs';
   import usePageConf from '~/composables/use-page';
   import { useSearchPlaceholder } from '~/composables/use-search-placeholder';
@@ -259,6 +260,7 @@
   const { formatDateString } = useTime();
   const appDetailStore = useAppDetail();
   const { t } = useI18n();
+  const { fetchEnvNameDisplayMap, getEnvDisplayName } = useAppEnvNameMapping();
 
   const isNotGitRepo = computed(() => appDetailStore?.appDetail?.helmSpec?.helmSource?.repoType !== 'GitRepo');
 
@@ -396,8 +398,8 @@
 
   watch(
     () => appDetailStore.appID,
-    async () => {
-      await fetchChartList();
+    async appID => {
+      await Promise.all([appID ? fetchEnvNameDisplayMap(appID) : Promise.resolve({}), fetchChartList()]);
     },
     {
       immediate: true,

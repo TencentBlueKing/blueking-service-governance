@@ -135,7 +135,7 @@
             width="150"
           >
             <template #default="{ row }">
-              {{ getEnvColumnText(row?.group) }}
+              {{ getOperationEnvDisplayName(row?.group) }}
             </template>
           </TableColumn>
           <TableColumn
@@ -197,13 +197,13 @@
   import { useI18n } from 'vue-i18n';
   import {
     ListOperationRecordsRequest,
-    OperationGroupOutputObj,
     OperationRecordFilterOptionsOutputObj,
     OperationRecordOutputObj,
   } from '~/@types/v1/operation-audit';
   import { OperationAuditService } from '~/api/modules/v1';
   import { formatTimeByTimezone, mapKeys } from '~/common/util';
   import Layout from '~/components/skeleton/skeleton-layout';
+  import { getOperationEnvDisplayName } from '~/composables/use-operation-audit';
   import useSearchFilter from '~/composables/use-search-filter';
   import { useSearchPlaceholder } from '~/composables/use-search-placeholder';
   import useTableEmpty from '~/composables/use-table-empty';
@@ -282,11 +282,6 @@
   const { setTypeToError, clearErrorType, curExceptionType } = useTableEmpty({
     filters: [searchValue, dateRange],
   });
-
-  /** 环境列：优先用后端返回的展示名，环境已删除时回退内部名 */
-  function getEnvColumnText(group?: OperationGroupOutputObj) {
-    return group?.envDisplayName || group?.envName || '--';
-  }
 
   function getResultDisplayName(result: string): string {
     const displayName = operationFilters.value?.operationResults?.find(item => item.value === result)?.displayName;

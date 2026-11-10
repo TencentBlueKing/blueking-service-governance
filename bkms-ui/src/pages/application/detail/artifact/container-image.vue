@@ -355,8 +355,6 @@
     <!-- 删除镜像 Tag 确认弹窗 -->
     <DeleteImageTagDialog
       v-model:is-show="isDeleteDialogShow"
-      :env-kind-map="envNameKindMap"
-      :env-name-type-map="envNameTypeMap"
       :get-env-display-name="getEnvDisplayName"
       :image-usages="imageUsages"
       :is-loading-usages="isLoadingUsages"
@@ -384,6 +382,7 @@
   import { sourceMaterialText } from '~/components/code-revision/revision';
   import FieldItem from '~/components/field-item.vue';
   import Layout from '~/components/skeleton/skeleton-layout';
+  import useAppEnvNameMapping from '~/composables/use-app-env-name-mapping';
   import { groupDeployedEnvs, resolveDeployedEnvDisplayName } from '~/composables/use-deployed-envs';
   import { envTypeTagClassMap } from '~/composables/use-env-manager';
   import usePageConf from '~/composables/use-page';
@@ -411,12 +410,9 @@
 
   const appDetailStore = useAppDetail();
 
-  /** 环境 name → displayName 映射 */
-  const envNameDisplayMap = ref<Record<string, string>>({});
+  const { envNameDisplayMap, fetchEnvNameDisplayMap, getEnvDisplayName } = useAppEnvNameMapping();
   /** 环境 name → type 映射 */
   const envNameTypeMap = ref<Record<string, string>>({});
-  /** 环境 name → kind 映射，用于给特性环境单独打标签 */
-  const envNameKindMap = ref<Record<string, string>>({});
 
   const artifactList = ref<AppImageOutputObj[]>([]);
   const count = ref(0);
@@ -536,33 +532,21 @@
     }
   }
 
-  /** 获取本应用可用环境列表（含特性环境），仅页面初始化时调用一次 */
-  async function fetchEnvList() {
+  /** 获取本应用可用环境列表（含特性环境）的环境类型映射，仅页面初始化时调用一次 */
+  async function fetchEnvTypeMap() {
     if (!appDetailStore.appID) return;
-    // 特性环境只在本应用的 listAppEnvs 返回，用空间级的 listEnvs 翻译不出来
     const envList = await EnvService.listAppEnvs({ appID: appDetailStore.appID }).catch(() => []);
-    const displayMap: Record<string, string> = {};
     const typeMap: Record<string, string> = {};
-    const kindMap: Record<string, string> = {};
     envList.forEach(env => {
-      if (!env.name) return;
-      displayMap[env.name] = env.displayName || env.name;
-      if (env.type) typeMap[env.name] = env.type;
-      if (env.kind) kindMap[env.name] = env.kind;
+      if (env.name && env.type) typeMap[env.name] = env.type;
     });
-    envNameDisplayMap.value = displayMap;
     envNameTypeMap.value = typeMap;
-    envNameKindMap.value = kindMap;
   }
 
   /** 格式化摘要，截取冒号后前8位 */
   function formatDigest(digest?: string) {
     if (!digest) return '';
     return digest.includes(':') ? digest.split(':')[1].slice(0, 8) : digest.slice(0, 8);
-  }
-
-  function getEnvDisplayName(envName: string) {
-    return envNameDisplayMap.value[envName] || envName;
   }
 
   function getEnvTooltipContent(envNames: string[]) {
@@ -706,8 +690,12 @@
 
   watch(
     () => appDetailStore.appID,
-    async () => {
-      await Promise.all([fetchEnvList(), fetchArtifactList()]);
+    async appID => {
+      await Promise.all([
+        appID ? fetchEnvNameDisplayMap(appID) : Promise.resolve({}),
+        fetchEnvTypeMap(),
+        fetchArtifactList(),
+      ]);
     },
     {
       immediate: true,

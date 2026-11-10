@@ -77,9 +77,10 @@ export function groupDeployedEnvs(
 
 /** 判断环境类型是否为可展示的标准类型 */
 export function isDeployedEnvType(envType?: string): envType is DeployedEnvType {
-  return Boolean(envType) && DEPLOYED_ENV_TYPES.includes(envType as DeployedEnvType);
+  return DEPLOYED_ENV_TYPES.includes(envType as DeployedEnvType);
 }
 
+/** 判断环境类别是否为特性环境 */
 export function isFeatureEnvKind(envKind?: string) {
   return envKind === FEATURE_ENV_KIND;
 }
