@@ -81,7 +81,7 @@
 </template>
 <script lang="ts" setup>
   import type { PropType } from 'vue';
-  import { computed, onBeforeMount, onMounted, ref, watch } from 'vue';
+  import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
   import { Copy } from 'bkui-vue/lib/icon';
   import { isEqual } from 'lodash-es';
@@ -172,7 +172,9 @@
   let editorVariableProvide: monaco.IDisposable | null = null;
   // 销毁编辑器
   function destroyMonaco() {
+    const diffModels = props.isDiff ? getModels() : [];
     editor?.dispose();
+    diffModels.forEach(model => model?.dispose());
     editorVariableProvide?.dispose();
     editor = null;
     editorVariableProvide = null;
@@ -484,7 +486,7 @@
     initMonaco();
   });
 
-  onBeforeMount(() => {
+  onBeforeUnmount(() => {
     document.removeEventListener('fullscreenchange', handleFullscreenChange);
     destroyMonaco();
   });

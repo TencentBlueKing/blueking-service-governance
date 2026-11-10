@@ -301,7 +301,7 @@
               <div class="min-h-[500px] flex-1">
                 <BkmsContent
                   class="yaml-content info-title flex h-full flex-col shadow-[0_2px_4px_0_#1919290d]"
-                  :show-edit-icon="!isEditing && !isFileInfoEditing && effectiveEditableContentField !== 'none'"
+                  :show-edit-icon="!isEditing && !isFileInfoEditing && canEditContent"
                   @edit="handleStartEdit"
                 >
                   <template #title>
@@ -509,7 +509,7 @@
                       class="flex shrink-0 items-center gap-[8px] pt-[16px]"
                     >
                       <Button
-                        :disabled="isEditorReadonly || hasEditorError"
+                        :disabled="isEditorReadonly || isEditorLoading || hasEditorError"
                         theme="primary"
                         @click="handleBeforeSave"
                       >
@@ -555,7 +555,7 @@
     <SaveVersionConfirmDialog
       ref="saveVersionDialogRef"
       v-model:is-show="showSaveVersionDialog"
-      :next-version="nextVersion"
+      :preview="savePreview"
       @confirm="handleSave"
     />
     <EnvContentStrategyConfirmDialog
@@ -624,6 +624,7 @@
   import type { EnvOutput } from '~/@types/v1/env';
   import type { IMonacoEditorErrorMarkerItem } from '~/common/util';
   import type { MountScope } from '~/pages/application/detail/app-config/components/mount-scope-field.vue';
+  import type { SaveVersionSnapshot } from '~/pages/application/detail/app-config/components/types';
   import type {
     ConfigFileDefView,
     ConfigFileEnvContentStrategy,
@@ -672,6 +673,7 @@
   const isEditing = ref(false); // 文件内容是否处于编辑态
   const isEditorLoading = ref(false);
   const isSubmitLoading = ref(false);
+  const needsSavedDetail = ref(false); // 写入成功后，等详情刷新再允许编辑。
   const fullContentLoading = ref(false); // 合并完整内容预览加载中
   let detailLoadRequestID = 0;
   let envListRequestID = 0;
@@ -681,7 +683,13 @@
   const showCreateSideslider = ref(false); // 新建配置文件侧滑
   const createSidesliderRef = ref<InstanceType<typeof CreateConfigFileSideslider> | null>(null);
   const showVersionListSideslider = ref(false); // 版本列表侧滑
-  const showSaveVersionDialog = ref(false);
+  const savePreview = ref<null | SaveVersionSnapshot>(null);
+  const showSaveVersionDialog = computed({
+    get: () => savePreview.value !== null,
+    set: visible => {
+      if (!visible) savePreview.value = null;
+    },
+  });
   const showClearFileContentDialog = ref(false); // 保存空内容确认弹窗
   const showVariables = ref(false);
   const showFullContent = ref(false); // 是否查看合并后的完整内容
@@ -796,17 +804,17 @@
   const effectiveEditableContentField = computed(() =>
     isOverlayEnvWithoutInstance.value ? 'overlayContent' : detail.value?.editableContentField || 'none',
   );
-  // 当前环境的实例文件 ID；环境无独立实例时为空（版本列表不可用）
-  const currentInstanceFileID = computed(() =>
-    currentEnv.value.name && !detail.value?.hasEnvInstance ? '' : detail.value?.fileId || '',
-  );
-  const currentInstanceVersion = computed(() =>
-    currentInstanceFileID.value ? Number(detail.value?.currentVersion || 0) : 0,
-  );
-  const isEditorReadonly = computed(
-    () => !isEditing.value || showFullContent.value || effectiveEditableContentField.value === 'none',
-  );
-  const nextVersion = computed(() => currentInstanceVersion.value + 1);
+  const saveTarget = computed(() => ({
+    appID: appID.value,
+    currentVersion:
+      currentEnv.value.name && detail.value?.isUnifiedConfig === false && !detail.value.hasEnvInstance
+        ? 0
+        : (detail.value?.currentVersion ?? 0),
+    envName: currentEnv.value.name || '',
+    id: activeDefID.value,
+  }));
+  const canEditContent = computed(() => !needsSavedDetail.value && effectiveEditableContentField.value !== 'none');
+  const isEditorReadonly = computed(() => !isEditing.value || showFullContent.value || !canEditContent.value);
   // 「差异内容/完整内容」切换项，divider 控制与前一项的分隔线
   const contentViewOptions: { divider: boolean; label: string; value: ContentView }[] = [
     { divider: true, label: '差异内容', value: 'editable' },
@@ -913,10 +921,8 @@
     };
   });
 
-  // 将详情中可编辑的内容写入编辑器，并重置错误与 admin.ip 校验
-  async function applyDetailToEditor() {
-    await nextTick();
-    const content = getEditableContent();
+  // 更新编辑器里的已保存内容，并重置错误与 admin.ip 校验
+  function applySavedContentToEditor(content: string) {
     editorErrMessages.value = [];
     originalContent.value = content;
     editableDraft.value = content;
@@ -1028,13 +1034,21 @@
     }
   }
 
-  // 保存前置处理：合并模式下清空已有环境差异需先弹确认，否则弹版本说明。
+  // 合并模式下清空已有环境差异走原确认流程，其余情况预览新版本。
   function handleBeforeSave() {
-    if (shouldShowClearFileContentDialog()) {
+    if (!detail.value || isEditorLoading.value) return;
+    const content = msEditorRef.value?.getValue() ?? '';
+    if (shouldShowClearFileContentDialog(content)) {
       showClearFileContentDialog.value = true;
       return;
     }
-    showSaveVersionDialog.value = true;
+    savePreview.value = {
+      ...saveTarget.value,
+      content,
+      fileName: detail.value.name,
+      lang: editorLang.value,
+      originalContent: originalContent.value,
+    };
   }
 
   // 取消编辑，还原编辑器内容并收起面板
@@ -1371,24 +1385,21 @@
   // 保存文件内容：deleteFile 动作调 resetEnv 删除环境单独配置，否则保存内容并生成新版本；
   // 版本冲突（APP_CONFIG_FILE_VERSION_CONFLICT）时提示刷新后重新编辑
   async function handleSave(description = '', emptyAction?: ClearFileContentAction) {
-    let success = false;
+    const snapshot = emptyAction
+      ? { ...saveTarget.value, content: msEditorRef.value?.getValue() ?? '' }
+      : savePreview.value;
+    if (!snapshot || isSubmitLoading.value) return;
+    const { appID, content, currentVersion, envName = '', id } = snapshot;
     isSubmitLoading.value = true;
     try {
-      if (emptyAction === 'deleteFile' && currentEnv.value.name) {
-        await resetEnv(currentEnv.value.name);
+      if (emptyAction === 'deleteFile' && envName) {
+        await resetEnv(envName);
       } else {
-        await saveContent(currentEnv.value.name || '', msEditorRef.value?.getValue() || '', description);
+        await saveContent({ appID, content, currentVersion, description, envName, id });
       }
-      await fetchDefs(activeDefID.value);
-      await loadCurrentDetail(currentEnv.value.name || '');
-      isEditing.value = false;
-      showSaveVersionDialog.value = false;
-      showClearFileContentDialog.value = false;
-      showVariables.value = false;
-      Message({ theme: 'success', message: t('操作成功') });
-      success = true;
     } catch (error) {
       saveVersionDialogRef.value?.stopLoading();
+      if (emptyAction === 'saveEmpty') showClearFileContentDialog.value = true;
       if (hasErrorCode(error, 'APP_CONFIG_FILE_VERSION_CONFLICT')) {
         Message({
           theme: 'error',
@@ -1397,9 +1408,23 @@
       } else {
         Message({ theme: 'error', message: t('保存失败，请稍后重试') });
       }
+      return;
     } finally {
       isSubmitLoading.value = false;
-      if (!success && emptyAction === 'saveEmpty') showClearFileContentDialog.value = true;
+    }
+
+    needsSavedDetail.value = true;
+    isEditing.value = false;
+    showSaveVersionDialog.value = false;
+    showClearFileContentDialog.value = false;
+    showVariables.value = false;
+    if (emptyAction !== 'deleteFile') applySavedContentToEditor(content);
+    try {
+      await fetchDefs(id, { interceptorErr: false });
+      await loadCurrentDetail(envName, { afterSave: true });
+      Message({ theme: 'success', message: t('操作成功') });
+    } catch {
+      Message({ theme: 'warning', message: t('配置已保存，获取最新配置失败，请刷新页面重试') });
     }
   }
 
@@ -1414,7 +1439,7 @@
   }
 
   function handleStartEdit() {
-    if (effectiveEditableContentField.value === 'none') return;
+    if (!canEditContent.value) return;
     isEditing.value = true;
   }
 
@@ -1453,7 +1478,7 @@
   }
 
   // 加载当前文件在指定环境的详情并写入编辑器
-  async function loadCurrentDetail(envName = currentEnv.value.name || '') {
+  async function loadCurrentDetail(envName = currentEnv.value.name || '', { afterSave = false } = {}) {
     const requestID = ++detailLoadRequestID;
     const requestedAppID = appDetailStore.appID;
     const requestedDefID = activeDefID.value;
@@ -1462,7 +1487,7 @@
     showFullContent.value = false;
     isEditorLoading.value = true;
     try {
-      await refreshActive(envName);
+      await refreshActive(envName, afterSave ? { interceptorErr: false } : undefined);
       if (
         requestID !== detailLoadRequestID ||
         requestedAppID !== appDetailStore.appID ||
@@ -1471,12 +1496,16 @@
       ) {
         return;
       }
-      await applyDetailToEditor();
+      await nextTick();
+      applySavedContentToEditor(getEditableContent());
+      needsSavedDetail.value = false;
     } catch (error) {
       if (requestID !== detailLoadRequestID) return;
-      originalContent.value = '';
-      editableDraft.value = '';
-      msEditorRef.value?.setValue('');
+      if (!afterSave) {
+        originalContent.value = '';
+        editableDraft.value = '';
+        msEditorRef.value?.setValue('');
+      }
       throw error;
     } finally {
       if (requestID === detailLoadRequestID) isEditorLoading.value = false;
@@ -1495,6 +1524,8 @@
     currentEnv.value = { ...defaultEnv.value };
     originalContent.value = '';
     editableDraft.value = '';
+    savePreview.value = null;
+    needsSavedDetail.value = false;
     isEditing.value = false;
     isFileInfoEditing.value = false;
     showVariables.value = false;
@@ -1510,13 +1541,13 @@
   }
 
   // 合并模式下清空已有环境差异，需确认保存为空文件或恢复默认配置。
-  function shouldShowClearFileContentDialog() {
+  function shouldShowClearFileContentDialog(content: string) {
     return (
       frameworkMergesWithDefault.value &&
       isIndependentConfig.value &&
       !!currentEnv.value.name &&
       !!detail.value?.hasEnvInstance &&
-      !(msEditorRef.value?.getValue() || '').trim()
+      !content.trim()
     );
   }
 

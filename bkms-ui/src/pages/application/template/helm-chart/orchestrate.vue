@@ -192,11 +192,10 @@
                 :loading="isLoading"
                 :opacity="0.3"
               >
-                <!-- BSCP 为只读状态 -->
                 <MsEditor
                   v-model="overrideValues"
                   class="h-full"
-                  :readonly="isReadonlyFile"
+                  :readonly="!isSaveReady"
                   @error="handleYamlError"
                 >
                   <template #title>
@@ -255,6 +254,7 @@
                   </template>
                   <template #tools>
                     <IconButton
+                      v-if="isSaveReady"
                       class="mr-[8px]"
                       :desc="$t('支持上传 .yaml 和 .yml 格式的文件')"
                       @click="handleUpload"
@@ -481,10 +481,6 @@
     yamlErrorLines.value = [];
   }
 
-  function getValue() {
-    return overrideValues.value;
-  }
-
   function handleYamlError(data: IMonacoEditorErrorMarkerItem[]) {
     yamlErrorLines.value = data;
   }
@@ -500,6 +496,29 @@
     if (!curFileInfo.value?.id) return null;
     return fileList.value.find(file => file.id === curFileInfo.value?.id) ?? null;
   });
+
+  function getEditableValues(file: DefDetailObj | null) {
+    const field = file?.editableContentField;
+    return field === 'content' || field === 'overlayContent' ? (file?.[field] ?? '') : '';
+  }
+
+  const saveBase = computed(() => {
+    const file = curFileDetail.value;
+    if (!file?.id || isLoading.value || isReadonlyFile.value) return null;
+    return {
+      // 列表可以独立刷新，保存基准版本必须和编辑器加载的原文来自同一详情。
+      currentVersion: file.currentVersion ?? 0,
+      fileName: file.name ?? '',
+      id: file.id,
+      lang: 'yaml',
+      originalContent: getEditableValues(file),
+    };
+  });
+  const isSaveReady = computed(() => saveBase.value !== null);
+
+  function getSavePreview() {
+    return saveBase.value && { ...saveBase.value, content: overrideValues.value };
+  }
 
   function handleFileDetailChange(data: FileDetailChangeEvent) {
     curFileInfo.value = data.fileInfo;
@@ -524,6 +543,7 @@
     fileList.value = list;
     if (!list.length) {
       curFileInfo.value = null;
+      curFileDetail.value = null;
       overrideValues.value = '';
       originalOverrideValues.value = '';
     }
@@ -534,18 +554,7 @@
 
   // 更新 values 内容
   function updateEditorContent(fileDetail: DefDetailObj | null) {
-    overrideValues.value = '';
-    if (fileDetail) {
-      const { editableContentField, content, overlayContent } = fileDetail;
-      switch (editableContentField) {
-        case 'content':
-          overrideValues.value = content || '';
-          break;
-        case 'overlayContent':
-          overrideValues.value = overlayContent || '';
-          break;
-      }
-    }
+    overrideValues.value = getEditableValues(fileDetail);
     originalOverrideValues.value = overrideValues.value;
   }
 
@@ -645,19 +654,22 @@
     handleHideAside();
   });
 
-  // 保存成功，重置状态
-  function markAsSaved() {
-    originalOverrideValues.value = overrideValues.value;
+  // 保存成功后保留已提交的内容，等详情刷新再允许编辑。
+  function markAsSaved(content: string) {
+    originalOverrideValues.value = content;
+    overrideValues.value = content;
+    curFileDetail.value = null;
   }
 
   /** 刷新文件列表（供外部调用，如保存后） */
-  async function refreshFileList() {
-    await helmFileListRef.value?.fetchFileList();
-    await helmFileListRef.value?.refetchCurrentFile();
+  async function refreshFileList({ afterSave = false } = {}) {
+    await helmFileListRef.value?.fetchFileList(afterSave ? { interceptorErr: false } : undefined);
+    await helmFileListRef.value?.refetchCurrentFile({ preserveContent: afterSave });
   }
 
   defineExpose({
-    getValue,
+    getSavePreview,
+    isSaveReady,
     markAsSaved,
     refreshFileList,
   });

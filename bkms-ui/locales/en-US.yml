@@ -1517,6 +1517,16 @@ CLB 区域: CLB Region
 新增应用变量: Add App Variable
 版本对比: Version Compare
 内容无差异: No Content Differences
+保存并创建新版本: Save and Create New Version
+当前版本 {0}: Current Version {0}
+当前内容（尚无版本）: Current Content (No Saved Version)
+即将保存 {0}: Save as {0}
+请先核对与当前版本的差异。确认后将生成 {version}，并记入版本历史。: Review the changes from the current version. Confirm to create {version} and add it to version history.
+与当前已保存内容一致。确认后仍会生成 {version}。: The content matches the current version. Confirm to create {version} anyway.
+还没有配置内容: No Configuration Content Yet
+确认后将生成空的 {version}，可供之后对比和回滚。: Confirm to create an empty {version} for future comparisons and rollbacks.
+'{0} 版本描述': '{0} Version Description'
+请输入版本描述: Enter a version description
 无差异: No Differences
 配置差异: Configuration Differences
 仅展示发生变化的配置项: Only changed configuration items are shown
