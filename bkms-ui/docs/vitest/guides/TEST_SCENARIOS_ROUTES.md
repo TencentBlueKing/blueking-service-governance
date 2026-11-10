@@ -32,6 +32,7 @@
 | ↳ `env/` 其余子页 | — | 环境详情/设置/泳道等 | 1~2 | 2 | 2 | 5~6 | ❌ 落选（低频可复评） |
 | `:space/env/:envId/health` | clusterHealthDiagnosis | 集群健康诊断 | 1 | 2 | 2 | **5** | ❌ 落选 |
 | `:space/env/:envId/port-pool` | clusterPortPool | 端口池管理 | 1 | 2 | 2 | **5** | ❌ 落选 |
+| `:space/basic`（release-strategies） | basicItem | 发布策略管理（列表 + 新建/编辑/查看/克隆/删除抽屉） | 2 | 3 | 3 | **8** | ✅ 入选（S20） |
 | `:space/basic`（app-default-config/deploy-config） | basicItem | 应用默认配置编辑 | 2 | 2 | 2 | **6** | ❌ 落选 |
 | `:space/basic`（base-info/operation-history） | basicItem | 基础信息/操作历史 | 2 | 1 | 1 | **4** | ❌ 落选 |
 | `:space/plugin/:menuName` | componentList | 插件配置 | 1 | 2 | 2 | **5** | ❌ 落选 |
@@ -75,6 +76,8 @@
 | S17 | 集群组件安装与配置 | 7 | `✅ 入选` |
 | S18 | 构建管理 | 7 | `✅ 入选` |
 | S19 | RepoRefSelect（Input 路径） | 8 | `✅ 入选` |
+| S20 | 发布策略管理 | 8 | `✅ 入选` |
+| S21 | 实例列表分批发布控制 | 8 | `✅ 入选` |
 
 > S8 编号预留未使用（首版评审即保留空位，避免与既有讨论引用冲突）。场景卡模板：状态/评分/来源/目标/V → 用例 → 验收 → backlog → 打法。
 
@@ -248,6 +251,26 @@
 - 验收：连跑 3 稳定；变异 2/2；评审 90/100
 - backlog：P2 Select 下拉路径
 - 打法：PLAYBOOK「防抖 + VTU 契约」
+
+#### S20 发布策略管理
+
+- 状态：`✅ 入选` ｜ 评分：8 ｜ 来源：`src/pages/basic/release-strategies/`（index.vue + strategy-sideslider.vue + use-release-strategies.ts + utils.ts）
+- 用户目标：维护分批发布策略（新建/编辑/查看/克隆/删除），列表按名称搜索；批次列可视化（N 批 + 分段条 + 摘要）
+- V = 13：列表加载成功 / 加载失败保留旧数据并提示 / 搜索过滤与空态 / 新建提交 / 新建校验拦截 / 新增批次插入全量批之前 / 全量批不可删除 / 预览前置校验拦截 / 预览弹窗按实例数换算 / 编辑回显提交 / 查看只读 / 删除二次确认 / 删除取消 / 内置策略操作差异
+- 用例：`test/scenarios/release-strategies-management.test.ts`（14 全绿）+ `test/release-strategies-utils.test.ts`（纯函数：摘要文案 / 分段条占比 / 暂停方式 / 目标资源校验 / 全量末批与递增校验 / 预览行换算 / 排序 / 过滤 / 明细行文案）
+- 验收：连跑 3 稳定；变异 6/6 捕获（编辑回显失效 / 名称校验退化 / 提交 name 丢失 / 删除确认失效 / 排序反转 / 过滤失效）
+- backlog：批次明细 Popover hover 弹层 jsdom 不可稳定断言（布局改 grid 后仅覆盖默认插槽摘要，明细行文案由 `buildBatchDetailRows` 纯函数单测覆盖）；单位下拉（个/%）展开交互在 jsdom 不稳定，仅覆盖默认单位与数字输入；克隆预填交互；失败策略列待后端提供字段
+- 打法：PLAYBOOK「vxe 垫片 + 表格 stub」+ bkui 弹层 partial mock（Message/InfoBox stub、其余真实渲染）
+
+#### S21 实例列表分批发布控制
+
+- 状态：`✅ 入选` ｜ 评分：8 ｜ 来源：`src/pages/application/detail/deploy/`（deploy.vue + instance-list/batch-release.ts + instance-list/components/batch-release-banner.vue + batch-release-progress-panel.vue + canary-instance-table.vue + instance-list/composables/use-batch-release-control.ts）
+- 用户目标：分批发布过程中在实例列表页看到当前批次状态，并继续 / 暂停 / 回退上一批 / 跳过剩余批次 / 回滚；点击「查看发布进度」隐藏横幅并切换为独立灰度发布进度视图（返回栏 + 语义色大横幅平铺按钮 + Steps 批次步骤条 + 灰度实例列表），点「返回实例列表」复原
+- V = 14：deploying 展示控制横幅并禁用部署入口 / updating 态暂停直接执行 / 回滚二次确认与取消 / manual-paused 态回退与跳过剩余批次二次确认 / timed-paused 继续发布提前进入下一批 / 批次序号未回填仍给出按钮 / 已完成展示成功 Alert 且可关闭 / 失败展示原因 + 重试 / 已回滚展示提示且不阻塞部署 / 非分批发布不请求进度 / 操作失败保留状态 / 操作在途时所有入口置灰且不重复发请求 / 查看发布进度→横幅隐藏 + 进度视图互斥切换 + 平铺按钮复用确认链路 / 暂停态进度视图暂停小标与继续发布主操作
+- 用例：`test/scenarios/batch-release-control.test.ts`（含「查看发布进度」事件、互斥切换与复原、进度视图平铺按钮顺序断言、操作在途忙态断言与未部署环境不补查断言）+ `test/batch-release-banner.test.ts`（纯函数：六态映射（完成/失败/暂停/回滚中/已回滚/更新中）/ 批次阶段 → 按钮集合 / 更多菜单项 / 终态关闭记忆 / 进度补查门控（含未部署、build 阶段例外、空结果记忆）/ 成功提示文案 / buildBatchReleaseSteps 批次步骤映射（loading/暂停/失败/终态/自动全量批/标题与副文本口径）/ resolveInstanceCanaryState 灰度归属判定）
+- 验收：两文件连跑 61/61 全绿；变异验证捕获（暂停态映射改坏 → 暂停步骤用例失败）
+- backlog：失败原因文案依赖后端 `message` 字段（当前仅兜底）；「重试」复用 `action=continue`，后端新增 retry 动作后只需改映射；灰度实例列表筛选计数依赖 `canary-instance-table.vue` 挂载（场景测试中 stub，口径由 `resolveInstanceCanaryState` 纯函数单测覆盖）；定时暂停剩余秒换算依赖 `pauseStartTime`，无持续倒计时
+- 打法：PLAYBOOK「Proxy service / pinia / vxe」+ bkui 命令式 API partial mock（Message/InfoBox stub，Dropdown 只渲染插槽，其余真实渲染；CanaryInstanceTable stub 仅验证面板接线）
 
 ## 3. 覆盖模型检查
 

@@ -97,7 +97,127 @@
         disabled
       />
     </Form.FormItem>
+
+    <!-- 发布方式：一次更新全部 / 按策略分批更新 -->
+    <Form.FormItem
+      :label="$t('发布方式')"
+      required
+    >
+      <Button.ButtonGroup class="flex items-center">
+        <Button
+          class="flex-1"
+          :selected="formModel.releaseMode === 'all'"
+          @click="handleChangeReleaseMode('all')"
+        >
+          {{ $t('一次更新全部实例') }}
+        </Button>
+        <Button
+          v-bk-tooltips="{
+            content: canaryDisabledReason,
+            disabled: !canaryDisabledReason,
+          }"
+          class="flex-1"
+          :disabled="!!canaryDisabledReason"
+          :selected="formModel.releaseMode === 'canary'"
+          @click="handleChangeReleaseMode('canary')"
+        >
+          {{ $t('按策略分批更新') }}
+        </Button>
+      </Button.ButtonGroup>
+    </Form.FormItem>
+
+    <!-- 发布策略：分批发布时必选 -->
+    <Form.FormItem
+      v-if="formModel.releaseMode === 'canary'"
+      :label="$t('发布策略')"
+      property="releaseStrategyID"
+      required
+      :rules="releaseStrategyRules"
+    >
+      <div class="w-full">
+        <div class="flex items-center gap-[8px]">
+          <Select
+            ref="strategySelectRef"
+            v-model="formModel.releaseStrategyID"
+            class="flex-1"
+            filterable
+            :list="strategyOptions"
+            :loading="strategyLoading"
+            :no-data-text="$t('暂无发布策略，请先在工作空间创建')"
+            :placeholder="$t('请选择发布策略')"
+          >
+            <template #optionRender="{ item }">
+              <span class="flex min-w-0 flex-1 items-center justify-between gap-[8px]">
+                <span class="truncate">{{ item.label }}</span>
+                <span
+                  v-if="item.isBuiltin"
+                  class="shrink-0 rounded-[2px] bg-[#F0F1F5] px-[6px] text-[10px] leading-[16px] text-[#4D4F56]"
+                >
+                  {{ $t('平台内置') }}
+                </span>
+              </span>
+            </template>
+            <template #extension>
+              <div
+                class="flex w-full items-center gap-[8px] justify-center cursor-pointer"
+                @click="handleCreateStrategy"
+              >
+                <Plus
+                  class="border-[1px] border-solid rounded-[50%] border-[#979BA5]"
+                  fill="#979BA5"
+                  height="16px"
+                  width="16px"
+                />
+                <span class="text-[#4D4F56] !text-[12px]">
+                  {{ $t('新建策略') }}
+                </span>
+              </div>
+            </template>
+          </Select>
+          <!-- 查看已选策略详情，可克隆为空间策略；未选中策略时不可点 -->
+          <Button
+            class="shrink-0"
+            :disabled="!selectedStrategy"
+            text
+            theme="primary"
+            @click="handleViewStrategies"
+          >
+            {{ $t('查看') }}
+          </Button>
+        </div>
+        <div
+          v-if="strategyHintText"
+          class="mt-[8px] text-[12px] leading-[20px] text-[#979BA5]"
+        >
+          {{ strategyHintText }}
+        </div>
+      </div>
+    </Form.FormItem>
   </Form>
+
+  <!-- 发布预览：摘要栏 + 批次时间线 -->
+  <ReleasePreviewPanel
+    v-if="releasePreview"
+    class="mb-[24px]"
+    :preview="releasePreview"
+  />
+
+  <!-- 新建策略：叠加在部署抽屉之上的独立抽屉，保存后自动选中并刷新发布预览 -->
+  <StrategySideslider
+    v-model:is-show="createStrategyVisible"
+    :existing-names="existingStrategyNames"
+    mode="create"
+    @success="handleStrategyCreated"
+  />
+
+  <!-- 查看策略：叠加在部署抽屉之上的独立抽屉，展示已选策略详情，可克隆为空间策略 -->
+  <StrategySideslider
+    v-model:is-show="viewStrategyVisible"
+    :existing-names="existingStrategyNames"
+    mode="view"
+    :strategy="selectedStrategy"
+    @success="handleStrategyCloned"
+  />
 
   <!-- “资源规格” 和 “环境变量” 统一预检查弹窗 -->
   <EnvVarPrecheckDialog
@@ -115,23 +235,38 @@
 </template>
 
 <script lang="ts" setup>
-  import { computed, reactive, ref } from 'vue';
+  import { computed, onMounted, reactive, ref, watch } from 'vue';
 
-  import { Button, Form, Input, Select } from 'bkui-vue';
+  import { Button, Form, Input, Message, Select } from 'bkui-vue';
+  import { Plus } from 'bkui-vue/lib/icon';
+  import { useI18n } from 'vue-i18n';
+  import { ReleaseStrategiesService } from '~/api/modules/v1/release-strategies';
   import { type RevisionType, revisionRequestFields } from '~/components/code-revision/revision';
+  import { isAppModelAppType } from '~/composables/app-type';
   import { useAppRepoRefSelect } from '~/composables/use-app-repo-ref-select';
   import { useAppVisibleEnvs } from '~/composables/use-app-visible-envs';
   import useLeaveConfirm from '~/composables/use-leave-confirm';
   import { useRecommendTag } from '~/composables/use-recommend-tag';
+  import StrategySideslider from '~/pages/basic/release-strategies/components/strategy-sideslider.vue';
   import { useAppDetail } from '~/stores/app-detail';
+  import { useSpaceStore } from '~/stores/space';
   import { useTrpcDeployStore } from '~/stores/trpc-deploy';
 
   import ImageSelect from '../../components/image-select.vue';
   import EnvVarPrecheckDialog from './env-var-precheck-dialog.vue';
+  import {
+    type ReleasePreviewResult,
+    buildReleasePreview,
+    buildStrategyHint,
+    formatOptionTarget,
+  } from './release-preview';
+  import ReleasePreviewPanel from './release-preview-panel.vue';
   import { type DeployableAppType, type DeployParams, useDeployAPIs } from './use-deploy';
   import { useDeployPrecheck } from './use-deploy-precheck';
 
+  import type { AppModelDeployRecordOutputObj } from '~/@types/v1/deploy';
   import type { EnvOutput } from '~/@types/v1/env';
+  import type { BatchOutputObj, ReleaseStrategyOutputObj } from '~/@types/v1/release-strategies';
 
   // 镜像来源类型：从源码构建 / 已构建镜像
   type ImageSourceType = 'code' | 'image';
@@ -141,6 +276,8 @@
       effectiveReplicas?: number; // 当前生效的实例数，用于重置表单时回填
       envName?: string;
       envType?: string;
+      /** 目标环境是否为联邦集群环境；联邦集群暂不支持按策略分批发布。 */
+      isFederationEnv?: boolean;
       isProdEnv?: boolean;
       /** 是否在提交表单时执行预检查；普通部署已在打开侧栏前完成检查。 */
       precheckBeforeSubmit?: boolean;
@@ -152,6 +289,8 @@
     },
   );
 
+  const { t } = useI18n();
+  const spaceStore = useSpaceStore();
   const trpcDeployStore = useTrpcDeployStore();
   const appDetailStore = useAppDetail();
   const { checkDeployEnv } = useAppVisibleEnvs();
@@ -180,6 +319,8 @@
   const defaultRevision = ref('');
   const formModel = reactive<{
     imageTag: string;
+    releaseMode: 'all' | 'canary';
+    releaseStrategyID: string;
     replicas: number;
     revision: string;
     revisionType: RevisionType;
@@ -188,6 +329,8 @@
     imageTag: '',
     revision: '',
     revisionType: 'branch',
+    releaseMode: 'all',
+    releaseStrategyID: '',
   });
 
   // 实例列表入口沿用 store 当前环境；总览入口只认侧栏选中的目标环境，即使暂时为空也不回退。
@@ -217,6 +360,180 @@
   function handleRevisionConfirm() {
     fetchRecommendTag();
   }
+
+  // ---------- 发布策略：一次更新全部实例 / 按策略分批发布 ----------
+
+  // 工作空间发布策略列表（含平台内置策略，isBuiltin 标识）
+  const releaseStrategies = ref<ReleaseStrategyOutputObj[]>([]);
+  const strategyLoading = ref(false);
+  const strategySelectRef = ref();
+  /** 「新建策略」抽屉：叠加在部署抽屉之上，独立维护显隐 */
+  const createStrategyVisible = ref(false);
+  /** 「查看策略」抽屉：展示已选策略详情，可克隆为空间策略 */
+  const viewStrategyVisible = ref(false);
+  /** 空间内已有策略名称：新建抽屉用于名称唯一性校验 */
+  const existingStrategyNames = computed(() => releaseStrategies.value.map(item => item.name ?? ''));
+  // 选项展示：策略名 + 批次序列摘要，如「生产谨慎发布(1个,25%,50%,全量)」；
+  // 排序：空间自定义策略在前、平台内置策略在后（各自保持创建时间序，见设计稿 2141:28311 注释）
+  const strategyOptions = computed(() => {
+    const options = releaseStrategies.value.map(item => ({
+      isBuiltin: item.isBuiltin === true,
+      value: item.id ?? '',
+      label: buildStrategyOptionLabel(item.name ?? '', item.batches),
+    }));
+    return options.sort((a, b) => Number(a.isBuiltin) - Number(b.isBuiltin));
+  });
+
+  /** 选项摘要拼装：全量/个词条走 i18n */
+  function buildStrategyOptionLabel(name: string, batches: BatchOutputObj[] | undefined): string {
+    const summary = (batches ?? [])
+      .map(batch => formatOptionTarget(batch.target, { full: t('全量'), unit: t('个') }))
+      .join(',');
+    return summary ? `${name}(${summary})` : name;
+  }
+
+  /**
+   * 分批发布不可用的原因；为空表示可用。
+   * 支持范围：仅应用模型应用（tRPC / TAF）、主工作负载为 GameDeployment、非联邦集群、镜像直连部署。
+   */
+  const canaryDisabledReason = computed(() => {
+    if (!isAppModelAppType(appDetailStore.appType)) return t('仅应用模型应用支持分批发布');
+    if (props.isFederationEnv) return t('联邦集群环境暂不支持分批发布');
+    // 主工作负载资格检查完成前不允许选择分批发布，避免「先选后禁」留下已选策略透传给后端。
+    if (workloadKindLoading.value) return t('正在检查分批发布资格，请稍候');
+    // 主工作负载明确为 Deployment 时禁用；无部署记录（未知）时不因该条件禁用，由后端兜底校验。
+    if (mainWorkloadKind.value === 'Deployment') return t('仅主工作负载为 GameDeployment 的应用支持分批发布');
+    if (imageSource.value === 'code') return t('构建部署暂不支持分批发布');
+    return '';
+  });
+
+  // 分批发布时策略必选；一次更新全部实例时不校验
+  const releaseStrategyRules = computed(() =>
+    formModel.releaseMode === 'canary' ? [{ required: true, message: t('请选择发布策略'), trigger: 'change' }] : [],
+  );
+
+  /**
+   * 主工作负载类型（GameDeployment / Deployment），来自最近一次部署记录；
+   * 无部署记录时为空字符串，表示未知（不因此禁用分批发布，由后端兜底校验）。
+   */
+  const mainWorkloadKind = ref('');
+  /** 主工作负载资格检查是否进行中：检查完成前禁用分批发布，避免选择后再被回退。 */
+  const workloadKindLoading = ref(false);
+
+  /** 拉取最近一条部署记录以获取主工作负载类型；仅应用模型应用且已选环境时执行。 */
+  async function fetchMainWorkloadKind() {
+    if (!isAppModelAppType(appDetailStore.appType) || !envName.value) return;
+    workloadKindLoading.value = true;
+    const deployAPIs = useDeployAPIs(appDetailStore.appType as DeployableAppType);
+    const res = await deployAPIs
+      .listDeployRecords({
+        appID: appDetailStore.appID,
+        envName: envName.value,
+        page: 1,
+        pageSize: 1,
+      })
+      .catch(() => ({ count: 0, results: [] as AppModelDeployRecordOutputObj[] }));
+    mainWorkloadKind.value = res?.results?.[0]?.workloadKind ?? '';
+    workloadKindLoading.value = false;
+  }
+
+  // 资格异步返回导致已选分批模式失效时，重置为一次更新全部并提示，避免带着后端必拒的参数提交。
+  watch(canaryDisabledReason, reason => {
+    if (!reason || formModel.releaseMode !== 'canary') return;
+    formModel.releaseMode = 'all';
+    formModel.releaseStrategyID = '';
+    Message({ theme: 'warning', message: t('当前环境不支持分批发布，已重置为一次更新全部实例') });
+  });
+
+  /** 拉取工作空间发布策略；侧栏按环境名重建，随挂载加载一次即可。 */
+  async function fetchReleaseStrategies() {
+    if (!spaceStore.currentSpace) return;
+    strategyLoading.value = true;
+    try {
+      releaseStrategies.value =
+        (await ReleaseStrategiesService.listReleaseStrategies({ workspaceID: spaceStore.currentSpace })) ?? [];
+    } catch (err) {
+      console.error(err);
+    } finally {
+      strategyLoading.value = false;
+    }
+  }
+
+  /**
+   * 打开「新建策略」抽屉：Select 的 extension 区点击被组件库阻止冒泡，下拉不会自动收起，
+   * 需显式关闭，避免下拉浮层压在抽屉之上。
+   */
+  function handleCreateStrategy() {
+    strategySelectRef.value?.hidePopover?.();
+    createStrategyVisible.value = true;
+  }
+
+  /** 查看抽屉中克隆为空间策略成功：刷新策略列表，成功提示由查看抽屉展示。 */
+  async function handleStrategyCloned() {
+    await fetchReleaseStrategies();
+  }
+
+  /** 新建成功：关闭抽屉、刷新策略列表并选中新策略，发布预览随选中项自动重算。 */
+  async function handleStrategyCreated(strategy?: ReleaseStrategyOutputObj) {
+    createStrategyVisible.value = false;
+    await fetchReleaseStrategies();
+    if (!strategy?.id) return;
+    formModel.releaseStrategyID = strategy.id;
+  }
+
+  /**
+   * 查看已选策略：打开查看抽屉（叠加在部署抽屉之上）；
+   * 未选中策略时「查看」置灰不可点，此处兜底拦截。
+   */
+  function handleViewStrategies() {
+    if (!selectedStrategy.value) return;
+    viewStrategyVisible.value = true;
+  }
+
+  onMounted(() => {
+    fetchReleaseStrategies();
+    fetchMainWorkloadKind();
+  });
+
+  const selectedStrategy = computed(() =>
+    releaseStrategies.value.find(item => item.id === formModel.releaseStrategyID),
+  );
+
+  /** 发布预览：选中策略后按实例数实时换算批次时间线与摘要 */
+  const releasePreview = computed<null | ReleasePreviewResult>(() => {
+    if (formModel.releaseMode !== 'canary' || !selectedStrategy.value) return null;
+    return buildReleasePreview(selectedStrategy.value.batches, Number(formModel.replicas));
+  });
+
+  /**
+   * 策略说明文案：先 1 个实例，确认后累计到 25%、50%，最后自动全量。
+   * 末批非全量时后端仍会补齐剩余实例（UpdatingPrimary 阶段），因此收尾固定为「最后自动全量」，
+   * 与策略预览、发布预览中的「系统补齐全量批」保持一致。
+   */
+  const strategyHintText = computed(() => {
+    const hint = buildStrategyHint(selectedStrategy.value?.batches);
+    if (!hint) return '';
+    const parts: string[] = [];
+    // 仅「真的只有一个批次且为全量」才只提示「最后自动全量」，避免「先更新到 100%」的重复表述；
+    // 两批策略（如 25% → 100%）不能用中间批次数判断，否则首批灰度阶段会被漏掉。
+    const isSingleFull = hint.batchCount === 1 && hint.lastIsFull;
+    if (!isSingleFull) {
+      parts.push(hint.firstIsPercent ? t('先更新到 {0}', [hint.firstTarget]) : t('先 {0} 个实例', [hint.firstTarget]));
+    }
+    if (hint.middleTargets.length > 0) {
+      parts.push(t('确认后累计到 {0}', [hint.middleTargets.join('、')]));
+    }
+    parts.push(t('最后自动全量'));
+    return parts.join('，');
+  });
+
+  /** 切换发布方式；切回「一次更新全部」时清空已选策略。 */
+  function handleChangeReleaseMode(mode: 'all' | 'canary') {
+    formModel.releaseMode = mode;
+    if (mode === 'all') {
+      formModel.releaseStrategyID = '';
+    }
+  }
   // 离开确认：表单有变更时提示用户
   const { confirmBox, forceCleanDirtyTag, withPausedWatch } = useLeaveConfirm(formModel);
 
@@ -237,6 +554,12 @@
   // 执行部署：根据镜像来源调用直接部署或构建+部署接口
   async function deploy(targetEnv: EnvOutput) {
     if (!targetEnv.name || !checkDeployEnv(targetEnv)) return false;
+    // 提交前按最新资格兜底校验：分批发布已失效（如主工作负载异步判定为 Deployment）时拦截，
+    // 不把后端必拒的 releaseStrategyID 透传出去。
+    if (formModel.releaseMode === 'canary' && canaryDisabledReason.value) {
+      Message({ theme: 'error', message: canaryDisabledReason.value });
+      return false;
+    }
     const deployAPIs = useDeployAPIs(appDetailStore.appType as DeployableAppType);
     const params: DeployParams = {
       appID: appDetailStore.appID,
@@ -245,6 +568,10 @@
       replicas: Number(formModel.replicas),
     };
     if (imageSource.value === 'image') {
+      // 仅镜像直连部署 + 分批发布 + 已选策略时透传发布策略；构建部署接口无该字段。
+      if (formModel.releaseMode === 'canary' && formModel.releaseStrategyID) {
+        params.releaseStrategyID = formModel.releaseStrategyID;
+      }
       await deployAPIs.createDeployDirectly!(params);
     } else {
       Object.assign(params, revisionRequestFields(showCodeSource.value, formModel.revisionType, formModel.revision));
@@ -257,6 +584,11 @@
   async function handleChangeImageSource(source: ImageSourceType) {
     imageSource.value = source;
     if (source === 'code') {
+      // 构建部署不支持分批发布，切到源码构建时回落为一次更新全部
+      if (formModel.releaseMode === 'canary') {
+        formModel.releaseMode = 'all';
+        formModel.releaseStrategyID = '';
+      }
       defaultRevision.value = getDefaultBranch();
       formModel.revisionType = 'branch';
       await prepareBranchAfterMount(defaultRevision.value);
@@ -278,6 +610,8 @@
       formModel.imageTag = '';
       formModel.revision = '';
       formModel.revisionType = 'branch';
+      formModel.releaseMode = 'all';
+      formModel.releaseStrategyID = '';
       imageSource.value = 'image';
     });
     forceCleanDirtyTag(() => {

@@ -56,6 +56,8 @@ export interface DeployParams {
   branch?: string;
   envName: string;
   imageTag: string;
+  /** 发布策略 ID：指定时按策略分批更新实例，仅镜像直连部署支持；不指定时一次更新全部实例 */
+  releaseStrategyID?: string;
   replicas: number;
   /** 代码修订：分支名、Tag 名或 CommitID */
   revision?: string;

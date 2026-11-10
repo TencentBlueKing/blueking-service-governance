@@ -28,6 +28,10 @@ export interface RankInstancesRequest {
    */
   limit?: number;
   /**
+   * 排名指标
+   */
+  rankBy?: "cpu_limit_usage" | "memory_limit_usage" | "cpu_usage" | "memory_usage";
+  /**
    * 排名方向，默认 top
    */
   rankType?: "top" | "bottom";
@@ -1053,7 +1057,11 @@ export interface InstanceRankOutput {
    */
   instance?: string;
   /**
-   * Value 时间范围内的平均 CPU 使用量（核数）
+   * Unit 排名指标的单位：percent（0~1）、cores、bytes
+   */
+  unit?: string;
+  /**
+   * Value 排名指标在时间范围内的平均值（原始单位）
    */
   value?: number;
 }
