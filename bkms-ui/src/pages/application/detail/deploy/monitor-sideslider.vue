@@ -61,9 +61,8 @@
     <div
       class="monitor-toolbar flex-shrink-0 border-b border-[#DCDEE5] bg-[#fff] px-[24px] py-[8px] shadow-[0_3px_5.5px_0_#00000012]"
     >
-      <div class="flex items-center gap-[16px] min-w-0">
-        <!-- 实例名称 -->
-        <div class="flex items-center flex-1 min-w-0">
+      <div class="flex flex-wrap items-center gap-x-[16px] gap-y-[8px]">
+        <div class="monitor-instance-selector flex items-center min-w-0">
           <span
             class="flex-shrink-0 whitespace-nowrap bg-[#FAFBFD] h-[32px] leading-[30px] text-[#4D4F56] text-[12px] px-[6px] b b-r-0 b-[#c4c6cc]"
             >{{ $t('实例名称') }}</span
@@ -127,44 +126,63 @@
             </div>
           </Select>
         </div>
-        <div
-          v-bk-tooltips="
-            selectedInstance.length ? $t('选择实例后展示全部已选实例') : $t('所有图表按平均 CPU 使用量选取实例')
-          "
-          class="flex items-center flex-shrink-0"
-        >
-          <span class="bg-[#FAFBFD] h-[32px] leading-[30px] text-[#4D4F56] text-[12px] px-[6px] b b-r-0 b-[#c4c6cc]"
-            >Limit</span
-          >
+        <div class="monitor-ranking flex flex-wrap items-center max-w-full gap-y-[8px]">
+          <div class="flex items-center">
+            <span class="monitor-ranking-label">
+              {{ $t('排序') }}
+              <i
+                v-bk-tooltips="rankingTooltip"
+                :aria-label="rankingTooltip"
+                class="bkms-icon bkms-icon-help-document text-[#979BA5] ml-[4px]"
+                role="img"
+              />
+            </span>
+            <Select
+              v-model="rankBy"
+              class="monitor-ranking-metric flex-shrink-0"
+              :clearable="false"
+              :disabled="isRankingDisabled"
+            >
+              <Select.Option
+                v-for="column in rankColumns"
+                :id="column.key"
+                :key="column.key"
+                :name="t(column.metricLabel)"
+              />
+            </Select>
+          </div>
           <Select
             v-model="rankType"
-            class="w-[96px]"
+            class="monitor-ranking-direction flex-shrink-0"
             :clearable="false"
-            :disabled="!!selectedInstance.length"
+            :disabled="isRankingDisabled"
           >
             <Select.Option
               id="top"
-              name="top"
+              :name="$t('降序')"
             />
             <Select.Option
               id="bottom"
-              name="bottom"
+              :name="$t('升序')"
             />
           </Select>
-          <!-- 数字步进按钮通过 change 提交，即使输入框未获得焦点。 -->
-          <Input
-            v-model="limitDraft"
-            class="w-[150px] ml-[-1px] focus-within:z-1"
-            :disabled="!!selectedInstance.length"
-            :max="50"
-            :min="1"
-            :placeholder="$t('请输入 0-50 的数字')"
-            :precision="0"
-            type="number"
-            @blur="commitLimit"
-            @change="commitLimit"
-            @enter="commitLimit"
-          />
+          <div class="flex items-center">
+            <span class="monitor-ranking-label">Limit</span>
+            <!-- 数字步进按钮通过 change 提交，即使输入框未获得焦点。 -->
+            <Input
+              v-model="limitDraft"
+              class="monitor-ranking-limit focus-within:z-1"
+              :disabled="isRankingDisabled"
+              :max="50"
+              :min="1"
+              placeholder="1–50"
+              :precision="0"
+              type="number"
+              @blur="commitLimit"
+              @change="commitLimit"
+              @enter="commitLimit"
+            />
+          </div>
         </div>
       </div>
       <div class="monitor-toolbar-options flex items-center gap-[16px] mt-[8px]">
@@ -304,53 +322,51 @@
           </template>
         </TableColumn>
         <TableColumn
-          field="cpuLimitUsageRate"
-          :label="$t('CPU 使用率')"
-          :min-width="200"
+          v-for="column in rankColumns"
+          :key="column.key"
+          :field="column.field"
+          :label="t(column.tableLabel)"
+          :min-width="column.width"
         >
+          <template #header>
+            <button
+              :aria-label="
+                !isRankingDisabled && rankBy === column.key
+                  ? `${t(column.tableLabel)} (${rankDirectionLabel})`
+                  : undefined
+              "
+              :aria-pressed="!isRankingDisabled && rankBy === column.key"
+              class="monitor-rank-header"
+              :disabled="isRankingDisabled"
+              :title="!isRankingDisabled && rankBy === column.key ? rankingColumnTooltip : undefined"
+              type="button"
+              @click.stop="sortByColumn(column.key)"
+            >
+              {{ t(column.tableLabel) }}
+              <span
+                aria-hidden="true"
+                class="monitor-rank-arrows"
+              >
+                <span :class="{ active: !isRankingDisabled && rankBy === column.key && rankType === 'bottom' }" />
+                <span :class="{ active: !isRankingDisabled && rankBy === column.key && rankType === 'top' }" />
+              </span>
+            </button>
+          </template>
           <template #default="{ row }">
-            <div class="flex items-center">
+            <div
+              class="flex items-center"
+              :class="{ 'gap-[4px]': column.key === 'cpu_limit_usage' }"
+            >
               <Progress
-                v-if="row.cpuLimitUsageRate !== undefined"
+                v-if="column.key === 'cpu_limit_usage' && row.cpuLimitUsageRate !== undefined"
                 color="#3A84FF"
                 :percent="Math.min(row.cpuLimitUsageRate, 100)"
                 :show-text="false"
                 :stroke-width="6"
                 type="line"
               />
-              <span class="text-[#63656E] text-[12px] ml-[4px]">{{ formatPercent(row.cpuLimitUsageRate) }}</span>
+              <span class="text-[#63656E] text-[12px]">{{ column.format(row[column.field]) }}</span>
             </div>
-          </template>
-        </TableColumn>
-        <TableColumn
-          field="memLimitUsageRate"
-          :label="$t('内存使用率')"
-          :min-width="120"
-        >
-          <template #default="{ row }">
-            <span class="text-[#63656E] text-[12px]">{{ formatPercent(row.memLimitUsageRate) }}</span>
-          </template>
-        </TableColumn>
-        <TableColumn
-          field="cpuUsage"
-          :label="$t('CPU 用量（cores）')"
-          :min-width="120"
-        >
-          <template #default="{ row }">
-            <span class="text-[#63656E] text-[12px]">
-              {{ formatDecimal(row.cpuUsage) }}
-            </span>
-          </template>
-        </TableColumn>
-        <TableColumn
-          field="memUsage"
-          :label="$t('内存用量（MiB）')"
-          :min-width="120"
-        >
-          <template #default="{ row }">
-            <span class="text-[#63656E] text-[12px]">
-              {{ formatBytes(row.memUsage) }}
-            </span>
           </template>
         </TableColumn>
       </Table>
@@ -420,7 +436,13 @@
   import { useDeployEnvStore } from '~/stores/deploy-env';
 
   import type { MonitorInstanceGroup } from './instance-list/types';
-  import type { MonitorInstance, MonitorMetricQuery, MonitorMetricTimeSeries } from './monitor-chart-bridge';
+  import type {
+    MonitorInstance,
+    MonitorMetricQuery,
+    MonitorMetricTimeSeries,
+    MonitorRankBy,
+    RankedMonitorInstance,
+  } from './monitor-chart-bridge';
   import type { DateValue } from '@blueking/date-picker';
   import type { Dayjs } from 'dayjs';
   import type { TimeSeriesItem } from '~/@types/v1/bkintegrations-bkmonitor';
@@ -433,6 +455,10 @@
     compareOffsets: number[];
     envNames: string[];
     queryId: number;
+    ranking?: {
+      by: MonitorRankBy;
+      instances: Map<string, RankedMonitorInstance>;
+    };
   };
   const props = defineProps<{
     envName?: string;
@@ -552,9 +578,11 @@
 
   const selectedInstance = ref<string[]>([]);
   const committedInstances = ref<string[]>([]);
+  const isRankingDisabled = computed(() => selectedInstance.value.length > 0);
   const searchText = ref('');
   const treeRef = ref<InstanceType<typeof Tree>>();
   const selectRef = ref<InstanceType<typeof Select>>();
+  const DEFAULT_RANK_BY: MonitorRankBy = 'cpu_limit_usage';
   const DEFAULT_RANKING_LIMIT = 10;
   // 查询只使用已提交的 Limit，避免键入过程中的中间值重复触发排名和时序请求。
   const limitDraft = ref<number | string>(DEFAULT_RANKING_LIMIT);
@@ -567,14 +595,69 @@
     limitDraft.value = committedLimit.value;
   }
 
+  const rankColumns = [
+    {
+      key: 'cpu_limit_usage',
+      field: 'cpuLimitUsageRate',
+      metricLabel: 'CPU 使用率',
+      tableLabel: 'CPU 使用率',
+      width: 200,
+      format: formatPercent,
+    },
+    {
+      key: 'memory_limit_usage',
+      field: 'memLimitUsageRate',
+      metricLabel: '内存使用率',
+      tableLabel: '内存使用率',
+      width: 120,
+      format: formatPercent,
+    },
+    {
+      key: 'cpu_usage',
+      field: 'cpuUsage',
+      metricLabel: 'CPU 用量',
+      tableLabel: 'CPU 用量（cores）',
+      width: 120,
+      format: formatDecimal,
+    },
+    {
+      key: 'memory_usage',
+      field: 'memUsage',
+      metricLabel: '内存用量',
+      tableLabel: '内存用量（MiB）',
+      width: 120,
+      format: formatBytes,
+    },
+  ] as const;
+  const rankBy = ref<MonitorRankBy>(DEFAULT_RANK_BY);
   const rankType = ref<'bottom' | 'top'>('top');
   const methodOptions = ['sum', 'max', 'min', 'count', 'avg'] as const;
   const method = ref<(typeof methodOptions)[number]>('sum');
+  const rankDirectionLabel = computed(() => t(rankType.value === 'top' ? '降序' : '升序'));
+  const rankingColumnTooltip = computed(() => t('排名值为所选时段内 {0} 汇聚结果的均值', [method.value.toUpperCase()]));
+  const rankingTooltip = computed(() => {
+    if (isRankingDisabled.value) return t('选择实例后展示全部已选实例');
+    const metric = rankColumns.find(column => column.key === rankBy.value);
+    return t('所有图表按「{0}」的 {1} 汇聚结果在所选时段内的均值{2}，取前 {3} 个实例', [
+      t(metric?.metricLabel ?? 'CPU 使用率'),
+      method.value.toUpperCase(),
+      rankDirectionLabel.value,
+      committedLimit.value,
+    ]);
+  });
+
   interface TreeNodeData {
     children?: TreeNodeData[];
     id: string;
     name: string;
   }
+
+  function sortByColumn(key: MonitorRankBy) {
+    if (isRankingDisabled.value) return;
+    rankType.value = rankBy.value === key && rankType.value === 'top' ? 'bottom' : 'top';
+    rankBy.value = key;
+  }
+
   // 只构建有限的搜索候选，第 101 项用于判断是否需要缩小范围。
   const searchMatches = computed(() => {
     const keyword = searchText.value.trim().toLowerCase();
@@ -835,24 +918,38 @@
     invalidateMonitorChartQueries();
     queryReady.value = false;
     // 排名只在当前期做一次。收到名单后再用同一份查询快照挂载所有图表。
-    const instances = committedInstances.value.length
-      ? committedInstances.value.flatMap(id => {
-          const instance = selectedInstanceDetails.value[id];
-          return instance && params.envNames.includes(instance.envName) ? [instance] : [];
-        })
+    const currentRankBy = rankBy.value;
+    const ranked = committedInstances.value.length
+      ? undefined
       : await fetchRankedMonitorInstances({
           ...params,
           appID: appDetailStore.appID,
           limit: committedLimit.value,
+          rankBy: currentRankBy,
           rankType: rankType.value,
         });
     if (!isShow.value || generation !== queryGeneration) return;
+    const instances = ranked
+      ? ranked.map(({ envName, instance }) => ({ envName, instance }))
+      : committedInstances.value.flatMap(id => {
+          const instance = selectedInstanceDetails.value[id];
+          return instance && params.envNames.includes(instance.envName) ? [instance] : [];
+        });
     metricData.value = {};
     timeRangeRef.value = [
       dayjs.unix(params.startTime).format(dateFormat),
       dayjs.unix(params.endTime).format(dateFormat),
     ];
-    chartParams.value = { ...params, instances, compareOffsets: effectiveCompareOffsets.value, queryId: generation };
+    chartParams.value = {
+      ...params,
+      instances,
+      compareOffsets: effectiveCompareOffsets.value,
+      queryId: generation,
+      ranking: ranked && {
+        by: currentRankBy,
+        instances: new Map(ranked.map(item => [getMonitorInstanceKey(item), item])),
+      },
+    };
     queryReady.value = true;
   }
   function handleShowCustomInput() {
@@ -875,6 +972,7 @@
       () => effectiveInterval.value,
       () => chartPlotWidth.value > 0,
       () => committedLimit.value,
+      () => rankBy.value,
       () => rankType.value,
       () => method.value,
       () => appDetailStore.appID,
@@ -962,6 +1060,7 @@
       searchText.value = '';
       limitDraft.value = DEFAULT_RANKING_LIMIT;
       committedLimit.value = DEFAULT_RANKING_LIMIT;
+      rankBy.value = DEFAULT_RANK_BY;
       rankType.value = 'top';
       method.value = 'sum';
       void syncSelection();
@@ -969,18 +1068,19 @@
     { immediate: true },
   );
 
-  /** 将 bytes 统一转换为 MiB（1 MiB = 1024^2 bytes），保留 2 位小数；非有限值返回 '-'。 */
+  /** 将 bytes 统一转换为 MiB（1 MiB = 1024^2 bytes）；非有限值返回 '-'。 */
   function formatBytes(value: number | undefined): string {
     if (value === undefined || !Number.isFinite(value) || value < 0) return '-';
     return `${formatDecimal(value / 1024 / 1024, 2)}`;
   }
-  /** 回显时最多显示指定小数位（默认 5 位），截断不四舍五入；非有限值返回 '-'。
-   *  注意：此处仅用于展示，聚合/派生计算仍基于真实值，避免截断累积误差。 */
+  /** 常规值最多显示 2 位小数，截断后会变成 0 的非零值用科学计数法展示。 */
   function formatDecimal(value: number | undefined, digits = 2): string {
     if (value === null || value === undefined || !Number.isFinite(value)) return '-';
     const negative = value < 0 ? '-' : '';
     const abs = Math.abs(value);
-    const [intPart, decPart = ''] = abs.toString().split('.');
+    const decimal = abs.toString();
+    if (decimal.includes('e') || (abs > 0 && abs < 10 ** -digits)) return value.toExponential();
+    const [intPart, decPart = ''] = decimal.split('.');
     const trimmed = decPart.slice(0, digits);
     return negative + (trimmed ? `${intPart}.${trimmed}` : intPart);
   }
@@ -988,27 +1088,44 @@
     return value === undefined ? '-' : `${formatDecimal(value)}%`;
   }
 
+  function getRankValue(item: RankedMonitorInstance | undefined): number | undefined {
+    const { unit, value } = item ?? {};
+    if (typeof value !== 'number' || !Number.isFinite(value)) return undefined;
+    if (unit === 'percent') return ratioToPercent(value);
+    // 内存列在渲染时将原始 bytes 统一换算为 MiB。
+    if (unit === 'cores' || unit === 'bytes') return value;
+    return undefined;
+  }
+
+  function ratioToPercent(value: number): number {
+    // 用十进制指数移动小数点，避免 0.29 * 100 的误差在截断时显示成 28.99%。
+    const [mantissa, exponent = '0'] = value.toString().split('e');
+    return Number(`${mantissa}e${Number(exponent) + 2}`);
+  }
+
   const tableData = computed<MonitorInstanceRow[]>(() => {
     if (!queryReady.value) return [];
     const metrics = metricData.value;
-    const keys = ['cpu_limit_usage', 'memory_limit_usage', 'cpu_usage', 'memory_usage'] as const;
+    const { instances, ranking } = chartParams.value;
     const values = new Map<string, Map<string, TimeSeriesItem>>();
-    for (const key of keys) {
+    for (const { key } of rankColumns) {
       values.set(key, new Map((metrics[key]?.series || []).map(series => [getMonitorInstanceKey(series), series])));
     }
-    return chartParams.value.instances.map(instance => {
-      const latest = (key: (typeof keys)[number]) => {
-        const item = values.get(key)?.get(getMonitorInstanceKey(instance));
+    return instances.map(instance => {
+      const instanceKey = getMonitorInstanceKey(instance);
+      const getValue = (key: MonitorRankBy) => {
+        if (ranking?.by === key) return getRankValue(ranking.instances.get(instanceKey));
+        const item = values.get(key)?.get(instanceKey);
         const value = item?.stat?.last?.[1];
         if (typeof value !== 'number' || !Number.isFinite(value)) return undefined;
-        return value * (isPercentUnit(metrics[key]?.unit) ? 100 : 1);
+        return isPercentUnit(metrics[key]?.unit) ? ratioToPercent(value) : value;
       };
       return {
         name: getMonitorInstanceLabel(instance, isMultiEnv.value),
-        cpuLimitUsageRate: latest('cpu_limit_usage'),
-        memLimitUsageRate: latest('memory_limit_usage'),
-        cpuUsage: latest('cpu_usage'),
-        memUsage: latest('memory_usage'),
+        cpuLimitUsageRate: getValue('cpu_limit_usage'),
+        memLimitUsageRate: getValue('memory_limit_usage'),
+        cpuUsage: getValue('cpu_usage'),
+        memUsage: getValue('memory_usage'),
       };
     });
   });
@@ -1058,6 +1175,67 @@
 
   .monitor-toolbar-options {
     overflow: auto hidden;
+  }
+
+  .monitor-instance-selector {
+    flex: 1 1 320px;
+  }
+
+  .monitor-ranking-label {
+    @apply flex h-[32px] shrink-0 items-center whitespace-nowrap b b-r-0 b-[#c4c6cc] bg-[#FAFBFD] px-[6px] text-[12px] text-[#4D4F56];
+  }
+
+  .monitor-ranking-metric {
+    width: 128px;
+  }
+
+  .monitor-ranking-direction {
+    width: 112px;
+  }
+
+  .monitor-ranking-limit {
+    width: 88px;
+  }
+
+  .monitor-rank-header {
+    font: inherit;
+    color: inherit;
+
+    @apply inline-flex cursor-pointer items-center gap-[6px] border-0 bg-transparent p-0;
+
+    &[aria-pressed='true'] {
+      color: #3a84ff;
+    }
+
+    &:disabled {
+      cursor: default;
+    }
+  }
+
+  .monitor-rank-arrows {
+    @apply flex flex-col gap-[3px];
+
+    span {
+      border: 4px solid transparent;
+
+      &:first-child {
+        border-top: 0;
+        border-bottom-color: #c4c6cc;
+
+        &.active {
+          border-bottom-color: #3a84ff;
+        }
+      }
+
+      &:last-child {
+        border-top-color: #c4c6cc;
+        border-bottom: 0;
+
+        &.active {
+          border-top-color: #3a84ff;
+        }
+      }
+    }
   }
 
   .hide-tree-action :deep(.is-root.bk-tree-node .bk-node-action) {
