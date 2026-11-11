@@ -636,9 +636,7 @@
                 :disabled="!canViewLog(row)"
                 text
                 theme="primary"
-                @click.stop="
-                  emit('row-action', { action: 'log' as InstanceRowAction, envName: props.envName, instance: row })
-                "
+                @click="emitRowAction('log', row)"
               >
                 {{ $t('日志') }}
               </Button>
@@ -650,9 +648,7 @@
                 :disabled="!canLogin(row)"
                 text
                 theme="primary"
-                @click.stop="
-                  emit('row-action', { action: 'login' as InstanceRowAction, envName: props.envName, instance: row })
-                "
+                @click="emitRowAction('login', row)"
               >
                 {{ $t('登录') }}
               </Button>
@@ -665,7 +661,7 @@
                 :disabled="!canAdjustInstanceWeight(row)"
                 text
                 theme="primary"
-                @click.stop="emitRowAction('weight', row)"
+                @click="emitRowAction('weight', row)"
               >
                 {{ $t('调整权重') }}
               </Button>
