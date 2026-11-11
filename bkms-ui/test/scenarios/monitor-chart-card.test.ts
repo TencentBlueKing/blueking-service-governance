@@ -204,7 +204,7 @@ describe('实例监控图例的环境归属', () => {
     const metric: MonitorMetricTimeSeries = {
       unit: 'cores',
       series: [
-        { envName: 'prod', instance: 'same-pod', stat: { min: [0, 1], max: [0, 2], avg: [0, 3] } },
+        { envName: 'prod', instance: 'same-pod', stat: { min: [0, 0.00017], max: [0, 0.00029], avg: [0, 0.0001899] } },
         { envName: 'test', instance: 'same-pod', stat: { min: [0, 4], max: [0, 5], avg: [0, 6] } },
       ],
     };
@@ -213,8 +213,8 @@ describe('实例监控图例的环境归属', () => {
     const table = wrapper.getComponent({ name: 'LegendTableStub' });
     await wrapper.vm.$nextTick();
     expect(table.props('data')).toEqual([
-      expect.objectContaining({ alias: 'prod/same-pod', min: '1.00', max: '2.00', avg: '3.00' }),
-      expect.objectContaining({ alias: 'test/same-pod', min: '4.00', max: '5.00', avg: '6.00' }),
+      expect.objectContaining({ alias: 'prod/same-pod', min: '0.00017', max: '0.00029', avg: '0.00018' }),
+      expect.objectContaining({ alias: 'test/same-pod', min: '4.00000', max: '5.00000', avg: '6.00000' }),
     ]);
     const names = wrapper.findAll('[data-testid="legend-name-cell"] .cursor-pointer');
     await names[0].trigger('click');
@@ -236,7 +236,7 @@ describe('实例监控图例的环境归属', () => {
     const wrapper = mountCard();
     await wrapper.vm.$nextTick();
     expect(wrapper.getComponent({ name: 'LegendTableStub' }).props('data')).toEqual([
-      expect.objectContaining({ name: 'prod/same-pod', min: '1.00', max: '2.00', avg: '3.00' }),
+      expect.objectContaining({ name: 'prod/same-pod', min: '1.00000', max: '2.00000', avg: '3.00000' }),
     ]);
     wrapper.unmount();
   });

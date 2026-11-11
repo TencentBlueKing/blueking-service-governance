@@ -639,16 +639,27 @@ describe('实例监控侧栏', () => {
       { instance: 'pod-a', value: 0.29, unit: 'percent' },
       { instance: 'pod-empty', value: 0.25, unit: 'percent' },
     ]);
+    const smallCpuUsage = 1.7002083333323982e-4;
+    const cpuMetric = {
+      unit: 'cores',
+      series: [
+        ...(metric(['pod-a'], 'cores', 0).series ?? []),
+        ...(metric(['pod-b'], 'cores', smallCpuUsage).series ?? []),
+      ],
+    };
     mocks.getInstanceTimeSeries.mockImplementation((query: { metricKey: string }) =>
       Promise.resolve({
-        [query.metricKey]: metric(['pod-a', 'pod-b'], query.metricKey.includes('limit') ? 'percent' : 'cores', 0.25),
+        [query.metricKey]:
+          query.metricKey === 'cpu_usage'
+            ? cpuMetric
+            : metric(['pod-a', 'pod-b'], query.metricKey.includes('limit') ? 'percent' : 'cores', 0.25),
       }),
     );
     const { wrapper, rows, cells } = await mountSlider();
     expect(mocks.getInstanceTimeSeries).toHaveBeenCalledTimes(8);
     expect(rows()).toEqual([
-      { name: 'pod-b', cpuLimitUsageRate: 75, memLimitUsageRate: 25, cpuUsage: 0.25, memUsage: 0.25 },
-      { name: 'pod-a', cpuLimitUsageRate: 29, memLimitUsageRate: 25, cpuUsage: 0.25, memUsage: 0.25 },
+      { name: 'pod-b', cpuLimitUsageRate: 75, memLimitUsageRate: 25, cpuUsage: smallCpuUsage, memUsage: 0.25 },
+      { name: 'pod-a', cpuLimitUsageRate: 29, memLimitUsageRate: 25, cpuUsage: 0, memUsage: 0.25 },
       {
         name: 'pod-empty',
         cpuLimitUsageRate: 25,
@@ -659,11 +670,12 @@ describe('实例监控侧栏', () => {
     ]);
     expect(cells('cpuLimitUsageRate')).toEqual(['75%', '29%', '25%']);
     expect(cells('memLimitUsageRate')).toEqual(['25%', '25%', '-']);
+    expect(cells('cpuUsage')).toEqual(['0.01', '0.00', '-']);
     wrapper.unmount();
   });
 
   it('排序下拉框和表头共享查询条件，各次排名只触发一轮时序', async () => {
-    const { wrapper, select, sortHeader, chart, cells, instanceSelect } = await mountSlider();
+    const { wrapper, select, sortHeader, chart, rows, cells, instanceSelect } = await mountSlider();
     const rankBy = select('cpu_limit_usage');
     const rankType = select('bottom');
     const memoryUsageHeader = sortHeader('memUsage');
@@ -714,7 +726,8 @@ describe('实例监控侧栏', () => {
     expect(mocks.rankInstances).toHaveBeenCalledTimes(5);
 
     mocks.rankInstances.mockResolvedValueOnce([
-      { instance: 'pod-cpu', value: 1.259, unit: 'cores' },
+      { instance: 'pod-cpu', value: 1.251, unit: 'cores' },
+      { instance: 'pod-exact-cpu', value: 0.07, unit: 'cores' },
       { instance: 'pod-tiny-cpu', value: 1.234e-7, unit: 'cores' },
     ]);
     await cpuUsageHeader.trigger('click');
@@ -726,8 +739,9 @@ describe('实例监控侧栏', () => {
     );
     expect(mocks.rankInstances).toHaveBeenCalledTimes(6);
     expect(mocks.getInstanceTimeSeries).toHaveBeenCalledTimes(48);
-    expect(cells('cpuUsage')).toEqual(['1.25', '1.234e-7']);
-    expect(chart().props('instances')).toEqual(instances(['pod-cpu', 'pod-tiny-cpu']));
+    expect(rows()).toMatchObject([{ cpuUsage: 1.251 }, { cpuUsage: 0.07 }, { cpuUsage: 1.234e-7 }]);
+    expect(cells('cpuUsage')).toEqual(['1.26', '0.07', '0.01']);
+    expect(chart().props('instances')).toEqual(instances(['pod-cpu', 'pod-exact-cpu', 'pod-tiny-cpu']));
 
     await wrapper.get('input[placeholder="输入实例名称搜索"]').setValue('pod-0');
     await wrapper.get<HTMLInputElement>('[data-testid="instance-candidate"]').setValue(true);
@@ -735,7 +749,7 @@ describe('实例监控侧栏', () => {
     await flushPromises();
     expect(mocks.rankInstances).toHaveBeenCalledTimes(6);
     expect(chart().props('instances')).toEqual(instances(['pod-0']));
-    expect(cells('cpuUsage')).toEqual(['1']);
+    expect(cells('cpuUsage')).toEqual(['1.00']);
 
     instanceSelect().vm.$emit('clear');
     await flushPromises();

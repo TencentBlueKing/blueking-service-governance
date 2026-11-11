@@ -421,7 +421,7 @@
   import { Table, TableColumn } from '@blueking/table';
   import { Divider, Input, Message, Progress, Radio, Select, Sideslider, Switcher, Tag, Tree } from 'bkui-vue';
   import dayjs from 'dayjs';
-  import { debounce } from 'lodash-es';
+  import { ceil, debounce } from 'lodash-es';
   import { useI18n } from 'vue-i18n';
   import IntervalSelector from '~/components/interval-selector.vue';
   import useInterval from '~/composables/use-interval';
@@ -595,6 +595,11 @@
     limitDraft.value = committedLimit.value;
   }
 
+  const cpuUsageFormatter = new Intl.NumberFormat('en-US', {
+    maximumFractionDigits: 2,
+    minimumFractionDigits: 2,
+    useGrouping: false,
+  });
   const rankColumns = [
     {
       key: 'cpu_limit_usage',
@@ -618,7 +623,7 @@
       metricLabel: 'CPU 用量',
       tableLabel: 'CPU 用量（cores）',
       width: 120,
-      format: formatDecimal,
+      format: formatCpuUsage,
     },
     {
       key: 'memory_usage',
@@ -1071,18 +1076,23 @@
   /** 将 bytes 统一转换为 MiB（1 MiB = 1024^2 bytes）；非有限值返回 '-'。 */
   function formatBytes(value: number | undefined): string {
     if (value === undefined || !Number.isFinite(value) || value < 0) return '-';
-    return `${formatDecimal(value / 1024 / 1024, 2)}`;
+    return formatDecimal(value / 1024 / 1024);
   }
-  /** 常规值最多显示 2 位小数，截断后会变成 0 的非零值用科学计数法展示。 */
-  function formatDecimal(value: number | undefined, digits = 2): string {
+  function formatCpuUsage(value: number | undefined): string {
+    if (value === undefined || !Number.isFinite(value)) return '-';
+    const roundedUp = Number.isInteger(value) ? value : ceil(value, 2);
+    return roundedUp === 0 ? '0.00' : cpuUsageFormatter.format(roundedUp);
+  }
+  /** 常规值截断至两位小数，极小的非零值用科学计数法。 */
+  function formatDecimal(value: number | undefined): string {
     if (value === null || value === undefined || !Number.isFinite(value)) return '-';
-    const negative = value < 0 ? '-' : '';
     const abs = Math.abs(value);
-    const decimal = abs.toString();
-    if (decimal.includes('e') || (abs > 0 && abs < 10 ** -digits)) return value.toExponential();
+    if (abs > 0 && abs < 0.01) return value.toExponential();
+    const decimal = value.toString();
+    if (decimal.includes('e')) return decimal;
     const [intPart, decPart = ''] = decimal.split('.');
-    const trimmed = decPart.slice(0, digits);
-    return negative + (trimmed ? `${intPart}.${trimmed}` : intPart);
+    const trimmed = decPart.slice(0, 2);
+    return trimmed ? `${intPart}.${trimmed}` : intPart;
   }
   function formatPercent(value: number | undefined): string {
     return value === undefined ? '-' : `${formatDecimal(value)}%`;
