@@ -77,7 +77,7 @@ func runBindBscpProject(
 	if err != nil {
 		return errors.Wrap(err, "load config")
 	}
-	if bscpapi.Disabled() {
+	if bscpapi.IsDisabled() {
 		return errors.Wrap(bscpapi.ErrDisabled, "cannot bind workspace to bscp project")
 	}
 

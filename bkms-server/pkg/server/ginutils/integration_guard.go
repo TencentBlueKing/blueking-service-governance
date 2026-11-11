@@ -16,7 +16,22 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
-package workspace
+package ginutils
 
-// BindDefaultBscpProject 导出给外部测试包使用
-var BindDefaultBscpProject = bindDefaultBscpProject
+import (
+	"github.com/gin-gonic/gin"
+
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bscp"
+)
+
+// RequireBSCP 当前环境关闭了 BSCP 对接时，拦截 BSCP 相关接口并返回明确的未启用错误
+func RequireBSCP() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if bscp.IsDisabled() {
+			bkerrs.AbortWithErr(c, bscp.ErrDisabled)
+			return
+		}
+		c.Next()
+	}
+}

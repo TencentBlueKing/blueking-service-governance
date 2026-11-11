@@ -43,7 +43,7 @@ func WrapBSCPNoPermission(err error, msg string) *Error {
 
 // WrapBSCPDisabled 包装为当前环境关闭了 BSCP 对接的错误
 func WrapBSCPDisabled(err error) *Error {
-	return Wrap(err, ErrCodeInvalidRequest, bscpDisabledMsg).SetDetails(
+	return Wrap(err, ErrCodeNotImplemented, bscpDisabledMsg).SetDetails(
 		NewDetail(
 			ErrDetailCodeBSCPDisabled,
 			bscpDisabledMsg,

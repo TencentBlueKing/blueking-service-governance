@@ -68,14 +68,14 @@ type ApiClient struct {
 // ErrDisabled 当前环境关闭了 BSCP 对接（featureIntegrations.disableBSCP）
 var ErrDisabled = bkerrs.ErrBSCPDisabled
 
-// Disabled 返回当前环境是否关闭了 BSCP 对接
-func Disabled() bool {
+// IsDisabled 返回当前环境是否关闭了 BSCP 对接
+func IsDisabled() bool {
 	return config.G != nil && config.G.FeatureIntegrations.DisableBSCP
 }
 
 // New 创建 BSCP API 客户端，根据配置返回真实客户端或 stub 客户端
 func New(user auth.User) (Client, error) {
-	if Disabled() {
+	if IsDisabled() {
 		return nil, ErrDisabled
 	}
 	// 测试时使用 stub 客户端

@@ -73,7 +73,7 @@ type ConfigClient interface {
 
 // NewConfigClient 创建配置管理 BSCP API 客户端
 func NewConfigClient(user auth.User) (ConfigClient, error) {
-	if Disabled() {
+	if IsDisabled() {
 		return nil, ErrDisabled
 	}
 	if config.G.Development.UseStubBSCP {

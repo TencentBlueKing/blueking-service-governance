@@ -39,12 +39,12 @@ var _ = Describe("DisableBSCP", func() {
 	})
 
 	It("should be enabled by default", func() {
-		Expect(Disabled()).To(BeFalse())
+		Expect(IsDisabled()).To(BeFalse())
 	})
 
 	It("should be enabled when config is not loaded", func() {
 		config.G = nil
-		Expect(Disabled()).To(BeFalse())
+		Expect(IsDisabled()).To(BeFalse())
 	})
 
 	It("should refuse to create clients when disabled", func() {

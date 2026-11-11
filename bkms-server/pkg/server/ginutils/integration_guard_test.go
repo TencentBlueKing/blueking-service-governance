@@ -68,10 +68,10 @@ var _ = Describe("RequireBSCP", func() {
 		rec := httptest.NewRecorder()
 		router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/bscp", nil))
 
-		Expect(rec.Code).To(Equal(http.StatusBadRequest))
+		Expect(rec.Code).To(Equal(http.StatusNotImplemented))
 		var out bkerrs.GinErrorOutput
 		Expect(json.Unmarshal(rec.Body.Bytes(), &out)).To(Succeed())
-		Expect(out.Error.Code).To(Equal(bkerrs.ErrCodeInvalidRequest))
+		Expect(out.Error.Code).To(Equal(bkerrs.ErrCodeNotImplemented))
 		Expect(out.Error.Details).To(HaveLen(1))
 		Expect(out.Error.Details[0]["code"]).To(Equal(string(bkerrs.ErrDetailCodeBSCPDisabled)))
 	})

@@ -82,7 +82,7 @@ var _ = Describe("Register", func() {
 		config.G.FeatureIntegrations.DisableBSCP = true
 
 		rec := serve("/bscp/bizs")
-		Expect(rec.Code).To(Equal(http.StatusBadRequest))
+		Expect(rec.Code).To(Equal(http.StatusNotImplemented))
 		var out bkerrs.GinErrorOutput
 		Expect(json.Unmarshal(rec.Body.Bytes(), &out)).To(Succeed())
 		Expect(out.Error.Details).To(HaveLen(1))

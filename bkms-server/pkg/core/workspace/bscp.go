@@ -69,7 +69,7 @@ func BindBscpProject(ctx context.Context, bizID, projectKey string) (*BscpBindin
 // bindDefaultBscpProject 创建工作空间时绑定 BSCP Default 项目。
 // 当前环境关闭了 BSCP 对接时跳过绑定，返回空的绑定结果；开启后需通过 bind-bscp-project 命令补绑。
 func bindDefaultBscpProject(ctx context.Context, bizID string) (*BscpBinding, error) {
-	if bscpapi.Disabled() {
+	if bscpapi.IsDisabled() {
 		log.Infof(ctx, "bscp is disabled, skip binding bscp project for biz %s", bizID)
 		return &BscpBinding{}, nil
 	}

@@ -97,10 +97,10 @@ var _ = Describe("Gin error handling", func() {
 			cause := pkgerrors.Wrap(ErrBSCPDisabled, "initializing bscp client")
 			rec := makeRequest(Wrap(cause, ErrCodeInvalidArgument, "validating bscp config"))
 
-			Expect(rec.Code).To(Equal(http.StatusBadRequest))
+			Expect(rec.Code).To(Equal(http.StatusNotImplemented))
 			var out GinErrorOutput
 			Expect(json.Unmarshal(rec.Body.Bytes(), &out)).To(Succeed())
-			Expect(out.Error.Code).To(Equal(ErrCodeInvalidRequest))
+			Expect(out.Error.Code).To(Equal(ErrCodeNotImplemented))
 			Expect(out.Error.Message).To(ContainSubstring("validating bscp config"))
 			Expect(out.Error.Details).To(HaveLen(1))
 			Expect(out.Error.Details[0]["code"]).To(Equal(string(ErrDetailCodeBSCPDisabled)))
@@ -110,7 +110,7 @@ var _ = Describe("Gin error handling", func() {
 		It("should return BSCP_DISABLED for the bare sentinel error", func() {
 			rec := makeRequest(ErrBSCPDisabled)
 
-			Expect(rec.Code).To(Equal(http.StatusBadRequest))
+			Expect(rec.Code).To(Equal(http.StatusNotImplemented))
 			var out GinErrorOutput
 			Expect(json.Unmarshal(rec.Body.Bytes(), &out)).To(Succeed())
 			Expect(out.Error.Message).To(Equal(
