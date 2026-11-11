@@ -279,7 +279,7 @@ describe('实例列表：WeTerm 入口', () => {
   it('运行中实例点击 WeTerm 向上抛出 weterm 行操作', async () => {
     const { emitted } = await renderTable([{ id: 'pod-running', status: 'Running' }]);
 
-    await fireEvent.click(screen.getByText('WeTerm'));
+    await fireEvent.click(screen.getByText('WeTERM'));
 
     expect(emitted()['row-action']).toEqual([
       [{ action: 'weterm', envName: 'prod', instance: { id: 'pod-running', status: 'Running' } }],
@@ -289,7 +289,7 @@ describe('实例列表：WeTerm 入口', () => {
   it('非运行中实例的 WeTerm 入口点击无效', async () => {
     const { emitted } = await renderTable([{ id: 'pod-pending', status: 'Pending' }]);
 
-    await fireEvent.click(screen.getByText('WeTerm'));
+    await fireEvent.click(screen.getByText('WeTERM'));
 
     expect(emitted()['row-action']).toBeUndefined();
   });
