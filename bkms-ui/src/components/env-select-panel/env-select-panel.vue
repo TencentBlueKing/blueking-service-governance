@@ -119,14 +119,14 @@
             <span class="truncate">{{ selectedEnvItem.displayName }}</span>
             <Tag
               v-if="selectedEnvItem?.type && envTypeMap[selectedEnvItem.type]"
-              :class="envTypeTagClassMap[selectedEnvItem.type]"
+              :class="[envTypeTagClassMap[selectedEnvItem.type], 'pointer-events-none']"
               size="small"
             >
               {{ envTypeMap[selectedEnvItem.type]?.name || '' }}
             </Tag>
             <Tag
               v-if="isFeatureEnv(selectedEnvItem)"
-              class="bg-[#E2F5F7] text-[#3A9EAA] shrink-0"
+              class="bg-[#E2F5F7] text-[#3A9EAA] shrink-0 pointer-events-none"
               size="small"
             >
               {{ $t('特性') }}

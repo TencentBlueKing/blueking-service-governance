@@ -198,3 +198,8 @@ body,
     border-top-color: #007acc;
   }
 }
+
+/* 解决某些浏览器的readonly输入框会出现编辑光标问题 */
+input[readonly] {
+  caret-color: transparent;
+}
