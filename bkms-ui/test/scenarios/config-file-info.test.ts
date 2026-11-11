@@ -41,7 +41,9 @@ const mocks = vi.hoisted(() => ({
   message: vi.fn(),
   appType: 'taf',
   editorValue: '',
+  resetEnv: vi.fn(),
   saveContent: vi.fn(),
+  stopLoading: vi.fn(),
 }));
 const runtimeState = ref<null | PublicView | undefined>();
 vi.mock('vue-i18n', async importOriginal => ({
@@ -78,6 +80,7 @@ vi.mock('~/api/modules/v1', () => ({
     listAppConfigFileDefEnvInstances: mocks.instances,
     updateAppConfigFileDef: mocks.update,
     createAppConfigFileDef: mocks.create,
+    resetAppConfigFileDefEnvToDefault: mocks.resetEnv,
     updateAppConfigFileDefContent: mocks.saveContent,
   },
   AppConfigFilesService: {},
@@ -104,10 +107,15 @@ vi.mock('~/pages/application/detail/app-config/components/env-content-strategy-c
   default: { name: 'EnvContentStrategyConfirmDialog', template: '<div />', methods: { confirm: async () => true } },
 }));
 vi.mock('~/pages/application/detail/app-config/components/clear-file-content-dialog.vue', () => ({
-  default: { template: '<div />' },
+  default: { name: 'ClearFileContentDialog', props: ['isShow'], template: '<div />' },
 }));
 vi.mock('~/pages/application/detail/app-config/components/save-version-confirm-dialog.vue', () => ({
-  default: { name: 'SaveVersionConfirmDialog', props: ['isShow'], template: '<div />' },
+  default: {
+    name: 'SaveVersionConfirmDialog',
+    props: ['isShow', 'preview'],
+    template: '<div />',
+    methods: { stopLoading: mocks.stopLoading },
+  },
 }));
 vi.mock('~/pages/application/detail/app-config/components/create-config-file-sideslider.vue', () => ({
   default: { name: 'CreateConfigFileSideslider', props: ['isShow', 'loading'], template: '<div />' },
@@ -158,7 +166,7 @@ afterEach(() => {
   wrapper?.unmount();
 });
 
-async function openEditor() {
+async function openEditor(editFileInfo = true) {
   wrapper = shallowMount(ConfigFiles, {
     global: {
       mocks: i18nGlobalMocks,
@@ -187,8 +195,10 @@ async function openEditor() {
     },
   });
   await flushPromises();
-  await wrapper.get('[data-edit]').trigger('click');
-  await flushPromises();
+  if (editFileInfo) {
+    await wrapper.get('[data-edit]').trigger('click');
+    await flushPromises();
+  }
   return wrapper;
 }
 
@@ -198,6 +208,166 @@ async function save() {
   await button!.trigger('click');
   await flushPromises();
 }
+
+describe('配置文件保存预览', () => {
+  it('首次保存独立环境时预览已加载的原文，并提交预览时的草稿和版本 0', async () => {
+    mocks.appType = 'trpc';
+    savedFile = {
+      ...savedFile,
+      name: 'trpc_go.yaml',
+      editableContentField: 'content',
+      envContentStrategy: 'overwrite',
+      isUnifiedConfig: false,
+      content: 'enabled: false\n',
+      currentVersion: 6,
+    };
+    const view = await openEditor(false);
+    view.getComponent({ name: 'EnvPerspectiveSelect' }).vm.$emit('change', 'prod');
+    await flushPromises();
+    await view.get('[data-section="文件内容"]').trigger('click');
+    mocks.editorValue = 'enabled: true\n';
+    await save();
+
+    const dialog = view.getComponent({ name: 'SaveVersionConfirmDialog' });
+    expect(dialog.props('preview')).toMatchObject({
+      fileName: 'trpc_go.yaml',
+      originalContent: 'enabled: false\n',
+      content: 'enabled: true\n',
+      currentVersion: 0,
+    });
+    expect(mocks.detail).toHaveBeenCalledTimes(2);
+    expect(mocks.saveContent).not.toHaveBeenCalled();
+
+    // 提交时使用预览中的草稿。
+    mocks.editorValue = 'enabled: false\n';
+    dialog.vm.$emit('confirm', 'enable in prod');
+    await flushPromises();
+    expect(mocks.saveContent).toHaveBeenCalledExactlyOnceWith(
+      { appID: 'app-id', id: 'def-id', content: 'enabled: true\n', currentVersion: 0, description: 'enable in prod' },
+      { interceptorErr: false, needRes: true, queryParams: { envName: 'prod' } },
+    );
+    expect(dialog.props('isShow')).toBe(false);
+  });
+
+  it('两侧均为空的文件仍可提交空版本', async () => {
+    savedFile = {
+      ...savedFile,
+      name: 'placeholder.conf',
+      configKind: 'plain',
+      editableContentField: 'content',
+      currentVersion: 0,
+    };
+    const view = await openEditor(false);
+    await view.get('[data-section="文件内容"]').trigger('click');
+    await save();
+    const dialog = view.getComponent({ name: 'SaveVersionConfirmDialog' });
+    expect(dialog.props('preview')).toMatchObject({ originalContent: '', content: '', currentVersion: 0 });
+    dialog.vm.$emit('confirm', 'create empty version');
+    await flushPromises();
+
+    expect(mocks.saveContent).toHaveBeenCalledExactlyOnceWith(
+      { appID: 'app-id', id: 'def-id', content: '', currentVersion: 0, description: 'create empty version' },
+      { interceptorErr: false, needRes: true, queryParams: undefined },
+    );
+    expect(dialog.props('isShow')).toBe(false);
+  });
+
+  it.each(['list', 'detail', 'instances'] as const)('保存成功后 %s 刷新失败时保留已保存内容', async refresh => {
+    savedFile = { ...savedFile, configKind: 'plain', editableContentField: 'content', content: 'enabled: false' };
+    const view = await openEditor(false);
+    await view.get('[data-section="文件内容"]').trigger('click');
+    mocks.editorValue = 'enabled: true';
+    await save();
+    const dialog = view.getComponent({ name: 'SaveVersionConfirmDialog' });
+    mocks.saveContent.mockImplementationOnce(async () => {
+      savedFile = { ...savedFile, currentVersion: 4, content: 'enabled: true' };
+      return { currentVersion: 4 };
+    });
+    const { promise, reject } = Promise.withResolvers<never>();
+    mocks[refresh].mockReturnValueOnce(promise);
+    dialog.vm.$emit('confirm', 'enable feature');
+    await flushPromises();
+    expect(dialog.props('isShow')).toBe(false);
+
+    reject(new Error('refresh unavailable'));
+    await flushPromises();
+    expect(mocks.editorValue).toBe('enabled: true');
+    expect(mocks.message).toHaveBeenCalledExactlyOnceWith({
+      theme: 'warning',
+      message: '配置已保存，获取最新配置失败，请刷新页面重试',
+    });
+    await view.get('[data-section="文件内容"]').trigger('click');
+    expect(view.findAll('button').some(button => button.text() === '保存')).toBe(false);
+    expect(mocks.saveContent).toHaveBeenCalledOnce();
+  });
+
+  it('版本冲突后保留预览和草稿，取消预览也不丢失草稿', async () => {
+    savedFile = {
+      ...savedFile,
+      name: 'feature.yaml',
+      configKind: 'plain',
+      editableContentField: 'content',
+      content: 'enabled: false\n',
+    };
+    const view = await openEditor(false);
+    await view.get('[data-section="文件内容"]').trigger('click');
+    mocks.editorValue = 'enabled: true\n';
+    await save();
+    const dialog = view.getComponent({ name: 'SaveVersionConfirmDialog' });
+    mocks.saveContent.mockRejectedValueOnce({ error: { details: [{ code: 'APP_CONFIG_FILE_VERSION_CONFLICT' }] } });
+    dialog.vm.$emit('confirm', 'enable feature');
+    await flushPromises();
+
+    expect(mocks.stopLoading).toHaveBeenCalledOnce();
+    expect(mocks.message).toHaveBeenCalledExactlyOnceWith({
+      theme: 'error',
+      message: '当前配置已被他人更新。为避免数据被覆盖，请刷新页面获取最新版本后重新编辑。',
+    });
+    expect(dialog.props('isShow')).toBe(true);
+    expect(dialog.props('preview')).toMatchObject({ originalContent: 'enabled: false\n', content: 'enabled: true\n' });
+    expect(mocks.detail).toHaveBeenCalledOnce();
+    expect(mocks.editorValue).toBe('enabled: true\n');
+
+    dialog.vm.$emit('update:isShow', false);
+    await flushPromises();
+    expect(dialog.props('isShow')).toBe(false);
+    expect(mocks.editorValue).toBe('enabled: true\n');
+    expect(mocks.saveContent).toHaveBeenCalledOnce();
+  });
+
+  it.each(['saveEmpty', 'deleteFile'])('清空已有环境差异时按原动作 %s 提交', async action => {
+    savedFile = { ...savedFile, editableContentField: 'content', isUnifiedConfig: false };
+    mocks.detail.mockImplementation(async ({ envName }: { envName?: string }) => ({
+      item:
+        envName === 'prod'
+          ? { ...savedFile, hasEnvInstance: true, editableContentField: 'overlayContent', overlayContent: 'key: value' }
+          : savedFile,
+    }));
+    const view = await openEditor(false);
+    view.getComponent({ name: 'EnvPerspectiveSelect' }).vm.$emit('change', 'prod');
+    await flushPromises();
+    await view.get('[data-section="文件内容"]').trigger('click');
+    mocks.editorValue = '';
+    await save();
+
+    expect(view.getComponent({ name: 'SaveVersionConfirmDialog' }).props('isShow')).toBe(false);
+    const dialog = view.getComponent({ name: 'ClearFileContentDialog' });
+    expect(dialog.props('isShow')).toBe(true);
+    dialog.vm.$emit('confirm', action);
+    await flushPromises();
+
+    if (action === 'saveEmpty') {
+      expect(mocks.saveContent).toHaveBeenCalledExactlyOnceWith(
+        { appID: 'app-id', id: 'def-id', content: '', currentVersion: 3, description: '保存为空文件' },
+        { interceptorErr: false, needRes: true, queryParams: { envName: 'prod' } },
+      );
+      expect(mocks.resetEnv).not.toHaveBeenCalled();
+    } else {
+      expect(mocks.resetEnv).toHaveBeenCalledExactlyOnceWith({ appID: 'app-id', id: 'def-id', envName: 'prod' });
+      expect(mocks.saveContent).not.toHaveBeenCalled();
+    }
+  });
+});
 
 describe('配置文件信息编辑', () => {
   it.each<[string, null | PublicView]>([
