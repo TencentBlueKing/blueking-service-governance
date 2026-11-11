@@ -20,6 +20,7 @@ import { ref } from 'vue';
 
 import { flushPromises, shallowMount } from '@vue/test-utils';
 import { Radio } from 'bkui-vue';
+import { languages } from 'monaco-editor';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ConfigFileListItem from '~/pages/application/detail/app-config/components/config-file-list-item.vue';
 import ConfigFiles from '~/pages/application/detail/app-config/config-files.vue';
@@ -44,6 +45,7 @@ const mocks = vi.hoisted(() => ({
   resetEnv: vi.fn(),
   saveContent: vi.fn(),
   stopLoading: vi.fn(),
+  validate: vi.fn(),
 }));
 const runtimeState = ref<null | PublicView | undefined>();
 vi.mock('vue-i18n', async importOriginal => ({
@@ -94,12 +96,14 @@ vi.mock('bkui-vue', async importOriginal => {
 vi.mock('~/components/monaco-editor/ms-editor.vue', () => ({
   default: {
     name: 'MsEditor',
+    props: ['lang', 'requireYamlMapRoot'],
     template: '<div><slot name="title" /></div>',
     methods: {
       setValue(value: string) {
         mocks.editorValue = value;
       },
       getValue: () => mocks.editorValue,
+      validate: mocks.validate,
     },
   },
 }));
@@ -136,6 +140,18 @@ beforeEach(() => {
   mocks.appType = 'taf';
   runtimeState.value = undefined;
   mocks.editorValue = '';
+  mocks.validate.mockReturnValue(false);
+  vi.spyOn(languages, 'getLanguages').mockReturnValue([
+    { id: 'yaml', extensions: ['.yaml', '.yml'] },
+    { id: 'json', extensions: ['.json'] },
+    { id: 'xml', extensions: ['.xml'] },
+    { id: 'ini', extensions: ['.ini', '.properties'], filenames: ['config'] },
+    { id: 'shell', extensions: ['.sh', '.bash'] },
+    { id: 'typescript', extensions: ['.ts'] },
+    { id: 'custom', extensions: ['.config.ts'] },
+    { id: 'dockerfile', extensions: ['.dockerfile'], filenames: ['Dockerfile'] },
+    { id: 'plaintext' },
+  ]);
   savedFile = {
     id: 'def-id',
     fileId: 'file-id',
@@ -366,6 +382,132 @@ describe('配置文件保存预览', () => {
       expect(mocks.resetEnv).toHaveBeenCalledExactlyOnceWith({ appID: 'app-id', id: 'def-id', envName: 'prod' });
       expect(mocks.saveContent).not.toHaveBeenCalled();
     }
+  });
+});
+
+describe('配置文件格式识别与校验', () => {
+  it.each([
+    ['app.yaml', 'yaml'],
+    ['app.yml', 'yaml'],
+    ['APP.YML', 'yaml'],
+    ['app.json', 'json'],
+    ['app.xml', 'xml'],
+    ['app.ini', 'ini'],
+    ['app.properties', 'ini'],
+    ['start.sh', 'shell'],
+    ['app.config.ts', 'custom'],
+    ['Dockerfile', 'dockerfile'],
+    ['config', 'ini'],
+    ['app.unknown', 'plaintext'],
+    ['no-extension', 'plaintext'],
+  ])('普通文件 %s 使用 %s 高亮', async (name, language) => {
+    savedFile = { ...savedFile, configKind: 'plain', name, fileFormat: 'yaml' };
+    const view = await openEditor();
+    expect(view.getComponent({ name: 'MsEditor' }).props('lang')).toBe(language);
+  });
+
+  // 普通文件只校验 YAML 语法；values.yaml 类框架文件才额外约束根节点为 key-value 结构。
+  it.each([
+    ['framework', true],
+    ['plain', false],
+  ])('%s 文件的 YAML 根节点结构约束为 %s', async (configKind, requireYamlMapRoot) => {
+    savedFile = { ...savedFile, configKind, name: 'app.yaml' };
+    const view = await openEditor();
+    expect(view.getComponent({ name: 'MsEditor' }).props('requireYamlMapRoot')).toBe(requireYamlMapRoot);
+  });
+
+  // 框架文件的格式由运行时声明，与文件名后缀无关。
+  it.each([
+    ['taf', 'default', 'xml'],
+    ['taf', 'taf.default.xml', 'xml'],
+    ['taf', 'trpc.go.yaml', 'xml'],
+    ['trpc', 'app.json', 'yaml'],
+    ['trpc', 'trpc.go.yaml', 'yaml'],
+  ])('%s 框架文件（%s）始终按运行时声明的格式使用 %s 高亮', async (appType, name, language) => {
+    mocks.appType = appType;
+    savedFile.name = name;
+    const view = await openEditor();
+    expect(view.getComponent({ name: 'MsEditor' }).props('lang')).toBe(language);
+  });
+
+  it('保存普通文件名后更新编辑器语言与工具栏', async () => {
+    savedFile = { ...savedFile, configKind: 'plain', name: 'app.json' };
+    const view = await openEditor();
+    await view.findAll('input')[0].setValue('app.YML');
+    await save();
+    expect(view.getComponent({ name: 'MsEditor' }).props('lang')).toBe('yaml');
+    expect(view.getComponent({ name: 'MsEditor' }).text()).toContain('yaml');
+  });
+
+  it('不同环境沿用文件名识别出的语言并加载对应内容', async () => {
+    savedFile = {
+      ...savedFile,
+      configKind: 'plain',
+      name: 'app.yml',
+      mountedEnvNames: ['prod'],
+      isUnifiedConfig: false,
+      content: 'key: default',
+    };
+    mocks.detail.mockImplementation(async ({ envName }: { envName?: string }) => ({
+      item: { ...savedFile, content: envName ? 'key: prod' : 'key: default' },
+    }));
+    const view = await openEditor();
+    view.getComponent({ name: 'EnvPerspectiveSelect' }).vm.$emit('change', 'prod');
+    await flushPromises();
+    expect(view.getComponent({ name: 'MsEditor' }).props('lang')).toBe('yaml');
+    expect(mocks.editorValue).toBe('key: prod');
+  });
+
+  it('切换内容相同但后缀不同的文件时更新语言', async () => {
+    savedFile = { ...savedFile, configKind: 'plain', name: 'app.yml', content: 'key: value' };
+    const otherFile = { ...savedFile, id: 'other-id', name: 'app.json' };
+    mocks.list.mockResolvedValue({ items: [savedFile, otherFile] });
+    mocks.detail.mockImplementation(async ({ id }: { id: string }) => ({
+      item: id === otherFile.id ? otherFile : savedFile,
+    }));
+    const view = await openEditor();
+    view.getComponent({ name: 'ConfigFileList' }).vm.$emit('select', otherFile.id);
+    await flushPromises();
+    expect(view.getComponent({ name: 'MsEditor' }).props('lang')).toBe('json');
+    expect(mocks.editorValue).toBe('key: value');
+  });
+
+  it('保存前立即校验，存在错误时不打开版本确认框', async () => {
+    savedFile = { ...savedFile, configKind: 'plain', name: 'app.yaml', editableContentField: 'content' };
+    const view = await openEditor();
+    await save();
+    await view.get('[data-section="文件内容"]').trigger('click');
+    mocks.validate.mockReturnValueOnce(true);
+    await save();
+    expect(mocks.validate).toHaveBeenCalledTimes(1);
+    expect(view.getComponent({ name: 'SaveVersionConfirmDialog' }).props('isShow')).toBe(false);
+    await save();
+    expect(view.getComponent({ name: 'SaveVersionConfirmDialog' }).props('isShow')).toBe(true);
+  });
+
+  it('编辑器错误禁用保存，清除错误后恢复', async () => {
+    savedFile = { ...savedFile, configKind: 'plain', name: 'app.yml', editableContentField: 'content' };
+    const view = await openEditor();
+    await save();
+    await view.get('[data-section="文件内容"]').trigger('click');
+    const editor = view.getComponent({ name: 'MsEditor' });
+    editor.vm.$emit('error', [{ message: 'invalid YAML' }]);
+    await flushPromises();
+    expect(
+      view
+        .findAll('button')
+        .find(button => button.text() === '保存')!
+        .attributes('disabled'),
+    ).toBeDefined();
+    expect(view.getComponent({ name: 'EditorStatus' }).props('message')).toEqual(['invalid YAML']);
+    editor.vm.$emit('error', []);
+    await flushPromises();
+    expect(
+      view
+        .findAll('button')
+        .find(button => button.text() === '保存')!
+        .attributes('disabled'),
+    ).toBeUndefined();
   });
 });
 

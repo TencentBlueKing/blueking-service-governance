@@ -16,6 +16,7 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
+import { languages } from 'monaco-editor';
 import { BKMS_REGEX } from '~/common/const';
 
 /** 「挂载路径」校验提示，新建与编辑表单共用，避免多处文案漂移。 */
@@ -58,4 +59,38 @@ export function isValidMountDir(value?: string) {
 export function normalizeMountDir(value: string) {
   const merged = (value || '').replace(/\/{2,}/g, '/');
   return merged.length > 1 ? merged.replace(/\/+$/, '') : merged;
+}
+
+/** Monaco 未注册的文件后缀 → 回退高亮语言。 */
+const EXT_LANG_FALLBACKS: Record<string, string> = {
+  '.cnf': 'ini',
+  '.env': 'ini',
+};
+
+/**
+ * 按文件名解析 Monaco 高亮语言：先精确匹配语言注册的文件名（如 Dockerfile），
+ * 再取已注册语言的最长后缀匹配，未命中时走回退表，兜底 plaintext。
+ * 回退表仅在后缀未注册时生效，如 x.cnf.json 仍按 .json 高亮。
+ */
+export function resolveEditorLang(fileName: string): string {
+  const name = (fileName || '').toLowerCase();
+  const registered = languages.getLanguages();
+  const byFileName = registered.find(({ filenames = [] }) =>
+    filenames.some(filename => filename.toLowerCase() === name),
+  );
+  if (byFileName) return byFileName.id;
+
+  let language = '';
+  let extensionLength = 0;
+  for (const { id, extensions = [] } of registered) {
+    for (const extension of extensions) {
+      if (extension.length > extensionLength && name.endsWith(extension.toLowerCase())) {
+        language = id;
+        extensionLength = extension.length;
+      }
+    }
+  }
+  if (language) return language;
+  const fallback = Object.keys(EXT_LANG_FALLBACKS).find(ext => name.endsWith(ext));
+  return fallback ? EXT_LANG_FALLBACKS[fallback] : 'plaintext';
 }

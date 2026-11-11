@@ -404,6 +404,7 @@
                                 :lang="editorLang"
                                 :model-value="editableDraft"
                                 :readonly="isEditorReadonly"
+                                :require-yaml-map-root="isFrameworkFile"
                                 :title="editorLang"
                                 @change="handleEditorChange"
                                 @error="handleEditorErr"
@@ -611,6 +612,7 @@
     createMountDirRules,
     formatMountPathPreview,
     normalizeMountDir,
+    resolveEditorLang,
   } from '~/pages/application/detail/app-config/config-file-utils';
   import EnvPerspectiveSelect from '~/pages/application/detail/app-config/env-perspective-select.vue';
   import {
@@ -717,11 +719,13 @@
   const isIndependentConfig = computed(
     () => !(detail.value?.isUnifiedConfig ?? activeDef.value?.isUnifiedConfig ?? true),
   );
-  // 编辑器语言：框架文件 taf 用 xml、trpc 用 yaml，普通文件用 plaintext
+  // 框架文件使用运行时声明的格式，普通文件按文件名解析高亮语言。
   const editorLang = computed(() => {
-    if (!isFrameworkFile.value) return 'plaintext';
-    const format = getFrameworkFileFormat(appDetailStore.runtime);
-    return format === 'taf' ? 'xml' : format || 'plaintext';
+    if (isFrameworkFile.value) {
+      const format = getFrameworkFileFormat(appDetailStore.runtime);
+      return format === 'taf' ? 'xml' : format || 'plaintext';
+    }
+    return resolveEditorLang(activeDef.value?.name || '');
   });
   // 框架文件和普通文件的名称、目录均以 def 为准。
   const activeDisplayName = computed(() => activeDef.value?.name || '');
@@ -1037,6 +1041,7 @@
   // 合并模式下清空已有环境差异走原确认流程，其余情况预览新版本。
   function handleBeforeSave() {
     if (!detail.value || isEditorLoading.value) return;
+    if (msEditorRef.value?.validate()) return;
     const content = msEditorRef.value?.getValue() ?? '';
     if (shouldShowClearFileContentDialog(content)) {
       showClearFileContentDialog.value = true;
