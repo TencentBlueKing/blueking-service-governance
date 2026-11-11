@@ -4,6 +4,7 @@
   "scripts": {
     "build": "vite build",
     "dev": "vite --mode development",
+    "dev:tenant": "vite --mode tenant",
     "gen:api:v1": "node scripts/gen-api-v1.js",
     "prepare": "cd ../.. && husky apps/ui/.husky",
     "preview": "vite preview",

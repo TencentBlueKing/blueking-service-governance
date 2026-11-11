@@ -17,5 +17,6 @@ mocks.json
 
 pre-*-bkcodeai
 .env.development
+.env.tenant
 .env.test
 tsconfig.tsbuildinfo

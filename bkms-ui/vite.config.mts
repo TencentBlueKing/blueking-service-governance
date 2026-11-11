@@ -32,6 +32,13 @@ import SvgLoader from 'vite-svg-loader';
 export default ({ mode }: { mode: string }) => {
   const env = loadEnv(mode, process.cwd(), 'BK_');
   const isDev = mode === 'development';
+
+  // 多租户联调：bk_token Cookie 域在租户环境，本地拿不到，由代理注入请求头（凭据在 .env.tenant.local）；非 tenant 模式下为空对象，零影响。
+  const devIdentityHeaders = {
+    ...(env.BK_DEV_BK_TOKEN ? { 'X-User-Bk-Token': env.BK_DEV_BK_TOKEN } : {}),
+    ...(env.BK_DEV_TENANT_ID ? { 'X-Bk-Tenant-Id': env.BK_DEV_TENANT_ID } : {}),
+  };
+
   return defineConfig({
     base: env.BK_STATIC_URL,
 
@@ -46,6 +53,7 @@ export default ({ mode }: { mode: string }) => {
           target: env.BK_API_BASE_URL,
           changeOrigin: true,
           secure: true,
+          headers: { ...devIdentityHeaders },
         },
         '/bkms': {
           target: env.BK_API_BASE_URL,
@@ -55,6 +63,7 @@ export default ({ mode }: { mode: string }) => {
           headers: {
             referer: env.BK_API_BASE_URL,
             origin: env.BK_API_BASE_URL,
+            ...devIdentityHeaders,
           },
         },
         '/generic': {
