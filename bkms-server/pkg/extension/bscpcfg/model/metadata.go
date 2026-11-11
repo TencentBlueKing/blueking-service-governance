@@ -39,9 +39,6 @@ type Metadata struct {
 	// MountPath 配置文件在容器中的挂载路径（所有环境共享同一路径）
 	MountPath string `bson:"mountPath"`
 
-	// Enable 是否启用 BSCP 配置管理
-	// 查询不到 Metadata 或为 false 表示未开启
-	Enable bool `bson:"enable"`
 	// Operator 最近操作人
 	Operator string `bson:"operator"`
 	// CreatedAt 创建时间

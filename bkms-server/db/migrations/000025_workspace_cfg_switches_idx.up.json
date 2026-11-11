@@ -1,0 +1,15 @@
+[
+  {
+    "createIndexes": "workspace_cfg_switches",
+    "indexes": [
+      {
+        "key": {
+          "workspaceID": 1,
+          "key": 1
+        },
+        "name": "idx_workspaceID_key",
+        "unique": true
+      }
+    ]
+  }
+]
