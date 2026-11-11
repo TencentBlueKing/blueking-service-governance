@@ -49,6 +49,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/hostport"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/rainbowtconf"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/perm"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/misc/audit"
@@ -985,6 +986,11 @@ func (h *Handler) cleanupAppResources(ctx context.Context, appID string) error {
 	// 删除镜像晋级记录
 	if _, err := store.Of(h.registry.DB, promotion.Meta).DeleteMany(ctx, promotion.ByApp(appID)); err != nil {
 		return errors.Wrap(err, "delete promotions")
+	}
+
+	// 删除七彩石入口
+	if err := rainbowtconf.DeleteByApp(ctx, h.registry.DB, appID); err != nil {
+		return errors.Wrap(err, "delete rainbow tconf entry")
 	}
 
 	return nil

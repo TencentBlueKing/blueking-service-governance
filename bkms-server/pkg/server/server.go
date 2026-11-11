@@ -74,6 +74,8 @@ import (
 	portpoolhandler "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component/portpool/handler"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice"
 	depservicehandler "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/handler"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/rainbowtconf"
+	rainbowtconfhandler "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/rainbowtconf/handler"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/bkuser"
@@ -244,6 +246,7 @@ func RegisterRouter(ctx context.Context, cfg config.Config, serverRole string) (
 	devmodeapi.RegisterRoutes(v1, devmodehandler.New(storereg.G()))
 	bscpcfg.Register(v1, bscpcfghandler.New(storereg.G()))
 	cfgswitch.Register(v1, cfgswitchhandler.New(storereg.G()))
+	rainbowtconf.Register(v1, rainbowtconfhandler.New(storereg.G()))
 	user.Register(v1, user.New(storereg.G()))
 	admin.Register(
 		v1,
