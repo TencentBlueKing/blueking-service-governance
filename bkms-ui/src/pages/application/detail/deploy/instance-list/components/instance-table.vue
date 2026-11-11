@@ -624,10 +624,10 @@
           fixed="right"
           header-class-name="instance-actions-col"
           :label="$t('操作')"
-          :width="108"
+          :width="140"
         >
           <template #default="{ row }: { row: AppInstanceOutputObj }">
-            <div class="flex items-center gap-[4px]">
+            <div class="flex items-center gap-[16px]">
               <Button
                 v-bk-tooltips="{
                   content: $t('实例尚未创建成功或宿主机异常，暂无法获取日志'),
@@ -675,7 +675,7 @@
                 :popover-options="{ clickContentAutoHide: true }"
                 trigger="click"
               >
-                <i class="row-more-trigger bkms-icon bkms-icon-more-fill"></i>
+                <i class="row-more-trigger bkms-icon bkms-icon-more-fill ml-[-8px]"></i>
                 <template #content>
                   <Dropdown.DropdownMenu>
                     <Dropdown.DropdownItem
