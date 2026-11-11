@@ -98,26 +98,9 @@ func refreshWorkspaceAppEnvPerms(
 	filterIDs []string,
 	dryRun bool,
 ) error {
-	workspaces, err := store.Of(db, workspace.Meta).List(ctx, store.TenantAll())
+	workspaces, err := listWorkspacesToRefresh(ctx, db, filterIDs)
 	if err != nil {
-		return errors.Wrap(err, "list workspaces")
-	}
-	if len(filterIDs) > 0 {
-		allIDs := lo.Map(workspaces, func(ws workspace.Workspace, _ int) string { return ws.ID })
-		if missing := lo.Without(filterIDs, allIDs...); len(missing) > 0 {
-			return errors.Errorf("workspaces not found: %s", strings.Join(missing, ","))
-		}
-		workspaces = lo.Filter(workspaces, func(ws workspace.Workspace, _ int) bool {
-			return lo.Contains(filterIDs, ws.ID)
-		})
-	}
-	// 就绪和停用的空间都要补发：停用的空间重新启用时不会重新授权，这里不补就一直缺新 action。
-	// 初始化中的空间跳过，初始化完成时会按新模板授权。
-	initializing, workspaces := lo.FilterReject(workspaces, func(ws workspace.Workspace, _ int) bool {
-		return ws.State == workspace.StateProcessing
-	})
-	for _, ws := range initializing {
-		log.Infof(ctx, "workspace %s is initializing, skipping", ws.ID)
+		return err
 	}
 
 	var success int
@@ -188,6 +171,35 @@ func refreshWorkspaceAppEnvPerms(
 		)
 	}
 	return nil
+}
+
+// listWorkspacesToRefresh 返回需要补发的 workspace，指定了 ID 时只返回这些，任一不存在即报错。
+//
+// 就绪和停用的空间都要补发：停用的空间重新启用时不会重新授权，这里不补就一直缺新 action。
+// 初始化中的空间跳过，初始化完成时会按新模板授权。
+func listWorkspacesToRefresh(
+	ctx context.Context, db *mongo.Database, filterIDs []string,
+) ([]workspace.Workspace, error) {
+	workspaces, err := store.Of(db, workspace.Meta).List(ctx, store.TenantAll())
+	if err != nil {
+		return nil, errors.Wrap(err, "list workspaces")
+	}
+	if len(filterIDs) > 0 {
+		allIDs := lo.Map(workspaces, func(ws workspace.Workspace, _ int) string { return ws.ID })
+		if missing := lo.Without(filterIDs, allIDs...); len(missing) > 0 {
+			return nil, errors.Errorf("workspaces not found: %s", strings.Join(missing, ","))
+		}
+		workspaces = lo.Filter(workspaces, func(ws workspace.Workspace, _ int) bool {
+			return lo.Contains(filterIDs, ws.ID)
+		})
+	}
+	initializing, workspaces := lo.FilterReject(workspaces, func(ws workspace.Workspace, _ int) bool {
+		return ws.State == workspace.StateProcessing
+	})
+	for _, ws := range initializing {
+		log.Infof(ctx, "workspace %s is initializing, skipping", ws.ID)
+	}
+	return workspaces, nil
 }
 
 // buildBSCPOptions 根据 workspace 下应用的 BSCP 环境绑定重建 BSCP 授权范围，未接入 BSCP 时返回 nil。
