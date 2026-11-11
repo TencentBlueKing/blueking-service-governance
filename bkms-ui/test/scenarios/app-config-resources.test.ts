@@ -1,3 +1,20 @@
+/*
+ * TencentBlueKing is pleased to support the open source community by making
+ * 蓝鲸智云 - 服务治理 (BlueKing Service Governance) available.
+ * Copyright (C) Tencent. All rights reserved.
+ * Licensed under the MIT License (the "License"); you may not use this file except
+ * in compliance with the License. You may obtain a copy of the License at
+ *
+ *  http://opensource.org/licenses/MIT
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under
+ * the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
+ * either express or implied. See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ * We undertake not to change the open source license (MIT license) applicable
+ * to the current version of the project delivered to anyone in the future.
+ */
 /**
  * 配置编辑保存（S3）场景级用例
  *
@@ -9,6 +26,8 @@
  * 5. 普通环境保存 → 走 setEnvAppSpecResources（环境维度多态分支）
  * 6. 普通环境「恢复默认配置」→ 删除环境覆盖
  *
+ * 回归覆盖确认等量继承值、低于预留拦截和已存值格式错误。
+ *
  * 多态切换由通用 composable `use-app-spec-section.ts` 实现（handleEdit 存快照 /
  * handleCancelEdit 回滚 / handleSave 校验后按环境分派），本轮以资源规格子模块
  * （`components/resources-form.vue`）为该模式的代表进行覆盖。
@@ -18,17 +37,17 @@
  * - Message 命令式 API mock；useGPAConfigPolling mock（自动扩缩容轮询非本场景判定分支）
  * - bkui-vue 真实渲染（表单校验、Select、Button 均为可感知行为载体）
  */
-import userEvent from '@testing-library/user-event';
-import { render, screen, waitFor } from '@testing-library/vue';
-import { createPinia, setActivePinia } from 'pinia';
 import { defineComponent, h, nextTick, ref } from 'vue';
+
+import userEvent from '@testing-library/user-event';
+import { render, screen, waitFor, within } from '@testing-library/vue';
+import { createPinia, setActivePinia } from 'pinia';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import ResourcesForm from '~/pages/application/detail/app-config/components/resources-form.vue';
+import { useAppDetail } from '~/stores/app-detail';
 
 import { i18nGlobalMocks, i18nPlugin } from '../helpers/mock-i18n';
 import { installVxeShims } from '../helpers/mock-table';
-
-import ResourcesForm from '~/pages/application/detail/app-config/components/resources-form.vue';
-import { useAppDetail } from '~/stores/app-detail';
 
 import type { ExtendedEnv } from '~/pages/application/detail/app-config/components/types';
 
@@ -104,6 +123,43 @@ const SectionHarness = defineComponent({
   },
 });
 
+async function enterEditMode() {
+  await userEvent.click(await screen.findByRole('button', { name: '编辑' }));
+  expect(await screen.findByRole('button', { name: '保存' })).toBeTruthy();
+}
+
+function getQuantityControl(label: string, selector: string) {
+  const control = screen
+    .getByText(label, { exact: true })
+    .closest('.bk-form-item')
+    ?.querySelector<HTMLElement>(selector);
+  if (!control) throw new Error(`未找到资源规格字段 ${label} 的控件`);
+  return control;
+}
+
+/** BKUI FormItem 的标签没有关联到输入框，用所属字段定位。 */
+function getReplicasInput() {
+  return getQuantityControl('实例数', 'input[type="number"]');
+}
+
+/** 驱动环境数据加载，并等待查看态渲染出实例数（正向信号：数据已回填） */
+async function loadEnv(env: ExtendedEnv, expectedReplicas: string) {
+  await harnessState.load?.(env);
+  expect(await screen.findByText(expectedReplicas, { exact: true })).toBeTruthy();
+}
+
+async function openCustomQuantity(label: string) {
+  await userEvent.click(getQuantityControl(label, '.bk-select-trigger'));
+  // BKUI 下拉弹层没有可查询的 role，用可见状态定位当前菜单。
+  const popup = await waitFor(() => {
+    const openMenu = document.querySelector<HTMLElement>('.bk-select-popover.visible');
+    if (!openMenu) throw new Error('资源规格下拉未打开');
+    return within(openMenu);
+  });
+  await userEvent.click(popup.getByRole('button', { name: '自定义' }));
+  return { popup, input: popup.getByRole('spinbutton', { name: '自定义' }) };
+}
+
 function renderResourcesForm() {
   const pinia = createPinia();
   setActivePinia(pinia);
@@ -117,20 +173,11 @@ function renderResourcesForm() {
   });
 }
 
-/** 驱动环境数据加载，并等待查看态渲染出实例数（正向信号：数据已回填） */
-async function loadEnv(env: ExtendedEnv, expectedReplicas: string) {
-  await harnessState.load?.(env);
-  expect(await screen.findByText(expectedReplicas, { exact: true })).toBeTruthy();
-}
-
-async function enterEditMode() {
-  await userEvent.click(await screen.findByRole('button', { name: '编辑' }));
-  expect(await screen.findByRole('button', { name: '保存' })).toBeTruthy();
-}
-
-/** 编辑态下唯一的类型为 number 的输入框即「实例数」（bkui FormItem label 未做 aria 关联） */
-function getReplicasInput() {
-  return screen.getByRole('spinbutton');
+async function setCustomQuantity(label: string, amount: string) {
+  const { popup, input } = await openCustomQuantity(label);
+  await userEvent.clear(input);
+  await userEvent.type(input, amount);
+  await userEvent.click(popup.getByRole('button', { name: '确定' }));
 }
 
 beforeEach(() => {
@@ -139,6 +186,7 @@ beforeEach(() => {
 
 // 页面链路触碰 @blueking/table 的 DOM 工具（HTMLDocument 等），沿用共享垫片
 installVxeShims();
+Element.prototype.scrollIntoView = vi.fn();
 
 describe('配置编辑：资源规格多态切换', () => {
   it('当用户点击编辑时，应进入编辑态并展示保存与取消操作', async () => {
@@ -180,33 +228,229 @@ describe('配置编辑：资源规格多态切换', () => {
   });
 
   it('当用户在默认环境保存有效配置时，应写入默认配置并回到查看态', async () => {
+    let storedSpec = { ...DEFAULT_SPEC, cpuRequests: '200m', memoryRequests: '128Mi' };
+    mocks.getDefault.mockImplementation(async () => storedSpec);
+    mocks.setDefault.mockImplementation(async ({ appSpecResources }) => {
+      storedSpec = appSpecResources;
+      return {};
+    });
+    const { unmount } = renderResourcesForm();
+    await loadEnv(DEFAULT_ENV, '2');
+    await enterEditMode();
+    await setCustomQuantity('CPU 限制 (Limits)', '89');
+    await setCustomQuantity('内存限制 (Limits)', '128');
+    await userEvent.click(screen.getByRole('button', { name: '保存' }));
+    await waitFor(() =>
+      expect(mocks.setDefault).toHaveBeenCalledWith({
+        appID: 'app-1',
+        appSpecResources: {
+          replicas: 2,
+          cpuRequests: '200m',
+          cpuLimits: '89',
+          memoryRequests: '128Mi',
+          memoryLimits: '128Gi',
+        },
+      }),
+    );
+    expect(mocks.message).toHaveBeenCalledWith(expect.objectContaining({ theme: 'success' }));
+    expect(await screen.findByRole('button', { name: '编辑' })).toBeTruthy();
+
+    unmount();
+    renderResourcesForm();
+    await loadEnv(DEFAULT_ENV, '2');
+    expect(screen.getByText('89 核')).toBeInTheDocument();
+    expect(screen.getByText('128Gi')).toBeInTheDocument();
+  });
+
+  it('当用户切换内存单位时，应保留输入并在确认后回填', async () => {
     mocks.getDefault.mockResolvedValue(DEFAULT_SPEC);
-    mocks.setDefault.mockResolvedValue({});
+    renderResourcesForm();
+    await loadEnv(DEFAULT_ENV, '2');
+    await enterEditMode();
+
+    const requestLabel = '内存预留 (Requests)';
+    const { popup: requestPopup, input } = await openCustomQuantity(requestLabel);
+    expect(input).toHaveValue(null);
+
+    await userEvent.type(input, '768');
+    await userEvent.click(requestPopup.getByRole('button', { name: '内存单位 Gi', expanded: false }));
+    await userEvent.click(await requestPopup.findByText('Mi', { exact: true }));
+    expect(requestPopup.getByRole('button', { name: '内存单位 Mi', expanded: false })).toBeVisible();
+    expect(input).toHaveValue(768);
+    expect(getQuantityControl(requestLabel, '.bk-select-trigger input')).toHaveValue('1Gi');
+
+    await userEvent.click(requestPopup.getByRole('button', { name: '确定' }));
+    expect(getQuantityControl(requestLabel, '.bk-select-trigger input')).toHaveValue('768Mi');
+    expect(requestPopup.getByRole('button', { name: '自定义' })).toBeVisible();
+
+    const limitLabel = '内存限制 (Limits)';
+    const { popup: limitPopup, input: limitInput } = await openCustomQuantity(limitLabel);
+    await userEvent.click(limitPopup.getByRole('button', { name: '内存单位 Gi', expanded: false }));
+    await userEvent.click(await limitPopup.findByText('Mi', { exact: true }));
+    await userEvent.type(limitInput, '1536');
+    await userEvent.click(limitPopup.getByRole('button', { name: '取消' }));
+    expect(getQuantityControl(limitLabel, '.bk-select-trigger input')).toHaveValue('2Gi');
+  });
+
+  it('当用户键入或粘贴非法字符时，应只保留合法的小数输入', async () => {
+    const user = userEvent.setup();
+    mocks.getDefault.mockResolvedValue(DEFAULT_SPEC);
+    renderResourcesForm();
+    await loadEnv(DEFAULT_ENV, '2');
+    await enterEditMode();
+
+    const label = 'CPU 预留 (Requests)';
+    const { input } = await openCustomQuantity(label);
+    await user.clear(input);
+    await user.type(input, '0e-+a.4');
+    expect(input).toHaveValue(0.4);
+
+    await user.paste('e2');
+    expect(input).toHaveValue(0.4);
+    await user.keyboard('{Enter}');
+    expect(getQuantityControl(label, '.bk-select-trigger input')).toHaveValue('0.4 核');
+  });
+
+  it('当用户用上下键调整 CPU 时，应每次加减 1 并拦截零值', async () => {
+    const user = userEvent.setup();
+    mocks.getDefault.mockResolvedValue(DEFAULT_SPEC);
+    renderResourcesForm();
+    await loadEnv(DEFAULT_ENV, '2');
+    await enterEditMode();
+
+    const label = 'CPU 限制 (Limits)';
+    const { input } = await openCustomQuantity(label);
+    expect(input).toHaveFocus();
+    expect(input).toHaveValue(2);
+
+    await user.keyboard('{ArrowDown}');
+    expect(input).toHaveValue(1);
+    await user.keyboard('{ArrowDown}');
+    expect(input).toHaveValue(1);
+    await user.keyboard('{ArrowUp}');
+    expect(input).toHaveValue(2);
+
+    await user.clear(input);
+    await user.type(input, '0');
+    await user.keyboard('{Enter}');
+    expect(input).toHaveAttribute('aria-invalid', 'true');
+    expect(getQuantityControl(label, '.bk-select-trigger input')).toHaveValue('2 核');
+  });
+
+  it('当用户用上下键调整内存时，应从 1 开始并保留小数部分', async () => {
+    const user = userEvent.setup();
+    mocks.getDefault.mockResolvedValue(DEFAULT_SPEC);
+    renderResourcesForm();
+    await loadEnv(DEFAULT_ENV, '2');
+    await enterEditMode();
+
+    const label = '内存预留 (Requests)';
+    const { input } = await openCustomQuantity(label);
+    expect(input).toHaveFocus();
+    await user.keyboard('{ArrowDown}');
+    expect(input).toHaveValue(null);
+    await user.keyboard('{ArrowUp}');
+    expect(input).toHaveValue(1);
+
+    await user.clear(input);
+    await user.type(input, '1.4');
+    await user.keyboard('{ArrowDown}');
+    expect(input).toHaveValue(0.4);
+    await user.keyboard('{ArrowDown}');
+    expect(input).toHaveValue(0.4);
+    await user.keyboard('{Enter}');
+    expect(getQuantityControl(label, '.bk-select-trigger input')).toHaveValue('0.4Gi');
+  });
+
+  it('当用户在普通环境保存配置时，应写入该环境的覆盖配置', async () => {
+    const defaults = { ...DEFAULT_SPEC, cpuRequests: '200m' };
+    let overrides: Partial<typeof DEFAULT_SPEC> = { replicas: 4, cpuRequests: '1.5', cpuLimits: '3' };
+    mocks.getDefault.mockResolvedValue(defaults);
+    mocks.getEnvEffective.mockImplementation(async () => ({ ...defaults, ...overrides }));
+    mocks.getEnvOverride.mockImplementation(async () => overrides);
+    mocks.setEnv.mockImplementation(async ({ appSpecResources }) => {
+      overrides = Object.fromEntries(Object.entries(appSpecResources).filter(([, value]) => value !== null));
+      return {};
+    });
+    const { unmount } = renderResourcesForm();
+    await loadEnv(PROD_ENV, '4');
+    await enterEditMode();
+    // 单项重置图标没有可查询的角色，用所属表单字段定位。
+    await userEvent.click(getQuantityControl('实例数', '.bkms-icon-return'));
+    const replicasInput = getReplicasInput();
+    expect(replicasInput).toHaveValue(2);
+    await userEvent.clear(replicasInput);
+    await userEvent.type(replicasInput, '5');
+    await userEvent.click(getQuantityControl('CPU 预留 (Requests)', '.bkms-icon-return'));
+    const { popup, input } = await openCustomQuantity('CPU 预留 (Requests)');
+    expect(input).toHaveValue(0.2);
+    await userEvent.click(popup.getByRole('button', { name: '确定' }));
+    await userEvent.click(getQuantityControl('CPU 限制 (Limits)', '.bkms-icon-return'));
+    await setCustomQuantity('CPU 限制 (Limits)', '89');
+    await setCustomQuantity('内存限制 (Limits)', '128');
+    await userEvent.click(screen.getByRole('button', { name: '保存' }));
+    await waitFor(() =>
+      expect(mocks.setEnv).toHaveBeenCalledWith({
+        appID: 'app-1',
+        envName: 'prod',
+        appSpecResources: {
+          replicas: 5,
+          cpuRequests: null,
+          cpuLimits: '89',
+          memoryRequests: null,
+          memoryLimits: '128Gi',
+        },
+      }),
+    );
+    expect(mocks.setDefault).not.toHaveBeenCalled();
+    expect(await screen.findByRole('button', { name: '编辑' })).toBeTruthy();
+
+    unmount();
+    renderResourcesForm();
+    await loadEnv(PROD_ENV, '5');
+    expect(screen.getByText('0.2 核')).toBeInTheDocument();
+    expect(screen.getByText('89 核')).toBeInTheDocument();
+    expect(screen.getByText('128Gi')).toBeInTheDocument();
+
+    await enterEditMode();
+    await userEvent.click(getQuantityControl('实例数', '.bkms-icon-return'));
+    await userEvent.click(screen.getByRole('button', { name: '保存' }));
+    await waitFor(() =>
+      expect(mocks.setEnv).toHaveBeenLastCalledWith(
+        expect.objectContaining({ appSpecResources: expect.objectContaining({ replicas: null }) }),
+      ),
+    );
+  });
+
+  it('当用户将限制设得低于预留时，应拦截保存', async () => {
+    const defaults = { ...DEFAULT_SPEC, cpuRequests: '2', memoryRequests: '1Gi' };
+    mocks.getDefault.mockResolvedValue(defaults);
+    mocks.getEnvEffective.mockResolvedValue({ ...defaults, replicas: 4 });
+    mocks.getEnvOverride.mockResolvedValue({ replicas: 4 });
+    renderResourcesForm();
+    await loadEnv(PROD_ENV, '4');
+    await enterEditMode();
+
+    // 打开自定义预填当前值，点取消丢弃草稿后已选值保持原样
+    const { popup, input } = await openCustomQuantity('CPU 预留 (Requests)');
+    expect(input).toHaveValue(2);
+    await userEvent.click(popup.getByRole('button', { name: '取消' }));
+    await setCustomQuantity('CPU 限制 (Limits)', '1');
+    await setCustomQuantity('内存限制 (Limits)', '0.5');
+    await userEvent.click(screen.getByRole('button', { name: '保存' }));
+
+    await waitFor(() => expect(screen.getAllByText('{0} Limits 不能小于 Requests')).toHaveLength(2));
+    expect(mocks.setEnv).not.toHaveBeenCalled();
+  });
+
+  it('当用户保存含无效资源值的配置时，应提示格式错误并拦截保存', async () => {
+    mocks.getDefault.mockResolvedValue({ ...DEFAULT_SPEC, cpuRequests: 'invalid' });
     renderResourcesForm();
     await loadEnv(DEFAULT_ENV, '2');
     await enterEditMode();
     await userEvent.click(screen.getByRole('button', { name: '保存' }));
-    await waitFor(() =>
-      expect(mocks.setDefault).toHaveBeenCalledWith(
-        expect.objectContaining({ appID: 'app-1', appSpecResources: expect.objectContaining({ replicas: 2 }) }),
-      ),
-    );
-    expect(mocks.message).toHaveBeenCalledWith(expect.objectContaining({ theme: 'success' }));
-    expect(await screen.findByRole('button', { name: '编辑' })).toBeTruthy();
-  });
 
-  it('当用户在普通环境保存配置时，应写入该环境的覆盖配置', async () => {
-    mocks.getDefault.mockResolvedValue(DEFAULT_SPEC);
-    mocks.getEnvEffective.mockResolvedValue({ ...DEFAULT_SPEC, replicas: 4 });
-    mocks.getEnvOverride.mockResolvedValue({ replicas: 4 });
-    mocks.setEnv.mockResolvedValue({});
-    renderResourcesForm();
-    await loadEnv(PROD_ENV, '4');
-    await enterEditMode();
-    await userEvent.click(screen.getByRole('button', { name: '保存' }));
-    await waitFor(() =>
-      expect(mocks.setEnv).toHaveBeenCalledWith(expect.objectContaining({ appID: 'app-1', envName: 'prod' })),
-    );
+    expect(await screen.findByText('格式错误')).toBeInTheDocument();
     expect(mocks.setDefault).not.toHaveBeenCalled();
   });
 
