@@ -215,6 +215,7 @@
     v-model:is-show="viewStrategyVisible"
     :existing-names="existingStrategyNames"
     mode="view"
+    readonly
     :strategy="selectedStrategy"
     @success="handleStrategyCloned"
   />
