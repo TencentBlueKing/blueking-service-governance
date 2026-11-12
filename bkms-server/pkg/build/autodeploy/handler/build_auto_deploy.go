@@ -23,6 +23,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/pkg/errors"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkci"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/autodeploy"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/autodeploy/serializer"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/build"
@@ -262,7 +263,8 @@ func buildAutoDeployErrCode(err error) bkerrs.ErrCode {
 	switch {
 	case build.IsImageReferenceInvalid(err) || errors.Is(err, build.ErrWorkspaceImageCredentialMissing):
 		return bkerrs.ErrCodeInvalidArgument
-	case errors.Is(err, revision.ErrRequired):
+	case errors.Is(err, revision.ErrRequired),
+		errors.Is(err, bkci.ErrBuiltinDockerfilePipelineDisabled):
 		return bkerrs.ErrCodeInvalidRequest
 	default:
 		return bkerrs.ErrCodeInternalServerError

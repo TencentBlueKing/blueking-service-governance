@@ -44,6 +44,9 @@ var ErrIndependentWorkspaceBizRequired = errors.New("bizID is required when crea
 // ErrIndependentWorkspaceBizInvalid 独立 BCS 模式下业务不存在或当前用户无权访问
 var ErrIndependentWorkspaceBizInvalid = errors.New("independent workspace biz is invalid")
 
+// ErrBoundBCSProjectInvalid 独立 BCS 模式下显式绑定的 BCS 项目不存在、不是 k8s 项目或未关联业务
+var ErrBoundBCSProjectInvalid = errors.New("bound bcs project is invalid")
+
 // bcsProjectCodeIndex BCS 项目 code 唯一索引名，用于从唯一键冲突中区分出 BCS 项目重复绑定
 const bcsProjectCodeIndex = "bkSystems.bkBcsProjectCode_1"
 

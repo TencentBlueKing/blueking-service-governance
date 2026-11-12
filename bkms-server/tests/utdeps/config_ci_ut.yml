@@ -152,6 +152,7 @@ development:
   useStubPerm: true
   useStubBkHCM: true
   useStubBkCMDB: true
+  useStubTof: true
   useStubBCS: true
   useStubBSCP: true
   useStubDBM: true

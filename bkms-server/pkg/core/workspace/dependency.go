@@ -36,6 +36,7 @@ import (
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bcs"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bkcc"
 	bkciapi "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bkci"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/perm"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/tenant"
@@ -175,10 +176,15 @@ func prepareIndependentBCSBinding(
 	// 1. 加载 BCS 项目，且项目必须关联业务
 	project, err := bcsmanager.NewProjectManager().LoadBoundProject(ctx, boundBCSProjectCode)
 	if err != nil {
+		if errors.Is(err, bcs.ErrProjectNotFound) || errors.Is(err, bcsmanager.ErrProjectNotK8s) {
+			return nil, nil, errors.Wrapf(ErrBoundBCSProjectInvalid, "load bound bcs project: %v", err)
+		}
 		return nil, nil, errors.Wrap(err, "load bound bcs project")
 	}
 	if cast.ToInt64(project.BizID) <= 0 {
-		return nil, nil, errors.Errorf("bcs project(%s) has no associated bizID", boundBCSProjectCode)
+		return nil, nil, errors.Wrapf(
+			ErrBoundBCSProjectInvalid, "bcs project(%s) has no associated bizID", boundBCSProjectCode,
+		)
 	}
 	// 2. 先校验是否已被其他 workspace 占用，避免后续先创建外部资源再失败。
 	if err = ensureBCSProjectNotBound(ctx, workspaces, workspaceID, project); err != nil {
@@ -264,7 +270,11 @@ func validateIndependentWorkspaceBiz(ctx context.Context, bizID int64) error {
 		return errors.Wrap(err, "initial cmdb service")
 	}
 	if _, err = cmdbSvc.GetBusinessByID(ctx, bizID); err != nil {
-		return errors.Wrapf(ErrIndependentWorkspaceBizInvalid, "validate bkcc biz %d: %v", bizID, err)
+		// 只查当前用户有权限的业务，查不到即业务不存在或无权访问；超时、5xx 等其他错误按内部错误返回
+		if errors.Is(err, bkcc.ErrBusinessNotFound) {
+			return errors.Wrapf(ErrIndependentWorkspaceBizInvalid, "validate bkcc biz %d", bizID)
+		}
+		return errors.Wrapf(err, "get bkcc biz %d", bizID)
 	}
 	return nil
 }
@@ -428,6 +438,10 @@ func ensureBCSProjectNotBound(
 	}
 	if boundWorkspace.ID == workspaceID {
 		return nil
+	}
+	if tenantID, _ := tenant.GetTenantID(ctx); boundWorkspace.TenantID != tenantID {
+		// 不向当前租户暴露其他租户的工作空间
+		return errors.Wrapf(ErrBCSProjectAlreadyBound, "bcs project(%s) already bound by another tenant", project.Code)
 	}
 	return errors.Wrapf(
 		ErrBCSProjectAlreadyBound,

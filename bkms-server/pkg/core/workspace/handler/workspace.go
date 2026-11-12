@@ -546,7 +546,7 @@ func (h *Handler) CreateWorkspace(c *gin.Context) {
 		input.BkCCBizID,
 	)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, classifyEnsureBkSystemsErr(err), "ensure blueking system"))
+		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, ClassifyEnsureBkSystemsErr(err), "ensure blueking system"))
 		return
 	}
 
@@ -1006,10 +1006,12 @@ func (h *Handler) hasActiveDeploymentsInWorkspace(ctx context.Context, workspace
 	return false, nil
 }
 
-func classifyEnsureBkSystemsErr(err error) bkerrs.ErrCode {
+// ClassifyEnsureBkSystemsErr 将确保蓝鲸系统依赖时的错误映射为 API 错误码
+func ClassifyEnsureBkSystemsErr(err error) bkerrs.ErrCode {
 	switch {
 	case errors.Is(err, workspace.ErrIndependentWorkspaceBizRequired),
-		errors.Is(err, workspace.ErrIndependentWorkspaceBizInvalid):
+		errors.Is(err, workspace.ErrIndependentWorkspaceBizInvalid),
+		errors.Is(err, workspace.ErrBoundBCSProjectInvalid):
 		return bkerrs.ErrCodeInvalidRequest
 	case errors.Is(err, workspace.ErrBCSProjectAlreadyExists),
 		errors.Is(err, workspace.ErrBCSProjectAlreadyBound):

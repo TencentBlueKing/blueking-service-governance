@@ -31,13 +31,19 @@ import (
 	cloudbcs "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bcs"
 )
 
-// workspaceProjectIDNamespace 生成工作空间 BCS projectID 的 UUID v5 命名空间，修改会导致已创建项目无法按 ID 回查
+// ErrProjectNotK8s BCS 项目不是 k8s 类型，不能绑定到工作空间
+var ErrProjectNotK8s = errors.New("bcs project is not a k8s project")
+
+// workspaceProjectIDNamespace 是生成 BCS projectID 用的 UUID v5 命名空间，值为一次性随机生成的常量，本身无业务含义。
+// 同一个 "{tenantID}/{workspaceID}" 在该命名空间下总得到同一个 projectID，创建失败重试时据此找回已创建的项目；
+// 修改该值会导致已创建的项目无法按 ID 回查。
 var workspaceProjectIDNamespace = uuid.MustParse("752ae529-863a-4659-a883-2e7d4b0f7cfa")
 
 // WorkspaceProjectID 生成工作空间独立 BCS 项目的 projectID（32 位，与 BCS 自动生成的格式一致）。
 //
-// 多租户下 BCS 会把 projectCode 改写为 {tenantID}-{code}，按请求里的 code 查不到项目；projectID 不会被改写，
-// 由 BKMS 指定后，创建失败重试时可以按 ID 找回上一次创建的项目。
+// 多租户下 BCS 会把请求里的 projectCode 改写为 {tenantID}-{code}，全局唯一的是改写后的 code。
+// BKMS 创建时只知道改写前的 code，无法按它回查；projectID 不会被改写，因此由 BKMS 预先算出并指定，
+// 创建失败重试时按 ID 找回上一次创建的项目。
 // BCS 按 ID 查询不区分租户，ID 需要包含租户，避免不同租户先后使用同一个工作空间 ID 时撞到对方的项目
 func WorkspaceProjectID(tenantID, workspaceID string) string {
 	id := uuid.NewSHA1(workspaceProjectIDNamespace, []byte(tenantID+"/"+workspaceID))
@@ -120,7 +126,7 @@ func getExistingProject(
 		return nil, errors.New("get bcs project returned empty id")
 	}
 	if project.Kind != cloudbcs.ProjectKindK8s {
-		return nil, errors.Errorf("bcs project(%s) is not a k8s project", projectIDOrCode)
+		return nil, errors.Wrapf(ErrProjectNotK8s, "bcs project(%s)", projectIDOrCode)
 	}
 	return project, nil
 }

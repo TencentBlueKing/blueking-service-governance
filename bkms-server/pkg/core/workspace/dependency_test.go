@@ -281,6 +281,9 @@ var _ = Describe("ensureBCSProjectNotBound", func() {
 			Code: "existing-bcs",
 		})
 		Expect(err).To(MatchError(ErrBCSProjectAlreadyBound))
+		// 不向当前租户暴露其他租户的工作空间
+		Expect(err.Error()).To(ContainSubstring("already bound by another tenant"))
+		Expect(err.Error()).NotTo(ContainSubstring(ws.ID))
 	})
 
 	It("allows the workspace that already owns the BCS project", func() {
@@ -431,13 +434,63 @@ var _ = Describe("prepareIndependentBCSBinding", func() {
 			mockey.Mock(auth.MustGetUser).Return(user).Build()
 			mockey.Mock(bkcmdb.NewService).Return(&fakeCMDBService{
 				getBusinessByID: func(ctx context.Context, bizID int64) (*bkcc.Business, error) {
-					return nil, errors.New("bkcc: business not found")
+					return nil, bkcc.ErrBusinessNotFound
 				},
 			}, nil).Build()
 
 			_, _, err := PrepareIndependentBCSBinding(ctx, nil, "ws-1", "", 398)
 			Expect(err).To(MatchError(ErrIndependentWorkspaceBizInvalid))
 			Expect(err.Error()).To(ContainSubstring("validate bkcc biz 398"))
+		})
+	})
+
+	It("keeps biz query failures other than not found as internal errors", func() {
+		mockey.PatchConvey("biz query failed", GinkgoT(), func() {
+			mockey.Mock(auth.MustGetUser).Return(user).Build()
+			mockey.Mock(bkcmdb.NewService).Return(&fakeCMDBService{
+				getBusinessByID: func(ctx context.Context, bizID int64) (*bkcc.Business, error) {
+					return nil, errors.New("bkcc: request timeout")
+				},
+			}, nil).Build()
+
+			_, _, err := PrepareIndependentBCSBinding(ctx, nil, "ws-1", "", 398)
+			Expect(err).To(MatchError(ContainSubstring("bkcc: request timeout")))
+			Expect(errors.Is(err, ErrIndependentWorkspaceBizInvalid)).To(BeFalse())
+		})
+	})
+
+	DescribeTable("rejects binding an invalid existing BCS project as a request error",
+		func(project *bcs.Project, getErr error, wantMsg string) {
+			mockey.PatchConvey("invalid bound project", GinkgoT(), func() {
+				mockey.Mock(auth.MustGetUser).Return(user).Build()
+				mockey.Mock(bcs.New).Return(bcs.NewStub(user), nil).Build()
+				mockey.Mock((*bcs.StubApiClient).GetProject).Return(project, getErr).Build()
+
+				_, _, err := PrepareIndependentBCSBinding(ctx, nil, "ws-1", "existing-bcs", 0)
+				Expect(err).To(MatchError(ErrBoundBCSProjectInvalid))
+				Expect(err.Error()).To(ContainSubstring(wantMsg))
+			})
+		},
+		Entry("project not found", nil, bcs.ErrProjectNotFound, "project not found"),
+		Entry("project is not k8s",
+			&bcs.Project{ID: "bcs-uid", Code: "existing-bcs", Kind: "mesos", BizID: "398"}, nil,
+			"not a k8s project",
+		),
+		Entry("project has no biz",
+			&bcs.Project{ID: "bcs-uid", Code: "existing-bcs", Kind: bcs.ProjectKindK8s}, nil,
+			"has no associated bizID",
+		),
+	)
+
+	It("keeps BCS query failures other than not found as internal errors", func() {
+		mockey.PatchConvey("bcs query failed", GinkgoT(), func() {
+			mockey.Mock(auth.MustGetUser).Return(user).Build()
+			mockey.Mock(bcs.New).Return(bcs.NewStub(user), nil).Build()
+			mockey.Mock((*bcs.StubApiClient).GetProject).Return(nil, errors.New("bcs: gateway timeout")).Build()
+
+			_, _, err := PrepareIndependentBCSBinding(ctx, nil, "ws-1", "existing-bcs", 0)
+			Expect(err).To(MatchError(ContainSubstring("bcs: gateway timeout")))
+			Expect(errors.Is(err, ErrBoundBCSProjectInvalid)).To(BeFalse())
 		})
 	})
 })

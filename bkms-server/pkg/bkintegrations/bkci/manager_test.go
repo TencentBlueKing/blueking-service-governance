@@ -134,7 +134,7 @@ var _ = Describe("ProjectManager Initialize", func() {
 		ctx = testutil.NewDefaultTenantContext()
 		manager = NewProjectManager(testutil.NewDB(GinkgoT()), managerTestWorkspaceID)
 		projectStore, _, _ = setupManagerTestStores()
-		expectedCode = bkciProjectCode(ctx, managerTestProjectCode)
+		expectedCode = addBKCIProjectTenantPrefix(ctx, managerTestProjectCode)
 	})
 
 	Context("Success Scenarios", func() {
@@ -181,7 +181,7 @@ var _ = Describe("ProjectManager Initialize", func() {
 				proj, err := manager.Initialize(ctx, "", "test-obs-id", "test-obs-name")
 
 				Expect(err).NotTo(HaveOccurred())
-				Expect(proj.Code).To(Equal(bkciProjectCode(ctx, "bkms-test-workspace")))
+				Expect(proj.Code).To(Equal(addBKCIProjectTenantPrefix(ctx, "bkms-test-workspace")))
 			})
 		})
 
@@ -277,18 +277,18 @@ var _ = Describe("bkci project code tenant prefix", func() {
 
 	It("adds tenant prefix in multi-tenant mode", func() {
 		setMultiTenantMode(true)
-		Expect(bkciProjectCode(ctx, "bkms-nicole-1")).To(Equal("system.bkms-nicole-1"))
+		Expect(addBKCIProjectTenantPrefix(ctx, "bkms-nicole-1")).To(Equal("system.bkms-nicole-1"))
 		Expect(trimBKCIProjectTenantPrefix(ctx, "system.bkms-nicole-1")).To(Equal("bkms-nicole-1"))
 	})
 
 	It("keeps code that already has tenant prefix", func() {
 		setMultiTenantMode(true)
-		Expect(bkciProjectCode(ctx, "system.bkms-nicole-1")).To(Equal("system.bkms-nicole-1"))
+		Expect(addBKCIProjectTenantPrefix(ctx, "system.bkms-nicole-1")).To(Equal("system.bkms-nicole-1"))
 	})
 
 	It("keeps code unchanged in single-tenant mode", func() {
 		setMultiTenantMode(false)
-		Expect(bkciProjectCode(ctx, "bkms-nicole-1")).To(Equal("bkms-nicole-1"))
+		Expect(addBKCIProjectTenantPrefix(ctx, "bkms-nicole-1")).To(Equal("bkms-nicole-1"))
 		Expect(trimBKCIProjectTenantPrefix(ctx, "bkms-nicole-1")).To(Equal("bkms-nicole-1"))
 	})
 

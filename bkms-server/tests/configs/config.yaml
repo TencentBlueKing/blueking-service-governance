@@ -203,6 +203,7 @@ development:
   useStubPerm: true
   useStubBkCMDB: true
   useStubTxCMDB: true
+  useStubTof: true
   useStubBkHCM: true
   useStubBCS: true
   useStubBSCP: true

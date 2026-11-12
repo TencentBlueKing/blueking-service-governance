@@ -410,6 +410,7 @@ type DevConfig struct {
 	UseStubBkRepo      bool
 	UseStubBkCMDB      bool
 	UseStubTxCMDB      bool
+	UseStubTof         bool
 	UseStubBCS         bool
 	UseStubBkHCM       bool
 	UseStubBkMonitor   bool

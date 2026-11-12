@@ -214,6 +214,21 @@ var _ = Describe("Build Functions", func() {
 			Expect(err.Error()).To(ContainSubstring("code repo config not found"))
 		})
 
+		It("should fail before creating bkci repository when builtin dockerfile pipeline is disabled", func() {
+			config.G.FeatureIntegrations.DisableBuiltinDockerfilePipeline = true
+			repoInitialized := false
+			mockey.Mock((*bkci.RepositoryManager).Initialize).To(
+				func(*bkci.RepositoryManager, context.Context, string, string) (*bkci.Repository, error) {
+					repoInitialized = true
+					return &bkci.Repository{}, nil
+				},
+			).Build()
+
+			_, _, err := ExecuteBKCIPipelineBuild(ctx, db, testApp, testCfg, rev, imageTag)
+			Expect(err).To(MatchError(bkci.ErrBuiltinDockerfilePipelineDisabled))
+			Expect(repoInitialized).To(BeFalse())
+		})
+
 		It("should return error when pipeline config is missing", func() {
 			// 修改配置：缺少流水线配置
 			testCfg.SourceType = SourceTypePipeline

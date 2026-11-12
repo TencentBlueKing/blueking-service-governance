@@ -16,6 +16,16 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
-package handler
+package tof
 
-var ClassifyEnsureBkSystemsErr = classifyEnsureBkSystemsErr
+import (
+	"testing"
+
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+)
+
+func TestTof(t *testing.T) {
+	RegisterFailHandler(Fail)
+	RunSpecs(t, "Tof Suite")
+}

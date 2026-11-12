@@ -331,7 +331,8 @@ func (h *Handler) CreateBuild(c *gin.Context) {
 		switch {
 		case build.IsImageReferenceInvalid(err) || pkgerrors.Is(err, build.ErrWorkspaceImageCredentialMissing):
 			errCode = bkerrs.ErrCodeInvalidArgument
-		case pkgerrors.Is(err, revision.ErrRequired):
+		case pkgerrors.Is(err, revision.ErrRequired),
+			pkgerrors.Is(err, bkci.ErrBuiltinDockerfilePipelineDisabled):
 			errCode = bkerrs.ErrCodeInvalidRequest
 		}
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, errCode, "start and schedule build"))

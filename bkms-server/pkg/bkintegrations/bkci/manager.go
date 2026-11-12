@@ -78,7 +78,7 @@ func (m *ProjectManager) Initialize(
 	if projectCode == "" {
 		projectCode = DefaultProjectCode(m.workspaceID)
 	}
-	projectCode = bkciProjectCode(ctx, projectCode)
+	projectCode = addBKCIProjectTenantPrefix(ctx, projectCode)
 
 	projStore := store.Of(m.db, ProjectMeta)
 
@@ -203,23 +203,23 @@ func DefaultProjectCode(workspaceID string) string {
 	return "bkms-" + workspaceID
 }
 
-// bkciProjectCode 为项目 Code 补齐租户前缀，得到蓝盾侧的项目 Code（多租户蓝盾为 {tenantID}.{code}）。
+// addBKCIProjectTenantPrefix 为项目 Code 补齐租户前缀，得到蓝盾侧的项目 Code（多租户蓝盾为 {tenantID}.{code}）。
 // 已带前缀（如从蓝盾项目列表中选择的已有项目）时原样返回。
-func bkciProjectCode(ctx context.Context, code string) string {
-	prefix := bkciProjectCodePrefix(ctx)
+func addBKCIProjectTenantPrefix(ctx context.Context, code string) string {
+	prefix := getBKCIProjectTenantPrefix(ctx)
 	if prefix == "" || strings.HasPrefix(code, prefix) {
 		return code
 	}
 	return prefix + code
 }
 
-// trimBKCIProjectTenantPrefix 去掉项目 Code 的租户前缀，是 bkciProjectCode 的逆操作
+// trimBKCIProjectTenantPrefix 去掉项目 Code 的租户前缀，是 addBKCIProjectTenantPrefix 的逆操作
 func trimBKCIProjectTenantPrefix(ctx context.Context, code string) string {
-	return strings.TrimPrefix(code, bkciProjectCodePrefix(ctx))
+	return strings.TrimPrefix(code, getBKCIProjectTenantPrefix(ctx))
 }
 
-// bkciProjectCodePrefix 返回多租户蓝盾项目 Code 的租户前缀（{tenantID}.），非多租户模式或 ctx 无租户时返回空
-func bkciProjectCodePrefix(ctx context.Context) string {
+// getBKCIProjectTenantPrefix 返回多租户蓝盾项目 Code 的租户前缀（{tenantID}.），非多租户模式或 ctx 无租户时返回空
+func getBKCIProjectTenantPrefix(ctx context.Context) string {
 	if config.G == nil || !config.G.Tenant.EnableMultiTenantMode {
 		return ""
 	}

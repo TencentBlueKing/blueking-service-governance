@@ -30,7 +30,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace/handler"
 )
 
-var _ = Describe("classifyEnsureBkSystemsErr", func() {
+var _ = Describe("ClassifyEnsureBkSystemsErr", func() {
 	It("maps missing independent biz id to invalid request", func() {
 		code := handler.ClassifyEnsureBkSystemsErr(workspace.ErrIndependentWorkspaceBizRequired)
 		Expect(code).To(Equal(bkerrs.ErrCodeInvalidRequest))
@@ -38,6 +38,12 @@ var _ = Describe("classifyEnsureBkSystemsErr", func() {
 
 	It("maps inaccessible biz to invalid request", func() {
 		err := fmt.Errorf("%w: validate bkcc biz 398", workspace.ErrIndependentWorkspaceBizInvalid)
+		code := handler.ClassifyEnsureBkSystemsErr(err)
+		Expect(code).To(Equal(bkerrs.ErrCodeInvalidRequest))
+	})
+
+	It("maps invalid bound bcs project to invalid request", func() {
+		err := fmt.Errorf("%w: bcs project(%s) has no associated bizID", workspace.ErrBoundBCSProjectInvalid, "demo")
 		code := handler.ClassifyEnsureBkSystemsErr(err)
 		Expect(code).To(Equal(bkerrs.ErrCodeInvalidRequest))
 	})
