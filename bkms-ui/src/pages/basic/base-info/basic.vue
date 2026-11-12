@@ -487,6 +487,7 @@
   import useTableEmpty from '~/composables/use-table-empty';
   import useToLink from '~/composables/use-to-link';
   import { useSpaceStore } from '~/stores/space';
+  import { useUserNameStore } from '~/stores/user-name';
 
   import PermissionContent from './permission-content.vue';
   import permissionModel from './permissionModel.vue';
@@ -502,6 +503,7 @@
 
   const router = useRouter();
   const spaceStore = useSpaceStore();
+  const userNameStore = useUserNameStore();
   const { handleToLink } = useToLink();
   const { copyText } = useCopy();
   const i18n = useI18n();
@@ -595,6 +597,8 @@
       });
 
       memberData.value = Object.values(tempData);
+      // 多租户下 username 为 userid，批量反查显示名称用于搜索
+      userNameStore.resolveUserNames(memberData.value.map(item => item.username));
       pagination.value.count = memberData.value.length;
       clearErrorType();
     } catch (error) {
@@ -651,7 +655,10 @@
     memberData.value.filter(item => {
       const result1 = memberType.value === 'all' || item.role.includes(memberType.value);
       if (searchValue.value) {
-        const result2 = item.username.toLowerCase().includes(searchValue.value.toLowerCase());
+        const keyword = searchValue.value.toLowerCase();
+        // 多租户下 userid 无可读性，同时匹配显示名称与 userid
+        const displayName = userNameStore.getDisplayName(item.username).toLowerCase();
+        const result2 = displayName.includes(keyword) || item.username.toLowerCase().includes(keyword);
         return result1 && result2;
       }
       return result1;
@@ -662,6 +669,7 @@
   const { setTypeToError, clearErrorType, curExceptionType } = useTableEmpty({
     filters: searchValue,
   });
+
   /**
    * 角色描述
    * @param role 角色
