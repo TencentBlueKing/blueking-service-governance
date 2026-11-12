@@ -42,6 +42,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil/dbfactory"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/utils/crypto"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime"
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	bkmsworkspace "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
@@ -423,7 +424,7 @@ func newAppModelTagDeletionFixture(
 		ID:          appName + stringx.Random(6),
 		Name:        appName,
 		WorkspaceID: workspace.ID,
-		Type:        bkmsapp.AppTypeTRPC,
+		Type:        appruntime.AppTypeTRPC,
 	}
 	Expect(appStore.Create(ctx, app)).To(Succeed())
 

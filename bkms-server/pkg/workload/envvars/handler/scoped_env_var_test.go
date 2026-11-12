@@ -30,6 +30,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil/dbfactory"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime"
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	storereg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
@@ -109,12 +110,12 @@ var _ = Describe("validateScopedEnvVarScopeValue", func() {
 
 var _ = Describe("ensureAppSupportsDefinedEnvVars", func() {
 	It("allows app model types", func() {
-		err := ensureAppSupportsDefinedEnvVars(&bkmsapp.Application{Type: bkmsapp.AppTypeTRPC})
+		err := ensureAppSupportsDefinedEnvVars(&bkmsapp.Application{Type: appruntime.AppTypeTRPC})
 		Expect(err).NotTo(HaveOccurred())
 	})
 
 	It("rejects non app model types", func() {
-		err := ensureAppSupportsDefinedEnvVars(&bkmsapp.Application{Type: bkmsapp.AppTypeHelm})
+		err := ensureAppSupportsDefinedEnvVars(&bkmsapp.Application{Type: appruntime.AppTypeHelm})
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("does not support app-defined env vars"))
 	})

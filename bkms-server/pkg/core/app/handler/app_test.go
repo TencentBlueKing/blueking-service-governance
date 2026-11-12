@@ -29,6 +29,7 @@ import (
 	build "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 )
 
@@ -59,7 +60,7 @@ var _ = Describe("collectBKCIRepositoriesForCreateApp", func() {
 			},
 		}
 
-		repos := collectBKCIRepositoriesForCreateApp(bkmsapp.AppTypeAgones, helmSpec, buildConfig)
+		repos := collectBKCIRepositoriesForCreateApp(appruntime.AppTypeAgones, helmSpec, buildConfig)
 
 		Expect(repos).To(Equal([]bkci.RepositoryInitSpec{
 			{URL: "https://git.example.com/build.git", Alias: "build-repo"},
@@ -78,7 +79,7 @@ var _ = Describe("collectBKCIRepositoriesForCreateApp", func() {
 			},
 		}
 
-		repos := collectBKCIRepositoriesForCreateApp(bkmsapp.AppTypeTRPC, helmSpec, nil)
+		repos := collectBKCIRepositoriesForCreateApp(appruntime.AppTypeTRPC, helmSpec, nil)
 
 		Expect(repos).To(BeNil())
 	})

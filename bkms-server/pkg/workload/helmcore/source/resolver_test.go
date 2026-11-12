@@ -33,6 +33,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/helmcore/credential"
 )
@@ -60,7 +61,7 @@ var _ = Describe("ResolveConfig", func() {
 		return &bkmsapp.Application{
 			WorkspaceID: workspaceID,
 			Name:        "my-app",
-			Type:        bkmsapp.AppTypeHelm,
+			Type:        appruntime.AppTypeHelm,
 			HelmSpec: &bkmsapp.HelmSpec{
 				HelmSource: &bkmsapp.HelmSource{RepoType: bkmsapp.HelmSourceRepoTypeGit},
 			},
@@ -71,7 +72,7 @@ var _ = Describe("ResolveConfig", func() {
 		app := &bkmsapp.Application{
 			WorkspaceID: workspaceID,
 			Name:        "my-app",
-			Type:        bkmsapp.AppTypeHelm,
+			Type:        appruntime.AppTypeHelm,
 			HelmSpec: &bkmsapp.HelmSpec{
 				HelmSource: &bkmsapp.HelmSource{
 					RepoType: bkmsapp.HelmSourceRepoTypeHelm,

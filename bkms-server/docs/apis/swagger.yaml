@@ -9787,17 +9787,13 @@ definitions:
   serializer.TafSpecInput:
     properties:
       fileContent:
-        description: 配置文件内容
+        description: 框架配置文件内容，仅创建时使用
         type: string
       fileName:
-        description: |-
-          配置文件名，创建应用时必填，写入 framework def，应用模型不保存。
-          todo 兼容：更新时可不传；传了仍同步到 def。更新改走 def 接口后，该字段只用于创建。
+        description: 框架配置文件名。创建时必填；修改时非空才同步到框架配置文件定义
         type: string
       filePath:
-        description: |-
-          配置文件路径，创建应用时必填，写入 framework def 的挂载目录，应用模型不保存。
-          todo 兼容：更新时可不传；传了仍同步到 def。更新改走 def 接口后，该字段只用于创建。
+        description: 框架配置文件挂载目录。创建时必填；修改时非空才同步到框架配置文件定义
         type: string
     type: object
   serializer.TafSpecOutputObj:
@@ -9806,14 +9802,10 @@ definitions:
         description: 框架配置文件的默认内容
         type: string
       fileName:
-        description: |-
-          配置文件名。
-          todo 兼容：详情仍返回该字段，值从 framework def 填回。调用方改读 def 后删除。
+        description: 框架配置文件名
         type: string
       filePath:
-        description: |-
-          配置文件路径。
-          todo 兼容：详情仍返回该字段，值从 framework def 填回。调用方改读 def 后删除。
+        description: 框架配置文件挂载目录
         type: string
     type: object
   serializer.TagConfigInput:
@@ -10175,20 +10167,16 @@ definitions:
   serializer.TrpcSpecInput:
     properties:
       fileContent:
-        description: 配置文件内容
+        description: 框架配置文件内容，仅创建时使用
         type: string
       fileName:
-        description: |-
-          配置文件名，创建应用时必填，写入 framework def，应用模型不保存。
-          todo 兼容：更新时可不传；传了仍同步到 def。更新改走 def 接口后，该字段只用于创建。
+        description: 框架配置文件名。创建时必填；修改时非空才同步到框架配置文件定义
         type: string
       filePath:
-        description: |-
-          配置文件路径，创建应用时必填，写入 framework def 的挂载目录，应用模型不保存。
-          todo 兼容：更新时可不传；传了仍同步到 def。更新改走 def 接口后，该字段只用于创建。
+        description: 框架配置文件挂载目录。创建时必填；修改时非空才同步到框架配置文件定义
         type: string
       language:
-        description: 编程语言
+        description: 编程语言。修改时须与应用当前语言一致，不能切换
         enum:
         - go
         - cpp
@@ -10202,14 +10190,10 @@ definitions:
         description: 框架配置文件的默认内容
         type: string
       fileName:
-        description: |-
-          配置文件名。
-          todo 兼容：详情仍返回该字段，值从 framework def 填回。调用方改读 def 后删除。
+        description: 框架配置文件名
         type: string
       filePath:
-        description: |-
-          配置文件路径。
-          todo 兼容：详情仍返回该字段，值从 framework def 填回。调用方改读 def 后删除。
+        description: 框架配置文件挂载目录
         type: string
       language:
         description: 编程语言
@@ -17766,7 +17750,7 @@ paths:
       consumes:
       - application/json
       deprecated: true
-      description: 已废弃，请改用 POST /apps/{appID}/envs/{envName}/build-deploys
+      description: 已废弃：构建部署接口已统一为 build-deploys，请改用 POST /apps/{appID}/envs/{envName}/build-deploys
       operationId: CreateTafBuildDeploy
       parameters:
       - description: 应用 ID
@@ -17813,7 +17797,7 @@ paths:
   /apps/{appID}/envs/{envName}/taf-deploys:
     delete:
       deprecated: true
-      description: 已废弃，请改用 DELETE /apps/{appID}/envs/{envName}/bkmsapp-deploys
+      description: 已废弃：部署接口已统一为 bkmsapp-deploys，请改用 DELETE /apps/{appID}/envs/{envName}/bkmsapp-deploys
       operationId: DeleteTafDeploy
       parameters:
       - description: 应用 ID
@@ -17849,7 +17833,7 @@ paths:
       - deploy
     get:
       deprecated: true
-      description: 已废弃，请改用 GET /apps/{appID}/envs/{envName}/bkmsapp-deploys
+      description: 已废弃：部署接口已统一为 bkmsapp-deploys，请改用 GET /apps/{appID}/envs/{envName}/bkmsapp-deploys
       operationId: ListTafDeployRecords
       parameters:
       - description: 应用 ID
@@ -17901,7 +17885,7 @@ paths:
       consumes:
       - application/json
       deprecated: true
-      description: 已废弃，请改用 POST /apps/{appID}/envs/{envName}/bkmsapp-deploys
+      description: 已废弃：部署接口已统一为 bkmsapp-deploys，请改用 POST /apps/{appID}/envs/{envName}/bkmsapp-deploys
       operationId: CreateTafDeploy
       parameters:
       - description: 应用 ID
@@ -17940,7 +17924,7 @@ paths:
   /apps/{appID}/envs/{envName}/taf-deploys/{deployID}/resource-snapshots:
     get:
       deprecated: true
-      description: 已废弃，请改用 GET /apps/{appID}/envs/{envName}/bkmsapp-deploys/{deployID}/resource-snapshots
+      description: 已废弃：部署接口已统一为 bkmsapp-deploys，请改用 bkmsapp-deploys 下的同名接口
       operationId: ListTafResourceSnapshots
       parameters:
       - description: 应用 ID
@@ -17988,7 +17972,7 @@ paths:
   /apps/{appID}/envs/{envName}/taf-deploys/{deployID}/resource-snapshots/{snapshotID}:
     get:
       deprecated: true
-      description: 已废弃，请改用 bkmsapp-deploys 下的同名接口
+      description: 已废弃：部署接口已统一为 bkmsapp-deploys，请改用 bkmsapp-deploys 下的同名接口
       operationId: GetTafResourceSnapshot
       parameters:
       - description: 应用 ID
@@ -18031,7 +18015,7 @@ paths:
   /apps/{appID}/envs/{envName}/taf-deploys/latest-status:
     get:
       deprecated: true
-      description: 已废弃，请改用 GET /apps/{appID}/envs/{envName}/bkmsapp-deploys/latest-status
+      description: 已废弃：部署接口已统一为 bkmsapp-deploys，请改用 GET /apps/{appID}/envs/{envName}/bkmsapp-deploys/latest-status
       operationId: GetLatestTafDeployStatus
       parameters:
       - description: 应用 ID
@@ -18068,7 +18052,7 @@ paths:
   /apps/{appID}/envs/{envName}/taf-deploys/precheck:
     get:
       deprecated: true
-      description: 已废弃，请改用 GET /apps/{appID}/envs/{envName}/bkmsapp-deploys/precheck
+      description: 已废弃：部署接口已统一为 bkmsapp-deploys，请改用 GET /apps/{appID}/envs/{envName}/bkmsapp-deploys/precheck
       operationId: PreCheckTafDeploy
       parameters:
       - description: 应用 ID
@@ -18107,7 +18091,7 @@ paths:
       consumes:
       - application/json
       deprecated: true
-      description: 已废弃，请改用 POST /apps/{appID}/envs/{envName}/build-deploys
+      description: 已废弃：构建部署接口已统一为 build-deploys，请改用 POST /apps/{appID}/envs/{envName}/build-deploys
       operationId: CreateTrpcBuildDeploy
       parameters:
       - description: 应用 ID
@@ -18154,7 +18138,7 @@ paths:
   /apps/{appID}/envs/{envName}/trpc-deploys:
     delete:
       deprecated: true
-      description: 已废弃，请改用 DELETE /apps/{appID}/envs/{envName}/bkmsapp-deploys
+      description: 已废弃：部署接口已统一为 bkmsapp-deploys，请改用 DELETE /apps/{appID}/envs/{envName}/bkmsapp-deploys
       operationId: DeleteTrpcDeploy
       parameters:
       - description: 应用 ID
@@ -18190,7 +18174,7 @@ paths:
       - deploy
     get:
       deprecated: true
-      description: 已废弃，请改用 GET /apps/{appID}/envs/{envName}/bkmsapp-deploys
+      description: 已废弃：部署接口已统一为 bkmsapp-deploys，请改用 GET /apps/{appID}/envs/{envName}/bkmsapp-deploys
       operationId: ListTrpcDeployRecords
       parameters:
       - description: 应用 ID
@@ -18242,7 +18226,7 @@ paths:
       consumes:
       - application/json
       deprecated: true
-      description: 已废弃，请改用 POST /apps/{appID}/envs/{envName}/bkmsapp-deploys
+      description: 已废弃：部署接口已统一为 bkmsapp-deploys，请改用 POST /apps/{appID}/envs/{envName}/bkmsapp-deploys
       operationId: CreateTrpcDeploy
       parameters:
       - description: 应用 ID
@@ -18281,7 +18265,7 @@ paths:
   /apps/{appID}/envs/{envName}/trpc-deploys/{deployID}/resource-snapshots:
     get:
       deprecated: true
-      description: 已废弃，请改用 GET /apps/{appID}/envs/{envName}/bkmsapp-deploys/{deployID}/resource-snapshots
+      description: 已废弃：部署接口已统一为 bkmsapp-deploys，请改用 bkmsapp-deploys 下的同名接口
       operationId: ListTrpcResourceSnapshots
       parameters:
       - description: 应用 ID
@@ -18329,7 +18313,7 @@ paths:
   /apps/{appID}/envs/{envName}/trpc-deploys/{deployID}/resource-snapshots/{snapshotID}:
     get:
       deprecated: true
-      description: 已废弃，请改用 bkmsapp-deploys 下的同名接口
+      description: 已废弃：部署接口已统一为 bkmsapp-deploys，请改用 bkmsapp-deploys 下的同名接口
       operationId: GetTrpcResourceSnapshot
       parameters:
       - description: 应用 ID
@@ -18372,7 +18356,7 @@ paths:
   /apps/{appID}/envs/{envName}/trpc-deploys/latest-status:
     get:
       deprecated: true
-      description: 已废弃，请改用 GET /apps/{appID}/envs/{envName}/bkmsapp-deploys/latest-status
+      description: 已废弃：部署接口已统一为 bkmsapp-deploys，请改用 GET /apps/{appID}/envs/{envName}/bkmsapp-deploys/latest-status
       operationId: GetLatestTrpcDeployStatus
       parameters:
       - description: 应用 ID
@@ -18409,7 +18393,7 @@ paths:
   /apps/{appID}/envs/{envName}/trpc-deploys/precheck:
     get:
       deprecated: true
-      description: 已废弃，请改用 GET /apps/{appID}/envs/{envName}/bkmsapp-deploys/precheck
+      description: 已废弃：部署接口已统一为 bkmsapp-deploys，请改用 GET /apps/{appID}/envs/{envName}/bkmsapp-deploys/precheck
       operationId: PreCheckTrpcDeploy
       parameters:
       - description: 应用 ID
@@ -19206,7 +19190,7 @@ paths:
       consumes:
       - application/json
       deprecated: true
-      description: 已废弃，请改用 PUT /apps/{appID}/startup-config
+      description: 已废弃：启动配置已统一由 startup-config 修改，请改用 PUT /apps/{appID}/startup-config
       operationId: UpdateAppTafSpec
       parameters:
       - description: 应用 ID
@@ -19246,7 +19230,7 @@ paths:
       consumes:
       - application/json
       deprecated: true
-      description: 已废弃，请改用 PUT /apps/{appID}/startup-config。不允许修改语言
+      description: 已废弃：启动配置已统一由 startup-config 修改，请改用 PUT /apps/{appID}/startup-config。不允许修改语言
       operationId: UpdateAppTrpcSpec
       parameters:
       - description: 应用 ID
@@ -21987,7 +21971,8 @@ paths:
     post:
       consumes:
       - application/json
-      description: type 为 trpc / taf 已废弃，请改用 bkmsapps 接口；仍按 bkmsApp 创建，响应 type 为 bkmsApp
+      description: type 为 trpc / taf 已废弃：平台托管应用统一为 bkmsApp，请改用 bkmsapps 接口；仍按 bkmsApp
+        创建
       operationId: CreateApp
       parameters:
       - description: 工作空间 ID

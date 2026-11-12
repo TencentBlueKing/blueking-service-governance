@@ -27,21 +27,6 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime"
 )
 
-const (
-	// AppTypeHelm helm 应用：https://helm.sh/
-	AppTypeHelm = appruntime.AppTypeHelm
-	// AppTypeAgones agones 应用：https://agones.dev
-	AppTypeAgones = appruntime.AppTypeAgones
-	// AppTypeBKMSApp 使用 AppModel 管理的默认应用类型，底层使用 AppModel 应用模型。
-	AppTypeBKMSApp = appruntime.AppTypeBKMSApp
-	// AppTypeTRPC trpc 应用（桥接期旧持久化值）。
-	// 已废弃：存量已迁移为 bkmsApp + framework=trpc，旧字段清理后删除，见 design_notes/bkms_app_runtime_model_migration.md §7。
-	AppTypeTRPC = appruntime.AppTypeTRPC
-	// AppTypeTAF taf 应用（桥接期旧持久化值）。
-	// 已废弃：存量已迁移为 bkmsApp + framework=taf，旧字段清理后删除，见 design_notes/bkms_app_runtime_model_migration.md §7。
-	AppTypeTAF = appruntime.AppTypeTAF
-)
-
 // Application is the main type for the project. An application is a deployable unit which can be defined in various
 // ways including a helm chart or other types.
 type Application struct {
@@ -72,7 +57,8 @@ type Application struct {
 
 	// **This field is only present for legacy trpc applications.**
 	// TrpcSpec is the compatibility DTO of the old trpc application spec.
-	// 已废弃：语言已迁移到 Language，旧字段清理后删除，见 design_notes/bkms_app_runtime_model_migration.md §7。
+	//
+	// Deprecated: bkmsApp 迁移兼容，语言已迁移到 Language。
 	TrpcSpec *TrpcSpec `json:"trpcSpec" bson:"trpcSpec,omitempty"`
 
 	// **This field is only present for helm applications.**

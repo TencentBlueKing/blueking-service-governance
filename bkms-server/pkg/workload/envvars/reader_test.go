@@ -32,6 +32,7 @@ import (
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris"
 	polarisenvvars "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris/envvars"
@@ -106,7 +107,7 @@ var _ = Describe("UnifiedEnvVarsReader", func() {
 		featureEnv.Name = "feat-env"
 		featureEnv.Kind = envmodel.EnvironmentKindFeature
 		featureEnv.OwnerAppID = "feature-app"
-		app := &bkmsapp.Application{ID: featureEnv.OwnerAppID, WorkspaceID: workspaceID, Type: bkmsapp.AppTypeTRPC}
+		app := &bkmsapp.Application{ID: featureEnv.OwnerAppID, WorkspaceID: workspaceID, Type: appruntime.AppTypeTRPC}
 
 		_, err := envvars.CreateSimpleEnvScopeVar(ctx, db, featureEnv, "SHARED_KEY", "feature-value", "")
 		Expect(err).NotTo(HaveOccurred())
@@ -150,7 +151,7 @@ var _ = Describe("UnifiedEnvVarsReader", func() {
 	It("should list app background vars with app-level builtins when app is provided", func() {
 		seedScopedEnvVars(ctx, db, workspaceID)
 
-		testApp := &bkmsapp.Application{ID: "app-1", Name: "test-app", Type: bkmsapp.AppTypeTRPC}
+		testApp := &bkmsapp.Application{ID: "app-1", Name: "test-app", Type: appruntime.AppTypeTRPC}
 		bgVars, err := reader.ListAppBgVars(ctx, environment, testApp, nil)
 		Expect(err).NotTo(HaveOccurred())
 
@@ -172,7 +173,7 @@ var _ = Describe("UnifiedEnvVarsReader", func() {
 	})
 
 	It("should list resource limit builtins in app background vars when app model is provided", func() {
-		testApp := &bkmsapp.Application{ID: "app-1", Name: "test-app", Type: bkmsapp.AppTypeTRPC}
+		testApp := &bkmsapp.Application{ID: "app-1", Name: "test-app", Type: appruntime.AppTypeTRPC}
 		am := &appmodel.AppModel{Workload: appmodel.Workload{
 			Resources: map[string]string{"cpu": "100m-200m", "memory": "2Gi"},
 		}}
@@ -209,7 +210,7 @@ var _ = Describe("UnifiedEnvVarsReader", func() {
 	It("should list deployable app vars from scoped env vars and app model vars", func() {
 		seedScopedEnvVars(ctx, db, workspaceID)
 
-		testApp := &bkmsapp.Application{ID: "app-1", Name: "test-app", Type: bkmsapp.AppTypeTRPC}
+		testApp := &bkmsapp.Application{ID: "app-1", Name: "test-app", Type: appruntime.AppTypeTRPC}
 		am := &appmodel.AppModel{
 			Workload: appmodel.Workload{
 				EnvVars: []appmodel.Variable{
@@ -246,7 +247,7 @@ var _ = Describe("UnifiedEnvVarsReader", func() {
 
 	DescribeTable("should inject CPU and memory limits as builtin env vars",
 		func(resources map[string]string, appEnvVars []appmodel.Variable, want map[string]string, absent []string) {
-			testApp := &bkmsapp.Application{ID: "app-1", Name: "test-app", Type: bkmsapp.AppTypeTRPC}
+			testApp := &bkmsapp.Application{ID: "app-1", Name: "test-app", Type: appruntime.AppTypeTRPC}
 			am := &appmodel.AppModel{
 				Workload: appmodel.Workload{
 					Resources: resources,
@@ -334,7 +335,7 @@ var _ = Describe("UnifiedEnvVarsReader", func() {
 		)
 		Expect(err).NotTo(HaveOccurred())
 
-		testApp := &bkmsapp.Application{ID: "app-1", Name: "test-app", Type: bkmsapp.AppTypeTRPC}
+		testApp := &bkmsapp.Application{ID: "app-1", Name: "test-app", Type: appruntime.AppTypeTRPC}
 		am := &appmodel.AppModel{
 			Workload: appmodel.Workload{
 				Resources: map[string]string{"cpu": "100m-200m", "memory": "512Mi-2Gi"},
@@ -487,7 +488,7 @@ var _ = Describe("BuildAppConflictedInfoByKeys", func() {
 		db = testutil.NewDB(GinkgoT())
 
 		workspaceID = "test-workspace-" + stringx.Random(6)
-		testApp = &bkmsapp.Application{ID: "app-1", Name: "test-app", Type: bkmsapp.AppTypeTRPC}
+		testApp = &bkmsapp.Application{ID: "app-1", Name: "test-app", Type: appruntime.AppTypeTRPC}
 		seedScopedEnvVars(ctx, db, workspaceID)
 	})
 
@@ -741,7 +742,7 @@ var _ = Describe("UnifiedEnvVarsReader with depInstance (real depenvvars.Reader 
 	}
 
 	It("should include depInstance vars in ListAppBgVars sorted by priority", func() {
-		testApp := &bkmsapp.Application{ID: "app-1", Name: "test-app", Type: bkmsapp.AppTypeTRPC}
+		testApp := &bkmsapp.Application{ID: "app-1", Name: "test-app", Type: appruntime.AppTypeTRPC}
 
 		// Credentials 中的键值对会作为环境变量输出
 		seedDepSvcBinding(
@@ -801,8 +802,8 @@ var _ = Describe("UnifiedEnvVarsReader with depInstance (real depenvvars.Reader 
 	})
 
 	It("should only return binding vars for the given app", func() {
-		app1 := &bkmsapp.Application{ID: "app-1", Name: "test-app-1", Type: bkmsapp.AppTypeTRPC}
-		app2 := &bkmsapp.Application{ID: "app-2", Name: "test-app-2", Type: bkmsapp.AppTypeTRPC}
+		app1 := &bkmsapp.Application{ID: "app-1", Name: "test-app-1", Type: appruntime.AppTypeTRPC}
+		app2 := &bkmsapp.Application{ID: "app-2", Name: "test-app-2", Type: appruntime.AppTypeTRPC}
 
 		seedDepSvcBinding(
 			app1.ID,
@@ -830,7 +831,7 @@ var _ = Describe("UnifiedEnvVarsReader with depInstance (real depenvvars.Reader 
 	})
 
 	It("should include depInstance vars in ListVars and they can be overridden by appModel vars", func() {
-		testApp := &bkmsapp.Application{ID: "app-1", Name: "test-app", Type: bkmsapp.AppTypeTRPC}
+		testApp := &bkmsapp.Application{ID: "app-1", Name: "test-app", Type: appruntime.AppTypeTRPC}
 
 		seedDepSvcBinding(
 			testApp.ID,
@@ -855,7 +856,7 @@ var _ = Describe("UnifiedEnvVarsReader with depInstance (real depenvvars.Reader 
 	})
 
 	It("should include depInstance vars in BuildAppConflictedInfoByKeys", func() {
-		testApp := &bkmsapp.Application{ID: "app-1", Name: "test-app", Type: bkmsapp.AppTypeTRPC}
+		testApp := &bkmsapp.Application{ID: "app-1", Name: "test-app", Type: appruntime.AppTypeTRPC}
 
 		seedDepSvcBinding(
 			testApp.ID,
@@ -876,7 +877,7 @@ var _ = Describe("UnifiedEnvVarsReader with depInstance (real depenvvars.Reader 
 	})
 
 	It("should only inject vars for envs mapped on the binding", func() {
-		testApp := &bkmsapp.Application{ID: "app-1", Name: "test-app", Type: bkmsapp.AppTypeTRPC}
+		testApp := &bkmsapp.Application{ID: "app-1", Name: "test-app", Type: appruntime.AppTypeTRPC}
 
 		seedDepSvcBinding(
 			testApp.ID,

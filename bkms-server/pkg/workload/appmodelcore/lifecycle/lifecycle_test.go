@@ -53,7 +53,7 @@ var _ = Describe("Lifecycle", func() {
 			Name:        name,
 			DisplayName: name,
 			WorkspaceID: workspace.ID,
-			Type:        bkmsapp.AppTypeBKMSApp,
+			Type:        appruntime.AppTypeBKMSApp,
 			Framework:   framework,
 			Language:    language,
 		}
@@ -104,7 +104,7 @@ var _ = Describe("Lifecycle", func() {
 
 				persisted, err := store.Of(db, bkmsapp.AppMeta).Get(ctx, bkmsapp.ByID(app.ID))
 				Expect(err).NotTo(HaveOccurred())
-				Expect(persisted.Type).To(Equal(bkmsapp.AppTypeBKMSApp))
+				Expect(persisted.Type).To(Equal(appruntime.AppTypeBKMSApp))
 				Expect(persisted.Framework).To(Equal(framework))
 				Expect(persisted.Language).To(Equal(language))
 				Expect(persisted.TrpcSpec).To(BeNil())
@@ -170,7 +170,7 @@ var _ = Describe("Lifecycle", func() {
 				Expect(frameworkDefs(app.ID)).To(BeEmpty())
 			},
 			Entry("legacy type", func(app *bkmsapp.Application, _ *lifecycle.CreateParams) {
-				app.Type = bkmsapp.AppTypeTRPC
+				app.Type = appruntime.AppTypeTRPC
 			}),
 			Entry("unsupported combination", func(app *bkmsapp.Application, _ *lifecycle.CreateParams) {
 				app.Framework = appruntime.FrameworkTAF
@@ -239,7 +239,7 @@ var _ = Describe("Lifecycle", func() {
 
 		It("rejects legacy apps", func() {
 			legacy := *app
-			legacy.Type = bkmsapp.AppTypeTRPC
+			legacy.Type = appruntime.AppTypeTRPC
 			_, _, err := svc.UpdateStartupConfig(ctx, &legacy, &lifecycle.UpdateStartupConfigParams{})
 			Expect(err).To(MatchError(lifecycle.ErrInvalidParams))
 		})
@@ -282,7 +282,7 @@ var _ = Describe("Lifecycle", func() {
 			model.Workload.TrpcConfig = appmodel.TrpcConfig{Language: appruntime.LanguageGo, FileContent: "legacy"}
 			Expect(appmodel.UpdateAppModel(ctx, db, model)).To(Succeed())
 			legacy := *app
-			legacy.Type, legacy.Framework, legacy.Language = bkmsapp.AppTypeTRPC, "", ""
+			legacy.Type, legacy.Framework, legacy.Language = appruntime.AppTypeTRPC, "", ""
 			legacy.TrpcSpec = &bkmsapp.TrpcSpec{Language: appruntime.LanguageGo}
 
 			_, newModel, err := svc.UpdateSpecCompat(ctx, &legacy, &lifecycle.SpecCompatParams{
@@ -301,7 +301,7 @@ var _ = Describe("Lifecycle", func() {
 
 		It("accepts any language for legacy apps without a recorded language and does not write it", func() {
 			legacy := *app
-			legacy.Type, legacy.Framework, legacy.Language = bkmsapp.AppTypeTRPC, "", ""
+			legacy.Type, legacy.Framework, legacy.Language = appruntime.AppTypeTRPC, "", ""
 
 			_, newModel, err := svc.UpdateSpecCompat(ctx, &legacy, &lifecycle.SpecCompatParams{
 				Framework: appruntime.FrameworkTRPC,

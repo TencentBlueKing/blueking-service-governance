@@ -35,6 +35,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil/dbfactory"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	appmodeldeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/appmodel"
 	k8sclient "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/client"
@@ -81,7 +82,7 @@ var _ = Describe("NewLogManager", func() {
 		_, err := NewLogManager(
 			testutil.NewDefaultTenantContext(),
 			testutil.NewDB(GinkgoT()),
-			&bkmsapp.Application{ID: "app-" + stringx.Random(6), Type: bkmsapp.AppTypeTRPC},
+			&bkmsapp.Application{ID: "app-" + stringx.Random(6), Type: appruntime.AppTypeTRPC},
 			&envmodel.Environment{
 				Name: "t",
 				Cluster: envmodel.BizCluster{
@@ -101,7 +102,7 @@ var _ = Describe("NewLogManager", func() {
 	It("rejects appmodel deploy records without label selectors", func() {
 		ctx := testutil.NewDefaultTenantContext()
 		db := testutil.NewDB(GinkgoT())
-		app := &bkmsapp.Application{ID: "app-" + stringx.Random(6), Type: bkmsapp.AppTypeTRPC}
+		app := &bkmsapp.Application{ID: "app-" + stringx.Random(6), Type: appruntime.AppTypeTRPC}
 		env := &envmodel.Environment{
 			Name: "test",
 			Cluster: envmodel.BizCluster{
