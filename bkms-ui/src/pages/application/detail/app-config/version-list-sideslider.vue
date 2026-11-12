@@ -163,7 +163,10 @@
           show-overflow-tooltip
         >
           <template #default="{ row }">
-            {{ row.creator || '--' }}
+            <UserDisplay
+              :plain="row.version === 1 && row.creator === 'system'"
+              :value="row.creator"
+            />
           </template>
         </TableColumn>
         <TableColumn

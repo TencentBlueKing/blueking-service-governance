@@ -262,7 +262,7 @@
             show-overflow="tooltip"
           >
             <template #default="{ row }: { row: AppInfoOutputObj }">
-              {{ row?.lastOperator || '--' }}
+              <UserDisplay :value="row?.lastOperator" />
             </template>
           </TableColumn>
           <TableColumn
@@ -281,7 +281,7 @@
             show-overflow="tooltip"
           >
             <template #default="{ row }: { row: AppInfoOutputObj }">
-              {{ row?.creator || '--' }}
+              <UserDisplay :value="row?.creator" />
             </template>
           </TableColumn>
           <TableColumn

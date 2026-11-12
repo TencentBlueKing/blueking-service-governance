@@ -30,6 +30,9 @@ export const useUserStore = defineStore('user', () => {
     user_id: '',
   });
   const roleInfo = ref<null | RoleInfo>(null);
+
+  // 租户 ID
+  const tenantId = computed(() => userInfo.value.tenant_id?.trim() || '');
   const currentUsername = computed(() => roleInfo.value?.username || userInfo.value.user_id || '');
   const hasPlatformRole = computed(() => !!roleInfo.value?.platRoleCode);
 
@@ -48,6 +51,7 @@ export const useUserStore = defineStore('user', () => {
   return {
     userInfo,
     roleInfo,
+    tenantId,
     currentUsername,
     hasPlatformRole,
     getUserInfo,

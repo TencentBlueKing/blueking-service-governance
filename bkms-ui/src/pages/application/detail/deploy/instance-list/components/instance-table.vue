@@ -475,7 +475,7 @@
                       :label="$t('操作人')"
                       :label-width="70"
                     >
-                      {{ row.latestPublish.operator || '--' }}
+                      <UserDisplay :value="row.latestPublish.operator" />
                     </DetailItem>
                     <DetailItem
                       :label="$t('更新时间')"

@@ -347,7 +347,11 @@
               field="username"
               :label="$t('用户名')"
               :width="260"
-            />
+            >
+              <template #default="{ row }: { row: Row }">
+                <UserDisplay :value="row.username" />
+              </template>
+            </TableColumn>
             <TableColumn
               :label="$t('角色')"
               :width="260"
@@ -465,7 +469,7 @@
   import { Button, Form, InfoBox, Input, Message, PopConfirm, Radio, Sideslider, Tag } from 'bkui-vue';
   import { Copy, Plus, Share } from 'bkui-vue/lib/icon';
   import { cloneDeep } from 'lodash-es';
-  import { useI18n } from 'vue-i18n';
+  import { I18nT, useI18n } from 'vue-i18n';
   import { useRouter } from 'vue-router';
   import { UpdateWorkspaceInfoRequest, WorkspaceDetailOutputObj } from '~/@types/v1/workspace';
   import { WorkspaceService } from '~/api/modules/v1';
@@ -475,6 +479,7 @@
   import FlexRow from '~/components/flex-row.vue';
   import SecretToggle from '~/components/secret-toggle.vue';
   import Layout from '~/components/skeleton/skeleton-layout';
+  import UserDisplay from '~/components/user-display.vue';
   import UserSelector from '~/components/user-selector.vue';
   import { useCopy } from '~/composables/use-copy';
   import useDebouncedRef from '~/composables/use-debounce';
@@ -499,7 +504,8 @@
   const spaceStore = useSpaceStore();
   const { handleToLink } = useToLink();
   const { copyText } = useCopy();
-  const { t } = useI18n();
+  const i18n = useI18n();
+  const { t } = i18n;
 
   const defaultData: Partial<WorkspaceDetailOutputObj> = {
     id: '',
@@ -694,7 +700,11 @@
       title: t('确定删除该成员？'),
       contentAlign: 'left',
       content: h('div', [
-        h('div', t('成员：{0}', [row.username])),
+        h(
+          I18nT,
+          { i18n, tag: 'div', keypath: '成员：{0}' },
+          { default: () => [h(UserDisplay, { value: row.username })] },
+        ),
         h(
           'p',
           { class: 'mt-[16px] px-[16px] py-[12px] bg-[#F5F7FA]' },

@@ -226,7 +226,9 @@
               show-overflow="tooltip"
               width="110"
             >
-              <template #default="{ row }: { row: WorkspaceInfoOutputObj }">{{ row?.creator || '--' }}</template>
+              <template #default="{ row }: { row: WorkspaceInfoOutputObj }">
+                <UserDisplay :value="row.creator" />
+              </template>
             </TableColumn>
             <TableColumn
               field="updater"
@@ -234,7 +236,9 @@
               show-overflow="tooltip"
               width="110"
             >
-              <template #default="{ row }: { row: WorkspaceInfoOutputObj }">{{ row?.updater || '--' }}</template>
+              <template #default="{ row }: { row: WorkspaceInfoOutputObj }">
+                <UserDisplay :value="row.updater" />
+              </template>
             </TableColumn>
             <TableColumn
               field="updatedAt"

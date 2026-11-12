@@ -84,7 +84,7 @@
               <template #default="{ item }: { item: UserGroupUser }">
                 <span class="flex items-center gap-[4px] rounded-[2px] px-[8px] bg-[#F0F1F5] cursor-default">
                   <i class="bkms-icon bkms-icon-usergroup text-[#979BA5] text-[14px]"></i>
-                  {{ item.display_name || item.id || '--' }}
+                  <AlertMemberName :member="item" />
                 </span>
               </template>
             </MoreTag>
@@ -167,6 +167,7 @@
   import { useSpaceStore } from '~/stores/space';
 
   import AlertGroupForm from './components/alert-group-form.vue';
+  import AlertMemberName from './components/alert-member-name.vue';
 
   import type { ISearchValue } from 'bkui-vue/lib/search-select/utils';
   import type { UserGroup, UserGroupUser } from '~/@types/v1/bkintegrations-bkmonitor';

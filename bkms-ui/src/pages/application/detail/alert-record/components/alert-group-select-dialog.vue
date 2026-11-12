@@ -19,13 +19,13 @@
 
       <!-- 告警组勾选表格 -->
       <Table
+        key="tableKey"
         ref="tableRef"
         :data="filteredGroups"
         :max-height="500"
         @checkbox-all="handleSelectAll"
         @checkbox-change="handleSelectChange"
         @row-click="handleRowClick"
-        key="tableKey"
       >
         <template #empty>
           <TableException type="empty" />
@@ -60,7 +60,7 @@
               <template #default="{ item }">
                 <span class="flex items-center gap-[4px] rounded-[2px] px-[8px] bg-[#F0F1F5] cursor-default">
                   <i class="bkms-icon bkms-icon-usergroup text-[#979BA5] text-[14px]"></i>
-                  {{ item.display_name || item.id || '--' }}
+                  <AlertMemberName :member="item" />
                 </span>
               </template>
             </MoreTag>
@@ -116,6 +116,8 @@
   import { Table, TableColumn } from '@blueking/table';
   import { Button, Dialog, Input } from 'bkui-vue';
   import TableException from '~/components/table-exception.vue';
+
+  import AlertMemberName from './alert-member-name.vue';
 
   import type { UserGroup } from '~/@types/v1/bkintegrations-bkmonitor';
 

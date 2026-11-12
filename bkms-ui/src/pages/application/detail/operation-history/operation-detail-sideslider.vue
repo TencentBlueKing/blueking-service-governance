@@ -51,6 +51,11 @@
               />
               {{ row.value }}
             </span>
+            <UserDisplay
+              v-else-if="row.field === 'username'"
+              class="break-all"
+              :value="row.value"
+            />
             <span
               v-else
               class="break-all"
@@ -137,7 +142,7 @@
         value: getOperationEnvDisplayName(row.group),
       },
       { field: 'resourceID', label: t('目标实例'), value: row.resourceID || '--' },
-      { field: 'username', label: t('操作人'), value: row.username || '--' },
+      { field: 'username', label: t('操作人'), value: row.username },
       {
         field: 'createdAt',
         label: t('操作时间'),

@@ -42,8 +42,12 @@
           class="!w-auto !h-auto"
           :label="$t('更新人')"
           :label-width="0"
-          :value="item.updater"
-        />
+        >
+          <UserDisplay
+            :plain="item.isBuiltin"
+            :value="item.updater"
+          />
+        </DetailItem>
       </div>
     </div>
     <!-- 描述 -->

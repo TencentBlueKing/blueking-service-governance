@@ -89,7 +89,10 @@
               @after-show="isPopoverShow = true"
             >
               <div class="flex items-center cursor-pointer">
-                <span class="mr-[5px]">{{ userStore.userInfo.user_id }}</span>
+                <UserDisplay
+                  class="mr-[5px]"
+                  :value="userStore.userInfo.user_id"
+                />
                 <AngleDownFill :class="[isPopoverShow ? '' : 'rotate-180']" />
               </div>
               <template #content>

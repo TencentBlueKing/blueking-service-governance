@@ -195,9 +195,16 @@
                   field-direction="left"
                   :field-value="$t('创建人')"
                   field-width="auto"
-                  :value="envData.creator"
-                  value-color="#313238"
-                />
+                >
+                  <template #value>
+                    <OverflowTitle
+                      class="max-w-[220px] text-[12px] text-[#313238]"
+                      type="tips"
+                    >
+                      <UserDisplay :value="envData.creator" />
+                    </OverflowTitle>
+                  </template>
+                </FieldItem>
                 <FieldItem
                   class="!w-auto"
                   :container-height="22"
@@ -266,11 +273,14 @@
               </Select>
             </Form.FormItem>
             <Form.FormItem :label="$t('创建人')">
-              <Input
-                class="w-[400px]"
-                :model-value="envData.creator"
-                readonly
-              />
+              <div class="flex items-center h-[32px] w-[400px] px-[8px] border border-[#c4c6cc] rounded-[2px]">
+                <OverflowTitle type="tips">
+                  <UserDisplay
+                    empty-text=""
+                    :value="envData.creator"
+                  />
+                </OverflowTitle>
+              </div>
             </Form.FormItem>
             <Form.FormItem :label="$t('创建时间')">
               <DatePicker
@@ -485,7 +495,7 @@
 <script lang="ts" setup>
   import { computed, onBeforeUnmount, ref, watch } from 'vue';
 
-  import { Button, DatePicker, Form, Input, Message, Select, Tag } from 'bkui-vue';
+  import { Button, DatePicker, Form, Input, Message, OverflowTitle, Select, Tag } from 'bkui-vue';
   import { ExclamationCircleShape } from 'bkui-vue/lib/icon';
   import { cloneDeep, countBy } from 'lodash-es';
   import { useI18n } from 'vue-i18n';

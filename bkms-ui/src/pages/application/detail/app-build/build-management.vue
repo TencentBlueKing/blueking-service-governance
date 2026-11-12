@@ -238,7 +238,10 @@
             :width="120"
           >
             <template #default="{ row }">
-              <span class="text-[12px]">{{ row?.creator || '--' }}</span>
+              <UserDisplay
+                class="text-[12px]"
+                :value="row?.creator"
+              />
             </template>
           </TableColumn>
           <TableColumn

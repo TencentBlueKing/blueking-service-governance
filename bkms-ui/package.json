@@ -25,6 +25,7 @@
   },
   "dependencies": {
     "@antv/g6": "5.0.50",
+    "@blueking/bk-user-display-name": "1.0.3-beta.3",
     "@blueking/bk-user-selector": "^0.1.9",
     "@blueking/date-picker": "^3.0.7",
     "@blueking/ediatable": "0.0.1-beta.32",

@@ -87,7 +87,7 @@
         show-overflow="tooltip"
       >
         <template #default="{ row }: { row: any }">
-          {{ row.operator || '--' }}
+          <UserDisplay :value="row.operator" />
         </template>
       </TableColumn>
       <TableColumn

@@ -28,9 +28,12 @@
       :container-height="32"
       :field-value="t('负责人')"
       :field-width="100"
-      :value="ownerText"
       value-color="#313238"
-    />
+    >
+      <template #value>
+        <UserDisplay :value="row.assignee" />
+      </template>
+    </FieldItem>
     <FieldItem
       :container-height="32"
       :field-value="t('持续时间')"
@@ -85,10 +88,4 @@
   };
 
   const statusLabel = computed(() => STATUS_LABEL_MAP[props.row.status || ''] || '--');
-
-  /** 负责人列表：row.assignee 为字符串数组，逗号隔开展示 */
-  const ownerText = computed(() => {
-    const assignees = props.row.assignee?.filter(Boolean);
-    return assignees?.length ? assignees.join(', ') : '--';
-  });
 </script>

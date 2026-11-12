@@ -89,8 +89,8 @@
                 <div>
                   <div class="text-[20px] font-bold text-[#313238]">
                     {{ greetingText }}，
-                    <span class="bg-clip-text text-transparent bg-gradient-to-r from-[#614BFA] to-[#3A84FF]"
-                      >{{ userStore.userInfo.user_id || '--' }} ~
+                    <span class="bg-clip-text text-transparent bg-gradient-to-r from-[#614BFA] to-[#3A84FF]">
+                      <UserDisplay :value="userStore.userInfo.user_id" /> ~
                     </span>
                   </div>
                   <div class="text-[14px] text-[#979BA5] mt-[4px]">{{ $t('欢迎回到蓝鲸服务治理平台') }} ~</div>

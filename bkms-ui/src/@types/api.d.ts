@@ -96,6 +96,7 @@ export interface IProjectPerm {
 type ExtractData<T> = T extends { data: infer D } ? D : undefined;
 
 interface IUser {
+  tenant_id?: string;
   user_id: string;
 }
 

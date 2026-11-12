@@ -128,7 +128,7 @@
           :min-width="120"
         >
           <template #default="{ row }">
-            {{ row.operator || '--' }}
+            <UserDisplay :value="row.operator" />
           </template>
         </TableColumn>
         <TableColumn

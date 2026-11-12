@@ -292,7 +292,7 @@
               <div class="flex px-[24px] gap-[36px] text-[12px] h-[18px] leading-[18px]">
                 <span>{{ latestRevisionLabel }}: {{ latestRevisionText }}</span>
                 <span>{{ $t('镜像 Tag') }}: {{ latestDeployStatus?.imageTag || '--' }}</span>
-                <span>{{ $t('操作人') }}: {{ latestDeployStatus?.operator || '--' }}</span>
+                <span>{{ $t('操作人') }}: <UserDisplay :value="latestDeployStatus?.operator" /></span>
                 <Button
                   class="inline-flex items-center"
                   text

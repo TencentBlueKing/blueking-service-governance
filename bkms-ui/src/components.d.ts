@@ -98,6 +98,7 @@ declare module 'vue' {
     ToggleCard: typeof import('./components/toggle-card.vue')['default']
     TypeParamSelect: typeof import('./components/type-param-select.vue')['default']
     UnderLineTips: typeof import('./components/under-line-tips.vue')['default']
+    UserDisplay: typeof import('./components/user-display.vue')['default']
     UserSelector: typeof import('./components/user-selector.vue')['default']
     ViewDefaultEnvVars: typeof import('./components/view-default-env-vars/index.vue')['default']
   }

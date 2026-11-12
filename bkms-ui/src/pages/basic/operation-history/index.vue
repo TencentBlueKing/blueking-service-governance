@@ -149,6 +149,9 @@
           :label="$t('操作人')"
           width="150"
         >
+          <template #default="{ row }">
+            <UserDisplay :value="row.username" />
+          </template>
         </TableColumn>
         <TableColumn
           field="createdAt"

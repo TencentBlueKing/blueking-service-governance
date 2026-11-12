@@ -68,7 +68,7 @@
           min-width="220"
         >
           <template #default="{ row }">
-            {{ row.username || '--' }}
+            <UserDisplay :value="row.username" />
           </template>
         </TableColumn>
         <TableColumn
@@ -88,7 +88,7 @@
           sortable
         >
           <template #default="{ row }">
-            {{ row.creator || '--' }}
+            <UserDisplay :value="row.creator" />
           </template>
         </TableColumn>
         <TableColumn
@@ -107,7 +107,14 @@
               @confirm="handleDeleteAdministrator(row)"
             >
               <template #content>
-                <div>{{ t('人员：{name}', { name: row.username }) }}</div>
+                <i18n-t
+                  keypath="人员：{name}"
+                  tag="div"
+                >
+                  <template #name>
+                    <UserDisplay :value="row.username" />
+                  </template>
+                </i18n-t>
                 <div class="mt-[6px] mb-[16px]">{{ t('删除后，将不再具有该平台的相关权限，请谨慎操作！') }}</div>
               </template>
               <Button

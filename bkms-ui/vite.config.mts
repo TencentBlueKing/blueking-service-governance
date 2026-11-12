@@ -99,6 +99,9 @@ export default ({ mode }: { mode: string }) => {
             'sec-fetch-site': 'same-origin',
             'sec-fetch-mode': 'cors',
             'sec-fetch-dest': 'empty',
+            // 与 /simple_account、/bkms 同理：本地拿不到租户环境的 bk_token Cookie，
+            // bk-user 网关用户认证失败（401）时组件静默回退显示原始 ID
+            ...devIdentityHeaders,
           },
         },
       },
@@ -132,7 +135,11 @@ export default ({ mode }: { mode: string }) => {
 
     plugins: [
       // https://github.com/vitejs/vite-plugin-vue/tree/main/packages/plugin-vue
-      Vue(),
+      Vue({
+        template: {
+          compilerOptions: { isCustomElement: tag => tag === 'bk-user-display-name' },
+        },
+      }),
 
       // viteCompression({
       //   filter: /\.js|.css$/,

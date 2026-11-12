@@ -25,6 +25,9 @@ importers:
       '@antv/g6':
         specifier: 5.0.50
         version: 5.0.50(workerize-loader@2.0.2(webpack@5.105.4(esbuild@0.20.2)))
+      '@blueking/bk-user-display-name':
+        specifier: 1.0.3-beta.3
+        version: 1.0.3-beta.3
       '@blueking/bk-user-selector':
         specifier: ^0.1.9
         version: 0.1.9(highlight.js@11.5.0)(vue@3.5.24(typescript@5.9.3))
