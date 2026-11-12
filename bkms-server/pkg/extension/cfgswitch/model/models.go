@@ -39,7 +39,7 @@ type SwitchKey string
 const (
 	// SwitchBscp 配置管理（BSCP）
 	SwitchBscp SwitchKey = "bscp"
-	// SwitchRainbowTConf 七彩石（Rainbow TConf）。目前只用于前端展示，后端没有对应的拦截
+	// SwitchRainbowTConf 七彩石（Rainbow TConf）。关闭时应用的七彩石页面绑定接口不可用，见 extension/rainbowtconf
 	SwitchRainbowTConf SwitchKey = "rainbowTConf"
 )
 

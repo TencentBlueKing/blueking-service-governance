@@ -8281,6 +8281,31 @@ definitions:
           type: integer
         type: array
     type: object
+  serializer.PutRainbowTConfInput:
+    properties:
+      url:
+        description: 七彩石页面地址，仅支持 https
+        type: string
+    required:
+    - url
+    type: object
+  serializer.RainbowTConfOutput:
+    properties:
+      updatedAt:
+        description: 最近修改时间，未配置时为 null
+        type: string
+      updater:
+        description: 最近修改人，未配置时为空
+        type: string
+      url:
+        description: 七彩石页面地址，未配置时为空
+        type: string
+    type: object
+  serializer.RainbowTConfResponse:
+    properties:
+      data:
+        $ref: '#/definitions/serializer.RainbowTConfOutput'
+    type: object
   serializer.RankInstancesResp:
     properties:
       data:
@@ -18406,6 +18431,67 @@ paths:
       summary: 获取配置文件挂载预览
       tags:
       - app-config-file-defs
+  /apps/{appID}/rainbow-tconf:
+    get:
+      description: 未配置时 url 为空；应用所在空间未开启七彩石配置开关时不可用
+      operationId: GetRainbowTConf
+      parameters:
+      - description: 应用 ID
+        in: path
+        name: appID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.RainbowTConfResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 获取应用的七彩石入口
+      tags:
+      - rainbowtconf
+    put:
+      consumes:
+      - application/json
+      description: 地址仅支持 https；应用所在空间未开启七彩石配置开关时不可用
+      operationId: PutRainbowTConf
+      parameters:
+      - description: 应用 ID
+        in: path
+        name: appID
+        required: true
+        type: string
+      - description: 七彩石页面地址
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/serializer.PutRainbowTConfInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.RainbowTConfResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 设置应用的七彩石入口
+      tags:
+      - rainbowtconf
   /apps/{appID}/recommended-image-tag:
     get:
       operationId: GetRecommendedImageTag
