@@ -147,15 +147,17 @@
     <template #footer>
       <div class="flex gap-[8px]">
         <template v-if="isView">
-          <Button
-            theme="primary"
-            @click="handleClone"
-          >
-            {{ t('克隆为空间策略') }}
-          </Button>
-          <Button @click="handlePreview">
-            {{ t('预览策略') }}
-          </Button>
+          <template v-if="!readonly">
+            <Button
+              theme="primary"
+              @click="handleClone"
+            >
+              {{ t('克隆为空间策略') }}
+            </Button>
+            <Button @click="handlePreview">
+              {{ t('预览策略') }}
+            </Button>
+          </template>
           <Button @click="handleCancel">{{ t('关闭') }}</Button>
         </template>
         <template v-else>
@@ -223,12 +225,15 @@
     existingNames?: string[];
     /** 打开场景：新建 / 编辑 / 查看 / 克隆 */
     mode: 'clone' | 'create' | 'edit' | 'view';
+    /** 是否只读 */
+    readonly?: boolean;
     /** 编辑/查看/克隆时传入的策略行数据，新建为空 */
     strategy?: ReleaseStrategyOutputObj;
   }
 
   const props = withDefaults(defineProps<Props>(), {
     existingNames: () => [],
+    readonly: false,
     strategy: undefined,
   });
 
