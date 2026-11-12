@@ -35,8 +35,6 @@ var (
 	// ErrBindingExists 空间内该集群已有绑定记录
 	ErrBindingExists = errors.New("polaris cluster binding already exists")
 
-	// ErrAccessPointDisabled 平台未开放空间自建接入点
-	ErrAccessPointDisabled = errors.New("workspace polaris access points are disabled")
 	// ErrAccessPointInvalid 接入点参数不合法：地址格式错误、数量越界等
 	ErrAccessPointInvalid = errors.New("invalid polaris access point")
 	// ErrConnectivityFailed 保存接入点前重跑的连通测试未通过：网络不通、开启了客户端鉴权或 Token 无效，
@@ -45,7 +43,7 @@ var (
 	ErrAccessPointInUse = errors.New("polaris access point is still in use")
 	// ErrClusterInUse 集群上有环境被北极星配置使用，不能解绑或换绑
 	ErrClusterInUse = errors.New("cluster is used by polaris configs")
-	// ErrClusterNotBound 集群未绑定接入点
+	// ErrClusterNotBound 集群未绑定自建接入点
 	ErrClusterNotBound = errors.New("cluster is not bound to any polaris access point")
 )
 
@@ -62,7 +60,6 @@ var apiErrorRules = []apiErrorRule{
 	{ErrAccessPointNotFound, bkerrs.ErrCodeNotFound, ""},
 	{installtask.ErrNotFound, bkerrs.ErrCodeNotFound, ""},
 	{installtask.ErrRunning, bkerrs.ErrCodeAborted, ""},
-	{ErrAccessPointDisabled, bkerrs.ErrCodeInvalidRequest, ""},
 	{ErrAccessPointNameExists, bkerrs.ErrCodeAlreadyExists, ""},
 	{ErrAccessPointInvalid, bkerrs.ErrCodeInvalidArgument, ""},
 	{ErrConnectivityFailed, bkerrs.ErrCodeInvalidRequest, ""},

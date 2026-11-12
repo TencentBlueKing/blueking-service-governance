@@ -40,7 +40,7 @@ type WorkspaceURIInput struct {
 type AccessPointURIInput struct {
 	// 工作空间 ID
 	WorkspaceID string `uri:"workspaceID" binding:"required,uri_slug"`
-	// 接入点 ID，平台托管接入点为 platform
+	// 空间自建接入点 ID
 	AccessPointID string `uri:"accessPointID" binding:"required"`
 }
 
@@ -80,14 +80,14 @@ type AccessPointUpdateInput struct {
 
 // ConnectivityTestInput 连通测试的请求
 type ConnectivityTestInput struct {
-	// 已有接入点的 ID，选填；有 ID 且 token 为空时使用已保存的 Token，并记录测试结果
+	// 已有接入点的 ID
 	ID string `json:"id"`
 	// 北极星控制台地址
 	ConsoleURL string `json:"consoleURL" binding:"required"`
 	// 客户端地址
 	ClientHosts []string `json:"clientHosts" binding:"required"`
-	// 北极星鉴权 Token，选填
-	Token string `json:"token"`
+	// 北极星鉴权 Token
+	Token *string `json:"token"`
 }
 
 // OperatorInstallInput 在接入点绑定的集群上安装或更新 bcs-polaris-operator 的请求
@@ -98,37 +98,12 @@ type OperatorInstallInput struct {
 	ChartVersion string `json:"chartVersion" binding:"required"`
 }
 
-// CapabilitiesOutput 接入点能力，前端只按能力决定交互，不判断接入点类型
-type CapabilitiesOutput struct {
-	// 是否可编辑、删除
-	Editable bool `json:"editable"`
-	// 是否支持权重因子与动态权重
-	WeightFactor bool `json:"weightFactor"`
-	// 北极星配置可选命名空间的来源：fixed 固定列表 / live 实时读取北极星
-	NamespaceSource accesspoint.NamespaceSource `json:"namespaceSource" enums:"fixed,live"`
-	// 引入已有北极星服务时是否需要服务 Token
-	ServiceTokenRequired bool `json:"serviceTokenRequired"`
-	// 是否向 Pod 注入 {instanceKey}_polarisToken 环境变量
-	InjectClientToken bool `json:"injectClientToken"`
-}
-
-// NewCapabilitiesOutput 由接入点能力构造输出
-func NewCapabilitiesOutput(c accesspoint.Capabilities) CapabilitiesOutput {
-	return CapabilitiesOutput{
-		Editable:             c.Editable,
-		WeightFactor:         c.WeightFactor,
-		NamespaceSource:      c.NamespaceSource,
-		ServiceTokenRequired: c.ServiceTokenRequired,
-		InjectClientToken:    c.InjectClientToken,
-	}
-}
-
 // ConnectivityResultOutput 最近一次连通测试结果
 type ConnectivityResultOutput struct {
 	// 是否通过
 	OK bool `json:"ok"`
-	// 失败的阶段，通过时为空：network 网络不通 / clientAuth 开启了客户端鉴权 / token Token 无效
-	Stage accesspoint.ConnectivityStage `json:"stage" enums:"network,clientAuth,token"`
+	// 失败的原因，通过时为空：networkUnreachable 网络不通 / clientAuthEnabled 开启了客户端鉴权 / tokenInvalid Token 无效
+	Reason accesspoint.FailureReason `json:"reason" enums:"networkUnreachable,clientAuthEnabled,tokenInvalid"`
 	// 失败原因或提示信息
 	Message string `json:"message"`
 	// 是否开启控制台鉴权
@@ -146,7 +121,7 @@ func NewConnectivityResultOutput(r *accesspoint.ConnectivityResult) *Connectivit
 	}
 	return &ConnectivityResultOutput{
 		OK:          r.OK,
-		Stage:       r.Stage,
+		Reason:      r.Reason,
 		Message:     r.Message,
 		ConsoleAuth: r.ConsoleAuth,
 		ClientAuth:  r.ClientAuth,
@@ -154,59 +129,41 @@ func NewConnectivityResultOutput(r *accesspoint.ConnectivityResult) *Connectivit
 	}
 }
 
-// AccessPointOutput 接入点，不返回 Token 明文
+// AccessPointOutput 空间自建接入点，不返回 Token 明文。
+// 接口只在允许空间自建接入点时注册，此时平台托管接入点不可用，因此不会输出平台托管接入点
 type AccessPointOutput struct {
-	// 接入点 ID，平台托管接入点为 platform
+	// 接入点 ID
 	ID string `json:"id"`
-	// 接入点类型：platform 平台托管 / workspace 空间自建
-	Kind accesspoint.Kind `json:"kind" enums:"platform,workspace"`
 	// 接入点名称
 	Name string `json:"name"`
-	// 北极星控制台地址，平台托管为空
+	// 北极星控制台地址
 	ConsoleURL string `json:"consoleURL"`
-	// 客户端地址，平台托管为空
+	// 客户端地址
 	ClientHosts []string `json:"clientHosts"`
 	// 是否填写了 Token
 	HasToken bool `json:"hasToken"`
-	// 接入点能力
-	Capabilities CapabilitiesOutput `json:"capabilities"`
 	// 绑定的集群数量
 	BoundClusterCount int `json:"boundClusterCount"`
-	// 最近一次连通测试结果，从未测试或平台托管时为 null
+	// 最近一次连通测试结果，从未测试时为 null
 	LastConnectivity *ConnectivityResultOutput `json:"lastConnectivity"`
-	// 最近修改人，平台托管为空
+	// 最近修改人
 	Updater string `json:"updater"`
-	// 最近修改时间，平台托管为 null
-	UpdatedAt *time.Time `json:"updatedAt"`
+	// 最近修改时间
+	UpdatedAt time.Time `json:"updatedAt"`
 }
 
 // NewAccessPointOutput 由空间自建接入点构造输出
 func NewAccessPointOutput(p *accesspoint.PolarisAccessPoint, boundClusterCount int) *AccessPointOutput {
 	return &AccessPointOutput{
 		ID:                p.ID.Hex(),
-		Kind:              accesspoint.KindWorkspace,
 		Name:              p.Name,
 		ConsoleURL:        p.ConsoleURL,
 		ClientHosts:       lo.Ternary(p.ClientHosts == nil, []string{}, p.ClientHosts),
 		HasToken:          p.Token != "",
-		Capabilities:      NewCapabilitiesOutput(accesspoint.CapabilitiesOf(accesspoint.KindWorkspace)),
 		BoundClusterCount: boundClusterCount,
 		LastConnectivity:  NewConnectivityResultOutput(p.LastConnectivity),
 		Updater:           p.Updater,
-		UpdatedAt:         lo.ToPtr(p.UpdatedAt),
-	}
-}
-
-// NewPlatformAccessPointOutput 由平台托管接入点构造输出
-func NewPlatformAccessPointOutput(ap *accesspoint.AccessPoint, boundClusterCount int) *AccessPointOutput {
-	return &AccessPointOutput{
-		ID:                ap.ID,
-		Kind:              ap.Kind,
-		Name:              ap.Name,
-		ClientHosts:       []string{},
-		HasToken:          ap.Token != "",
-		Capabilities:      NewCapabilitiesOutput(ap.Capabilities),
-		BoundClusterCount: boundClusterCount,
+		UpdatedAt:         p.UpdatedAt,
 	}
 }
 
@@ -214,8 +171,8 @@ func NewPlatformAccessPointOutput(ap *accesspoint.AccessPoint, boundClusterCount
 type ConnectivityTestOutput struct {
 	// 是否通过
 	OK bool `json:"ok"`
-	// 失败的阶段，通过时为空：network 网络不通 / clientAuth 开启了客户端鉴权 / token Token 无效
-	Stage accesspoint.ConnectivityStage `json:"stage" enums:"network,clientAuth,token"`
+	// 失败的原因，通过时为空：networkUnreachable 网络不通 / clientAuthEnabled 开启了客户端鉴权 / tokenInvalid Token 无效
+	Reason accesspoint.FailureReason `json:"reason" enums:"networkUnreachable,clientAuthEnabled,tokenInvalid"`
 	// 失败原因或提示信息
 	Message string `json:"message"`
 	// 是否开启控制台鉴权
@@ -252,9 +209,9 @@ type PolarisClusterOutput struct {
 	ClusterStatus string `json:"clusterStatus"`
 	// 集群上的空间环境（含特性环境）
 	Envs []PolarisClusterEnvOutput `json:"envs"`
-	// 绑定的接入点 ID，未绑定为空
+	// 绑定的自建接入点 ID；未绑定为空，此时集群不能使用北极星
 	AccessPointID string `json:"accessPointID"`
-	// 绑定的接入点名称，未绑定为空
+	// 绑定的自建接入点名称，未绑定为空
 	AccessPointName string `json:"accessPointName"`
 	// 集群上是否有环境被北极星配置使用；为 true 时不能解绑或换绑
 	InUse bool `json:"inUse"`
@@ -301,7 +258,7 @@ func NewOperatorTaskOutput(t *installtask.InstallTask) *OperatorTaskOutput {
 type PolarisOperatorOutput struct {
 	// 集群 ID
 	ClusterID string `json:"clusterID"`
-	// 集群绑定的接入点 ID，未绑定为空
+	// 集群绑定的自建接入点 ID，未绑定为空
 	AccessPointID string `json:"accessPointID"`
 	// 是否已安装
 	Installed bool `json:"installed"`

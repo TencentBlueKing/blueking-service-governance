@@ -244,11 +244,9 @@ func RegisterRouter(ctx context.Context, cfg config.Config, serverRole string) (
 	)
 	clusteraddon.Register(v1, clusteraddonhandler.New(storereg.G()))
 	polaris.Register(v1, polarishandler.New(storereg.G()))
-	polarisaccesspoint.Register(
-		v1,
-		polarisaccesspointhandler.New(storereg.G()),
-		cfg.Polaris.AllowWorkspaceAccessPoints,
-	)
+	if cfg.Polaris.AllowWorkspaceAccessPoints {
+		polarisaccesspoint.Register(v1, polarisaccesspointhandler.New(storereg.G()))
+	}
 	hostport.Register(v1, hostporthandler.New(storereg.G()))
 	depservice.Register(v1, depservicehandler.New(storereg.G()))
 	gpa.Register(v1, gpahandler.New(storereg.G()))

@@ -47,7 +47,7 @@ func New(registry *storereg.Registry) *Handler {
 //
 //	@ID				ListPolarisAccessPoints
 //	@Summary		获取空间的北极星接入点列表
-//	@Description	返回空间自建接入点；平台配置了北极星时追加平台托管接入点（id 为 platform）。不返回 Token 明文
+//	@Description	允许空间自建接入点时返回空间自建接入点
 //	@Tags			polaris-access-points
 //	@Produce		json
 //	@Security		BkUserInfo
@@ -162,7 +162,7 @@ func (h *Handler) DeleteAccessPoint(c *gin.Context) {
 //
 //	@ID				TestPolarisAccessPointConnectivity
 //	@Summary		测试北极星接入点连通性
-//	@Description	依次检查网络、鉴权开关、Token，返回失败的阶段与北极星上的命名空间，整体 10 秒超时。
+//	@Description	依次检查网络、鉴权开关、Token，返回失败的原因与北极星上的命名空间，整体 10 秒超时。
 //	@Description	传入已有接入点 ID 且 token 为空时使用已保存的 Token，并记录本次结果
 //	@Tags			polaris-access-points
 //	@Accept			json
@@ -222,7 +222,7 @@ func (h *Handler) GetNetworkInfo(c *gin.Context) {
 //
 //	@ID				ListPolarisAccessPointNamespaces
 //	@Summary		获取北极星接入点的命名空间
-//	@Description	空间自建接入点实时读取北极星并过滤系统命名空间 Polaris；平台托管接入点返回固定列表
+//	@Description	实时读取空间自建接入点上的北极星命名空间，并过滤系统命名空间 Polaris
 //	@Tags			polaris-access-points
 //	@Produce		json
 //	@Security		BkUserInfo
@@ -250,7 +250,6 @@ func (h *Handler) ListNamespaces(c *gin.Context) {
 //	@ID				ListPolarisClusters
 //	@Summary		获取北极星集群绑定视图
 //	@Description	候选集群为空间 BCS 项目下的全部非共享集群，含没有环境的集群；先列出有环境的集群，同类按集群 ID 排序。
-//	@Description	仅在平台允许空间自建接入点时提供
 //	@Tags			polaris-access-points
 //	@Produce		json
 //	@Security		BkUserInfo
@@ -277,7 +276,6 @@ func (h *Handler) ListClusters(c *gin.Context) {
 //	@ID				ListPolarisOperators
 //	@Summary		获取北极星组件状态视图
 //	@Description	返回候选集群的组件状态、与接入点不一致的参数、最近的安装任务，以及可选的 chart 版本。
-//	@Description	仅在平台允许空间自建接入点时提供
 //	@Tags			polaris-access-points
 //	@Produce		json
 //	@Security		BkUserInfo
@@ -304,7 +302,6 @@ func (h *Handler) ListOperators(c *gin.Context) {
 //	@ID				InstallPolarisOperators
 //	@Summary		安装或更新北极星组件
 //	@Description	集群必须已绑定该接入点；每个集群创建一个异步任务，同一集群同时只允许一个运行中的任务。
-//	@Description	仅在平台允许空间自建接入点时提供
 //	@Tags			polaris-access-points
 //	@Accept			json
 //	@Produce		json
@@ -334,7 +331,6 @@ func (h *Handler) InstallOperators(c *gin.Context) {
 //
 //	@ID				GetEnvPolarisOperator
 //	@Summary		获取环境的北极星组件状态
-//	@Description	仅在平台允许空间自建接入点时提供
 //	@Tags			polaris-access-points
 //	@Produce		json
 //	@Security		BkUserInfo

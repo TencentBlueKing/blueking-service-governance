@@ -57,8 +57,6 @@ var FixedNamespaces = []string{"Test", "Production", "Development", "Pre-release
 
 // Capabilities 接入点能力。两版北极星的差异都体现为能力差异，调用方不应再判断接入点类型或版本
 type Capabilities struct {
-	// Editable 接入点是否可编辑、删除
-	Editable bool
 	// WeightFactor 是否支持权重因子与动态权重
 	WeightFactor bool
 	// NamespaceSource 北极星配置可选命名空间的来源
@@ -73,7 +71,6 @@ type Capabilities struct {
 func CapabilitiesOf(kind Kind) Capabilities {
 	if kind == KindPlatform {
 		return Capabilities{
-			Editable:             false,
 			WeightFactor:         true,
 			NamespaceSource:      NamespaceSourceFixed,
 			ServiceTokenRequired: true,
@@ -81,7 +78,6 @@ func CapabilitiesOf(kind Kind) Capabilities {
 		}
 	}
 	return Capabilities{
-		Editable:             true,
 		WeightFactor:         false,
 		NamespaceSource:      NamespaceSourceLive,
 		ServiceTokenRequired: false,

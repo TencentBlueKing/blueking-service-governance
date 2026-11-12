@@ -15101,7 +15101,6 @@ const docTemplate = `{
                         "BkUserCredential": []
                     }
                 ],
-                "description": "仅在平台允许空间自建接入点时提供",
                 "produces": [
                     "application/json"
                 ],
@@ -20068,7 +20067,7 @@ const docTemplate = `{
                         "BkUserCredential": []
                     }
                 ],
-                "description": "返回空间自建接入点；平台配置了北极星时追加平台托管接入点（id 为 platform）。不返回 Token 明文",
+                "description": "允许空间自建接入点时返回空间自建接入点",
                 "produces": [
                     "application/json"
                 ],
@@ -20166,7 +20165,7 @@ const docTemplate = `{
                         "BkUserCredential": []
                     }
                 ],
-                "description": "依次检查网络、鉴权开关、Token，返回失败的阶段与北极星上的命名空间，整体 10 秒超时。\n传入已有接入点 ID 且 token 为空时使用已保存的 Token，并记录本次结果",
+                "description": "依次检查网络、鉴权开关、Token，返回失败的原因与北极星上的命名空间，整体 10 秒超时。\n传入已有接入点 ID 且 token 为空时使用已保存的 Token，并记录本次结果",
                 "consumes": [
                     "application/json"
                 ],
@@ -20378,7 +20377,7 @@ const docTemplate = `{
                         "BkUserCredential": []
                     }
                 ],
-                "description": "空间自建接入点实时读取北极星并过滤系统命名空间 Polaris；平台托管接入点返回固定列表",
+                "description": "实时读取空间自建接入点上的北极星命名空间，并过滤系统命名空间 Polaris",
                 "produces": [
                     "application/json"
                 ],
@@ -20429,7 +20428,7 @@ const docTemplate = `{
                         "BkUserCredential": []
                     }
                 ],
-                "description": "集群必须已绑定该接入点；每个集群创建一个异步任务，同一集群同时只允许一个运行中的任务。\n仅在平台允许空间自建接入点时提供",
+                "description": "集群必须已绑定该接入点；每个集群创建一个异步任务，同一集群同时只允许一个运行中的任务。",
                 "consumes": [
                     "application/json"
                 ],
@@ -20492,7 +20491,7 @@ const docTemplate = `{
                         "BkUserCredential": []
                     }
                 ],
-                "description": "候选集群为空间 BCS 项目下的全部非共享集群，含没有环境的集群；先列出有环境的集群，同类按集群 ID 排序。\n仅在平台允许空间自建接入点时提供",
+                "description": "候选集群为空间 BCS 项目下的全部非共享集群，含没有环境的集群；先列出有环境的集群，同类按集群 ID 排序。",
                 "produces": [
                     "application/json"
                 ],
@@ -20536,7 +20535,7 @@ const docTemplate = `{
                         "BkUserCredential": []
                     }
                 ],
-                "description": "返回候选集群的组件状态、与接入点不一致的参数、最近的安装任务，以及可选的 chart 版本。\n仅在平台允许空间自建接入点时提供",
+                "description": "返回候选集群的组件状态、与接入点不一致的参数、最近的安装任务，以及可选的 chart 版本。",
                 "produces": [
                     "application/json"
                 ],
@@ -21457,39 +21456,17 @@ const docTemplate = `{
         }
     },
     "definitions": {
-        "accesspoint.ConnectivityStage": {
+        "accesspoint.FailureReason": {
             "type": "string",
             "enum": [
-                "network",
-                "clientAuth",
-                "token"
+                "networkUnreachable",
+                "clientAuthEnabled",
+                "tokenInvalid"
             ],
             "x-enum-varnames": [
-                "ConnectivityStageNetwork",
-                "ConnectivityStageClientAuth",
-                "ConnectivityStageToken"
-            ]
-        },
-        "accesspoint.Kind": {
-            "type": "string",
-            "enum": [
-                "platform",
-                "workspace"
-            ],
-            "x-enum-varnames": [
-                "KindPlatform",
-                "KindWorkspace"
-            ]
-        },
-        "accesspoint.NamespaceSource": {
-            "type": "string",
-            "enum": [
-                "fixed",
-                "live"
-            ],
-            "x-enum-varnames": [
-                "NamespaceSourceFixed",
-                "NamespaceSourceLive"
+                "FailureNetworkUnreachable",
+                "FailureClientAuthEnabled",
+                "FailureTokenInvalid"
             ]
         },
         "accesspoint.OperatorStatus": {
@@ -23496,23 +23473,15 @@ const docTemplate = `{
                     "description": "绑定的集群数量",
                     "type": "integer"
                 },
-                "capabilities": {
-                    "description": "接入点能力",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/serializer.CapabilitiesOutput"
-                        }
-                    ]
-                },
                 "clientHosts": {
-                    "description": "客户端地址，平台托管为空",
+                    "description": "客户端地址",
                     "type": "array",
                     "items": {
                         "type": "string"
                     }
                 },
                 "consoleURL": {
-                    "description": "北极星控制台地址，平台托管为空",
+                    "description": "北极星控制台地址",
                     "type": "string"
                 },
                 "hasToken": {
@@ -23520,23 +23489,11 @@ const docTemplate = `{
                     "type": "boolean"
                 },
                 "id": {
-                    "description": "接入点 ID，平台托管接入点为 platform",
+                    "description": "接入点 ID",
                     "type": "string"
                 },
-                "kind": {
-                    "description": "接入点类型：platform 平台托管 / workspace 空间自建",
-                    "enum": [
-                        "platform",
-                        "workspace"
-                    ],
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/accesspoint.Kind"
-                        }
-                    ]
-                },
                 "lastConnectivity": {
-                    "description": "最近一次连通测试结果，从未测试或平台托管时为 null",
+                    "description": "最近一次连通测试结果，从未测试时为 null",
                     "allOf": [
                         {
                             "$ref": "#/definitions/serializer.ConnectivityResultOutput"
@@ -23548,11 +23505,11 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "updatedAt": {
-                    "description": "最近修改时间，平台托管为 null",
+                    "description": "最近修改时间",
                     "type": "string"
                 },
                 "updater": {
-                    "description": "最近修改人，平台托管为空",
+                    "description": "最近修改人",
                     "type": "string"
                 }
             }
@@ -26049,39 +26006,6 @@ const docTemplate = `{
                 }
             }
         },
-        "serializer.CapabilitiesOutput": {
-            "type": "object",
-            "properties": {
-                "editable": {
-                    "description": "是否可编辑、删除",
-                    "type": "boolean"
-                },
-                "injectClientToken": {
-                    "description": "是否向 Pod 注入 {instanceKey}_polarisToken 环境变量",
-                    "type": "boolean"
-                },
-                "namespaceSource": {
-                    "description": "北极星配置可选命名空间的来源：fixed 固定列表 / live 实时读取北极星",
-                    "enum": [
-                        "fixed",
-                        "live"
-                    ],
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/accesspoint.NamespaceSource"
-                        }
-                    ]
-                },
-                "serviceTokenRequired": {
-                    "description": "引入已有北极星服务时是否需要服务 Token",
-                    "type": "boolean"
-                },
-                "weightFactor": {
-                    "description": "是否支持权重因子与动态权重",
-                    "type": "boolean"
-                }
-            }
-        },
         "serializer.CfgSwitchesOutput": {
             "type": "object",
             "properties": {
@@ -26591,16 +26515,16 @@ const docTemplate = `{
                     "description": "是否通过",
                     "type": "boolean"
                 },
-                "stage": {
-                    "description": "失败的阶段，通过时为空：network 网络不通 / clientAuth 开启了客户端鉴权 / token Token 无效",
+                "reason": {
+                    "description": "失败的原因，通过时为空：networkUnreachable 网络不通 / clientAuthEnabled 开启了客户端鉴权 / tokenInvalid Token 无效",
                     "enum": [
-                        "network",
-                        "clientAuth",
-                        "token"
+                        "networkUnreachable",
+                        "clientAuthEnabled",
+                        "tokenInvalid"
                     ],
                     "allOf": [
                         {
-                            "$ref": "#/definitions/accesspoint.ConnectivityStage"
+                            "$ref": "#/definitions/accesspoint.FailureReason"
                         }
                     ]
                 }
@@ -26625,11 +26549,11 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "id": {
-                    "description": "已有接入点的 ID，选填；有 ID 且 token 为空时使用已保存的 Token，并记录测试结果",
+                    "description": "已有接入点的 ID",
                     "type": "string"
                 },
                 "token": {
-                    "description": "北极星鉴权 Token，选填",
+                    "description": "北极星鉴权 Token",
                     "type": "string"
                 }
             }
@@ -26660,16 +26584,16 @@ const docTemplate = `{
                     "description": "是否通过",
                     "type": "boolean"
                 },
-                "stage": {
-                    "description": "失败的阶段，通过时为空：network 网络不通 / clientAuth 开启了客户端鉴权 / token Token 无效",
+                "reason": {
+                    "description": "失败的原因，通过时为空：networkUnreachable 网络不通 / clientAuthEnabled 开启了客户端鉴权 / tokenInvalid Token 无效",
                     "enum": [
-                        "network",
-                        "clientAuth",
-                        "token"
+                        "networkUnreachable",
+                        "clientAuthEnabled",
+                        "tokenInvalid"
                     ],
                     "allOf": [
                         {
-                            "$ref": "#/definitions/accesspoint.ConnectivityStage"
+                            "$ref": "#/definitions/accesspoint.FailureReason"
                         }
                     ]
                 }
@@ -32964,11 +32888,11 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "accessPointID": {
-                    "description": "绑定的接入点 ID，未绑定为空",
+                    "description": "绑定的自建接入点 ID；未绑定为空，此时集群不能使用北极星",
                     "type": "string"
                 },
                 "accessPointName": {
-                    "description": "绑定的接入点名称，未绑定为空",
+                    "description": "绑定的自建接入点名称，未绑定为空",
                     "type": "string"
                 },
                 "clusterID": {
@@ -33240,7 +33164,7 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "accessPointID": {
-                    "description": "集群绑定的接入点 ID，未绑定为空",
+                    "description": "集群绑定的自建接入点 ID，未绑定为空",
                     "type": "string"
                 },
                 "chartVersion": {

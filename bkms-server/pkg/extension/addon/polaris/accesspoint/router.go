@@ -38,9 +38,9 @@ type Handler interface {
 
 // Register 注册北极星接入点路由。
 //
-// 集群绑定与组件相关的路由只在允许空间自建接入点时注册：不允许时所有集群隐式绑定平台托管接入点，
-// 不存在绑定和按接入点安装组件的操作
-func Register(rg *gin.RouterGroup, h Handler, allowWorkspaceAccessPoints bool) {
+// 调用方只在允许空间自建接入点时注册：不允许时只有平台托管接入点，所有集群自动使用它，
+// 前端沿用现有界面，不需要接入点管理、集群绑定与组件相关的接口
+func Register(rg *gin.RouterGroup, h Handler) {
 	// 接入点列表
 	rg.GET("/workspaces/:workspaceID/polaris-access-points", h.ListAccessPoints)
 	// 创建接入点
@@ -55,10 +55,6 @@ func Register(rg *gin.RouterGroup, h Handler, allowWorkspaceAccessPoints bool) {
 	rg.GET("/workspaces/:workspaceID/polaris-access-points/network-info", h.GetNetworkInfo)
 	// 接入点上可选的北极星命名空间
 	rg.GET("/workspaces/:workspaceID/polaris-access-points/:accessPointID/namespaces", h.ListNamespaces)
-
-	if !allowWorkspaceAccessPoints {
-		return
-	}
 	// 集群绑定视图
 	rg.GET("/workspaces/:workspaceID/polaris-clusters", h.ListClusters)
 	// 组件状态视图

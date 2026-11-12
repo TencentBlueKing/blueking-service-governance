@@ -54,7 +54,7 @@ type Resolver interface {
 	// ResolveByID 按 ID 解析接入点：PlatformID 返回平台托管接入点，其余 ID 必须是该空间的自建接入点，
 	// 否则返回 ErrAccessPointNotFound
 	ResolveByID(ctx context.Context, workspaceID, accessPointID string) (*AccessPoint, error)
-	// ResolveByCluster 解析集群绑定的接入点：不允许空间自建接入点时所有集群隐式绑定平台托管接入点；
+	// ResolveByCluster 解析集群使用的接入点：不允许空间自建接入点时所有集群使用平台托管接入点；
 	// 否则按集群绑定解析，未绑定时返回 ErrClusterNotBound
 	ResolveByCluster(ctx context.Context, workspaceID, clusterID string) (*AccessPoint, error)
 	// ResolveForPolarisConfig 解析北极星配置创建时固定的接入点：接入点 ID 为空（存量数据）时按平台托管处理，
@@ -67,13 +67,10 @@ func NewResolver(db *mongo.Database) Resolver {
 	return &resolver{db: db}
 }
 
-// PlatformAvailable 平台托管接入点是否可用：不允许空间自建接入点时它是唯一的接入点，总是可用；
-// 否则仅在配置了平台北极星 SDK 地址或接入点时可用。
-//
-// 不可用时它不出现在接入点列表中、不能被集群绑定，解析方法也返回 ErrAccessPointNotFound
+// PlatformAvailable 平台托管接入点是否可用：只在不允许空间自建接入点时可用，此时它是唯一的接入点，所有集群都使用它；
+// 允许空间自建接入点时集群只能使用绑定的自建接入点，平台托管接入点不出现在接入点列表中，解析方法返回 ErrAccessPointNotFound
 func PlatformAvailable() bool {
-	cfg := config.G.Polaris
-	return !cfg.AllowWorkspaceAccessPoints || cfg.Address != "" || cfg.JoinPoint != ""
+	return !config.G.Polaris.AllowWorkspaceAccessPoints
 }
 
 type resolver struct {
@@ -98,8 +95,8 @@ func (r *resolver) ResolveByID(ctx context.Context, workspaceID, accessPointID s
 	return p.ToAccessPoint(), nil
 }
 
-// ResolveByCluster 解析集群绑定的接入点：不允许空间自建接入点时不查绑定，直接返回平台托管接入点；
-// 否则按空间内的集群绑定解析，未绑定时返回 ErrClusterNotBound
+// ResolveByCluster 解析集群使用的接入点：不允许空间自建接入点时不查绑定，直接返回平台托管接入点；
+// 否则按空间内的集群绑定解析，未绑定时返回 ErrClusterNotBound，不回退到平台托管接入点
 func (r *resolver) ResolveByCluster(ctx context.Context, workspaceID, clusterID string) (*AccessPoint, error) {
 	if !config.G.Polaris.AllowWorkspaceAccessPoints {
 		return r.platform(ctx)

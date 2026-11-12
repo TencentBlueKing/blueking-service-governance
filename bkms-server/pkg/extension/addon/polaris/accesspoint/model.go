@@ -78,24 +78,24 @@ func (p *PolarisAccessPoint) ToAccessPoint() *AccessPoint {
 	return ap
 }
 
-// ConnectivityStage 连通测试失败的阶段
-type ConnectivityStage string
+// FailureReason 连通测试失败的原因，供前端选择提示
+type FailureReason string
 
 const (
-	// ConnectivityStageNetwork 网络不通：GET /naming/v1/namespaces 失败
-	ConnectivityStageNetwork ConnectivityStage = "network"
-	// ConnectivityStageClientAuth 北极星开启了客户端鉴权（clientOpen=true），暂不支持
-	ConnectivityStageClientAuth ConnectivityStage = "clientAuth"
-	// ConnectivityStageToken Token 无效
-	ConnectivityStageToken ConnectivityStage = "token"
+	// FailureNetworkUnreachable 网络不通：GET /naming/v1/namespaces 失败
+	FailureNetworkUnreachable FailureReason = "networkUnreachable"
+	// FailureClientAuthEnabled 北极星开启了客户端鉴权（clientOpen=true），暂不支持
+	FailureClientAuthEnabled FailureReason = "clientAuthEnabled"
+	// FailureTokenInvalid Token 无效
+	FailureTokenInvalid FailureReason = "tokenInvalid"
 )
 
 // ConnectivityResult 连通测试结果
 type ConnectivityResult struct {
 	// OK 是否通过
 	OK bool `bson:"ok"`
-	// Stage 失败的阶段，通过时为空
-	Stage ConnectivityStage `bson:"stage"`
+	// Reason 失败的原因，通过时为空
+	Reason FailureReason `bson:"reason"`
 	// Message 失败原因或提示信息，不含 Token
 	Message string `bson:"message"`
 	// ConsoleAuth 北极星是否开启控制台鉴权（consoleOpen）
@@ -115,7 +115,7 @@ type PolarisClusterBinding struct {
 	WorkspaceID string `bson:"workspaceID"`
 	// ClusterID BCS 集群 ID
 	ClusterID string `bson:"clusterID"`
-	// AccessPointID 绑定的接入点 ID，可以是 PlatformID
+	// AccessPointID 绑定的空间自建接入点 ID。允许绑定时平台托管接入点不可用，因此这里不会是 PlatformID
 	AccessPointID string `bson:"accessPointID"`
 
 	Creator   string    `bson:"creator"`

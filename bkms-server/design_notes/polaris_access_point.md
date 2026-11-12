@@ -24,13 +24,13 @@
 自建接入点只登记 `clientHosts`（IP 或域名，1–10 个），端口固定：OpenAPI 为 `8090`，SDK 为 `8091`。
 OpenAPI 只用第一个地址（`http://{clientHosts[0]}:8090`），SDK 使用全部地址（`host:8091`）。
 
-两类接入点的差异全部表达为能力字段（`accesspoint.Capabilities`，`CapabilitiesOf(kind)`）。**前端与后端只看能力，不判断接入点类型或版本**：
+两类接入点的差异全部表达为能力字段（`accesspoint.Capabilities`，`CapabilitiesOf(kind)`）。**后端只看能力，不判断接入点类型或版本**。
+能力不通过接口下发：两类接入点不会同时出现（见第 3 节），前端按 `/frontend-features` 区分两种模式即可：
 
 | 能力 | `platform` | `workspace` | 消费方 |
 | --- | --- | --- | --- |
-| `editable` 可编辑、删除 | false | true | 02 |
 | `weightFactor` 权重因子、动态权重 | true | false | 05 |
-| `namespaceSource` 命名空间来源 | `fixed`（Test/Production/Development/Pre-release） | `live`（实时读取北极星） | 02、05 |
+| `namespaceSource` 命名空间来源 | `fixed`（Test/Production/Development/Pre-release） | `live`（实时读取北极星） | 05 |
 | `serviceTokenRequired` 引入已有服务时需服务 Token | true | false | 05 |
 | `injectClientToken` 向 Pod 注入 `{instanceKey}_polarisToken` | true | false | 05 |
 
@@ -42,13 +42,18 @@ OpenAPI 只用第一个地址（`http://{clientHosts[0]}:8090`），SDK 使用�
 | --- | --- | --- | --- |
 | `polaris.allowWorkspaceAccessPoints` | `false` | `true` | `false` |
 | `network.egressIPs` | 空 | 平台出口 IP | 不需要 |
-| `polaris.address` / `polaris.joinPoint` | 空 | 有平台北极星时填写 | `joinPoint` |
+| `polaris.address` / `polaris.joinPoint` | 空 | 不使用 | `joinPoint` |
+
+开关决定集群使用哪种接入点，两种模式互斥，不做隐式回退：
+
+- `allowWorkspaceAccessPoints=true`：只有空间自建接入点，集群必须显式绑定，未绑定的集群不能使用北极星；
+  平台托管接入点不出现在列表中，也不能被绑定。
 
 `allowWorkspaceAccessPoints=false` 时：
 
-- 只有平台托管接入点，所有集群隐式绑定到它；
-- 接入点写接口返回 `INVALID_REQUEST`（`ErrAccessPointDisabled`，02 实现）；
-- 集群绑定视图、组件状态视图、组件安装、环境组件状态 4 个接口不注册（`accesspoint.Register` 的第三个参数）。
+- 只有平台托管接入点，所有集群自动使用它，用户无需操作；
+- 第 6 节的接入点接口全部不注册（`server.go` 按开关决定是否调用 `accesspoint.Register`）。
+  平台托管接入点的能力与命名空间只由后端通过 `Resolver` 在进程内使用，前端沿用现有界面，不需要通过接口读取。
 
 前端通过 `GET /frontend-features`（`pkg/misc/frontendfeature`）读取 `polarisWorkspaceAccessPoint`，
 它的值就是 `allowWorkspaceAccessPoints`。为 false 时前端隐藏接入点管理、集群绑定、组件安装等入口。
@@ -64,7 +69,7 @@ OpenAPI 只用第一个地址（`http://{clientHosts[0]}:8090`），SDK 使用�
 | 方法 | 规则 | 调用方 |
 | --- | --- | --- |
 | `ResolveByID(ctx, ws, id)` | `platform` 返回平台托管接入点（不可用时 `ErrAccessPointNotFound`，见 4.1）；其余 ID 查库且必须属于该空间，否则 `ErrAccessPointNotFound` | 02、04 |
-| `ResolveByCluster(ctx, ws, clusterID)` | `allowWorkspaceAccessPoints=false` 返回平台托管；否则查集群绑定，未绑定返回 `ErrClusterNotBound` | 03、04、05 |
+| `ResolveByCluster(ctx, ws, clusterID)` | `allowWorkspaceAccessPoints=false` 返回平台托管；否则查集群绑定，未绑定返回 `ErrClusterNotBound`，不回退平台托管（见 4.2） | 03、04、05 |
 | `ResolveForPolarisConfig(ctx, cfg)` | `cfg.AccessPointID` 为空（内部版存量数据）或为 `platform` 按平台托管处理；其余按配置所属应用的空间调用 `ResolveByID` | 05、06 |
 
 - 解析结果里的 Token 是明文，只在服务端内部使用，不能出现在接口响应、日志与审计记录中。
@@ -75,20 +80,20 @@ OpenAPI 只用第一个地址（`http://{clientHosts[0]}:8090`），SDK 使用�
 
 ### 4.1 平台托管接入点是否可用
 
-`PlatformAvailable()` 决定平台托管接入点是否可用：
-`allowWorkspaceAccessPoints=false` 时总是可用（内部版可以不配地址，由私有 SDK 使用内置接入点），
-否则仅在配置了 `polaris.address` 或 `polaris.joinPoint` 时可用。
+`PlatformAvailable()` 等价于 `allowWorkspaceAccessPoints=false`：平台托管接入点只在不允许空间自建接入点时可用。
+此时它是唯一的接入点，内部版可以不配地址，由私有 SDK 使用内置接入点。
+`polaris.address` / `polaris.joinPoint` 只在这种模式下使用，开关打开时即使配置了也不提供平台托管接入点。
 
-不可用时，平台托管接入点不出现在接入点列表中、不能被集群绑定，解析方法也返回 `ErrAccessPointNotFound`，
-不会返回一个地址为空的接入点、让调用方到真正访问北极星时才失败。
+不可用时，平台托管接入点不出现在接入点列表中，解析 `platform` 返回 `ErrAccessPointNotFound`。
 
 存量 `PolarisConfig`（`accessPointID` 为空）只来自内部版，内部版的平台托管接入点总是可用，因此不受影响；
 社区版没有存量数据，不需要为存量配置放宽这条规则。
 
-### 4.2 集群可以绑定到平台托管接入点
+### 4.2 开关打开时集群必须显式绑定
 
-`PolarisClusterBinding.AccessPointID` 可以是 `platform`。社区版同时配置了平台北极星时，
-`allowWorkspaceAccessPoints=true` 下未绑定的集群会被 `ResolveByCluster` 拒绝，用户需要显式选择平台托管接入点。
+允许空间自建接入点时，集群只能使用绑定的自建接入点，`PolarisClusterBinding.AccessPointID` 不会是 `platform`。
+未绑定的集群没有托底，`ResolveByCluster` 直接返回 `ErrClusterNotBound`，
+避免管理员解绑后集群悄悄换到另一个北极星。集群绑定视图与环境的 `polarisAccessPointID` 在未绑定时都为空。
 
 ### 4.3 删除接入点要检查北极星配置
 
@@ -120,8 +125,8 @@ OpenAPI 只用第一个地址（`http://{clientHosts[0]}:8090`），SDK 使用�
 
 - 自建接入点的 Token 选填，通过 store 的 Encode/Decode 钩子用 `crypto.AESEncrypt` 加密存储。
   Token 只写入 `PolarisConfig` CR，不放进 operator 安装参数，不注入 Pod；更换 Token 下次部署生效。
-- `lastConnectivity` 记录最近一次连通测试：`{ok, stage, message, consoleAuth, clientAuth, checkedAt}`，
-  `stage` 取值 `network` / `clientAuth` / `token`。
+- `lastConnectivity` 记录最近一次连通测试：`{ok, reason, message, consoleAuth, clientAuth, checkedAt}`，
+  `reason` 取值 `networkUnreachable` / `clientAuthEnabled` / `tokenInvalid`。
 - 组件安装任务状态只有 `running` / `succeeded` / `failed`。“同一集群同时只允许 1 个运行中的任务”
   由部分唯一索引保证，并发创建时第二个返回 `installtask.ErrRunning`，不依赖先查后写。
 
@@ -161,7 +166,8 @@ OpenAPI 只用第一个地址（`http://{clientHosts[0]}:8090`），SDK 使用�
 | 安装/更新组件 | `POST /workspaces/{ws}/polaris-access-points/{accessPointID}/operator-installs` | 空间编辑 | 04 |
 | 环境组件状态 | `GET /envs/{envID}/polaris-operator` | 环境查看 | 04 |
 
-后 4 个接口只在 `allowWorkspaceAccessPoints=true` 时注册。
+以上接口只在 `allowWorkspaceAccessPoints=true` 时注册，此时平台托管接入点不可用，因此接口只处理空间自建接入点：
+列表不返回平台托管接入点，路径中的 `accessPointID` 传 `platform` 时返回 `NOT_FOUND`。
 
 另有全局接口 `GET /frontend-features`（登录即可访问，已实现）向前端下发 `polarisWorkspaceAccessPoint`，见第 3 节。
 
@@ -178,17 +184,16 @@ serializer 只用 binding 校验必填。地址格式、数量上限、名称重
 | 领域错误 | 错误码 | 详情码 | 触发场景 |
 | --- | --- | --- | --- |
 | `ErrAccessPointNotFound` | `NOT_FOUND` | 无 | 接入点不存在或不属于该空间 |
-| `ErrAccessPointDisabled` | `INVALID_REQUEST` | 无 | 不允许自建接入点时创建、更新、删除 |
 | `ErrAccessPointNameExists` | `ALREADY_EXISTS` | 无 | 名称重复 |
 | `ErrAccessPointInvalid` | `INVALID_ARGUMENT` | 无 | 地址格式错误、数量越界、集群不在候选范围内 |
-| `ErrConnectivityFailed` | `INVALID_REQUEST` | 无 | 保存前重跑连通测试未通过（网络不通、`clientOpen=true`、Token 无效），失败阶段写在错误信息里 |
-| `ErrClusterNotBound` | `INVALID_REQUEST` | 无 | 北极星配置选择了未绑定集群上的环境、对未绑定集群安装组件 |
+| `ErrConnectivityFailed` | `INVALID_REQUEST` | 无 | 保存前重跑连通测试未通过（网络不通、`clientOpen=true`、Token 无效），失败原因写在错误信息里 |
+| `ErrClusterNotBound` | `INVALID_REQUEST` | 无 | 允许自建接入点时，北极星配置选择了未绑定集群上的环境 |
 | `ErrAccessPointInUse` | `INVALID_REQUEST` | `POLARIS_ACCESS_POINT_IN_USE` | 删除仍绑定集群、或仍有北极星配置固定使用的接入点 |
 | `ErrClusterInUse` | `INVALID_REQUEST` | `POLARIS_CLUSTER_IN_USE` | 解绑或换绑的集群上有环境被北极星配置使用 |
 
-- 结构化的连通失败阶段由连通测试接口的 `stage` 返回，前端在保存前调用它展示；保存失败时展示错误信息即可。
+- 结构化的连通失败原因由连通测试接口的 `reason` 返回，前端在保存前调用它展示；保存失败时展示错误信息即可。
 - 前端可以通过 `/frontend-features` 隐藏入口、通过环境的 `polarisAccessPointID` 过滤可选环境，
-  因此 `DISABLED`、`CLUSTER_NOT_BOUND` 不需要详情码。
+  因此 `CLUSTER_NOT_BOUND` 不需要详情码。
 - 两个 `IN_USE` 详情码需要在 `extras` 中列出占用的应用与配置供前端展示，由 02、03 实现删除与换绑时
   参照 `bkerrs.WrapEnvClusterNamespaceOccupied` 单独包装。
 

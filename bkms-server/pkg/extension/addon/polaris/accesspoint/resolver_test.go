@@ -81,7 +81,7 @@ var _ = Describe("Resolver", func() {
 
 		setPolarisConfig(config.PolarisConfig{
 			Address:                    "10.1.0.1:8091, 10.1.0.2:8091",
-			AllowWorkspaceAccessPoints: true,
+			AllowWorkspaceAccessPoints: false,
 		})
 		_, err := svcStore.DeleteMany(ctx, depsvcmodel.ByName("polaris"))
 		Expect(err).NotTo(HaveOccurred())
@@ -119,7 +119,7 @@ var _ = Describe("Resolver", func() {
 		})
 
 		It("should leave the platform OpenAPI address empty when the polaris dep service is absent", func() {
-			setPolarisConfig(config.PolarisConfig{JoinPoint: "default", AllowWorkspaceAccessPoints: true})
+			setPolarisConfig(config.PolarisConfig{JoinPoint: "default", AllowWorkspaceAccessPoints: false})
 
 			ap, err := resolver.ResolveByID(ctx, workspaceID, accesspoint.PlatformID)
 
@@ -163,8 +163,8 @@ var _ = Describe("Resolver", func() {
 			Expect(err).To(MatchError(accesspoint.ErrAccessPointNotFound))
 		})
 
-		It("should return not found for the platform access point when it is not configured", func() {
-			setPolarisConfig(config.PolarisConfig{AllowWorkspaceAccessPoints: true})
+		It("should return not found for the platform access point when workspace access points are allowed", func() {
+			setPolarisConfig(config.PolarisConfig{Address: "10.1.0.1:8091", AllowWorkspaceAccessPoints: true})
 
 			_, err := resolver.ResolveByID(ctx, workspaceID, accesspoint.PlatformID)
 
@@ -173,6 +173,10 @@ var _ = Describe("Resolver", func() {
 	})
 
 	Context("ResolveByCluster", func() {
+		BeforeEach(func() {
+			setPolarisConfig(config.PolarisConfig{Address: "10.1.0.1:8091", AllowWorkspaceAccessPoints: true})
+		})
+
 		It("should ignore bindings and return the platform when workspace access points are disabled", func() {
 			setPolarisConfig(config.PolarisConfig{AllowWorkspaceAccessPoints: false})
 			p := createAccessPoint(workspaceID)
@@ -184,7 +188,7 @@ var _ = Describe("Resolver", func() {
 			Expect(ap.ID).To(Equal(accesspoint.PlatformID))
 		})
 
-		It("should return ErrClusterNotBound when the cluster is not bound", func() {
+		It("should return ErrClusterNotBound without platform fallback when the cluster is not bound", func() {
 			_, err := resolver.ResolveByCluster(ctx, workspaceID, "BCS-K8S-00001")
 
 			Expect(err).To(MatchError(accesspoint.ErrClusterNotBound))
@@ -232,8 +236,7 @@ var _ = Describe("Resolver", func() {
 		})
 
 		It("should treat a legacy config without access point as platform", func() {
-			// 存量配置只来自内部版，内部版不允许空间自建接入点
-			setPolarisConfig(config.PolarisConfig{AllowWorkspaceAccessPoints: false})
+			// 存量配置只来自内部版，内部版不允许空间自建接入点（BeforeEach 的默认配置）
 			cfg := &polaris.PolarisConfig{AppID: app.ID}
 
 			ap, err := resolver.ResolveForPolarisConfig(ctx, cfg)
@@ -263,21 +266,4 @@ var _ = Describe("Resolver", func() {
 			Expect(err).To(MatchError(accesspoint.ErrAccessPointNotFound))
 		})
 	})
-})
-
-var _ = Describe("PlatformAvailable", func() {
-	DescribeTable("should depend on the platform polaris config",
-		func(cfg config.PolarisConfig, expected bool) {
-			setPolarisConfig(cfg)
-			Expect(accesspoint.PlatformAvailable()).To(Equal(expected))
-		},
-		Entry("only access point when workspace access points are disabled",
-			config.PolarisConfig{AllowWorkspaceAccessPoints: false}, true),
-		Entry("sdk address configured",
-			config.PolarisConfig{AllowWorkspaceAccessPoints: true, Address: "10.0.0.1:8091"}, true),
-		Entry("join point configured",
-			config.PolarisConfig{AllowWorkspaceAccessPoints: true, JoinPoint: "default"}, true),
-		Entry("nothing configured",
-			config.PolarisConfig{AllowWorkspaceAccessPoints: true}, false),
-	)
 })
