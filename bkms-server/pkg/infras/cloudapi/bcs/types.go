@@ -19,6 +19,8 @@
 package bcs
 
 import (
+	"fmt"
+
 	"github.com/pkg/errors"
 )
 
@@ -32,7 +34,7 @@ type apiError struct {
 }
 
 func (e *apiError) Error() string {
-	return e.Message
+	return fmt.Sprintf("bcs api error(code=%d): %s", e.Code, e.Message)
 }
 
 // UserTokenStatusActive 有效的 Token 状态
@@ -43,7 +45,7 @@ const ProjectKindK8s = "k8s"
 
 // CreateProjectInput 创建 BCS 项目请求
 type CreateProjectInput struct {
-	// ProjectID 可选，不传由 BCS 生成；多租户下 BCS 不改写 ID，可用于按 ID 回查
+	// ProjectID 可选，不传由 BCS 生成
 	ProjectID string
 	// Name 项目名，BCS 要求全局唯一，长度 2-64
 	Name string

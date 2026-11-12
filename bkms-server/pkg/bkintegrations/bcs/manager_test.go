@@ -27,8 +27,10 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	cloudbcs "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bcs"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/tenant"
 )
 
 var _ = Describe("ProjectManager", func() {
@@ -77,31 +79,67 @@ var _ = Describe("ProjectManager", func() {
 		})
 	})
 
-	spec := ProjectSpec{ID: "fixed-project-id", Code: "bkms-ws", Name: "工作空间(ws)", BizID: 398}
+	spec := ProjectSpec{Code: "bkms-ws", Name: "工作空间(ws)", BizID: 398}
 
-	It("looks up by the given project id and reuses the existing project", func() {
-		mockey.PatchConvey("test", GinkgoT(), func() {
-			mockey.Mock(auth.MustGetUser).Return(user).Build()
-			mockey.Mock(cloudbcs.New).Return(cloudbcs.NewStub(user), nil).Build()
-			var lookedUp string
-			mockey.Mock((*cloudbcs.StubApiClient).GetProject).To(
-				func(_ *cloudbcs.StubApiClient, _ context.Context, id string) (*cloudbcs.Project, error) {
-					lookedUp = id
-					// 多租户下 BCS 返回的 code 带租户前缀
-					return &cloudbcs.Project{
-						ID: id, Code: "tenant-a-bkms-ws", Kind: cloudbcs.ProjectKindK8s, BizID: "398",
-					}, nil
-				},
-			).Build()
-			mockey.Mock((*cloudbcs.StubApiClient).CreateProject).
-				Return(nil, errors.New("should not create when project already exists")).
-				Build()
+	Context("in multi-tenant mode", func() {
+		BeforeEach(func() {
+			enableMultiTenantMode()
+			ctx = tenant.WithTenantID(ctx, "tenant-a")
+		})
 
-			project, err := manager.EnsureProject(ctx, spec)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(lookedUp).To(Equal("fixed-project-id"))
-			Expect(project.ID).To(Equal("fixed-project-id"))
-			Expect(project.Code).To(Equal("tenant-a-bkms-ws"))
+		It("looks up by the tenant prefixed code and reuses the existing project", func() {
+			mockey.PatchConvey("test", GinkgoT(), func() {
+				mockey.Mock(auth.MustGetUser).Return(user).Build()
+				mockey.Mock(cloudbcs.New).Return(cloudbcs.NewStub(user), nil).Build()
+				var lookedUp string
+				mockey.Mock((*cloudbcs.StubApiClient).GetProject).To(
+					func(_ *cloudbcs.StubApiClient, _ context.Context, idOrCode string) (*cloudbcs.Project, error) {
+						lookedUp = idOrCode
+						return &cloudbcs.Project{
+							ID: "bcs-uid", Code: idOrCode, Kind: cloudbcs.ProjectKindK8s, BizID: "398",
+						}, nil
+					},
+				).Build()
+				mockey.Mock((*cloudbcs.StubApiClient).CreateProject).
+					Return(nil, errors.New("should not create when project already exists")).
+					Build()
+
+				project, err := manager.EnsureProject(ctx, spec)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(lookedUp).To(Equal("tenant-a-bkms-ws"))
+				Expect(project.ID).To(Equal("bcs-uid"))
+				Expect(project.Code).To(Equal("tenant-a-bkms-ws"))
+			})
+		})
+
+		It("creates the project with the unprefixed code and lets BCS add the tenant prefix", func() {
+			mockey.PatchConvey("test", GinkgoT(), func() {
+				mockey.Mock(auth.MustGetUser).Return(user).Build()
+				mockey.Mock(cloudbcs.New).Return(cloudbcs.NewStub(user), nil).Build()
+				mockey.Mock((*cloudbcs.StubApiClient).GetProject).Return(nil, cloudbcs.ErrProjectNotFound).Build()
+				var created cloudbcs.CreateProjectInput
+				mockey.Mock((*cloudbcs.StubApiClient).CreateProject).To(
+					func(_ *cloudbcs.StubApiClient, _ context.Context, in cloudbcs.CreateProjectInput) (
+						*cloudbcs.Project, error,
+					) {
+						created = in
+						// 模拟多租户 BCS 改写 projectCode
+						return &cloudbcs.Project{
+							ID: "bcs-uid", Code: "tenant-a-" + in.ProjectCode, Kind: in.Kind, BizID: in.BusinessID,
+						}, nil
+					},
+				).Build()
+
+				project, err := manager.EnsureProject(ctx, spec)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(created).To(Equal(cloudbcs.CreateProjectInput{
+					Name:        "工作空间(ws)",
+					ProjectCode: "bkms-ws",
+					Kind:        cloudbcs.ProjectKindK8s,
+					BusinessID:  "398",
+				}))
+				Expect(project.Code).To(Equal("tenant-a-bkms-ws"))
+			})
 		})
 	})
 
@@ -110,41 +148,32 @@ var _ = Describe("ProjectManager", func() {
 			mockey.Mock(auth.MustGetUser).Return(user).Build()
 			mockey.Mock(cloudbcs.New).Return(cloudbcs.NewStub(user), nil).Build()
 			mockey.Mock((*cloudbcs.StubApiClient).GetProject).Return(&cloudbcs.Project{
-				ID: "fixed-project-id", Code: "bkms-ws", Kind: cloudbcs.ProjectKindK8s, BizID: "399",
+				ID: "bcs-uid", Code: "bkms-ws", Kind: cloudbcs.ProjectKindK8s, BizID: "399",
 			}, nil).Build()
 
 			_, err := manager.EnsureProject(ctx, spec)
+			Expect(err).To(MatchError(ErrProjectBizMismatch))
 			Expect(err).To(MatchError(ContainSubstring("belongs to biz 399, not requested biz 398")))
 		})
 	})
 
-	It("creates the project with the given id, name and code when it does not exist", func() {
+	It("looks up by the unprefixed code when multi-tenant mode is disabled", func() {
 		mockey.PatchConvey("test", GinkgoT(), func() {
 			mockey.Mock(auth.MustGetUser).Return(user).Build()
 			mockey.Mock(cloudbcs.New).Return(cloudbcs.NewStub(user), nil).Build()
-			mockey.Mock((*cloudbcs.StubApiClient).GetProject).Return(nil, cloudbcs.ErrProjectNotFound).Build()
-			var created cloudbcs.CreateProjectInput
-			mockey.Mock((*cloudbcs.StubApiClient).CreateProject).To(
-				func(_ *cloudbcs.StubApiClient, _ context.Context, in cloudbcs.CreateProjectInput) (
-					*cloudbcs.Project, error,
-				) {
-					created = in
+			var lookedUp string
+			mockey.Mock((*cloudbcs.StubApiClient).GetProject).To(
+				func(_ *cloudbcs.StubApiClient, _ context.Context, idOrCode string) (*cloudbcs.Project, error) {
+					lookedUp = idOrCode
 					return &cloudbcs.Project{
-						ID: in.ProjectID, Code: "tenant-a-" + in.ProjectCode, Kind: in.Kind, BizID: in.BusinessID,
+						ID: "bcs-uid", Code: idOrCode, Kind: cloudbcs.ProjectKindK8s, BizID: "398",
 					}, nil
 				},
 			).Build()
 
-			project, err := manager.EnsureProject(ctx, spec)
+			_, err := manager.EnsureProject(tenant.WithTenantID(ctx, "tenant-a"), spec)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(created).To(Equal(cloudbcs.CreateProjectInput{
-				ProjectID:   "fixed-project-id",
-				Name:        "工作空间(ws)",
-				ProjectCode: "bkms-ws",
-				Kind:        cloudbcs.ProjectKindK8s,
-				BusinessID:  "398",
-			}))
-			Expect(project.Code).To(Equal("tenant-a-bkms-ws"))
+			Expect(lookedUp).To(Equal("bkms-ws"))
 		})
 	})
 
@@ -164,19 +193,32 @@ var _ = Describe("ProjectManager", func() {
 	})
 })
 
-var _ = Describe("WorkspaceProjectID", func() {
-	It("is deterministic and has the 32-char BCS project id format", func() {
-		id := WorkspaceProjectID("tenant-a", "ws")
-		Expect(id).To(Equal(WorkspaceProjectID("tenant-a", "ws")))
-		Expect(id).To(MatchRegexp(`^[0-9a-f]{32}$`))
+var _ = Describe("AddBCSProjectTenantPrefix", func() {
+	It("adds the tenant prefix in multi-tenant mode", func() {
+		enableMultiTenantMode()
+		ctx := tenant.WithTenantID(context.Background(), "tenant-a")
+		Expect(AddBCSProjectTenantPrefix(ctx, "bkms-ws")).To(Equal("tenant-a-bkms-ws"))
 	})
 
-	It("differs across tenants and workspaces", func() {
-		id := WorkspaceProjectID("tenant-a", "ws")
-		Expect(WorkspaceProjectID("tenant-b", "ws")).NotTo(Equal(id))
-		Expect(WorkspaceProjectID("tenant-a", "ws2")).NotTo(Equal(id))
+	It("keeps a code that already has the tenant prefix", func() {
+		enableMultiTenantMode()
+		ctx := tenant.WithTenantID(context.Background(), "tenant-a")
+		Expect(AddBCSProjectTenantPrefix(ctx, "tenant-a-bkms-ws")).To(Equal("tenant-a-bkms-ws"))
+	})
+
+	It("keeps the code when multi-tenant mode is disabled", func() {
+		ctx := tenant.WithTenantID(context.Background(), "tenant-a")
+		Expect(AddBCSProjectTenantPrefix(ctx, "bkms-ws")).To(Equal("bkms-ws"))
 	})
 })
+
+// enableMultiTenantMode 在当前用例内开启多租户模式，用例结束后恢复全局配置
+func enableMultiTenantMode() {
+	oldConfig := config.G
+	DeferCleanup(func() { config.G = oldConfig })
+	config.G = &config.Config{}
+	config.G.Tenant.EnableMultiTenantMode = true
+}
 
 var _ = Describe("WorkspaceProjectName", func() {
 	It("appends the workspace id so same display names do not collide", func() {

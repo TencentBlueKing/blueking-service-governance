@@ -25,9 +25,13 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	bcsmanager "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bcs"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkci"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/cmdb"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace/handler"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bkcc"
 )
 
 var _ = Describe("ClassifyEnsureBkSystemsErr", func() {
@@ -37,7 +41,7 @@ var _ = Describe("ClassifyEnsureBkSystemsErr", func() {
 	})
 
 	It("maps inaccessible biz to invalid request", func() {
-		err := fmt.Errorf("%w: validate bkcc biz 398", workspace.ErrIndependentWorkspaceBizInvalid)
+		err := fmt.Errorf("%w: bkcc biz 398", workspace.ErrIndependentWorkspaceBizInvalid)
 		code := handler.ClassifyEnsureBkSystemsErr(err)
 		Expect(code).To(Equal(bkerrs.ErrCodeInvalidRequest))
 	})
@@ -63,6 +67,39 @@ var _ = Describe("ClassifyEnsureBkSystemsErr", func() {
 		)
 		code := handler.ClassifyEnsureBkSystemsErr(err)
 		Expect(code).To(Equal(bkerrs.ErrCodeAlreadyExists))
+	})
+
+	DescribeTable("maps biz problems in shared project mode to invalid request",
+		func(sentinel error) {
+			err := fmt.Errorf("%w: get cmdb info of biz 398", sentinel)
+			Expect(handler.ClassifyEnsureBkSystemsErr(err)).To(Equal(bkerrs.ErrCodeInvalidRequest))
+		},
+		Entry("biz not found or not accessible", bkcc.ErrBusinessNotFound),
+		Entry("biz has no level-2 business", cmdb.ErrBusinessLevel2Missing),
+	)
+
+	DescribeTable("maps occupied projects to already exists",
+		func(sentinel error) {
+			err := fmt.Errorf("%w: project already occupied", sentinel)
+			Expect(handler.ClassifyEnsureBkSystemsErr(err)).To(Equal(bkerrs.ErrCodeAlreadyExists))
+		},
+		Entry("bkci project code used by another workspace", bkci.ErrProjectCodeAlreadyUsed),
+		Entry("workspace already bound to another bkci project", bkci.ErrWorkspaceAlreadyHasProject),
+		Entry("bcs project with the same code belongs to another biz", bcsmanager.ErrProjectBizMismatch),
+	)
+
+	DescribeTable("maps workspace insert conflicts to already exists",
+		func(sentinel error) {
+			err := fmt.Errorf("%w: create workspace demo", sentinel)
+			Expect(handler.ClassifyCreateWorkspaceErr(err)).To(Equal(bkerrs.ErrCodeAlreadyExists))
+		},
+		Entry("workspace id already used", workspace.ErrWorkspaceAlreadyExists),
+		Entry("bcs project already bound", workspace.ErrBCSProjectAlreadyBound),
+	)
+
+	It("keeps unexpected insert errors as internal server error", func() {
+		code := handler.ClassifyCreateWorkspaceErr(errors.New("create workspace demo"))
+		Expect(code).To(Equal(bkerrs.ErrCodeInternalServerError))
 	})
 
 	It("keeps unexpected errors as internal server error", func() {

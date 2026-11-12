@@ -227,7 +227,7 @@ var _ = Describe("ProjectManager Initialize", func() {
 
 			proj, err := manager.Initialize(ctx, managerTestProjectCode, "test-obs-id", "test-obs-name")
 
-			Expect(err).To(HaveOccurred())
+			Expect(err).To(MatchError(ErrWorkspaceAlreadyHasProject))
 			Expect(err.Error()).To(ContainSubstring("already has project"))
 			Expect(proj).To(BeNil())
 		})

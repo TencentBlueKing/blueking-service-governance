@@ -32,23 +32,29 @@ import (
 // ErrWorkspaceNotFound 工作空间未找到时, 返回固定错误
 var ErrWorkspaceNotFound = errors.New("workspace not found")
 
+// ErrWorkspaceAlreadyExists 工作空间 ID 已被占用
+var ErrWorkspaceAlreadyExists = errors.New("workspace already exists")
+
 // ErrBCSProjectAlreadyBound BCS 项目已被其他工作空间绑定
 var ErrBCSProjectAlreadyBound = errors.New("bcs project already bound")
 
-// ErrBCSProjectAlreadyExists 自动创建使用的确定性 BCS 项目已存在，且不能作为本次重试复用
+// ErrBCSProjectAlreadyExists 自动创建使用的 BCS 项目 code 已存在，且不能作为本次重试复用
 var ErrBCSProjectAlreadyExists = errors.New("bcs project already exists")
 
 // ErrIndependentWorkspaceBizRequired 独立 BCS 模式下新建容器项目必须提供业务 ID
 var ErrIndependentWorkspaceBizRequired = errors.New("bizID is required when creating an independent bcs project")
 
 // ErrIndependentWorkspaceBizInvalid 独立 BCS 模式下业务不存在或当前用户无权访问
-var ErrIndependentWorkspaceBizInvalid = errors.New("independent workspace biz is invalid")
+var ErrIndependentWorkspaceBizInvalid = errors.New("biz not found or not accessible by current user")
 
-// ErrBoundBCSProjectInvalid 独立 BCS 模式下显式绑定的 BCS 项目不存在、不是 k8s 项目或未关联业务
+// ErrBoundBCSProjectInvalid 绑定的 BCS 项目不存在、不是 k8s 项目或未关联业务
 var ErrBoundBCSProjectInvalid = errors.New("bound bcs project is invalid")
 
 // bcsProjectCodeIndex BCS 项目 code 唯一索引名，用于从唯一键冲突中区分出 BCS 项目重复绑定
 const bcsProjectCodeIndex = "bkSystems.bkBcsProjectCode_1"
+
+// workspaceIDIndex 工作空间 ID 唯一索引名，用于从唯一键冲突中区分出 ID 重复
+const workspaceIDIndex = "id_1"
 
 // WorkspaceStore 工作空间存储
 type WorkspaceStore = store.GenericStore[Workspace]
@@ -107,7 +113,8 @@ func DefaultOrder() store.Opt {
 	return store.Combine(store.Desc("updatedAt"), store.Asc("id"))
 }
 
-// Create 创建工作空间。绑定的 BCS 项目已被其他工作空间占用时返回 ErrBCSProjectAlreadyBound
+// Create 创建工作空间。工作空间 ID 已被占用时返回 ErrWorkspaceAlreadyExists，
+// 绑定的 BCS 项目已被其他工作空间占用时返回 ErrBCSProjectAlreadyBound
 func Create(ctx context.Context, workspaces *WorkspaceStore, ws *Workspace) error {
 	err := workspaces.Create(ctx, ws)
 	if errors.Is(err, store.ErrDuplicate) && strings.Contains(err.Error(), bcsProjectCodeIndex) {
@@ -115,6 +122,9 @@ func Create(ctx context.Context, workspaces *WorkspaceStore, ws *Workspace) erro
 			ErrBCSProjectAlreadyBound,
 			"bcs project(%s) already bound by another workspace", ws.BkSystems.BkBCSProjectCode,
 		)
+	}
+	if errors.Is(err, store.ErrDuplicate) && strings.Contains(err.Error(), "index: "+workspaceIDIndex) {
+		return errors.Wrapf(ErrWorkspaceAlreadyExists, "workspace %s", ws.ID)
 	}
 	if err != nil {
 		return errors.Wrapf(err, "create workspace %s", ws.ID)

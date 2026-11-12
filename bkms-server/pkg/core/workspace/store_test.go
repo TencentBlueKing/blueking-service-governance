@@ -137,6 +137,16 @@ var _ = Describe("WorkspaceStore", func() {
 			duplicateWorkspace.DisplayName = "重复 ID 的工作空间"
 			Expect(store.Create(ctx, &duplicateWorkspace)).To(MatchError(genericstore.ErrDuplicate))
 		})
+
+		It("should return ErrWorkspaceAlreadyExists when creating a duplicate workspace ID", func() {
+			Expect(Create(ctx, store, &workspaceA)).To(Succeed())
+
+			duplicateWorkspace := workspaceA
+			duplicateWorkspace.DisplayName = "重复 ID 的工作空间"
+			err := Create(ctx, store, &duplicateWorkspace)
+			Expect(err).To(MatchError(ErrWorkspaceAlreadyExists))
+			Expect(err.Error()).To(ContainSubstring(workspaceA.ID))
+		})
 	})
 
 	Context("BCS project binding", func() {

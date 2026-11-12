@@ -26,8 +26,8 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	bcsmanager "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bcs"
 	bkcmdb "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/cmdb"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil/dbfactory"
 	. "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
@@ -135,7 +135,19 @@ var _ = Describe("fetchCMDBInfo", func() {
 			}, nil).Build()
 
 			_, err := FetchCMDBInfo(ctx, "existing-bcs", 0)
+			Expect(err).To(MatchError(ErrBoundBCSProjectInvalid))
 			Expect(err).To(MatchError(ContainSubstring("has no associated bizID")))
+		})
+	})
+
+	It("fails as an invalid request when the bound BCS project does not exist", func() {
+		mockey.PatchConvey("project not found", GinkgoT(), func() {
+			mockey.Mock(auth.MustGetUser).Return(user).Build()
+			mockey.Mock(bcs.New).Return(bcs.NewStub(user), nil).Build()
+			mockey.Mock((*bcs.StubApiClient).GetProject).Return(nil, bcs.ErrProjectNotFound).Build()
+
+			_, err := FetchCMDBInfo(ctx, "missing-bcs", 0)
+			Expect(err).To(MatchError(ErrBoundBCSProjectInvalid))
 		})
 	})
 })
@@ -151,7 +163,7 @@ var _ = Describe("ensureIndependentBCSProject", func() {
 		user = auth.User{ID: "tester"}
 	})
 
-	It("reuses the existing deterministic BCS project before creating a new one", func() {
+	It("reuses the existing BCS project with the same code before creating a new one", func() {
 		mockey.PatchConvey("reuse existing project", GinkgoT(), func() {
 			mockey.Mock(auth.MustGetUser).Return(user).Build()
 			mockey.Mock(bcs.New).Return(bcs.NewStub(user), nil).Build()
@@ -172,7 +184,7 @@ var _ = Describe("ensureIndependentBCSProject", func() {
 		})
 	})
 
-	It("rejects reusing an existing deterministic BCS project from another biz", func() {
+	It("rejects reusing an existing BCS project with the same code from another biz", func() {
 		mockey.PatchConvey("biz id mismatch", GinkgoT(), func() {
 			mockey.Mock(auth.MustGetUser).Return(user).Build()
 			mockey.Mock(bcs.New).Return(bcs.NewStub(user), nil).Build()
@@ -191,17 +203,17 @@ var _ = Describe("ensureIndependentBCSProject", func() {
 		})
 	})
 
-	It("creates the BCS project with the deterministic id and stores the code returned by BCS", func() {
+	It("looks up by the tenant prefixed code and creates with the unprefixed code", func() {
 		mockey.PatchConvey("create after not found", GinkgoT(), func() {
+			enableMultiTenantMode()
 			tenantID, _ := tenant.GetTenantID(ctx)
-			wantID := bcsmanager.WorkspaceProjectID(tenantID, "current-workspace")
 
 			mockey.Mock(auth.MustGetUser).Return(user).Build()
 			mockey.Mock(bcs.New).Return(bcs.NewStub(user), nil).Build()
 			var lookedUp string
 			mockey.Mock((*bcs.StubApiClient).GetProject).To(
-				func(_ *bcs.StubApiClient, _ context.Context, id string) (*bcs.Project, error) {
-					lookedUp = id
+				func(_ *bcs.StubApiClient, _ context.Context, idOrCode string) (*bcs.Project, error) {
+					lookedUp = idOrCode
 					return nil, bcs.ErrProjectNotFound
 				},
 			).Build()
@@ -211,28 +223,30 @@ var _ = Describe("ensureIndependentBCSProject", func() {
 					created = in
 					// 模拟多租户 BCS 改写 projectCode
 					return &bcs.Project{
-						ID: in.ProjectID, Code: tenantID + "-" + in.ProjectCode, Kind: in.Kind, BizID: in.BusinessID,
+						ID: "bcs-uid", Code: tenantID + "-" + in.ProjectCode, Kind: in.Kind, BizID: in.BusinessID,
 					}, nil
 				},
 			).Build()
 
 			project, err := EnsureIndependentBCSProject(ctx, "current-workspace", "workspace-name", 398)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(lookedUp).To(Equal(wantID))
-			Expect(created.ProjectID).To(Equal(wantID))
+			Expect(lookedUp).To(Equal(tenantID + "-bkms-current-workspace"))
+			Expect(created.ProjectID).To(BeEmpty())
 			Expect(created.ProjectCode).To(Equal("bkms-current-workspace"))
 			Expect(created.Name).To(Equal("workspace-name(current-workspace)"))
-			Expect(project.ID).To(Equal(wantID))
+			Expect(project.ID).To(Equal("bcs-uid"))
 			Expect(project.Code).To(Equal(tenantID + "-bkms-current-workspace"))
 			Expect(project.BizID).To(Equal("398"))
 		})
 	})
-
-	It("fails without tenant in context instead of guessing the project id", func() {
-		_, err := EnsureIndependentBCSProject(context.Background(), "current-workspace", "workspace-name", 398)
-		Expect(err).To(MatchError(tenant.ErrTenantIDRequired))
-	})
 })
+
+// enableMultiTenantMode 在当前用例内开启多租户模式，用例结束后恢复全局配置
+func enableMultiTenantMode() {
+	old := config.G.Tenant.EnableMultiTenantMode
+	DeferCleanup(func() { config.G.Tenant.EnableMultiTenantMode = old })
+	config.G.Tenant.EnableMultiTenantMode = true
+}
 
 var _ = Describe("ensureBCSProjectNotBound", func() {
 	var (
@@ -321,8 +335,9 @@ var _ = Describe("prepareIndependentBCSBinding", func() {
 		user = auth.User{ID: "tester"}
 	})
 
-	It("rejects auto create when the deterministic BCS project belongs to another biz", func() {
+	It("rejects auto create when the BCS project with the same code belongs to another biz", func() {
 		mockey.PatchConvey("bcs project belongs to another biz", GinkgoT(), func() {
+			enableMultiTenantMode()
 			tenantID, _ := tenant.GetTenantID(ctx)
 			mockey.Mock(auth.MustGetUser).Return(user).Build()
 			mockey.Mock(bkcmdb.NewService).Return(&fakeCMDBService{
@@ -333,22 +348,22 @@ var _ = Describe("prepareIndependentBCSBinding", func() {
 			mockey.Mock(bcs.New).Return(bcs.NewStub(user), nil).Build()
 			var lookedUp string
 			mockey.Mock((*bcs.StubApiClient).GetProject).To(
-				func(_ *bcs.StubApiClient, _ context.Context, id string) (*bcs.Project, error) {
-					lookedUp = id
+				func(_ *bcs.StubApiClient, _ context.Context, idOrCode string) (*bcs.Project, error) {
+					lookedUp = idOrCode
 					return &bcs.Project{
-						ID: id, Code: tenantID + "-bkms-ws-1", Kind: bcs.ProjectKindK8s, BizID: "399",
+						ID: "bcs-uid", Code: idOrCode, Kind: bcs.ProjectKindK8s, BizID: "399",
 					}, nil
 				},
 			).Build()
 
 			_, _, err := PrepareIndependentBCSBinding(ctx, nil, "ws-1", "", 398)
-			Expect(lookedUp).To(Equal(bcsmanager.WorkspaceProjectID(tenantID, "ws-1")))
+			Expect(lookedUp).To(Equal(tenantID + "-bkms-ws-1"))
 			Expect(err).To(MatchError(ErrBCSProjectAlreadyExists))
 			Expect(err.Error()).To(ContainSubstring("belongs to biz 399, not requested biz 398"))
 		})
 	})
 
-	It("allows auto create when the deterministic BCS project does not exist", func() {
+	It("allows auto create when the BCS project with the same code does not exist", func() {
 		mockey.PatchConvey("bcs project not found", GinkgoT(), func() {
 			mockey.Mock(auth.MustGetUser).Return(user).Build()
 			mockey.Mock(bkcmdb.NewService).Return(&fakeCMDBService{
@@ -366,7 +381,7 @@ var _ = Describe("prepareIndependentBCSBinding", func() {
 		})
 	})
 
-	Context("when an existing deterministic project can be reused", func() {
+	Context("when an existing project with the same code can be reused", func() {
 		var store *WorkspaceStore
 
 		BeforeEach(func() {
@@ -440,7 +455,7 @@ var _ = Describe("prepareIndependentBCSBinding", func() {
 
 			_, _, err := PrepareIndependentBCSBinding(ctx, nil, "ws-1", "", 398)
 			Expect(err).To(MatchError(ErrIndependentWorkspaceBizInvalid))
-			Expect(err.Error()).To(ContainSubstring("validate bkcc biz 398"))
+			Expect(err.Error()).To(ContainSubstring("bkcc biz 398"))
 		})
 	})
 

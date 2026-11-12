@@ -29,6 +29,9 @@ import (
 	"github.com/samber/lo"
 	"golang.org/x/sync/errgroup"
 
+	bcsmanager "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bcs"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkci"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/cmdb"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
@@ -41,6 +44,7 @@ import (
 	helmdeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/helm"
 	deploystatus "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/status"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bkcc"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/perm"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/taskq"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/misc/audit"
@@ -587,11 +591,7 @@ func (h *Handler) CreateWorkspace(c *gin.Context) {
 		Creator:   auth.MustGetUser(ctx).ID,
 	}
 	if err = workspace.Create(ctx, h.workspaces(), ws); err != nil {
-		if errors.Is(err, workspace.ErrBCSProjectAlreadyBound) {
-			bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeAlreadyExists, "create workspace in DB"))
-			return
-		}
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "create workspace in DB"))
+		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, ClassifyCreateWorkspaceErr(err), "create workspace in DB"))
 		return
 	}
 
@@ -1011,9 +1011,25 @@ func ClassifyEnsureBkSystemsErr(err error) bkerrs.ErrCode {
 	switch {
 	case errors.Is(err, workspace.ErrIndependentWorkspaceBizRequired),
 		errors.Is(err, workspace.ErrIndependentWorkspaceBizInvalid),
-		errors.Is(err, workspace.ErrBoundBCSProjectInvalid):
+		errors.Is(err, workspace.ErrBoundBCSProjectInvalid),
+		errors.Is(err, bkcc.ErrBusinessNotFound),
+		errors.Is(err, cmdb.ErrBusinessLevel2Missing):
 		return bkerrs.ErrCodeInvalidRequest
 	case errors.Is(err, workspace.ErrBCSProjectAlreadyExists),
+		errors.Is(err, workspace.ErrBCSProjectAlreadyBound),
+		errors.Is(err, bcsmanager.ErrProjectBizMismatch),
+		errors.Is(err, bkci.ErrProjectCodeAlreadyUsed),
+		errors.Is(err, bkci.ErrWorkspaceAlreadyHasProject):
+		return bkerrs.ErrCodeAlreadyExists
+	default:
+		return bkerrs.ErrCodeInternalServerError
+	}
+}
+
+// ClassifyCreateWorkspaceErr 将工作空间入库时的冲突映射为 API 错误码
+func ClassifyCreateWorkspaceErr(err error) bkerrs.ErrCode {
+	switch {
+	case errors.Is(err, workspace.ErrWorkspaceAlreadyExists),
 		errors.Is(err, workspace.ErrBCSProjectAlreadyBound):
 		return bkerrs.ErrCodeAlreadyExists
 	default:

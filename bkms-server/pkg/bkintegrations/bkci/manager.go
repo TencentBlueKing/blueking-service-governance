@@ -38,6 +38,9 @@ import (
 // ErrProjectCodeAlreadyUsed 项目 Code 已存在但不属于指定工作空间（项目与工作空间是一对一绑定的关系）
 var ErrProjectCodeAlreadyUsed = errors.New("project code already used")
 
+// ErrWorkspaceAlreadyHasProject 工作空间已经绑定了另一个蓝盾项目，不能再绑定不同的项目
+var ErrWorkspaceAlreadyHasProject = errors.New("workspace already has a bkci project")
+
 // ErrBuildTriggerPipelineRequireEnsure 触发专用流水线必须通过 TriggerPipelineManager.Ensure 创建
 // Initialize 不会注入回调 URL/凭证，也不能生成带 appID 的显示名，因此禁止走该创建路径
 var ErrBuildTriggerPipelineRequireEnsure = errors.New(
@@ -93,7 +96,9 @@ func (m *ProjectManager) Initialize(
 			return proj, nil
 		}
 		// 空间关联的是其他项目，报错
-		return nil, errors.Errorf("workspace %s already has project %s", m.workspaceID, proj.Code)
+		return nil, errors.Wrapf(
+			ErrWorkspaceAlreadyHasProject, "workspace %s already has project %s", m.workspaceID, proj.Code,
+		)
 	}
 
 	// 2. 检查 projectCode 是否已经被占用。蓝盾项目 Code 全局唯一（code_1 唯一索引不含 tenantID），
@@ -251,7 +256,7 @@ func NewPipelineManager(db *mongo.Database, workspaceID string) *PipelineManager
 //     Git 事件条件；模板变更若需滚动，应另做保留上述字段的合并式 Sync，而不是套用本函数
 func (m *PipelineManager) Initialize(ctx context.Context, pipelineType string) (*Pipeline, error) {
 	if pipelineType == string(PipelineTypeDockerfile) && BuiltinDockerfilePipelineDisabled() {
-		return nil, ErrBuiltinDockerfilePipelineDisabled
+		return nil, errors.WithStack(ErrBuiltinDockerfilePipelineDisabled)
 	}
 	pipelineStore := store.Of(m.db, PipelineMeta)
 	pipeline, err := pipelineStore.Get(ctx, ByWorkspaceAndType(m.workspaceID, pipelineType))
