@@ -28,6 +28,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/samber/lo"
+	"go.mongodb.org/mongo-driver/v2/bson"
 	"k8s.io/client-go/rest"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
@@ -45,16 +46,20 @@ import (
 const (
 	fakeOldRevision = "demo-7b697647cb"
 	fakeNewRevision = "demo-d8db7cf84"
+	fakeDeployID    = "6560f1a2b3c4d5e6f7a8b9c0"
 )
 
-// fakeGameDeployWithStatus 生成带 status 的 GameDeployment，4 副本均就绪，其中 updated 个为新版本
+// fakeGameDeployWithStatus 生成属于部署 fakeDeployID、带 status 的 GameDeployment，4 副本均就绪，其中 updated 个为新版本
 func fakeGameDeployWithStatus(updated int64) map[string]any {
 	currentRevision := lo.Ternary(updated == 4, fakeNewRevision, fakeOldRevision)
 	return map[string]any{
 		"apiVersion": "tkex.tencent.com/v1alpha1",
 		"kind":       "GameDeployment",
-		"metadata":   map[string]any{"name": "demo", "namespace": "demo-ns", "generation": 3},
-		"spec":       map[string]any{"replicas": 4, "updateStrategy": map[string]any{"partition": 4 - updated}},
+		"metadata": map[string]any{
+			"name": "demo", "namespace": "demo-ns", "generation": 3,
+			"annotations": map[string]any{AnnotationKeyDeployID: fakeDeployID},
+		},
+		"spec": map[string]any{"replicas": 4, "updateStrategy": map[string]any{"partition": 4 - updated}},
 		"status": map[string]any{
 			"observedGeneration":   3,
 			"updateRevision":       fakeNewRevision,
@@ -67,12 +72,30 @@ func fakeGameDeployWithStatus(updated int64) map[string]any {
 	}
 }
 
+// fakeRolloutWithStatus 生成属于部署 fakeDeployID 的 Rollout
 func fakeRolloutWithStatus(status map[string]any) map[string]any {
+	return fakeRolloutOf(fakeDeployID, status)
+}
+
+func fakeRolloutOf(deployID string, status map[string]any) map[string]any {
 	return map[string]any{
 		"apiVersion": batchrelease.APIVersion, "kind": batchrelease.Kind,
-		"metadata": map[string]any{"name": "demo", "namespace": "demo-ns"},
-		"status":   status,
+		"metadata": map[string]any{
+			"name": "demo", "namespace": "demo-ns",
+			"annotations": map[string]any{AnnotationKeyDeployID: deployID},
+		},
+		"status": status,
 	}
+}
+
+// fakePausedRolloutOf 生成属于指定部署、永久暂停在第 0 批的 Rollout
+func fakePausedRolloutOf(deployID string) map[string]any {
+	return fakeRolloutOf(deployID, map[string]any{
+		"phase":            "Running",
+		"paused":           "true",
+		"workloadRevision": fakeNewRevision,
+		"stepStatus":       map[string]any{"currentStepIndex": 0, "currentStepPhase": "PausedPermanently"},
+	})
 }
 
 var _ = Describe("DeployStateGetter for batch release", func() {
@@ -92,6 +115,7 @@ var _ = Describe("DeployStateGetter for batch release", func() {
 		mocker = mockey.Mock(cluster.NewConfig).Return(cfg).Build()
 
 		record = &Record{
+			ID:           lo.Must(bson.ObjectIDFromHex(fakeDeployID)),
 			ClusterID:    "BCS-K8S-00000",
 			Namespace:    "demo-ns",
 			ImageTag:     "v2",
@@ -99,7 +123,11 @@ var _ = Describe("DeployStateGetter for batch release", func() {
 			WorkloadKind: k8skind.GameDeploy,
 			ResourceKeys: ResourceKeys{{Kind: k8skind.GameDeploy, Name: "demo"}},
 			ReleaseMode:  ReleaseModeCanary,
-			Status:       StatusDeploying,
+			ReleaseStrategy: &ReleaseStrategySnapshot{Batches: []releasestrategy.Batch{
+				{Target: "1", PauseMode: releasestrategy.PauseModePermanent},
+				{Target: "100%", PauseMode: releasestrategy.PauseModeNone},
+			}},
+			Status: StatusDeploying,
 			BatchProgress: &BatchProgress{
 				BatchPhase: batchrelease.BatchPhasePending, Replicas: 4, OldImageTag: "v1", NewImageTag: "v2",
 			},
@@ -116,7 +144,7 @@ var _ = Describe("DeployStateGetter for batch release", func() {
 		fake.rollouts["demo"] = fakeRolloutWithStatus(map[string]any{
 			"phase":            "Running",
 			"message":          "Rollout is running canary step 0",
-			"paused":           "false",
+			"paused":           "true",
 			"workloadRevision": fakeNewRevision,
 			"stepStatus": map[string]any{
 				"currentStepIndex": 0,
@@ -217,6 +245,66 @@ var _ = Describe("DeployStateGetter for batch release", func() {
 		Expect(state.Status).To(Equal(StatusDeploying))
 		Expect(state.Message).To(Equal("failed to scale canary replicas"))
 		Expect(state.BatchProgress.Message).To(Equal("failed to scale canary replicas"))
+	})
+
+	It("reports updating outside any batch right after skipping the remaining batches", func() {
+		fake.gameDeploys["demo"] = fakeGameDeployWithStatus(1)
+		fake.rollouts["demo"] = fakeRolloutWithStatus(map[string]any{
+			"phase":            "Running",
+			"paused":           "false",
+			"workloadRevision": fakeNewRevision,
+			"stepStatus":       map[string]any{"currentStepIndex": 2, "currentStepPhase": "PausedPermanently"},
+		})
+
+		state, err := NewDeployStateGetter(record).Get(ctx)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(state.Status).To(Equal(StatusDeploying))
+		Expect(state.BatchProgress.BatchPhase).To(Equal(batchrelease.BatchPhaseUpdating))
+		Expect(state.BatchProgress.CurrentBatchIndex).To(BeNil())
+	})
+
+	DescribeTable("rejects the rollout of another deploy while switching",
+		func(deployID string) {
+			fake.gameDeploys["demo"] = fakeGameDeployWithStatus(1)
+			fake.rollouts["demo"] = fakePausedRolloutOf(deployID)
+
+			_, err := NewDeployStateGetter(record).Get(ctx)
+			Expect(err).To(MatchError(batchrelease.ErrReleaseSwitching))
+			_, err = GetLiveBatchReleaseState(ctx, record)
+			Expect(err).To(MatchError(batchrelease.ErrReleaseSwitching))
+		},
+		Entry("previous deploy", bson.NewObjectID().Hex()),
+		Entry("no deploy id", ""),
+	)
+
+	It("rejects the finished round before the workload is updated by the deploy record", func() {
+		// 新 Rollout 已下发，主工作负载仍是上一次部署、已全部更新就绪，不校验工作负载会判为已完成
+		gameDeploy := fakeGameDeployWithStatus(4)
+		gameDeploy["metadata"].(map[string]any)["annotations"] = map[string]any{
+			AnnotationKeyDeployID: bson.NewObjectID().Hex(),
+		}
+		fake.gameDeploys["demo"] = gameDeploy
+		fake.rollouts["demo"] = fakeRolloutWithStatus(map[string]any{
+			"phase": "Healthy", "paused": "false", "workloadRevision": fakeNewRevision, "stepStatus": map[string]any{},
+		})
+
+		_, err := NewDeployStateGetter(record).Get(ctx)
+		Expect(err).To(MatchError(batchrelease.ErrReleaseSwitching))
+		_, err = GetLiveBatchReleaseState(ctx, record)
+		Expect(err).To(MatchError(batchrelease.ErrReleaseSwitching))
+	})
+
+	It("reads the live progress from the rollout owned by the deploy record", func() {
+		fake.gameDeploys["demo"] = fakeGameDeployWithStatus(1)
+		fake.rollouts["demo"] = fakePausedRolloutOf(fakeDeployID)
+
+		state, err := GetLiveBatchReleaseState(ctx, record)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(state.Status).To(Equal(StatusDeploying))
+		Expect(state.BatchProgress.BatchPhase).To(Equal(batchrelease.BatchPhaseManualPaused))
+		Expect(state.BatchProgress.CurrentBatchIndex).To(Equal(lo.ToPtr(int64(0))))
+		Expect(state.BatchProgress.UpdatedReplicas).To(Equal(int32(1)))
+		Expect(state.BatchProgress.OldImageTag).To(Equal("v1"))
 	})
 
 	It("returns an error when the rollout cannot be read", func() {

@@ -224,16 +224,18 @@ CleaningCanary    清理上一轮灰度资源，workloadRevision 仍为旧值
 
 | 顺序 | 条件 | 批次状态 |
 |------|------|------|
-| 1 | `currentStepIndex < 0` | `updating`（回滚中）。必须最先判断，否则残留的 `PausedPermanently` 会被当成暂停 |
+| 1 | `currentStepIndex < 0` | `updating`（回滚中）。回滚后步骤阶段不清理，最先判断，不依赖后续规则对残留值的处理 |
 | 2 | phase 为 `UpdatingPrimary` 或 `CleaningCanary` | `updating` |
 | 3 | phase 为 `Healthy`，`workloadRevision` 等于 GameDeployment `updateRevision`，且 GameDeployment 已观察到最新 generation、所有实例已更新并就绪 | `completed` |
 | 4 | phase 为 `Healthy` 的其他情况（如 Rollout 刚创建、工作负载尚未更新） | `pending` |
-| 5 | `paused` 为 `true` / `manually`，或步骤阶段为 `PausedPermanently` | `manual-paused` |
-| 6 | `paused` 为 `temporary`，或步骤阶段为 `PausedTemporarily` | `timed-paused` |
+| 5 | `paused` 为 `true` / `manually` | `manual-paused` |
+| 6 | `paused` 为 `temporary` | `timed-paused` |
 | 7 | 步骤阶段为空（两批之间） | `pending` |
-| 8 | 其他（`ScalingReplicas`、`Error` 等） | `updating`；`Error` 时进度提示取 `stepStatus.message` |
+| 8 | 其他（`ScalingReplicas`、`Error`、`paused=false` 时残留的暂停类步骤阶段等） | `updating`；`Error` 时进度提示取 `stepStatus.message` |
 
 第 3 条中 GameDeployment 的检查不能省：`workloadRevision` 在发布开始时就已是新值；缺少 `rollout` 标签时 Kourse 也会直接进入 `Healthy`。
+
+第 5、6 条只看 `paused`，不看步骤阶段：Kourse 进入暂停时总是同时写入 `paused`（`true` / `temporary`）与步骤阶段（`PausedPermanently` / `PausedTemporarily`），见 `reconcilePause`；而继续、跳过、回退等手动操作只把 `paused` 改为 `false`，步骤阶段要等 Kourse 处理后才更新。`paused=false` 时残留的暂停类步骤阶段表示操作已提交、等待 Kourse 执行，按第 8 条视为更新中，不能显示成"等待人工确认"。手动操作的前置条件同样据此判断，Kourse 处理前再次"继续"会被拒绝。
 
 批次状态为 `completed` 时，部署记录置为 `deployed`。
 
@@ -258,9 +260,11 @@ CleaningCanary    清理上一轮灰度资源，workloadRevision 仍为旧值
 3. 按 Rollout 的**实时 status** 调用 `ActionPatch` 校验前置条件。不使用部署记录中的进度：进度由轮询写入，可能落后一个周期（如定时暂停已到期、控制器已进入下一批）；
 4. `UpdateStatus` 修改 status 子资源，Merge Patch 中带上第 2 步读到的 `metadata.resourceVersion`（乐观锁）。读取之后 Rollout 又被修改过（控制器推进了批次、其他用户的操作、对象被删除重建）时 apiserver 返回 409，映射为 `ErrRolloutChanged`（HTTP 409，`ABORTED`），提示刷新后重试。不自动重试：patch 是按读取时的状态算出的，例如回退上一批写入的是绝对序号，控制器已进入下一批时重试会回退两批。Rollout 不存在时返回 `ErrRolloutNotFound`，其他集群错误原样透传。
 
-**Rollout 与部署记录的绑定**：分批发布进行中允许再次部署，而部署记录先于 Rollout 切换——从创建新记录到删除旧 Rollout 之间（同步镜像拉取凭证、下发额外资源、删除并等待），集群中仍是上一次发布的 Rollout。此时如果只看最新记录，会用新发布的批次数去修改旧 Rollout（如 `skip` 写入错误的批次序号），审计也会关联到新发布。因此部署时在 `applyMainWorkload` 中给 Rollout 打上本次的部署 ID（manifest 在创建部署记录之前生成，拿不到 ID），手动操作发现不一致时拒绝，提示稍后重试。上一轮已结束时走直接 Apply 路径，注解先于工作负载更新，但此时 Rollout 尚未进入 `Running`，`ActionPatch` 本就会拒绝，不产生新的窗口。没有该注解的 Rollout（本改动之前下发）同样被拒绝，再次部署即可恢复。
+**Rollout 与部署记录的绑定**：分批发布进行中允许再次部署，而部署记录先于 Rollout 切换——从创建新记录到删除旧 Rollout 之间（同步镜像拉取凭证、下发额外资源、删除并等待），集群中仍是上一次发布的 Rollout。此时如果只看最新记录，会用新发布的批次数去修改旧 Rollout（如 `skip` 写入错误的批次序号），审计也会关联到新发布。因此部署时在 `applyMainWorkload` 中给 Rollout 打上本次的部署 ID（manifest 在创建部署记录之前生成，拿不到 ID），手动操作发现不一致时拒绝，提示稍后重试。上一轮已结束时走直接 Apply 路径，注解先于工作负载更新，但此时 Rollout 尚未进入 `Running`，`ActionPatch` 本就会拒绝，手动操作不产生新的窗口。
 
-操作成功后写一条空间操作记录（resource 为 `app`，attribute 为 `batchRelease`，extras 含 `trafficLaneName`、`deployID`、策略 ID 与名称），操作类型为 `continue` / `pause` / `backward` / `skip` / `rollback`；前置条件不满足等失败情况不写记录。部署记录的进度不在操作时更新，由下一个轮询周期同步。
+读取进度（轮询任务与进度查询接口）则必须覆盖这个窗口：此时 Rollout 已带上新部署 ID，状态仍是上一轮结束后的 `Healthy`，工作负载尚未更新、旧版本实例全部就绪，按 4.5 第 3 条会判为 `completed`，把刚开始的发布误报为已部署。因此读取进度时同时校验主工作负载的部署 ID 注解（`injectDeployID` 写入，`upsertWorkload` 之后才变为新 ID），两者都属于该记录才计算进度，见 5.1、5.2。工作负载更新后、控制器观察到新 generation 前的滞后由 `IsUpdated` 的 generation 判断覆盖。
+
+操作成功后写一条空间操作记录（resource 为 `app`，attribute 为 `batchRelease`，extras 含 `trafficLaneName`、`deployID`、策略 ID 与名称），操作类型为 `continue` / `pause` / `backward` / `skip` / `rollback`；前置条件不满足等失败情况不写记录。部署记录的进度不在操作时更新，由下一个轮询周期同步；进度查询接口在分批发布中实时读取集群，操作后即可看到最新状态（见 5.2）。
 
 **回滚的语义与判定**
 
@@ -285,12 +289,13 @@ CleaningCanary    清理上一轮灰度资源，workloadRevision 仍为旧值
 - 进度通过 `UpdateBatchProgress` 写入，且先于状态落库，终态记录的进度停在终态时的值。进入终态时进度写入失败，本 tick 返回错误交给 asynq 重试；中间态写入失败只打日志。
 - **分批发布记录不受轮询超时窗口限制**（`TaskPoller.DeployStatus.Timeout`）。永久暂停可以无限期等待人工确认，如果沿用超时窗口，记录会被置为 `polling-timeout`，`IsBatchReleasing()` 随之返回 false，冲突拦截失效，手动操作也会因"没有进行中的分批发布"被拒绝。
 - 读取 Rollout 失败（含 CR 被删除）时不写进度，保留上一次的值，下个周期重试；连续失败沿用现有重试次数，耗尽后置为 `polling-broken`。
+- 校验 Rollout 与主工作负载的部署 ID 注解（见 4.6），不属于本记录时按读取失败处理，不把其他发布的状态写进本记录。正常流程不会触发：部署同步更新工作负载、下发 Rollout 之后才投递轮询任务；再次部署后，旧记录的轮询读到新 Rollout 时，同一 tick 中的 `hasNewerDeploy` 先把旧记录置为 `canceled`，不计失败。
 
 进度字段来源：
 
 | 字段 | 来源 |
 |------|------|
-| `currentBatchIndex` / `rolloutPhase` / `pauseStartTime` | Rollout status，原样写入 |
+| `currentBatchIndex` / `rolloutPhase` / `pauseStartTime` | Rollout status，原样写入；批次序号大于等于批次总数（跳过剩余批次后、Kourse 处理前）时 `currentBatchIndex` 写为空，与 Kourse 处理后清空 `stepStatus` 一致 |
 | `batchPhase` | `Status.BatchPhase(workload)` |
 | `message` | 批次出错（`currentStepPhase=Error`）时取 `stepStatus.message`，否则取 `status.message` |
 | `updatedReplicas` / `replicas` | GameDeployment `status.updatedReplicas` / `spec.replicas` |
@@ -302,10 +307,18 @@ CleaningCanary    清理上一轮灰度资源，workloadRevision 仍为旧值
 
 ### 5.2 进度查询接口
 
-`GET /apps/:appID/envs/:envName/batch-release?trafficLaneName=`，权限同"查看部署记录"，只读该环境 / 泳道的最新部署记录，不请求集群：
+`GET /apps/:appID/envs/:envName/batch-release?trafficLaneName=`，权限同"查看部署记录"，读该环境 / 泳道的最新部署记录：
 
 - 最新记录是分批发布：返回策略快照（ID、名称、批次）、`batchProgress` 各字段，以及部署记录 ID 与状态（前端据此区分进行中 / 已部署 / 已回滚）。
 - 没有部署记录，或最新记录是一次更新全部：`data` 为 `null`，不报错。
+
+最新记录处于分批发布中（`IsBatchReleasing()`）时，进度和状态**实时读取集群**（`appmodel.GetLiveBatchReleaseState`，与轮询任务同一套计算）。手动操作和 Kourse 自身的推进（定时暂停到期、一批更新完成）都能立即看到，不用等轮询周期。约束：
+
+- **只读不写**：部署记录仍只由轮询任务写入，避免两边写入互相覆盖；状态的终态流转、操作记录等仍由轮询任务完成。
+- **校验归属**：要求 Rollout 与主工作负载的部署 ID 注解都等于该记录，否则（再次部署正在切换 Rollout 或尚未更新工作负载）读到的是上一次发布的状态，退回部署记录中的进度。
+- **读取失败退回**：集群读取失败、Rollout 或主工作负载不存在时，退回部署记录中的进度，不报错。
+- **状态可能先于部署记录**：实时读到发布完成或回滚完成时，`status` 已是 `deployed` / `rolled-back`，部署记录要等下一个轮询周期才更新。部署状态接口的 `inProgressReleaseMode`、冲突拦截仍以部署记录为准，最多再落后一个周期；前端判断分批发布状态时以本接口为准。
+- 已结束的记录（`deployed` / `rolled-back` / `failed` 等）直接返回部署记录中的进度：Rollout 之后会被下一次部署替换或删除。
 
 前端发现进行中的分批发布不依赖该接口：部署状态接口（`trpc-deploys/latest-status`、`taf-deploys/latest-status`）返回 `inProgressReleaseMode`（空表示没有进行中的渐进式发布，`canary` 表示分批发布进行中，以后可扩展 `blueGreen` 等），部署页轮询到为 `canary` 时再调用进度查询接口取批次详情。该字段在最新部署记录 `IsBatchReleasing()` 为真时取其发布方式，与 `hasDeployRecord` 一样不受接口返回构建记录还是部署记录影响：构建记录较新时 `status` / `releaseMode` 取自构建记录，不能用来判断。部署状态接口和部署记录列表还返回本条记录的 `releaseMode`（`all` / `canary`，存量记录为 `all`），列表另返回策略名称快照 `releaseStrategyName`。
 

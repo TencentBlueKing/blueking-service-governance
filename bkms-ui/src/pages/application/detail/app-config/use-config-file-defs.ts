@@ -21,7 +21,12 @@ import type { InjectionKey, MaybeRefOrGetter, Ref } from 'vue';
 
 import { AppConfigFileDefsService } from '~/api/modules/v1';
 
-import type { DefDetailObj, EnvInstanceObj, UpdateDefInput } from '~/@types/v1/app-config-file-defs';
+import type {
+  DefDetailObj,
+  EnvInstanceObj,
+  UpdateAppConfigFileDefContentRequest,
+  UpdateDefInput,
+} from '~/@types/v1/app-config-file-defs';
 import type { Config } from '~/api/interceptors';
 
 export type ConfigFileContentSourceType = 'bscp' | 'local';
@@ -110,7 +115,7 @@ export function useConfigFileDefs(appID: MaybeRefOrGetter<string>) {
   const modifiedEnvNames = computed(() => envInstances.value.map(item => item.envName || '').filter(Boolean));
 
   /** 拉取定义列表：优先选中 preferredID，否则回退到 framework 或首项 */
-  async function fetchDefs(preferredID = activeDefID.value) {
+  async function fetchDefs(preferredID = activeDefID.value, config?: Config) {
     const id = toValue(appID);
     if (!id) {
       reset();
@@ -119,7 +124,10 @@ export function useConfigFileDefs(appID: MaybeRefOrGetter<string>) {
     const requestID = defsGuard.begin();
     listLoading.value = true;
     try {
-      const result = await AppConfigFileDefsService.listDefaultFilesWithDef({ appID: id }, { needRes: true });
+      const result = await AppConfigFileDefsService.listDefaultFilesWithDef(
+        { appID: id },
+        { needRes: true, ...config },
+      );
       if (!defsGuard.isLatest(requestID) || id !== toValue(appID)) return;
       defs.value = (result.items || []).map(normalizeDef).filter(item => item.id);
       const preferred = defs.value.find(item => item.id === preferredID);
@@ -136,7 +144,7 @@ export function useConfigFileDefs(appID: MaybeRefOrGetter<string>) {
   }
 
   /** 拉取当前定义详情，envName 为空即默认文件 */
-  async function fetchDetail(envName = '') {
+  async function fetchDetail(envName = '', config?: Config) {
     const id = toValue(appID);
     if (!id || !activeDefID.value) {
       detail.value = null;
@@ -149,7 +157,7 @@ export function useConfigFileDefs(appID: MaybeRefOrGetter<string>) {
     try {
       const result = await AppConfigFileDefsService.getAppConfigFileDefDetail(
         { appID: id, id: requestedDefID, envName },
-        { needRes: true },
+        { needRes: true, ...config },
       );
       if (!detailGuard.isLatest(requestID) || id !== toValue(appID) || requestedDefID !== activeDefID.value) {
         return null;
@@ -162,7 +170,7 @@ export function useConfigFileDefs(appID: MaybeRefOrGetter<string>) {
   }
 
   /** 拉取当前定义的环境实例列表 */
-  async function fetchEnvInstances() {
+  async function fetchEnvInstances(config?: Config) {
     const id = toValue(appID);
     if (!id || !activeDefID.value) {
       envInstances.value = [];
@@ -172,7 +180,7 @@ export function useConfigFileDefs(appID: MaybeRefOrGetter<string>) {
     const requestID = envInstancesGuard.begin();
     const result = await AppConfigFileDefsService.listAppConfigFileDefEnvInstances(
       { appID: id, id: requestedDefID },
-      { needRes: true },
+      { needRes: true, ...config },
     );
     if (!envInstancesGuard.isLatest(requestID) || id !== toValue(appID) || requestedDefID !== activeDefID.value) {
       return;
@@ -182,8 +190,8 @@ export function useConfigFileDefs(appID: MaybeRefOrGetter<string>) {
   }
 
   /** 并行刷新详情与环境实例 */
-  async function refreshActive(envName = '') {
-    await Promise.all([fetchDetail(envName), fetchEnvInstances()]);
+  async function refreshActive(envName = '', config?: Config) {
+    await Promise.all([fetchDetail(envName, config), fetchEnvInstances(config)]);
   }
 
   /** 创建 plain 文件，同时设置渲染开关与挂载环境。 */
@@ -217,24 +225,15 @@ export function useConfigFileDefs(appID: MaybeRefOrGetter<string>) {
   }
 
   /** 保存内容；envName 为空保存默认文件，关闭错误拦截由调用方处理版本冲突 */
-  async function saveContent(envName: string, content: string, description = '') {
-    return await AppConfigFileDefsService.updateAppConfigFileDefContent(
-      {
-        appID: toValue(appID),
-        id: activeDefID.value,
-        content,
-        currentVersion:
-          envName && !detail.value?.hasEnvInstance && detail.value?.isUnifiedConfig === false
-            ? 0
-            : detail.value?.currentVersion,
-        description,
-      },
-      {
-        interceptorErr: false,
-        needRes: true,
-        queryParams: envName ? { envName } : undefined,
-      },
-    );
+  async function saveContent({
+    envName,
+    ...request
+  }: Required<UpdateAppConfigFileDefContentRequest> & { envName: string }) {
+    return await AppConfigFileDefsService.updateAppConfigFileDefContent(request, {
+      interceptorErr: false,
+      needRes: true,
+      queryParams: envName ? { envName } : undefined,
+    });
   }
 
   /** 将指定环境的配置恢复为默认值 */

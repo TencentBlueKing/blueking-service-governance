@@ -7924,7 +7924,7 @@
                         "BkUserCredential": []
                     }
                 ],
-                "description": "返回环境 / 泳道最新部署记录的分批发布进度，进度由部署轮询任务写入，不实时请求集群；\n没有部署记录或最新记录不是分批发布时 data 为 null",
+                "description": "返回环境 / 泳道最新部署记录的分批发布进度\n没有部署记录或最新记录不是分批发布时 data 为 null",
                 "produces": [
                     "application/json"
                 ],
@@ -15813,6 +15813,112 @@
                 }
             }
         },
+        "/plat-mgt/workspaces/{workspaceID}/cfg-switches": {
+            "get": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "platmgt"
+                ],
+                "summary": "查询空间的配置开关列表（配置管理 BSCP、七彩石），从未设置过的开关为关闭状态",
+                "operationId": "ListPlatCfgSwitches",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.PlatCfgSwitchListResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
+        "/plat-mgt/workspaces/{workspaceID}/cfg-switches/{key}": {
+            "put": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "description": "关闭配置管理（BSCP）后，该空间下应用的配置管理接口全部不可用，且之后的部署不再注入 BSCP 容器",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "platmgt"
+                ],
+                "summary": "设置空间的一项配置开关",
+                "operationId": "UpdatePlatCfgSwitch",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "开关标识：bscp / rainbowTConf",
+                        "name": "key",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "开关取值",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/serializer.UpdatePlatCfgSwitchInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.PlatCfgSwitchResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
         "/plat-mgt/workspaces/{workspaceID}/image-registry": {
             "get": {
                 "security": [
@@ -18752,6 +18858,50 @@
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/serializer.CreateAppOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
+        "/workspaces/{workspaceID}/cfg-switches": {
+            "get": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "description": "开关由平台管理员在平台管理中设置，前端据此决定是否展示配置管理（BSCP）、七彩石等 tab；未设置时为 false",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "cfgswitch"
+                ],
+                "summary": "获取空间的配置开关",
+                "operationId": "GetCfgSwitches",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.CfgSwitchesResponse"
                         }
                     },
                     "400": {
@@ -24424,11 +24574,11 @@
                     "type": "integer"
                 },
                 "workloadCurrentRevision": {
-                    "description": "旧版本：工作负载 status.currentRevision；轮询任务读到工作负载前为空",
+                    "description": "旧版本：工作负载 status.currentRevision；尚未读到工作负载时为空",
                     "type": "string"
                 },
                 "workloadUpdateRevision": {
-                    "description": "新版本：工作负载 status.updateRevision，实例 workloadRevision 与之相等即为新版本实例；轮询任务读到工作负载前为空",
+                    "description": "新版本：工作负载 status.updateRevision，实例 workloadRevision 与之相等即为新版本实例；尚未读到工作负载时为空",
                     "type": "string"
                 }
             }
@@ -24985,6 +25135,27 @@
                 },
                 "trafficLaneEnabled": {
                     "type": "boolean"
+                }
+            }
+        },
+        "serializer.CfgSwitchesOutput": {
+            "type": "object",
+            "properties": {
+                "bscp": {
+                    "description": "是否开启配置管理（BSCP）",
+                    "type": "boolean"
+                },
+                "rainbowTConf": {
+                    "description": "是否展示七彩石",
+                    "type": "boolean"
+                }
+            }
+        },
+        "serializer.CfgSwitchesResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/serializer.CfgSwitchesOutput"
                 }
             }
         },
@@ -30668,9 +30839,6 @@
                 "createdAt": {
                     "type": "string"
                 },
-                "enable": {
-                    "type": "boolean"
-                },
                 "mountPath": {
                     "type": "string"
                 },
@@ -31529,6 +31697,50 @@
                 "key": {
                     "description": "占位符变量的 key, 如 IMAGE, IMAGE_TAG 等",
                     "type": "string"
+                }
+            }
+        },
+        "serializer.PlatCfgSwitchListResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/serializer.PlatCfgSwitchOutput"
+                    }
+                }
+            }
+        },
+        "serializer.PlatCfgSwitchOutput": {
+            "type": "object",
+            "properties": {
+                "enabled": {
+                    "description": "是否开启",
+                    "type": "boolean"
+                },
+                "key": {
+                    "description": "开关标识：bscp / rainbowTConf",
+                    "type": "string"
+                },
+                "name": {
+                    "description": "展示名称",
+                    "type": "string"
+                },
+                "updatedAt": {
+                    "description": "最近修改时间，从未设置过时为 null",
+                    "type": "string"
+                },
+                "updater": {
+                    "description": "最近修改人，从未设置过时为空",
+                    "type": "string"
+                }
+            }
+        },
+        "serializer.PlatCfgSwitchResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/serializer.PlatCfgSwitchOutput"
                 }
             }
         },
@@ -35232,6 +35444,18 @@
                     "description": "北极星 Token",
                     "type": "string",
                     "minLength": 1
+                }
+            }
+        },
+        "serializer.UpdatePlatCfgSwitchInput": {
+            "type": "object",
+            "required": [
+                "enabled"
+            ],
+            "properties": {
+                "enabled": {
+                    "description": "是否开启；使用指针以区分字段缺失与显式传 false",
+                    "type": "boolean"
                 }
             }
         },

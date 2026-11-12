@@ -100,24 +100,24 @@
         </template>
         <template #value>
           <div
-            v-if="groupedEnvEntries.length"
+            v-if="groupedEnvTags.length"
             class="flex flex-col gap-[8px] py-[4px]"
           >
             <div
-              v-for="[envType, envs] in groupedEnvEntries"
-              :key="envType"
+              v-for="group in groupedEnvTags"
+              :key="group.key"
               class="flex flex-wrap items-center gap-[4px]"
             >
-              <Tag :class="envTypeTagClassMap[envType]">
-                {{ getEnvTypeLabel(envType) }}
+              <Tag :class="group.tagClass">
+                {{ group.label }}
               </Tag>
               <Tag
-                v-for="env in envs"
-                :key="env.envName"
+                v-for="(displayName, index) in group.displayNames"
+                :key="`${group.key}-${index}`"
                 class="bg-[#fff]"
                 type="stroke"
               >
-                {{ getEnvDisplayName(env?.envName ?? '') }}
+                {{ displayName }}
               </Tag>
             </div>
           </div>
@@ -165,17 +165,15 @@
 
   import { Button, Exception, OverflowTitle, Tag, Timeline } from 'bkui-vue';
   import { useI18n } from 'vue-i18n';
-  import { AppImageOutputObj, DeployedEnvInfoOutputObj, ImageTagDeployRecordOutputObj } from '~/@types/v1/images';
+  import { AppImageOutputObj, ImageTagDeployRecordOutputObj } from '~/@types/v1/images';
   import { ImagesService } from '~/api/modules/v1';
   import { APP_DEPLOY_STATUS, HELM_DEPLOY_STATUS } from '~/common/enums/deploy';
   import { formatSize } from '~/common/util';
   import FieldItem from '~/components/field-item.vue';
   import SvgIcon from '~/components/svg-icon.vue';
-  import { envTypeMap, envTypeTagClassMap } from '~/composables/use-env-manager';
+  import { groupDeployedEnvs } from '~/composables/use-deployed-envs';
   import useTime from '~/composables/use-time';
   import { useAppDetail } from '~/stores/app-detail';
-
-  type GroupedEnvs = Record<string, DeployedEnvInfoOutputObj[]>;
 
   interface IProps {
     envNameDisplayMap?: Record<string, string>;
@@ -192,28 +190,13 @@
     return props.envNameDisplayMap?.[envName] || envName;
   }
 
-  function getEnvTypeLabel(envType: string) {
-    return envTypeMap[envType]?.name || envType;
-  }
-
   /** 跳转代码仓库 commit 页 */
   function handleToCommit(url: string) {
     if (url) window.open(url, '_blank');
   }
 
-  /** 按环境类型分组 */
-  const groupedEnvs = computed<GroupedEnvs>(() => {
-    const envs = props.row.deployedEnvs;
-    if (!envs?.length) return {};
-    return envs.reduce((acc, env) => {
-      const type = env.envType || 'unknown';
-      acc[type] ||= [];
-      acc[type].push(env);
-      return acc;
-    }, {} as GroupedEnvs);
-  });
-
-  const groupedEnvEntries = computed(() => Object.entries(groupedEnvs.value));
+  /** 已部署环境按环境分类分行，特性环境计入其继承的分类 */
+  const groupedEnvTags = computed(() => groupDeployedEnvs(props.row.deployedEnvs, getEnvDisplayName));
 
   /** 部署记录 */
   const deployRecords = ref<ImageTagDeployRecordOutputObj[]>([]);

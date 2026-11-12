@@ -29,6 +29,7 @@ import (
 	svccfg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/bscpcfg"
+	cfgswitchmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/cfgswitch/model"
 )
 
 const (
@@ -162,19 +163,30 @@ func Build(params Params) *PodFragment {
 
 // BuildFromStore 从数据库获取配置快照并装配 pod 片段。
 //
-// 当指定 app+env 未配置、或配置管理未启用时返回 nil, nil。
+// 当空间未开启配置管理（BSCP）、或指定 app+env 未配置时返回 nil, nil。
+// 空间开关由平台管理员设置，关闭后已绑定的应用再次部署也不再注入。
+//
+// 涉及的模型：workspace_cfg_switches、bscpcfg_metadata、bscpcfg_env_bindings
 func BuildFromStore(
 	ctx context.Context,
 	db *mongo.Database,
 	appID, envName string,
 	ws *workspace.Workspace,
 ) (*PodFragment, error) {
+	enabled, err := cfgswitchmodel.IsEnabled(ctx, db, ws.ID, cfgswitchmodel.SwitchBscp)
+	if err != nil {
+		return nil, errors.Wrapf(err, "checking bscp cfg switch of workspace %s", ws.ID)
+	}
+	if !enabled {
+		return nil, nil
+	}
+
 	snapshot, err := bscpcfg.GetSnapshot(ctx, db, appID, envName)
 	if err != nil {
 		return nil, errors.Wrap(err, "getting bscp config snapshot")
 	}
-	// 未配置或未启用时不注入
-	if snapshot == nil || !snapshot.Metadata.Enable {
+	// 未配置时不注入
+	if snapshot == nil {
 		return nil, nil
 	}
 

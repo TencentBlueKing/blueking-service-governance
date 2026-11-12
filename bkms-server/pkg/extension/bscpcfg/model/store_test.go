@@ -89,7 +89,6 @@ var _ = Describe("GetSnapshot", func() {
 func createTestMetadata(ctx context.Context, metas *model.MetadataStore, appID string) {
 	err := metas.Create(ctx, &model.Metadata{
 		AppID:        appID,
-		Enable:       true,
 		MountPath:    "/data/bscp",
 		WorkloadName: "test-workload",
 		Operator:     "tester",

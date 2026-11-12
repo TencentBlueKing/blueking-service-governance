@@ -112,6 +112,12 @@ var _ = Describe("Status.ActionPatch", func() {
 			Expect(err).To(MatchError(batchrelease.ErrActionNotAllowed))
 		},
 		Entry("continue when not paused", scaling, batchrelease.ActionContinue),
+		Entry("continue again before Kourse handles the previous continue",
+			batchrelease.Status{
+				Phase: "Running", Paused: "false", CurrentStepIndex: lo.ToPtr(int64(0)),
+				CurrentStepPhase: "PausedPermanently",
+			},
+			batchrelease.ActionContinue),
 		Entry("pause when already paused", pausedAtFirst, batchrelease.ActionPause),
 		Entry("pause when frozen manually", frozenAtSecond, batchrelease.ActionPause),
 		Entry("go back from the first batch", pausedAtFirst, batchrelease.ActionBackward),

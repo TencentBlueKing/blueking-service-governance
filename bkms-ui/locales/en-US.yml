@@ -223,6 +223,7 @@ tag不能为空: Tag cannot be empty
 删除后，将不可恢复，请谨慎操作！: Once deleted, it cannot be restored. Please proceed with caution!
 实例列表: list
 观测数据: observability
+在新标签页打开: Open in a new tab
 操作记录: record
 操作时间: time
 操作人: operator
@@ -1163,6 +1164,9 @@ Pod 中的管理脚本将在重新部署后移除: Management scripts in the Pod
   the image repository of the current space
 查看解决方案: View solutions
 "{0} Limits 不能小于 Requests": "{0} Limits cannot be less than Requests"
+内存单位: Memory unit
+请输入不小于 0.1 核且最多一位小数的数字: Enter at least 0.1 cores with up to one decimal place
+请输入不小于 256Mi 的数字: Enter a value of at least 256Mi
 格式化: Format
 框架配置文件: Framework Configuration File
 配置文件路径: Configuration File Path
@@ -1443,6 +1447,8 @@ Agones 应用不支持该功能: Agones Application does not support this featur
 镜像同步成功: Image sync successful
 镜像仓库为空或不存在: Image repository is empty or does not exist
 实例当前未处于运行状态，无法登录: The instance is not currently running and cannot be logged into
+当前部署未配置 WeTerm 环境，暂不支持 WeTerm 登录: WeTerm environment is not configured for this deployment, WeTerm login is not supported
+正在唤起 WeTerm 客户端，如未唤起请先安装 WeTerm 客户端: Opening the WeTerm client. If it does not open, install the WeTerm client first
 实例尚未创建成功或宿主机异常，暂无法获取日志: The instance has not been created successfully or the host is abnormal. Unable to retrieve logs temporarily
 未获取到北极星信息，无法调整权重: No Polaris information found, unable to adjust weight
 生产类型环境仅支持部署已晋级的 Tag: Production-type environments only support deploying promoted Tags
@@ -1517,6 +1523,16 @@ CLB 区域: CLB Region
 新增应用变量: Add App Variable
 版本对比: Version Compare
 内容无差异: No Content Differences
+保存并创建新版本: Save and Create New Version
+当前版本 {0}: Current Version {0}
+当前内容（尚无版本）: Current Content (No Saved Version)
+即将保存 {0}: Save as {0}
+请先核对与当前版本的差异。确认后将生成 {version}，并记入版本历史。: Review the changes from the current version. Confirm to create {version} and add it to version history.
+与当前已保存内容一致。确认后仍会生成 {version}。: The content matches the current version. Confirm to create {version} anyway.
+还没有配置内容: No Configuration Content Yet
+确认后将生成空的 {version}，可供之后对比和回滚。: Confirm to create an empty {version} for future comparisons and rollbacks.
+'{0} 版本描述': '{0} Version Description'
+请输入版本描述: Enter a version description
 无差异: No Differences
 配置差异: Configuration Differences
 仅展示发生变化的配置项: Only changed configuration items are shown
@@ -2275,7 +2291,12 @@ HostPort 目前仅对绑定联邦集群的环境生效: HostPort currently only 
 "最多选择 50 个实例": "Select up to 50 instances"
 "一次最多选择 50 个实例，请减少勾选数量，或清空选择后查看全部实例": "Select up to 50 instances. Select fewer instances, or clear the selection to view all instances"
 "选择实例后展示全部已选实例": "Show all selected instances after selecting instances"
-"所有图表按平均 CPU 使用量选取实例": "All charts use instances ranked by average CPU usage"
-"请输入 0-50 的数字": "Enter 0–50"
+"排序": "Sort"
+"升序": "Ascending"
+"降序": "Descending"
+"CPU 用量": "CPU Used"
+"内存用量": "Memory Used"
+"所有图表按「{0}」的 {1} 汇聚结果在所选时段内的均值{2}，取前 {3} 个实例": "All charts show the first {3} instances by average {1} of {0} over the selected time range ({2})."
+"排名值为所选时段内 {0} 汇聚结果的均值": "Ranked values are the average of the {0} aggregation over the selected time range."
 "汇聚方法": "Aggregation method"
 "COUNT 下使用率指标的分子、分母分别计数，结果恒为 100%": "COUNT counts the numerator and denominator of usage ratios separately, so the result is always 100%"
