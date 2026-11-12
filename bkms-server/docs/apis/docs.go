@@ -15091,6 +15091,50 @@ const docTemplate = `{
                 }
             }
         },
+        "/envs/{envID}/polaris-operator": {
+            "get": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "description": "仅在平台允许空间自建接入点时提供",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "polaris-access-points"
+                ],
+                "summary": "获取环境的北极星组件状态",
+                "operationId": "GetEnvPolarisOperator",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "环境 ID",
+                        "name": "envID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.PolarisOperatorResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
         "/envs/{envID}/port-pools": {
             "get": {
                 "security": [
@@ -15278,6 +15322,41 @@ const docTemplate = `{
                 "responses": {
                     "200": {
                         "description": "OK"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
+        "/frontend-features": {
+            "get": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "description": "返回由部署配置决定的功能开关，前端据此决定页面入口是否展示",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "frontend-features"
+                ],
+                "summary": "获取前端功能开关",
+                "operationId": "GetFrontendFeatures",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.FrontendFeaturesResponse"
+                        }
                     },
                     "400": {
                         "description": "Bad Request",
@@ -19979,6 +20058,518 @@ const docTemplate = `{
                 }
             }
         },
+        "/workspaces/{workspaceID}/polaris-access-points": {
+            "get": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "description": "返回空间自建接入点；平台配置了北极星时追加平台托管接入点（id 为 platform）。不返回 Token 明文",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "polaris-access-points"
+                ],
+                "summary": "获取空间的北极星接入点列表",
+                "operationId": "ListPolarisAccessPoints",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.AccessPointListResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "description": "保存前服务端重新执行连通测试，失败或北极星开启了客户端鉴权时拒绝；Token 选填，加密存储。\n传入 clusterIDs 时同时把这些集群绑定到该接入点",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "polaris-access-points"
+                ],
+                "summary": "创建北极星接入点",
+                "operationId": "CreatePolarisAccessPoint",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "接入点",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/serializer.AccessPointCreateInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.AccessPointResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
+        "/workspaces/{workspaceID}/polaris-access-points/connectivity-test": {
+            "post": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "description": "依次检查网络、鉴权开关、Token，返回失败的阶段与北极星上的命名空间，整体 10 秒超时。\n传入已有接入点 ID 且 token 为空时使用已保存的 Token，并记录本次结果",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "polaris-access-points"
+                ],
+                "summary": "测试北极星接入点连通性",
+                "operationId": "TestPolarisAccessPointConnectivity",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "接入地址",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/serializer.ConnectivityTestInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.ConnectivityTestResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
+        "/workspaces/{workspaceID}/polaris-access-points/network-info": {
+            "get": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "description": "返回平台访问北极星的出口 IP，用户需要把它们加入自建北极星的白名单",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "polaris-access-points"
+                ],
+                "summary": "获取平台访问北极星的网络信息",
+                "operationId": "GetPolarisAccessPointNetworkInfo",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.NetworkInfoResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
+        "/workspaces/{workspaceID}/polaris-access-points/{accessPointID}": {
+            "delete": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "description": "接入点仍绑定集群，或仍有北极星配置固定使用它时拒绝删除",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "polaris-access-points"
+                ],
+                "summary": "删除北极星接入点",
+                "operationId": "DeletePolarisAccessPoint",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "接入点 ID",
+                        "name": "accessPointID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.EmptyResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "description": "字段缺省表示不修改；客户端地址或 Token 变化时重新执行连通测试，失败时拒绝保存。\n接入点被北极星配置使用时仍允许修改地址，集群组件会显示为需要更新。\n传入 clusterIDs 时全量替换该接入点绑定的集群",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "polaris-access-points"
+                ],
+                "summary": "更新北极星接入点",
+                "operationId": "UpdatePolarisAccessPoint",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "接入点 ID",
+                        "name": "accessPointID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "待修改的字段",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/serializer.AccessPointUpdateInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.AccessPointResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
+        "/workspaces/{workspaceID}/polaris-access-points/{accessPointID}/namespaces": {
+            "get": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "description": "空间自建接入点实时读取北极星并过滤系统命名空间 Polaris；平台托管接入点返回固定列表",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "polaris-access-points"
+                ],
+                "summary": "获取北极星接入点的命名空间",
+                "operationId": "ListPolarisAccessPointNamespaces",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "接入点 ID",
+                        "name": "accessPointID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.NamespacesResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
+        "/workspaces/{workspaceID}/polaris-access-points/{accessPointID}/operator-installs": {
+            "post": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "description": "集群必须已绑定该接入点；每个集群创建一个异步任务，同一集群同时只允许一个运行中的任务。\n仅在平台允许空间自建接入点时提供",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "polaris-access-points"
+                ],
+                "summary": "安装或更新北极星组件",
+                "operationId": "InstallPolarisOperators",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "接入点 ID",
+                        "name": "accessPointID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "目标集群与 chart 版本",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/serializer.OperatorInstallInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.OperatorTaskListResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
+        "/workspaces/{workspaceID}/polaris-clusters": {
+            "get": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "description": "候选集群为空间 BCS 项目下的全部非共享集群，含没有环境的集群；先列出有环境的集群，同类按集群 ID 排序。\n仅在平台允许空间自建接入点时提供",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "polaris-access-points"
+                ],
+                "summary": "获取北极星集群绑定视图",
+                "operationId": "ListPolarisClusters",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.PolarisClusterListResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
+        "/workspaces/{workspaceID}/polaris-operators": {
+            "get": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "description": "返回候选集群的组件状态、与接入点不一致的参数、最近的安装任务，以及可选的 chart 版本。\n仅在平台允许空间自建接入点时提供",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "polaris-access-points"
+                ],
+                "summary": "获取北极星组件状态视图",
+                "operationId": "ListPolarisOperators",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.PolarisOperatorListResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
         "/workspaces/{workspaceID}/release-strategies": {
             "get": {
                 "security": [
@@ -20866,6 +21457,58 @@ const docTemplate = `{
         }
     },
     "definitions": {
+        "accesspoint.ConnectivityStage": {
+            "type": "string",
+            "enum": [
+                "network",
+                "clientAuth",
+                "token"
+            ],
+            "x-enum-varnames": [
+                "ConnectivityStageNetwork",
+                "ConnectivityStageClientAuth",
+                "ConnectivityStageToken"
+            ]
+        },
+        "accesspoint.Kind": {
+            "type": "string",
+            "enum": [
+                "platform",
+                "workspace"
+            ],
+            "x-enum-varnames": [
+                "KindPlatform",
+                "KindWorkspace"
+            ]
+        },
+        "accesspoint.NamespaceSource": {
+            "type": "string",
+            "enum": [
+                "fixed",
+                "live"
+            ],
+            "x-enum-varnames": [
+                "NamespaceSourceFixed",
+                "NamespaceSourceLive"
+            ]
+        },
+        "accesspoint.OperatorStatus": {
+            "type": "string",
+            "enum": [
+                "ready",
+                "installing",
+                "failed",
+                "outdated",
+                "not_installed"
+            ],
+            "x-enum-varnames": [
+                "OperatorStatusReady",
+                "OperatorStatusInstalling",
+                "OperatorStatusFailed",
+                "OperatorStatusOutdated",
+                "OperatorStatusNotInstalled"
+            ]
+        },
         "admin.RoleCode": {
             "type": "string",
             "enum": [
@@ -22723,6 +23366,19 @@ const docTemplate = `{
         "github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_workload_networking_serializer.EmptyOutput": {
             "type": "object"
         },
+        "installtask.Status": {
+            "type": "string",
+            "enum": [
+                "running",
+                "succeeded",
+                "failed"
+            ],
+            "x-enum-varnames": [
+                "StatusRunning",
+                "StatusSucceeded",
+                "StatusFailed"
+            ]
+        },
         "runtimemod.PublicModView": {
             "type": "object",
             "properties": {
@@ -22785,6 +23441,160 @@ const docTemplate = `{
                 "ReasonInvalidStack",
                 "ReasonIncompleteLanguage"
             ]
+        },
+        "serializer.AccessPointCreateInput": {
+            "type": "object",
+            "required": [
+                "clientHosts",
+                "consoleURL",
+                "name"
+            ],
+            "properties": {
+                "clientHosts": {
+                    "description": "客户端地址，IP 或域名，1 ~ 10 个；OpenAPI 端口固定为 8090，SDK 端口固定为 8091",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "clusterIDs": {
+                    "description": "绑定到该接入点的集群 ID；缺省表示不绑定集群",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "consoleURL": {
+                    "description": "北极星控制台地址，IP:Port 或域名，缺省协议时补 http://",
+                    "type": "string"
+                },
+                "name": {
+                    "description": "接入点名称，空间内唯一",
+                    "type": "string"
+                },
+                "token": {
+                    "description": "北极星鉴权 Token，选填",
+                    "type": "string"
+                }
+            }
+        },
+        "serializer.AccessPointListResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/serializer.AccessPointOutput"
+                    }
+                }
+            }
+        },
+        "serializer.AccessPointOutput": {
+            "type": "object",
+            "properties": {
+                "boundClusterCount": {
+                    "description": "绑定的集群数量",
+                    "type": "integer"
+                },
+                "capabilities": {
+                    "description": "接入点能力",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/serializer.CapabilitiesOutput"
+                        }
+                    ]
+                },
+                "clientHosts": {
+                    "description": "客户端地址，平台托管为空",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "consoleURL": {
+                    "description": "北极星控制台地址，平台托管为空",
+                    "type": "string"
+                },
+                "hasToken": {
+                    "description": "是否填写了 Token",
+                    "type": "boolean"
+                },
+                "id": {
+                    "description": "接入点 ID，平台托管接入点为 platform",
+                    "type": "string"
+                },
+                "kind": {
+                    "description": "接入点类型：platform 平台托管 / workspace 空间自建",
+                    "enum": [
+                        "platform",
+                        "workspace"
+                    ],
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/accesspoint.Kind"
+                        }
+                    ]
+                },
+                "lastConnectivity": {
+                    "description": "最近一次连通测试结果，从未测试或平台托管时为 null",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/serializer.ConnectivityResultOutput"
+                        }
+                    ]
+                },
+                "name": {
+                    "description": "接入点名称",
+                    "type": "string"
+                },
+                "updatedAt": {
+                    "description": "最近修改时间，平台托管为 null",
+                    "type": "string"
+                },
+                "updater": {
+                    "description": "最近修改人，平台托管为空",
+                    "type": "string"
+                }
+            }
+        },
+        "serializer.AccessPointResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/serializer.AccessPointOutput"
+                }
+            }
+        },
+        "serializer.AccessPointUpdateInput": {
+            "type": "object",
+            "properties": {
+                "clientHosts": {
+                    "description": "客户端地址",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "clusterIDs": {
+                    "description": "绑定到该接入点的集群 ID，全量替换；显式传空数组表示解除全部绑定",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "consoleURL": {
+                    "description": "北极星控制台地址",
+                    "type": "string"
+                },
+                "name": {
+                    "description": "接入点名称",
+                    "type": "string"
+                },
+                "token": {
+                    "description": "北极星鉴权 Token；显式传空字符串表示清除",
+                    "type": "string"
+                }
+            }
         },
         "serializer.AddWorkspaceUserInput": {
             "type": "object",
@@ -25239,6 +26049,39 @@ const docTemplate = `{
                 }
             }
         },
+        "serializer.CapabilitiesOutput": {
+            "type": "object",
+            "properties": {
+                "editable": {
+                    "description": "是否可编辑、删除",
+                    "type": "boolean"
+                },
+                "injectClientToken": {
+                    "description": "是否向 Pod 注入 {instanceKey}_polarisToken 环境变量",
+                    "type": "boolean"
+                },
+                "namespaceSource": {
+                    "description": "北极星配置可选命名空间的来源：fixed 固定列表 / live 实时读取北极星",
+                    "enum": [
+                        "fixed",
+                        "live"
+                    ],
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/accesspoint.NamespaceSource"
+                        }
+                    ]
+                },
+                "serviceTokenRequired": {
+                    "description": "引入已有北极星服务时是否需要服务 Token",
+                    "type": "boolean"
+                },
+                "weightFactor": {
+                    "description": "是否支持权重因子与动态权重",
+                    "type": "boolean"
+                }
+            }
+        },
         "serializer.CfgSwitchesOutput": {
             "type": "object",
             "properties": {
@@ -25722,6 +26565,121 @@ const docTemplate = `{
                 "level": {
                     "description": "冲突级别：none 无冲突，warn 软冲突（可保存），error 硬冲突（禁止保存）",
                     "type": "string"
+                }
+            }
+        },
+        "serializer.ConnectivityResultOutput": {
+            "type": "object",
+            "properties": {
+                "checkedAt": {
+                    "description": "测试时间",
+                    "type": "string"
+                },
+                "clientAuth": {
+                    "description": "是否开启客户端鉴权",
+                    "type": "boolean"
+                },
+                "consoleAuth": {
+                    "description": "是否开启控制台鉴权",
+                    "type": "boolean"
+                },
+                "message": {
+                    "description": "失败原因或提示信息",
+                    "type": "string"
+                },
+                "ok": {
+                    "description": "是否通过",
+                    "type": "boolean"
+                },
+                "stage": {
+                    "description": "失败的阶段，通过时为空：network 网络不通 / clientAuth 开启了客户端鉴权 / token Token 无效",
+                    "enum": [
+                        "network",
+                        "clientAuth",
+                        "token"
+                    ],
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/accesspoint.ConnectivityStage"
+                        }
+                    ]
+                }
+            }
+        },
+        "serializer.ConnectivityTestInput": {
+            "type": "object",
+            "required": [
+                "clientHosts",
+                "consoleURL"
+            ],
+            "properties": {
+                "clientHosts": {
+                    "description": "客户端地址",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "consoleURL": {
+                    "description": "北极星控制台地址",
+                    "type": "string"
+                },
+                "id": {
+                    "description": "已有接入点的 ID，选填；有 ID 且 token 为空时使用已保存的 Token，并记录测试结果",
+                    "type": "string"
+                },
+                "token": {
+                    "description": "北极星鉴权 Token，选填",
+                    "type": "string"
+                }
+            }
+        },
+        "serializer.ConnectivityTestOutput": {
+            "type": "object",
+            "properties": {
+                "clientAuth": {
+                    "description": "是否开启客户端鉴权",
+                    "type": "boolean"
+                },
+                "consoleAuth": {
+                    "description": "是否开启控制台鉴权",
+                    "type": "boolean"
+                },
+                "message": {
+                    "description": "失败原因或提示信息",
+                    "type": "string"
+                },
+                "namespaces": {
+                    "description": "北极星上的命名空间（已过滤系统命名空间 Polaris），网络不通时为空",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "ok": {
+                    "description": "是否通过",
+                    "type": "boolean"
+                },
+                "stage": {
+                    "description": "失败的阶段，通过时为空：network 网络不通 / clientAuth 开启了客户端鉴权 / token Token 无效",
+                    "enum": [
+                        "network",
+                        "clientAuth",
+                        "token"
+                    ],
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/accesspoint.ConnectivityStage"
+                        }
+                    ]
+                }
+            }
+        },
+        "serializer.ConnectivityTestResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/serializer.ConnectivityTestOutput"
                 }
             }
         },
@@ -27474,6 +28432,9 @@ const docTemplate = `{
                 }
             }
         },
+        "serializer.EmptyResponse": {
+            "type": "object"
+        },
         "serializer.EnvAppDeployStatusOutput": {
             "type": "object",
             "properties": {
@@ -28312,6 +29273,23 @@ const docTemplate = `{
                     "items": {
                         "type": "string"
                     }
+                }
+            }
+        },
+        "serializer.FrontendFeaturesOutput": {
+            "type": "object",
+            "properties": {
+                "polarisWorkspaceAccessPoint": {
+                    "description": "是否允许空间自建北极星接入点并按集群绑定。为 false 时前端隐藏接入点管理、集群绑定、组件安装等入口，\n所有集群都使用平台托管接入点",
+                    "type": "boolean"
+                }
+            }
+        },
+        "serializer.FrontendFeaturesResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/serializer.FrontendFeaturesOutput"
                 }
             }
         },
@@ -30999,6 +31977,37 @@ const docTemplate = `{
                 }
             }
         },
+        "serializer.NamespacesResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "serializer.NetworkInfoOutput": {
+            "type": "object",
+            "properties": {
+                "egressIPs": {
+                    "description": "平台访问北极星的出口 IP，需加入北极星白名单",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "serializer.NetworkInfoResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/serializer.NetworkInfoOutput"
+                }
+            }
+        },
         "serializer.NetworkParamsOutput": {
             "type": "object",
             "properties": {
@@ -31180,6 +32189,84 @@ const docTemplate = `{
                 "username": {
                     "description": "操作人用户名",
                     "type": "string"
+                }
+            }
+        },
+        "serializer.OperatorInstallInput": {
+            "type": "object",
+            "required": [
+                "chartVersion",
+                "clusterIDs"
+            ],
+            "properties": {
+                "chartVersion": {
+                    "description": "chart 版本",
+                    "type": "string"
+                },
+                "clusterIDs": {
+                    "description": "目标集群 ID，必须已绑定该接入点",
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "serializer.OperatorTaskListResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/serializer.OperatorTaskOutput"
+                    }
+                }
+            }
+        },
+        "serializer.OperatorTaskOutput": {
+            "type": "object",
+            "properties": {
+                "chartVersion": {
+                    "description": "chart 版本",
+                    "type": "string"
+                },
+                "clusterID": {
+                    "description": "目标集群 ID",
+                    "type": "string"
+                },
+                "finishedAt": {
+                    "description": "结束时间，运行中为 null",
+                    "type": "string"
+                },
+                "id": {
+                    "description": "任务 ID",
+                    "type": "string"
+                },
+                "message": {
+                    "description": "失败原因等补充信息",
+                    "type": "string"
+                },
+                "operator": {
+                    "description": "发起人",
+                    "type": "string"
+                },
+                "startedAt": {
+                    "description": "开始时间",
+                    "type": "string"
+                },
+                "status": {
+                    "description": "任务状态",
+                    "enum": [
+                        "running",
+                        "succeeded",
+                        "failed"
+                    ],
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/installtask.Status"
+                        }
+                    ]
                 }
             }
         },
@@ -31845,6 +32932,70 @@ const docTemplate = `{
                 }
             }
         },
+        "serializer.PolarisClusterEnvOutput": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "description": "环境 ID",
+                    "type": "string"
+                },
+                "isFeature": {
+                    "description": "是否为特性环境",
+                    "type": "boolean"
+                },
+                "name": {
+                    "description": "环境名称",
+                    "type": "string"
+                }
+            }
+        },
+        "serializer.PolarisClusterListResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/serializer.PolarisClusterOutput"
+                    }
+                }
+            }
+        },
+        "serializer.PolarisClusterOutput": {
+            "type": "object",
+            "properties": {
+                "accessPointID": {
+                    "description": "绑定的接入点 ID，未绑定为空",
+                    "type": "string"
+                },
+                "accessPointName": {
+                    "description": "绑定的接入点名称，未绑定为空",
+                    "type": "string"
+                },
+                "clusterID": {
+                    "description": "集群 ID",
+                    "type": "string"
+                },
+                "clusterName": {
+                    "description": "集群名称",
+                    "type": "string"
+                },
+                "clusterStatus": {
+                    "description": "集群状态",
+                    "type": "string"
+                },
+                "envs": {
+                    "description": "集群上的空间环境（含特性环境）",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/serializer.PolarisClusterEnvOutput"
+                    }
+                },
+                "inUse": {
+                    "description": "集群上是否有环境被北极星配置使用；为 true 时不能解绑或换绑",
+                    "type": "boolean"
+                }
+            }
+        },
         "serializer.PolarisConfigOutputObj": {
             "type": "object",
             "properties": {
@@ -32055,6 +33206,100 @@ const docTemplate = `{
                 "name": {
                     "description": "配置名称",
                     "type": "string"
+                }
+            }
+        },
+        "serializer.PolarisOperatorListOutput": {
+            "type": "object",
+            "properties": {
+                "chartVersions": {
+                    "description": "可选的 chart 版本，从新到旧",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "operators": {
+                    "description": "候选集群的组件状态",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/serializer.PolarisOperatorOutput"
+                    }
+                }
+            }
+        },
+        "serializer.PolarisOperatorListResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/serializer.PolarisOperatorListOutput"
+                }
+            }
+        },
+        "serializer.PolarisOperatorOutput": {
+            "type": "object",
+            "properties": {
+                "accessPointID": {
+                    "description": "集群绑定的接入点 ID，未绑定为空",
+                    "type": "string"
+                },
+                "chartVersion": {
+                    "description": "已安装的 chart 版本，未安装为空",
+                    "type": "string"
+                },
+                "clusterID": {
+                    "description": "集群 ID",
+                    "type": "string"
+                },
+                "driftFields": {
+                    "description": "与接入点期望值不一致的 values 键，仅 outdated 时非空",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "installed": {
+                    "description": "是否已安装",
+                    "type": "boolean"
+                },
+                "lastTask": {
+                    "description": "最近一次安装任务，没有任务时为 null",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/serializer.OperatorTaskOutput"
+                        }
+                    ]
+                },
+                "namespace": {
+                    "description": "helm release 所在命名空间，未安装为空",
+                    "type": "string"
+                },
+                "releaseName": {
+                    "description": "helm release 名称，未安装为空",
+                    "type": "string"
+                },
+                "status": {
+                    "description": "组件状态",
+                    "enum": [
+                        "ready",
+                        "installing",
+                        "failed",
+                        "outdated",
+                        "not_installed"
+                    ],
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/accesspoint.OperatorStatus"
+                        }
+                    ]
+                }
+            }
+        },
+        "serializer.PolarisOperatorResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/serializer.PolarisOperatorOutput"
                 }
             }
         },

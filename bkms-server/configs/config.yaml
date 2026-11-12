@@ -135,6 +135,14 @@ cmdb:
   baseUrl: https://cmdb.example.com
   appID: <masked>
   appKey: <masked>
+# 北极星配置
+polaris:
+  # 平台托管北极星的 SDK 地址（IP:Port，逗号分隔），与 joinPoint 二选一；都不配置时不提供平台托管接入点
+  address: ""
+  # 平台托管北极星的 SDK 接入点，仅私有 SDK 支持
+  joinPoint: ""
+  # 是否允许空间登记自建北极星接入点并按集群绑定，缺省为 false
+  allowWorkspaceAccessPoints: false
 # ------------------------------ 基础设施依赖 ------------------------------
 # 数据库相关配置
 mongo:
@@ -231,6 +239,10 @@ logging:
 encrypt:
   # 加密密钥（base64 编码）仅用于测试
   secret: masked
+# 网络配置
+network:
+  # 平台访问外部系统（如自建北极星）时的出口 IP，展示给用户在对方配置白名单
+  egressIPs: []
 # ------------------------------ 业务功能配置 ------------------------------
 # 集群插件（Addon）配置
 clusterAddons:

@@ -61,6 +61,8 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/hostport"
 	hostporthandler "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/hostport/handler"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris"
+	polarisaccesspoint "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris/accesspoint"
+	polarisaccesspointhandler "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris/accesspoint/handler"
 	polarishandler "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris/handler"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/bscpcfg"
 	bscpcfghandler "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/bscpcfg/handler"
@@ -83,6 +85,8 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/tenant"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/misc/audit"
 	audithandler "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/misc/audit/handler"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/misc/frontendfeature"
+	frontendfeaturehandler "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/misc/frontendfeature/handler"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/apm"
 	bkmalert "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/bkmonitor/alert"
 	bkmalerthandler "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/bkmonitor/alert/handler"
@@ -227,6 +231,7 @@ func RegisterRouter(ctx context.Context, cfg config.Config, serverRole string) (
 	topology.Register(v1, topologyhandler.New(storereg.G()))
 	env.Register(v1, envhandler.New(storereg.G()))
 	audit.Register(v1, audithandler.New(storereg.G()))
+	frontendfeature.Register(v1, frontendfeaturehandler.New())
 	bkintegrations.Register(v1, bkintegrationshandler.New(storereg.G()))
 	bkmusergroup.Register(v1, bkmusergrouphandler.New(storereg.G(), bkmusergroup.New()))
 	bkmalert.Register(v1, bkmalerthandler.New(storereg.G()))
@@ -239,6 +244,11 @@ func RegisterRouter(ctx context.Context, cfg config.Config, serverRole string) (
 	)
 	clusteraddon.Register(v1, clusteraddonhandler.New(storereg.G()))
 	polaris.Register(v1, polarishandler.New(storereg.G()))
+	polarisaccesspoint.Register(
+		v1,
+		polarisaccesspointhandler.New(storereg.G()),
+		cfg.Polaris.AllowWorkspaceAccessPoints,
+	)
 	hostport.Register(v1, hostporthandler.New(storereg.G()))
 	depservice.Register(v1, depservicehandler.New(storereg.G()))
 	gpa.Register(v1, gpahandler.New(storereg.G()))
