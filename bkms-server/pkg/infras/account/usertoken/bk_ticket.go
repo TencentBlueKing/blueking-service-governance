@@ -16,39 +16,20 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
-// Package usertoken contains the token client which request the token service.
 package usertoken
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/url"
 
 	"github.com/mitchellh/mapstructure"
 	"github.com/samber/lo"
-	"github.com/spf13/cast"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/httpcli"
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 )
-
-// TokenClient is the interface for managing user access tokens.
-type TokenClient interface {
-	// GetToken gets an access token of the given user.
-	GetToken(
-		ctx context.Context, username string, credentials map[string]string, envName string, needNewToken bool,
-	) (*AccessToken, error)
-
-	// RefreshToken refreshes an access token by using a refresh token.
-	RefreshToken(
-		ctx context.Context, refreshToken, envName string, needNewToken bool,
-	) (*AccessToken, error)
-
-	// GetUserInfo get the user information by the access token.
-	GetUserInfo(ctx context.Context, token string) (string, error)
-}
 
 // NewAPIGatewayTokenClient Creates a new APIGatewayTokenClient instance.
 //
@@ -62,7 +43,8 @@ func NewAPIGatewayTokenClient(baseURL, bkAppCode, bkAppSecret string) *APIGatewa
 	}
 }
 
-// APIGatewayTokenClient is the client for managing user tokens.
+// APIGatewayTokenClient is the client for managing user tokens by the token service behind the
+// API gateway, it exchanges the bk_ticket credential and username for an access token.
 type APIGatewayTokenClient struct {
 	// BaseURL is the base URL of the blueking API gateway.
 	BaseURL string
@@ -70,16 +52,6 @@ type APIGatewayTokenClient struct {
 	BkAppCode   string
 	BkAppSecret string
 }
-
-// AccessToken contains the access token for a user.
-type AccessToken struct {
-	AccessToken  string `json:"access_token"`
-	RefreshToken string `json:"refresh_token"`
-	ExpiresIn    int    `json:"expires_in"`
-}
-
-// UserAccessToken is the compatibility alias for the former gateway package type name.
-type UserAccessToken = AccessToken
 
 // GetToken gets an access token of the given user.
 //
@@ -168,21 +140,6 @@ func (b *APIGatewayTokenClient) RefreshToken(
 	return parseUserAccessToken(respObj)
 }
 
-func parseUserAccessToken(respObj ClientResp) (*AccessToken, error) {
-	var data TokenResultData
-	if err := mapstructure.Decode(respObj.Data, &data); err != nil {
-		return nil, fmt.Errorf("parsing token data error")
-	}
-	if data.AccessToken == "" {
-		return nil, fmt.Errorf("access token not found")
-	}
-	return &AccessToken{
-		AccessToken:  data.AccessToken,
-		RefreshToken: data.RefreshToken,
-		ExpiresIn:    data.ExpiresIn,
-	}, nil
-}
-
 // Convert a bool value to "1" or "0" string, which is required by the token API.
 func boolToBoolIntString(v bool) string {
 	if v {
@@ -232,44 +189,6 @@ func (b *APIGatewayTokenClient) GetUserInfo(ctx context.Context, token string) (
 		return "", fmt.Errorf("username not provided")
 	}
 	return username, nil
-}
-
-// toSuccessRespObj turn the response body into a structured object, return error if the
-// given content is malformed or the "code" in the content is not "0"("0" mean success).
-//
-// INFO: The response use 200 status code even if it's an error, so we won't check the status code.
-func toSuccessRespObj(body []byte) (ClientResp, error) {
-	// Try to parse the response and check the "code"
-	respObj := ClientResp{}
-	if err := json.Unmarshal(body, &respObj); err != nil {
-		return respObj, fmt.Errorf("parsing response result: %w", err)
-	}
-	// The code might be int(1308406) or string("0"), cast it to int anyway.
-	code := cast.ToInt(respObj.Code)
-	if code != 0 {
-		return respObj, fmt.Errorf("api error: %d-%s", code, respObj.Message)
-	}
-	return respObj, nil
-}
-
-// ClientResp is the common structure of API responses.
-type ClientResp struct {
-	Message string `json:"message"`
-	// Code might be int or string
-	Code     any    `json:"code"`
-	CodeName string `json:"code_name"`
-	Result   bool   `json:"result"`
-	Data     any    `json:"data"`
-}
-
-// TokenResultData holds the data of the getting token response.
-type TokenResultData struct {
-	AccessToken  string `mapstructure:"access_token"`
-	RefreshToken string `mapstructure:"refresh_token"`
-	Scope        string `mapstructure:"scope"`
-	ExpiresIn    int    `mapstructure:"expires_in"`
-	UserID       string `mapstructure:"user_id"`
-	UserType     string `mapstructure:"user_type"`
 }
 
 // UserInfoResultData holds the data of the getting user info response.

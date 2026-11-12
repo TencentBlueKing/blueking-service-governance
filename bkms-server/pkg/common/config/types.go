@@ -44,6 +44,9 @@ type AccountConfig struct {
 	AuthEnvName string
 	// BackendType 是用户认证使用的后端类型，比如 bk_ticket 或 bk_token，默认值为 "bk_token"
 	BackendType string `validate:"omitempty,oneof=bk_ticket bk_token"`
+	// SSMBaseURL 是蓝鲸 SSM 服务的基础 URL，只能直连、不能经过网关。BackendType 为 bk_token 时，
+	// 配置后 usertoken 令牌相关功能改用 SSM 签发和校验，未配置时仍使用 AuthBaseURL 指向的网关 token 服务
+	SSMBaseURL string `validate:"omitempty,url"`
 }
 
 // BkPlatUrlsConfig 蓝鲸平台地址配置

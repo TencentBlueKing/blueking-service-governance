@@ -202,6 +202,9 @@ svcConf:
     # authEnvName: prod
     # BackendType 是用户认证使用的后端类型，比如 bk_ticket 或 bk_token，默认值为 "bk_token"
     # backendType: bk_token
+    # SSMBaseURL 是蓝鲸 SSM 服务地址（只能直连，不能走网关）。backendType 为 bk_token 时，
+    # 配置后 usertoken 令牌相关功能改用 SSM ；未配置时仍使用 authBaseURL
+    # ssmBaseURL: http://bkssm.example.com
   # 蓝鲸平台地址配置
   bkPlatUrls:
     # 蓝鲸网关 API 地址模板
