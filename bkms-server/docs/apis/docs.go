@@ -19807,6 +19807,326 @@ const docTemplate = `{
                 }
             }
         },
+        "/workspaces/{workspaceID}/framework-templates": {
+            "get": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "description": "返回平台内置模板与空间自定义模板，每个框架、语言先列内置模板；不返回模板内容",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "framework-templates"
+                ],
+                "summary": "查询工作空间框架配置模板列表",
+                "operationId": "ListWorkspaceFrameworkTemplates",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "框架：trpc、taf",
+                        "name": "framework",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "语言：go、cpp",
+                        "name": "language",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.ListTemplatesOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "framework-templates"
+                ],
+                "summary": "新建工作空间框架配置模板",
+                "operationId": "CreateWorkspaceFrameworkTemplate",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "框架配置模板",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/serializer.CreateTemplateInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.TemplateOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
+        "/workspaces/{workspaceID}/framework-templates/{templateID}": {
+            "get": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "framework-templates"
+                ],
+                "summary": "查询工作空间框架配置模板详情",
+                "operationId": "GetWorkspaceFrameworkTemplate",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "模板 ID，内置模板为 builtin-{framework}-{language}",
+                        "name": "templateID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.TemplateOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "description": "框架与语言不可修改；平台内置模板只读",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "framework-templates"
+                ],
+                "summary": "编辑工作空间框架配置模板",
+                "operationId": "UpdateWorkspaceFrameworkTemplate",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "模板 ID",
+                        "name": "templateID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "框架配置模板",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/serializer.UpdateTemplateInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.TemplateOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "description": "删除默认模板后，该框架、语言回落到平台内置模板；平台内置模板不能删除",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "framework-templates"
+                ],
+                "summary": "删除工作空间框架配置模板",
+                "operationId": "DeleteWorkspaceFrameworkTemplate",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "模板 ID",
+                        "name": "templateID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_workload_appmodelcore_frameworktmpl_serializer.EmptyOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
+        "/workspaces/{workspaceID}/framework-templates/{templateID}/default": {
+            "put": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "description": "创建应用时默认使用该模板；对平台内置模板调用表示恢复使用平台默认模板",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "framework-templates"
+                ],
+                "summary": "设为默认框架配置模板",
+                "operationId": "SetWorkspaceFrameworkTemplateDefault",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "模板 ID，内置模板为 builtin-{framework}-{language}",
+                        "name": "templateID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.TemplateOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
         "/workspaces/{workspaceID}/info": {
             "put": {
                 "security": [
@@ -22712,6 +23032,9 @@ const docTemplate = `{
             "type": "object"
         },
         "github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_workload_appmodelcore_appspec_serializer.EmptyOutput": {
+            "type": "object"
+        },
+        "github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_workload_appmodelcore_frameworktmpl_serializer.EmptyOutput": {
             "type": "object"
         },
         "github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_workload_envvars_serializer.EmptyOutput": {
@@ -26842,6 +27165,41 @@ const docTemplate = `{
                 }
             }
         },
+        "serializer.CreateTemplateInput": {
+            "type": "object",
+            "required": [
+                "content",
+                "fileName",
+                "framework",
+                "name"
+            ],
+            "properties": {
+                "content": {
+                    "description": "框架配置文件内容，最大 64KB",
+                    "type": "string"
+                },
+                "fileName": {
+                    "description": "框架配置文件名",
+                    "type": "string"
+                },
+                "framework": {
+                    "description": "框架：trpc、taf",
+                    "type": "string"
+                },
+                "isDefault": {
+                    "description": "是否设为创建应用时默认使用的模板",
+                    "type": "boolean"
+                },
+                "language": {
+                    "description": "语言：go、cpp。框架只支持一种语言时（如 TAF）可以不填",
+                    "type": "string"
+                },
+                "name": {
+                    "description": "模板名称，同一框架、同一语言下不能重复，不能为「平台默认」",
+                    "type": "string"
+                }
+            }
+        },
         "serializer.CreateWorkspaceComponentInput": {
             "type": "object",
             "required": [
@@ -30767,6 +31125,17 @@ const docTemplate = `{
                 }
             }
         },
+        "serializer.ListTemplatesOutput": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/serializer.TemplateOutputObj"
+                    }
+                }
+            }
+        },
         "serializer.ListTopologyNodeEventsOutput": {
             "type": "object",
             "properties": {
@@ -34544,6 +34913,67 @@ const docTemplate = `{
                 }
             }
         },
+        "serializer.TemplateOutput": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/serializer.TemplateOutputObj"
+                }
+            }
+        },
+        "serializer.TemplateOutputObj": {
+            "type": "object",
+            "properties": {
+                "builtin": {
+                    "description": "是否为平台内置模板，内置模板只读",
+                    "type": "boolean"
+                },
+                "content": {
+                    "description": "框架配置文件内容，列表接口不返回",
+                    "type": "string"
+                },
+                "createdAt": {
+                    "description": "创建时间，内置模板为空",
+                    "type": "string"
+                },
+                "creator": {
+                    "description": "创建人，内置模板为空",
+                    "type": "string"
+                },
+                "fileName": {
+                    "description": "框架配置文件名",
+                    "type": "string"
+                },
+                "framework": {
+                    "description": "框架",
+                    "type": "string"
+                },
+                "id": {
+                    "description": "模板 ID，内置模板为 builtin-{framework}-{language}",
+                    "type": "string"
+                },
+                "isDefault": {
+                    "description": "是否为所在框架、语言的默认模板",
+                    "type": "boolean"
+                },
+                "language": {
+                    "description": "语言",
+                    "type": "string"
+                },
+                "name": {
+                    "description": "模板名称",
+                    "type": "string"
+                },
+                "updatedAt": {
+                    "description": "更新时间，内置模板为空",
+                    "type": "string"
+                },
+                "updater": {
+                    "description": "最近修改人，内置模板为空",
+                    "type": "string"
+                }
+            }
+        },
         "serializer.ThresholdConfigInput": {
             "type": "object",
             "required": [
@@ -35647,6 +36077,32 @@ const docTemplate = `{
                             "$ref": "#/definitions/serializer.ScopedEnvVarOutputObj"
                         }
                     ]
+                }
+            }
+        },
+        "serializer.UpdateTemplateInput": {
+            "type": "object",
+            "required": [
+                "content",
+                "fileName",
+                "name"
+            ],
+            "properties": {
+                "content": {
+                    "description": "框架配置文件内容，最大 64KB",
+                    "type": "string"
+                },
+                "fileName": {
+                    "description": "框架配置文件名",
+                    "type": "string"
+                },
+                "isDefault": {
+                    "description": "是否设为创建应用时默认使用的模板；不传不修改，取消默认后回落到平台默认模板",
+                    "type": "boolean"
+                },
+                "name": {
+                    "description": "模板名称，同一框架、同一语言下不能重复，不能为「平台默认」",
+                    "type": "string"
                 }
             }
         },

@@ -1,0 +1,10 @@
+[
+  {
+    "dropIndexes": "workspace_framework_templates",
+    "index": [
+      "idx_workspaceID_framework_language_name",
+      "idx_workspaceID_framework_language_default",
+      "tenantID_1"
+    ]
+  }
+]
