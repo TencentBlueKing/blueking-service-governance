@@ -31,7 +31,8 @@ import (
 )
 
 // SpecCompatParams 旧 trpc-spec / taf-spec 接口的修改参数。
-// 已废弃：仅供旧接口兼容，旧接口下线后删除。
+//
+// Deprecated: bkmsApp 迁移兼容，仅供旧 trpc-spec / taf-spec 接口使用。
 type SpecCompatParams struct {
 	// Framework 接口要求的框架，与应用框架不一致时拒绝。
 	Framework string
@@ -49,13 +50,13 @@ type SpecCompatParams struct {
 	FilePath string
 }
 
-// UpdateSpecCompat 按新模型处理旧 spec 接口的修改：修改启动命令、参数、脚本，同步框架配置文件位置。
-// 不读写旧字段，旧类型应用与 bkmsApp 应用处理方式相同；不允许切换语言。
+// UpdateSpecCompat 处理旧 trpc-spec / taf-spec 接口的修改：修改启动命令、参数、脚本，同步框架配置文件位置。
+// 旧类型应用与 bkmsApp 应用处理方式相同，只读写新模型字段；不允许切换语言。
 // 返回修改前后的 AppModel，供调用方审计。
 //
 // 涉及集合：app_config_file_defs、app_models。
 //
-// Deprecated: 仅供旧接口兼容，旧接口下线后删除。
+// Deprecated: bkmsApp 迁移兼容，仅供旧 trpc-spec / taf-spec 接口使用。
 func (s *Service) UpdateSpecCompat(
 	ctx context.Context,
 	app *bkmsapp.Application,

@@ -132,8 +132,7 @@
 | `trpc-spec`、`taf-spec`、`trpc-deploys`、`taf-deploys`、`trpc-build-deploys`、`taf-build-deploys` | Swagger `@Deprecated`，说明替代接口 |
 | `POST /workspaces/:workspaceID/apps` 的 trpc / taf | Swagger 说明改用 `bkmsapps` |
 | `CreateAppInput.AppModelSpec`、`AppModelSpecInput.TrpcSpec` / `TafSpec`，详情的 `trpcSpec` / `tafSpec` | 字段注释标注废弃 |
-| `AppTypeTRPC` / `AppTypeTAF`、`Application.TrpcSpec`、`Workload.Type` / `TrpcConfig` / `TafConfig` | 注释标注"已废弃"。不用 Go `// Deprecated:`：兼容期代码仍大量引用，staticcheck 会报 SA1019 |
-| 兼容入口：`lifecycle.UpdateSpecCompat`、`serializer.ToBKMSAppCompat` / `ToSpecCompatParams` / `FrameworkSpecView` 及对应 handler | Go `// Deprecated:` 注释，旧 API 下线时一并删除 |
+| `AppTypeTRPC` / `AppTypeTAF`、`Application.TrpcSpec`、`Workload.Type` / `TrpcConfig` / `TafConfig`、旧 DTO 与兼容入口 | Go `// Deprecated: bkmsApp 迁移兼容，……`。业务代码新增引用会被 staticcheck（SA1019）拦截；现有引用逐行 `//nolint:staticcheck` 并说明原因；测试按该前缀在 `.golangci.yaml` 中豁免 |
 
 ---
 
@@ -149,10 +148,10 @@
 | appruntime BRIDGE-ONLY：`Inspect` / `Normalize` / `Report` 与 issue code、`ValidateCapabilityStack`、`incomplete_language`、`FrameworkFromLegacyType`、`Snapshot` 旧字段 | server | P1 | `rg -n BRIDGE-ONLY pkg` 无结果 |
 | `Application.TrpcSpec`、`DisplayLanguage` / `DisplayFramework` 的回退逻辑、`RuntimeSnapshot` | server | P1 | `rg -n TrpcSpec pkg/core/app/app.go` 无结果 |
 | `Workload.Type` / `TrpcConfig` / `TafConfig`、`appmodel/compat.go` | server | P1 | — |
-| `AppTypeTRPC` / `AppTypeTAF`、`IsAppModelType` 的旧值、`OfType` 与列表筛选的旧值展开 | server | P1、P2 | `rg -n 'AppTypeTRPC\|AppTypeTAF' pkg` 无结果 |
+| `appruntime.AppTypeTRPC` / `AppTypeTAF`、`IsAppModelType` 的旧值、`OfType` 与列表筛选的旧值展开、`.golangci.yaml` 中的 SA1019 豁免 | server | P1、P2 | `rg -n 'bkmsApp 迁移兼容' pkg cmd` 无结果 |
 | 集群组件 YAML 的 trpc / taf、`AddonAppTypesOf` 的框架匹配 | server | P1 | — |
 | `repair_trpc_taf_framework_defs`、`render/migrate` 中的 `tafConfig.fileContent` 处理 | server | P1 | — |
-| 旧路由及其 handler、serializer、Swagger；`CreateApp` 的 trpc / taf 分支；`appcfg.SyncFrameworkFileLocation` | server | P2 | 路由表无旧路径 |
+| 旧路由及其 handler（`core/app/handler/app_compat.go`、`deploy/handler/deploy_compat.go`、`build_auto_deploy.go` 中的 trpc / taf 接口）、`serializer/app_compat.go`、`lifecycle/spec_compat.go`、Swagger；`CreateApp` 的 trpc / taf 分支；`appcfg.SyncFrameworkFileLocation` | server | P2 | 路由表无旧路径 |
 | 详情的 `trpcSpec` / `tafSpec` | server | P2 | — |
 | AppSpec `devMode.workPath` / `mountPath` 持久化字段 | server、数据 | — | 渲染已不读取。字段仍作为接口与开发模式处理的内存载体（由能力参数填充），`appdefaults` 仍会写入；删除需同时改 AppSpec 结构、`appdefaults` 与库内数据 |
 | `dbfactory.TrpcApplication` / `TafApplication` 改为创建 `bkmsApp` | server 测试 | P1 | — |

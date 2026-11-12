@@ -87,7 +87,7 @@ func (h *Handler) newBuildService() (*build.Service, error) {
 //	@Failure		400		{object}	bkerrs.GinErrorOutput
 //	@Failure		404		{object}	bkerrs.GinErrorOutput
 //	@Failure		500		{object}	bkerrs.GinErrorOutput
-//	@Description	已废弃，请改用 POST /apps/{appID}/envs/{envName}/build-deploys
+//	@Description	已废弃：构建部署接口已统一为 build-deploys，请改用 POST /apps/{appID}/envs/{envName}/build-deploys
 //	@Deprecated
 //	@Router			/apps/{appID}/envs/{envName}/trpc-build-deploys [post]
 func (h *Handler) CreateTrpcBuildDeploy(c *gin.Context) {
@@ -110,7 +110,7 @@ func (h *Handler) CreateTrpcBuildDeploy(c *gin.Context) {
 //	@Failure		400		{object}	bkerrs.GinErrorOutput
 //	@Failure		404		{object}	bkerrs.GinErrorOutput
 //	@Failure		500		{object}	bkerrs.GinErrorOutput
-//	@Description	已废弃，请改用 POST /apps/{appID}/envs/{envName}/build-deploys
+//	@Description	已废弃：构建部署接口已统一为 build-deploys，请改用 POST /apps/{appID}/envs/{envName}/build-deploys
 //	@Deprecated
 //	@Router			/apps/{appID}/envs/{envName}/taf-build-deploys [post]
 func (h *Handler) CreateTafBuildDeploy(c *gin.Context) {

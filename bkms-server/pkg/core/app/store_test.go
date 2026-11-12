@@ -30,6 +30,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil/dbfactory"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime"
 )
 
 var _ = Describe("Application store", func() {
@@ -288,19 +289,19 @@ var _ = Describe("Application store", func() {
 				ID:          "id1-" + stringx.Random(6),
 				WorkspaceID: workspace1ID,
 				Name:        app1Name,
-				Type:        bkmsapp.AppTypeHelm,
+				Type:        appruntime.AppTypeHelm,
 			})).To(Succeed())
 			Expect(bkmsapp.CreateApp(ctx, db, &bkmsapp.Application{
 				ID:          "id2-" + stringx.Random(6),
 				WorkspaceID: workspace1ID,
 				Name:        app2Name,
-				Type:        bkmsapp.AppTypeTRPC,
+				Type:        appruntime.AppTypeTRPC,
 			})).To(Succeed())
 			Expect(bkmsapp.CreateApp(ctx, db, &bkmsapp.Application{
 				ID:          "id3-" + stringx.Random(6),
 				WorkspaceID: workspace2ID,
 				Name:        app3Name,
-				Type:        bkmsapp.AppTypeHelm,
+				Type:        appruntime.AppTypeHelm,
 			})).To(Succeed())
 		})
 
@@ -309,7 +310,7 @@ var _ = Describe("Application store", func() {
 				ID:          appID,
 				WorkspaceID: workspaceID,
 				Name:        appName,
-				Type:        bkmsapp.AppTypeTRPC,
+				Type:        appruntime.AppTypeTRPC,
 				Language:    "go",
 				Framework:   "trpc",
 				TrpcSpec:    &bkmsapp.TrpcSpec{Language: "go"},
@@ -318,7 +319,7 @@ var _ = Describe("Application store", func() {
 
 			got, err := apps.Get(ctx, bkmsapp.ByID(appID))
 			Expect(err).NotTo(HaveOccurred())
-			Expect(got.Type).To(Equal(bkmsapp.AppTypeTRPC))
+			Expect(got.Type).To(Equal(appruntime.AppTypeTRPC))
 			Expect(got.Language).To(Equal("go"))
 			Expect(got.Framework).To(Equal("trpc"))
 			Expect(got.TrpcSpec).NotTo(BeNil())
@@ -332,30 +333,30 @@ var _ = Describe("Application store", func() {
 				ID:          legacyID,
 				WorkspaceID: workspaceID,
 				Name:        "legacy-" + stringx.Random(6),
-				Type:        bkmsapp.AppTypeTRPC,
+				Type:        appruntime.AppTypeTRPC,
 			})).To(Succeed())
 			Expect(bkmsapp.CreateApp(ctx, db, &bkmsapp.Application{
 				ID:          modernID,
 				WorkspaceID: workspaceID,
 				Name:        "modern-" + stringx.Random(6),
-				Type:        bkmsapp.AppTypeBKMSApp,
+				Type:        appruntime.AppTypeBKMSApp,
 				Framework:   "trpc",
 				Language:    "go",
 			})).To(Succeed())
 
-			result, err := apps.List(ctx, bkmsapp.InWorkspace(workspaceID), bkmsapp.OfType(bkmsapp.AppTypeTRPC))
+			result, err := apps.List(ctx, bkmsapp.InWorkspace(workspaceID), bkmsapp.OfType(appruntime.AppTypeTRPC))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(lo.Map(result, func(a bkmsapp.Application, _ int) string { return a.ID })).
 				To(ConsistOf(legacyID, modernID))
 		})
 
 		It("should filter applications by multiple criteria", func() {
-			result, err := apps.List(ctx, bkmsapp.InWorkspace(workspace1ID), bkmsapp.OfType(bkmsapp.AppTypeHelm))
+			result, err := apps.List(ctx, bkmsapp.InWorkspace(workspace1ID), bkmsapp.OfType(appruntime.AppTypeHelm))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result).To(HaveLen(1))
 			Expect(result[0].WorkspaceID).To(Equal(workspace1ID))
 			Expect(result[0].Name).To(Equal(app1Name))
-			Expect(result[0].Type).To(Equal(bkmsapp.AppTypeHelm))
+			Expect(result[0].Type).To(Equal(appruntime.AppTypeHelm))
 		})
 
 		It("should count applications by workspace IDs", func() {

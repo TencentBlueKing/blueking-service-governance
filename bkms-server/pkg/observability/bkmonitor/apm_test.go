@@ -23,6 +23,7 @@ import (
 	. "github.com/onsi/gomega"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/bkmonitor"
 )
 
@@ -52,7 +53,11 @@ plugins:
     galileo:
       ocp_addr: "http://ocp.example.com"
 `
-			serviceName, err := bkmonitor.GetApmServiceName(&app.Application{Type: app.AppTypeTRPC}, content, nil)
+			serviceName, err := bkmonitor.GetApmServiceName(
+				&app.Application{Type: appruntime.AppTypeTRPC},
+				content,
+				nil,
+			)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(serviceName).To(Equal("myapp.myserver"))
 		})
@@ -67,7 +72,11 @@ plugins:
 		</server>
 	</application>
 </taf>`
-			serviceName, err := bkmonitor.GetApmServiceName(&app.Application{Type: app.AppTypeTAF}, content, nil)
+			serviceName, err := bkmonitor.GetApmServiceName(
+				&app.Application{Type: appruntime.AppTypeTAF},
+				content,
+				nil,
+			)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(serviceName).To(Equal("MyApp.MyServer"))
 		})

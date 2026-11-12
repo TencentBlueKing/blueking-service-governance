@@ -32,6 +32,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/revision"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime"
 )
 
 var _ = Describe("ChartBuildService revision check", func() {
@@ -39,7 +40,7 @@ var _ = Describe("ChartBuildService revision check", func() {
 		// 零值服务的 db 是 nil：只要校验晚于准备或版本号生成就会 panic，
 		// 因此能返回哨兵错误即证明语义化版本号没有被消耗
 		svc := &ChartBuildService{}
-		app := &bkmsapp.Application{ID: "helm-app", WorkspaceID: "ws-1", Type: bkmsapp.AppTypeHelm}
+		app := &bkmsapp.Application{ID: "helm-app", WorkspaceID: "ws-1", Type: appruntime.AppTypeHelm}
 
 		_, err := svc.ExecuteChartBuild(
 			testutil.WithTenantOrDefault(

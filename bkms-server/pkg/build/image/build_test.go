@@ -72,7 +72,7 @@ var _ = Describe("Build Functions", func() {
 			ID:          "test-app-id",
 			Name:        "bkms-server",
 			WorkspaceID: "ws-" + stringx.Random(8),
-			Type:        bkmsapp.AppTypeTRPC,
+			Type:        appruntime.AppTypeTRPC,
 			TrpcSpec:    &bkmsapp.TrpcSpec{Language: appmodel.LanguageGo},
 		}
 

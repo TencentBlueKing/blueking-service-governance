@@ -70,7 +70,7 @@ func (h *Handler) CreateBKMSApp(c *gin.Context) {
 		ID:          input.ID,
 		WorkspaceID: uriInput.WorkspaceID,
 		Name:        input.Name,
-		Type:        bkmsapp.AppTypeBKMSApp,
+		Type:        appruntime.AppTypeBKMSApp,
 		Framework:   input.Framework,
 		Language:    input.Language,
 		DisplayName: input.Name,
@@ -78,25 +78,6 @@ func (h *Handler) CreateBKMSApp(c *gin.Context) {
 		CreatedAt:   time.Now(),
 	}
 	h.createBKMSApp(c, app, input.ToCreateParams(), input.BuildConfig)
-}
-
-// createBKMSAppCompat 按 bkmsApp 创建旧创建接口的 trpc / taf 应用，响应结构不变。
-//
-// Deprecated: 仅供旧创建接口兼容，旧接口下线后删除。
-func (h *Handler) createBKMSAppCompat(c *gin.Context, workspaceID string, input *serializer.CreateAppInput) {
-	framework, language, params := input.ToBKMSAppCompat()
-	app := &bkmsapp.Application{
-		ID:          input.ID,
-		WorkspaceID: workspaceID,
-		Name:        input.Name,
-		Type:        bkmsapp.AppTypeBKMSApp,
-		Framework:   framework,
-		Language:    language,
-		DisplayName: input.Name,
-		Creator:     auth.MustGetUser(c.Request.Context()).ID,
-		CreatedAt:   time.Now(),
-	}
-	h.createBKMSApp(c, app, params, input.BuildConfig)
 }
 
 // createBKMSApp 校验参数、写入构建配置，再创建 bkmsApp 应用的其余数据并返回结果。
@@ -162,7 +143,7 @@ func (h *Handler) UpdateAppStartupConfig(c *gin.Context) {
 		bkerrs.AbortWithErr(c, err)
 		return
 	}
-	if app.Type != bkmsapp.AppTypeBKMSApp {
+	if app.Type != appruntime.AppTypeBKMSApp {
 		bkerrs.AbortWithErr(c, bkerrs.Errorf(bkerrs.ErrCodeInvalidRequest,
 			"app type %s does not support startup-config, use trpc-spec or taf-spec", app.Type))
 		return

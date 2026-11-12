@@ -27,6 +27,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bscp"
 )
@@ -66,7 +67,8 @@ var _ = Describe("validateBSCPConfig when bscp is disabled", func() {
 })
 
 var _ = Describe("validateConfigKindForApp", func() {
-	DescribeTable("allows or rejects config kinds by app",
+	DescribeTable(
+		"allows or rejects config kinds by app",
 		func(app *bkmsapp.Application, kind appcfg.ConfigKind, errSubstring string) {
 			err := validateConfigKindForApp(app, kind)
 			if errSubstring == "" {
@@ -75,22 +77,27 @@ var _ = Describe("validateConfigKindForApp", func() {
 			}
 			Expect(err).To(MatchError(ContainSubstring(errSubstring)))
 		},
-		Entry("plain for trpc", &bkmsapp.Application{Type: bkmsapp.AppTypeTRPC}, appcfg.ConfigKindPlain, ""),
+		Entry("plain for trpc", &bkmsapp.Application{Type: appruntime.AppTypeTRPC}, appcfg.ConfigKindPlain, ""),
 		Entry("plain for blank",
-			&bkmsapp.Application{Type: bkmsapp.AppTypeBKMSApp, Framework: "blank", Language: "python"},
+			&bkmsapp.Application{Type: appruntime.AppTypeBKMSApp, Framework: "blank", Language: "python"},
 			appcfg.ConfigKindPlain, ""),
-		Entry("plain for helm", &bkmsapp.Application{Type: bkmsapp.AppTypeHelm}, appcfg.ConfigKindPlain,
+		Entry("plain for helm", &bkmsapp.Application{Type: appruntime.AppTypeHelm}, appcfg.ConfigKindPlain,
 			"only supported for appmodel applications"),
-		Entry("framework for helm", &bkmsapp.Application{Type: bkmsapp.AppTypeHelm}, appcfg.ConfigKindFramework, ""),
-		Entry("framework for legacy trpc", &bkmsapp.Application{Type: bkmsapp.AppTypeTRPC},
+		Entry(
+			"framework for helm",
+			&bkmsapp.Application{Type: appruntime.AppTypeHelm},
+			appcfg.ConfigKindFramework,
+			"",
+		),
+		Entry("framework for legacy trpc", &bkmsapp.Application{Type: appruntime.AppTypeTRPC},
 			appcfg.ConfigKindFramework, ""),
-		Entry("framework for legacy taf", &bkmsapp.Application{Type: bkmsapp.AppTypeTAF},
+		Entry("framework for legacy taf", &bkmsapp.Application{Type: appruntime.AppTypeTAF},
 			appcfg.ConfigKindFramework, ""),
 		Entry("framework for bkmsApp trpc",
-			&bkmsapp.Application{Type: bkmsapp.AppTypeBKMSApp, Framework: "trpc", Language: "go"},
+			&bkmsapp.Application{Type: appruntime.AppTypeBKMSApp, Framework: "trpc", Language: "go"},
 			appcfg.ConfigKindFramework, ""),
 		Entry("framework for blank",
-			&bkmsapp.Application{Type: bkmsapp.AppTypeBKMSApp, Framework: "blank", Language: "go"},
+			&bkmsapp.Application{Type: appruntime.AppTypeBKMSApp, Framework: "blank", Language: "go"},
 			appcfg.ConfigKindFramework, `framework "blank" does not support framework config file`),
 	)
 })

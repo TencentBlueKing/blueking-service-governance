@@ -36,6 +36,13 @@ linters:
       - common-false-positives
       - legacy
       - std-error-handling
+    rules:
+      # 测试需要构造存量旧类型应用与旧字段，允许引用以"bkmsApp 迁移兼容"废弃的标识符；
+      # 业务代码中新增引用仍会报错
+      - path: _test\.go
+        linters:
+          - staticcheck
+        text: "SA1019: .* is deprecated: bkmsApp 迁移兼容"
 # TODO: Use golangci-lint's built-in formatter
 
 formatters:

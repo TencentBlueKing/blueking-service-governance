@@ -51,7 +51,7 @@ func mustResolve(framework, language string) mods.Set {
 var _ = Describe("Of", func() {
 	It("reads the language of a legacy trpc app from TrpcSpec", func() {
 		set := mods.Of(&bkmsapp.Application{
-			Type:     bkmsapp.AppTypeTRPC,
+			Type:     appruntime.AppTypeTRPC,
 			TrpcSpec: &bkmsapp.TrpcSpec{Language: appruntime.LanguageGo},
 		})
 		Expect(set.Stack.Framework).To(Equal(appruntime.FrameworkTRPC))
@@ -60,7 +60,7 @@ var _ = Describe("Of", func() {
 	})
 
 	It("keeps devmode available for a legacy taf app without a language", func() {
-		set := mods.Of(&bkmsapp.Application{Type: bkmsapp.AppTypeTAF})
+		set := mods.Of(&bkmsapp.Application{Type: appruntime.AppTypeTAF})
 		Expect(set.Stack.Language).To(BeEmpty())
 		Expect(set.DevMode.Supported).To(BeTrue())
 		Expect(set.DevMode.Props.ScriptSet).To(Equal(devmode.ScriptSetTAF))
@@ -69,7 +69,7 @@ var _ = Describe("Of", func() {
 
 	It("marks every capability unsupported when the stack contradicts itself", func() {
 		set := mods.Of(&bkmsapp.Application{
-			Type:     bkmsapp.AppTypeTRPC,
+			Type:     appruntime.AppTypeTRPC,
 			Language: appruntime.LanguageCpp,
 			TrpcSpec: &bkmsapp.TrpcSpec{Language: appruntime.LanguageGo},
 		})

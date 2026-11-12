@@ -93,7 +93,7 @@ var _ = Describe("Builder", func() {
 			// blank 没有框架插件，只渲染公共部分
 			app = dbfactory.ApplicationWithOpts(ctx, appStore, &dbfactory.ApplicationOpts{
 				WorkspaceID: newWorkspaceID(ctx),
-				Type:        bkmsapp.AppTypeBKMSApp,
+				Type:        appruntime.AppTypeBKMSApp,
 				Framework:   appruntime.FrameworkBlank,
 				Language:    appruntime.LanguageGo,
 			})
@@ -157,7 +157,7 @@ var _ = Describe("Builder", func() {
 		It("should fail to render when the app tech stack is invalid", func() {
 			// type 与 framework 冲突，取不到框架
 			conflicted := *app
-			conflicted.Type = bkmsapp.AppTypeTAF
+			conflicted.Type = appruntime.AppTypeTAF
 			conflicted.Framework = appruntime.FrameworkTRPC
 			_, err := workload.NewBuilder(builderSvc, &conflicted, appModel).Build(ctx, envObj)
 			Expect(err).To(HaveOccurred())

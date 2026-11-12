@@ -31,6 +31,7 @@ import (
 	build "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/serializer"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/overview"
 	deploystatus "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/status"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
@@ -106,7 +107,7 @@ var _ = Describe("App deploy status serializers", func() {
 			ID:          "app-id",
 			WorkspaceID: "workspace-id",
 			Name:        "app-name",
-			Type:        bkmsapp.AppTypeTRPC,
+			Type:        appruntime.AppTypeTRPC,
 			Language:    "cpp",
 			Framework:   "trpc",
 			TrpcSpec:    &bkmsapp.TrpcSpec{Language: "go"},
@@ -218,7 +219,7 @@ var _ = Describe("App serializers", func() {
 			ID:          "app-id",
 			WorkspaceID: "workspace-1",
 			Name:        "demo-app",
-			Type:        bkmsapp.AppTypeTRPC,
+			Type:        appruntime.AppTypeTRPC,
 			DisplayName: "Demo App",
 			Creator:     "tester",
 		}
@@ -312,7 +313,7 @@ var _ = Describe("App serializers", func() {
 			ID:          "helm-app",
 			WorkspaceID: "workspace-1",
 			Name:        "helm-demo",
-			Type:        bkmsapp.AppTypeHelm,
+			Type:        appruntime.AppTypeHelm,
 			DisplayName: "Helm Demo",
 			Creator:     "tester",
 		}
@@ -330,7 +331,7 @@ var _ = Describe("App serializers", func() {
 			ID:              "app-id",
 			WorkspaceID:     "workspace-1",
 			Name:            "demo-app",
-			Type:            bkmsapp.AppTypeTRPC,
+			Type:            appruntime.AppTypeTRPC,
 			VisibleEnvNames: []string{"test", "stag"},
 		}
 
@@ -640,7 +641,7 @@ var _ = Describe("App serializers", func() {
 		Entry("valid trpc app input", serializer.CreateAppInput{
 			Name: "demo-app",
 			ID:   "demo-app",
-			Type: bkmsapp.AppTypeTRPC,
+			Type: appruntime.AppTypeTRPC,
 			BuildConfig: &serializer.BuildConfigInput{
 				SourceType: "pipeline",
 				PipelineBuildConfig: &serializer.PipelineBuildConfigInput{
@@ -658,7 +659,7 @@ var _ = Describe("App serializers", func() {
 		Entry("duplicate env var keys in trpc create input", serializer.CreateAppInput{
 			Name: "demo-app",
 			ID:   "demo-app",
-			Type: bkmsapp.AppTypeTRPC,
+			Type: appruntime.AppTypeTRPC,
 			BuildConfig: &serializer.BuildConfigInput{
 				SourceType: "pipeline",
 				PipelineBuildConfig: &serializer.PipelineBuildConfigInput{
@@ -683,7 +684,7 @@ var _ = Describe("App serializers", func() {
 		Entry("too long app name", serializer.CreateAppInput{
 			Name: "demo-app-abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdef",
 			ID:   "demo-app",
-			Type: bkmsapp.AppTypeTRPC,
+			Type: appruntime.AppTypeTRPC,
 			BuildConfig: &serializer.BuildConfigInput{
 				SourceType:          "pipeline",
 				PipelineBuildConfig: &serializer.PipelineBuildConfigInput{PipelineID: "pipeline-id"},
@@ -702,7 +703,7 @@ var _ = Describe("App serializers", func() {
 		Entry("too long app id", serializer.CreateAppInput{
 			Name: "demo-app",
 			ID:   "demo-app-abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdef",
-			Type: bkmsapp.AppTypeTRPC,
+			Type: appruntime.AppTypeTRPC,
 			BuildConfig: &serializer.BuildConfigInput{
 				SourceType:          "pipeline",
 				PipelineBuildConfig: &serializer.PipelineBuildConfigInput{PipelineID: "pipeline-id"},
@@ -721,7 +722,7 @@ var _ = Describe("App serializers", func() {
 		Entry("trpc app requires trpc spec", serializer.CreateAppInput{
 			Name: "demo-app",
 			ID:   "demo-app",
-			Type: bkmsapp.AppTypeTRPC,
+			Type: appruntime.AppTypeTRPC,
 			BuildConfig: &serializer.BuildConfigInput{
 				SourceType:          "pipeline",
 				PipelineBuildConfig: &serializer.PipelineBuildConfigInput{PipelineID: "pipeline-id"},
@@ -734,7 +735,7 @@ var _ = Describe("App serializers", func() {
 		Entry("sh command is mutually exclusive with args", serializer.CreateAppInput{
 			Name: "demo-app",
 			ID:   "demo-app",
-			Type: bkmsapp.AppTypeTRPC,
+			Type: appruntime.AppTypeTRPC,
 			BuildConfig: &serializer.BuildConfigInput{
 				SourceType:          "pipeline",
 				PipelineBuildConfig: &serializer.PipelineBuildConfigInput{PipelineID: "pipeline-id"},
@@ -755,7 +756,7 @@ var _ = Describe("App serializers", func() {
 		Entry("sh command must not be blank", serializer.CreateAppInput{
 			Name: "demo-app",
 			ID:   "demo-app",
-			Type: bkmsapp.AppTypeTRPC,
+			Type: appruntime.AppTypeTRPC,
 			BuildConfig: &serializer.BuildConfigInput{
 				SourceType:          "pipeline",
 				PipelineBuildConfig: &serializer.PipelineBuildConfigInput{PipelineID: "pipeline-id"},
@@ -775,7 +776,7 @@ var _ = Describe("App serializers", func() {
 		Entry("trpc app requires framework file location on create", serializer.CreateAppInput{
 			Name: "demo-app",
 			ID:   "demo-app",
-			Type: bkmsapp.AppTypeTRPC,
+			Type: appruntime.AppTypeTRPC,
 			BuildConfig: &serializer.BuildConfigInput{
 				SourceType:          "pipeline",
 				PipelineBuildConfig: &serializer.PipelineBuildConfigInput{PipelineID: "pipeline-id"},
@@ -790,7 +791,7 @@ var _ = Describe("App serializers", func() {
 		Entry("taf app requires framework file location on create", serializer.CreateAppInput{
 			Name: "demo-app",
 			ID:   "demo-app",
-			Type: bkmsapp.AppTypeTAF,
+			Type: appruntime.AppTypeTAF,
 			BuildConfig: &serializer.BuildConfigInput{
 				SourceType:          "pipeline",
 				PipelineBuildConfig: &serializer.PipelineBuildConfigInput{PipelineID: "pipeline-id"},
@@ -804,7 +805,7 @@ var _ = Describe("App serializers", func() {
 		Entry("helm app requires helm repo config for helm repo type", serializer.CreateAppInput{
 			Name: "helm-app",
 			ID:   "helm-app",
-			Type: bkmsapp.AppTypeHelm,
+			Type: appruntime.AppTypeHelm,
 			BuildConfig: &serializer.BuildConfigInput{
 				SourceType:       "imageRegistry",
 				ImageBuildConfig: &serializer.ImageBuildConfigInput{Name: "example.com/demo"},

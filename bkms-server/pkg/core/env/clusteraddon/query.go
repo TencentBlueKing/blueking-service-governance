@@ -135,9 +135,9 @@ func AddonAppTypesOf(app *bkmsapp.Application) []string {
 		return []string{app.Type}
 	}
 	if framework := mods.Of(app).Stack.Framework; framework != "" {
-		return []string{bkmsapp.AppTypeBKMSApp, framework}
+		return []string{appruntime.AppTypeBKMSApp, framework}
 	}
-	return []string{bkmsapp.AppTypeBKMSApp}
+	return []string{appruntime.AppTypeBKMSApp}
 }
 
 // InspectRequiredAddons 查询必选组件状态。缺失作为检查结果，查询失败作为错误返回。

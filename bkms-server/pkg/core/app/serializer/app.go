@@ -156,22 +156,6 @@ type AppDetailOutputObj struct {
 	AppModelSpec *AppModelSpecOutputObj `json:"appModelSpec,omitempty"`
 }
 
-// FrameworkSpecView 详情中 trpcSpec / tafSpec 的取值，由调用方按新模型准备，不读取旧字段。
-//
-// Deprecated: 仅供详情的 trpcSpec / tafSpec 兼容输出，旧客户端不再读取后删除。
-type FrameworkSpecView struct {
-	// Framework 应用框架，trpc 输出 trpcSpec，taf 输出 tafSpec，其余不输出。
-	Framework string
-	// Language 应用语言，仅 trpcSpec 输出。
-	Language string
-	// FileName 框架配置文件名，取自 framework def。
-	FileName string
-	// FilePath 框架配置文件挂载目录，取自 framework def。
-	FilePath string
-	// FileContent 框架配置文件的默认内容。
-	FileContent string
-}
-
 // FromModel fills output fields from app detail models.
 func (o *AppDetailOutputObj) FromModel(
 	app *bkmsapp.Application,
@@ -282,7 +266,7 @@ type ComponentOutputObj struct {
 }
 
 // FromModel fills output fields from appmodel data.
-// trpcSpec / tafSpec 由 frameworkSpec 按框架输出，不读取 AppModel 的旧字段。
+// trpcSpec / tafSpec 由 frameworkSpec 按框架输出。
 func (o *AppModelSpecOutputObj) FromModel(
 	am *appmodel.AppModel,
 	components []ComponentOutputObj,
@@ -737,4 +721,21 @@ func emptySliceIfNil[T any](items []T) []T {
 		return []T{}
 	}
 	return items
+}
+
+// variableInputsToModel 将 VariableInput 切片转换为 appmodel.Variable 切片
+func variableInputsToModel(vars []VariableInput) []appmodel.Variable {
+	if len(vars) == 0 {
+		return nil
+	}
+	result := make([]appmodel.Variable, 0, len(vars))
+	for _, v := range vars {
+		result = append(result, appmodel.Variable{
+			Key:         v.Key,
+			Value:       v.Value,
+			Description: v.Description,
+			IsSensitive: v.IsSensitive,
+		})
+	}
+	return result
 }
