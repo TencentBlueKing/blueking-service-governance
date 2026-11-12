@@ -33,13 +33,11 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkrepo"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/cmdb"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
-	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bcs"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bkcc"
 	bkciapi "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bkci"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/perm"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/tenant"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	bkmsreg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/registry"
 )
@@ -249,15 +247,12 @@ func buildBkSystems(
 }
 
 func initializeDefaultBKCIPipelines(ctx context.Context, db *mongo.Database, workspaceID string) error {
-	if bkci.BuiltinDockerfilePipelineDisabled() {
-		log.Infof(ctx, "builtin dockerfile pipeline is disabled, skip creating it for workspace %s", workspaceID)
-	} else if _, err := bkci.NewPipelineManager(db, workspaceID).Initialize(
-		ctx, string(bkci.PipelineTypeDockerfile),
-	); err != nil {
+	_, err := bkci.NewPipelineManager(db, workspaceID).Initialize(ctx, string(bkci.PipelineTypeDockerfile))
+	if err != nil {
 		return errors.Wrap(err, "create builtin dockerfile pipeline")
 	}
 	// 同时初始化 Helm Git Build 流水线
-	_, err := bkci.NewPipelineManager(db, workspaceID).Initialize(ctx, string(bkci.PipelineTypeHelmGitBuild))
+	_, err = bkci.NewPipelineManager(db, workspaceID).Initialize(ctx, string(bkci.PipelineTypeHelmGitBuild))
 	if err != nil {
 		return errors.Wrap(err, "create builtin helm-git-build pipeline")
 	}
@@ -421,16 +416,8 @@ func ensureBCSProjectNotBound(
 	if boundWorkspace.ID == workspaceID {
 		return nil
 	}
-	if tenantID, _ := tenant.GetTenantID(ctx); boundWorkspace.TenantID != tenantID {
-		// 不向当前租户暴露其他租户的工作空间
-		return errors.Wrapf(ErrBCSProjectAlreadyBound, "bcs project(%s) already bound by another tenant", project.Code)
-	}
-	return errors.Wrapf(
-		ErrBCSProjectAlreadyBound,
-		"bcs project(%s) already bound by workspace %s",
-		project.Code,
-		boundWorkspace.ID,
-	)
+	// 不返回占用方的工作空间 ID，避免跨租户暴露
+	return errors.Wrapf(ErrBCSProjectAlreadyBound, "bcs project(%s)", project.Code)
 }
 
 // fetchCMDBInfo 查询 CMDB 相关字段（二级业务 ID、运营产品 ID/名称）

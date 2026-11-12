@@ -73,6 +73,7 @@ func NewMigrateIAMSystemModelCmd() *cobra.Command {
 			}
 
 			if tenantID == "" {
+				//tenancy:allow default-tenant 单租户部署没有真实租户，IAM 模型注册沿用 default
 				tenantID = tenant.DefaultTenantID
 				if cfg.Tenant.EnableMultiTenantMode {
 					tenantID = tenant.SystemTenantID

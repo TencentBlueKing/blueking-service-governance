@@ -275,7 +275,8 @@ var _ = Describe("ensureBCSProjectNotBound", func() {
 			Code: "existing-bcs",
 		})
 		Expect(err).To(MatchError(ErrBCSProjectAlreadyBound))
-		Expect(err.Error()).To(ContainSubstring("already bound by workspace"))
+		Expect(err.Error()).To(ContainSubstring("existing-bcs"))
+		Expect(err.Error()).NotTo(ContainSubstring(ws.ID))
 	})
 
 	It("rejects binding a BCS project that is already occupied by a workspace of another tenant", func() {
@@ -295,8 +296,6 @@ var _ = Describe("ensureBCSProjectNotBound", func() {
 			Code: "existing-bcs",
 		})
 		Expect(err).To(MatchError(ErrBCSProjectAlreadyBound))
-		// 不向当前租户暴露其他租户的工作空间
-		Expect(err.Error()).To(ContainSubstring("already bound by another tenant"))
 		Expect(err.Error()).NotTo(ContainSubstring(ws.ID))
 	})
 
@@ -439,7 +438,6 @@ var _ = Describe("prepareIndependentBCSBinding", func() {
 
 				_, _, err := PrepareIndependentBCSBinding(ctx, store, "ws-1", "", 398)
 				Expect(err).To(MatchError(ErrBCSProjectAlreadyBound))
-				Expect(err.Error()).To(ContainSubstring("already bound by workspace"))
 			})
 		})
 	})

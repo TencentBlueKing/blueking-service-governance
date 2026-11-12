@@ -75,10 +75,6 @@ func ExecuteBKCIPipelineBuild(
 		if cfg.CodeRepo == nil {
 			return nil, nil, errors.Errorf("code repo config not found")
 		}
-		// 代码库构建依赖内置 Dockerfile 流水线，关闭时在创建蓝盾代码仓库之前失败
-		if bkci.BuiltinDockerfilePipelineDisabled() {
-			return nil, nil, errors.WithStack(bkci.ErrBuiltinDockerfilePipelineDisabled)
-		}
 		// 构建来源是代码库时，需要在蓝盾上初始化代码仓库
 		_, err := bkci.NewRepositoryManager(db, app.WorkspaceID).Initialize(
 			ctx, cfg.CodeRepo.RepoURL, cfg.CodeRepo.RepoAlias,

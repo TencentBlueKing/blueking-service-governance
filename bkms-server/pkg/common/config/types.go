@@ -73,8 +73,6 @@ type FeatureIntegrationsConfig struct {
 	// 为 true：蓝盾始终新建；新建容器则创建 BCS 项目，绑定已有容器则绑定已有 BCS 项目。
 	// 为 false：新建/绑定都按蓝盾项目处理，BCS ID/Code 复用蓝盾项目。
 	EnableIndependentBCSProject bool
-	// DisableBuiltinDockerfilePipeline 关闭内置的 Dockerfile 构建流水线
-	DisableBuiltinDockerfilePipeline bool
 }
 
 // BkApiStagesConfig 蓝鲸 API 版本信息，不指定时均默认为 "prod"

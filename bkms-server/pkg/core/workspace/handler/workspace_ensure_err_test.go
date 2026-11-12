@@ -59,12 +59,7 @@ var _ = Describe("ClassifyEnsureBkSystemsErr", func() {
 	})
 
 	It("maps bound bcs project to already exists", func() {
-		err := fmt.Errorf(
-			"%w: bcs project(%s) already bound by workspace %s",
-			workspace.ErrBCSProjectAlreadyBound,
-			"existing-bcs",
-			"other-ws",
-		)
+		err := fmt.Errorf("%w: bcs project(%s)", workspace.ErrBCSProjectAlreadyBound, "existing-bcs")
 		code := handler.ClassifyEnsureBkSystemsErr(err)
 		Expect(code).To(Equal(bkerrs.ErrCodeAlreadyExists))
 	})

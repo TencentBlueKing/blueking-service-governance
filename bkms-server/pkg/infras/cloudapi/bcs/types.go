@@ -33,6 +33,7 @@ type apiError struct {
 	Message string
 }
 
+// Error 实现 error 接口
 func (e *apiError) Error() string {
 	return fmt.Sprintf("bcs api error(code=%d): %s", e.Code, e.Message)
 }

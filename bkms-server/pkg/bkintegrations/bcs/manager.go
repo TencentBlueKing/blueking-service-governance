@@ -81,6 +81,7 @@ type ProjectSpec struct {
 // ProjectManager 负责 BCS 项目的查询、校验与幂等 ensure。
 type ProjectManager struct{}
 
+// NewProjectManager 创建project manager
 func NewProjectManager() *ProjectManager {
 	return &ProjectManager{}
 }

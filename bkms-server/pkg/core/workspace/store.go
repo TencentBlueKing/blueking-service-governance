@@ -39,7 +39,7 @@ var ErrWorkspaceAlreadyExists = errors.New("workspace already exists")
 var ErrWorkspaceConflict = errors.New("workspace id or bcs project already used")
 
 // ErrBCSProjectAlreadyBound BCS 项目已被其他工作空间绑定
-var ErrBCSProjectAlreadyBound = errors.New("bcs project already bound")
+var ErrBCSProjectAlreadyBound = errors.New("bcs project already bound by another workspace")
 
 // ErrBCSProjectAlreadyExists 自动创建使用的 BCS 项目 code 已存在，且不能作为本次重试复用
 var ErrBCSProjectAlreadyExists = errors.New("bcs project already exists")
