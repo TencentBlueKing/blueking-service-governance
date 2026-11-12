@@ -23,6 +23,8 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 )
 
 var _ = Describe("NewTokenClient", func() {
@@ -35,7 +37,7 @@ var _ = Describe("NewTokenClient", func() {
 
 	It("uses SSM when the auth backend is bk_token and SSM is configured", func() {
 		cfg := cfg
-		cfg.AuthBackendType = "bk_token"
+		cfg.AuthBackendType = config.AuthBackendBkToken
 		client, credential := NewTokenClient(context.Background(), cfg)
 		Expect(client).To(BeAssignableToTypeOf(&SSMTokenClient{}))
 		Expect(credential).To(Equal(CredentialBkToken))
@@ -43,7 +45,7 @@ var _ = Describe("NewTokenClient", func() {
 
 	It("falls back to the API gateway when SSM is not configured", func() {
 		cfg := cfg
-		cfg.AuthBackendType = "bk_token"
+		cfg.AuthBackendType = config.AuthBackendBkToken
 		cfg.SSMBaseURL = ""
 		client, credential := NewTokenClient(context.Background(), cfg)
 		Expect(client).To(BeAssignableToTypeOf(&APIGatewayTokenClient{}))
@@ -52,7 +54,7 @@ var _ = Describe("NewTokenClient", func() {
 
 	It("uses the API gateway when the auth backend is bk_ticket", func() {
 		cfg := cfg
-		cfg.AuthBackendType = "bk_ticket"
+		cfg.AuthBackendType = config.AuthBackendBkTicket
 		client, credential := NewTokenClient(context.Background(), cfg)
 		Expect(client).To(BeAssignableToTypeOf(&APIGatewayTokenClient{}))
 		Expect(credential).To(Equal(CredentialBkTicket))

@@ -120,8 +120,7 @@ func (o WorkspaceListOptions) sortOpt() store.Opt {
 func (o WorkspaceListOptions) ToWorkspaceStoreStatisticsOpt() store.Opt {
 	opts := []store.Opt{bkmsworkspace.KeywordMatches(o.Keyword)}
 	if o.TenantID != "" {
-		// 调用方查询时使用 TenantAll()，此时允许按 tenantID 字段筛选
-		opts = append(opts, store.Where("tenantID", o.TenantID))
+		opts = append(opts, bkmsworkspace.InTenant(o.TenantID))
 	}
 	return store.Combine(opts...)
 }

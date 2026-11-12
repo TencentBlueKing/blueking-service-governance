@@ -21,6 +21,7 @@ package usertoken
 import (
 	"context"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 )
 
@@ -32,7 +33,7 @@ const (
 
 // ClientConfig 是创建 TokenClient 所需的配置
 type ClientConfig struct {
-	// AuthBackendType 是用户登录认证使用的后端类型，bk_ticket 或 bk_token
+	// AuthBackendType 是用户登录认证使用的后端类型，取值见 config.AuthBackendBkTicket / AuthBackendBkToken
 	AuthBackendType string
 	// APIGatewayBaseURL 是 API 网关 token 服务的基础 URL
 	APIGatewayBaseURL string
@@ -46,8 +47,9 @@ type ClientConfig struct {
 //
 // 登录态为 bk_token 且配置了 SSM 地址时使用 SSM，否则使用 API 网关 token 服务（需要 bk_ticket）。
 // 未配置 SSM 时回退到 API 网关，是为了兼容此前未显式配置 backendType（默认 bk_token）的存量部署。
+// 返回的 client 同时用于签发和校验 token，两种服务签发的 token 互不认可，切换后需重新获取。
 func NewTokenClient(ctx context.Context, cfg ClientConfig) (TokenClient, string) {
-	if cfg.AuthBackendType == CredentialBkToken {
+	if cfg.AuthBackendType == config.AuthBackendBkToken {
 		if cfg.SSMBaseURL != "" {
 			return NewSSMTokenClient(cfg.SSMBaseURL, cfg.BkAppCode, cfg.BkAppSecret), CredentialBkToken
 		}

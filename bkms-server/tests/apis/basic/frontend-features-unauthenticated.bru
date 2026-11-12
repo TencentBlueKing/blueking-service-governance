@@ -1,0 +1,29 @@
+docs {
+  测的是：前端功能开关接口虽然不要求租户头，但仍需登录，未认证的请求被拒绝（401）。
+}
+
+meta {
+  name: frontend-features-unauthenticated
+  type: http
+  seq: 5
+}
+
+get {
+  url: {{serviceURL}}/platform/frontend-features
+  body: none
+  auth: inherit
+}
+
+script:pre-request {
+  // Bruno 3 的 req 没有 deleteHeader；空的用户头解析失败后回退到真实认证，请求中没有登录凭证
+  req.setHeader("X-Bk-Authed-User-Info", "");
+}
+
+assert {
+  res.status: eq 401
+}
+
+settings {
+  encodeUrl: true
+  timeout: 10000
+}

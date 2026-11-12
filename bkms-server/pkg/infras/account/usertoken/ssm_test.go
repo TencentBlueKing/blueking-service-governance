@@ -107,4 +107,17 @@ var _ = Describe("SSMTokenClient with httptest server", func() {
 		_, err := client.GetUserInfo(context.Background(), "invalid")
 		Expect(err).To(MatchError(ContainSubstring("1901403")))
 	})
+
+	It("reports the status code when the service fails with a non-JSON body", func() {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusBadGateway)
+			_, _ = w.Write([]byte(`<html>502 Bad Gateway</html>`))
+		}))
+		defer server.Close()
+
+		client := NewSSMTokenClient(server.URL, "app-code", "app-secret")
+		_, err := client.GetUserInfo(context.Background(), "access-1")
+		Expect(err).To(MatchError(ContainSubstring("status 502")))
+		Expect(err).To(MatchError(ContainSubstring("parsing response result")))
+	})
 })

@@ -1,0 +1,31 @@
+docs {
+  测的是：前端功能开关接口不经过租户中间件，多租户模式下不带租户头也能获取（与 02 号用例对照）。
+  不依赖 01 号建的数据，可单独运行。
+}
+
+meta {
+  name: 38-frontend-features-without-tenant-header
+  type: http
+  seq: 38
+}
+
+get {
+  url: {{serviceURL}}/platform/frontend-features
+  body: none
+  auth: inherit
+}
+
+script:pre-request {
+  // Bruno 3 的 req 没有 deleteHeader；服务端按 Header.Get 读取，空值与未传等价
+  req.setHeader("X-Bk-Tenant-Id", "");
+}
+
+assert {
+  res.status: eq 200
+  res.body.data.MULTI_TENANT_MODE: eq true
+}
+
+settings {
+  encodeUrl: true
+  timeout: 10000
+}
