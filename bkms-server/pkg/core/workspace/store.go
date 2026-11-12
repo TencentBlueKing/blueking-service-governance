@@ -20,7 +20,6 @@ package workspace
 
 import (
 	"context"
-	"strings"
 
 	"github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -34,6 +33,10 @@ var ErrWorkspaceNotFound = errors.New("workspace not found")
 
 // ErrWorkspaceAlreadyExists 工作空间 ID 已被占用
 var ErrWorkspaceAlreadyExists = errors.New("workspace already exists")
+
+// ErrWorkspaceConflict 写入时撞上唯一索引：工作空间 ID 或绑定的 BCS 项目已被占用。
+// 创建前已分别预检查两者，这里只兜底并发写入
+var ErrWorkspaceConflict = errors.New("workspace id or bcs project already used")
 
 // ErrBCSProjectAlreadyBound BCS 项目已被其他工作空间绑定
 var ErrBCSProjectAlreadyBound = errors.New("bcs project already bound")
@@ -49,12 +52,6 @@ var ErrIndependentWorkspaceBizInvalid = errors.New("biz not found or not accessi
 
 // ErrBoundBCSProjectInvalid 绑定的 BCS 项目不存在、不是 k8s 项目或未关联业务
 var ErrBoundBCSProjectInvalid = errors.New("bound bcs project is invalid")
-
-// bcsProjectCodeIndex BCS 项目 code 唯一索引名，用于从唯一键冲突中区分出 BCS 项目重复绑定
-const bcsProjectCodeIndex = "bkSystems.bkBcsProjectCode_1"
-
-// workspaceIDIndex 工作空间 ID 唯一索引名，用于从唯一键冲突中区分出 ID 重复
-const workspaceIDIndex = "id_1"
 
 // WorkspaceStore 工作空间存储
 type WorkspaceStore = store.GenericStore[Workspace]
@@ -73,6 +70,7 @@ var Meta = store.Meta[Workspace]{
 	Collection:   "workspaces",
 	TenantScoped: true,
 	NotFound:     ErrWorkspaceNotFound,
+	Duplicate:    ErrWorkspaceConflict,
 }
 
 // ByWorkspaceID 按工作空间 ID 匹配
@@ -113,23 +111,25 @@ func DefaultOrder() store.Opt {
 	return store.Combine(store.Desc("updatedAt"), store.Asc("id"))
 }
 
-// Create 创建工作空间。工作空间 ID 已被占用时返回 ErrWorkspaceAlreadyExists，
-// 绑定的 BCS 项目已被其他工作空间占用时返回 ErrBCSProjectAlreadyBound
+// Create 创建工作空间。工作空间 ID 或绑定的 BCS 项目已被占用时返回 ErrWorkspaceConflict
 func Create(ctx context.Context, workspaces *WorkspaceStore, ws *Workspace) error {
-	err := workspaces.Create(ctx, ws)
-	if errors.Is(err, store.ErrDuplicate) && strings.Contains(err.Error(), bcsProjectCodeIndex) {
-		return errors.Wrapf(
-			ErrBCSProjectAlreadyBound,
-			"bcs project(%s) already bound by another workspace", ws.BkSystems.BkBCSProjectCode,
-		)
-	}
-	if errors.Is(err, store.ErrDuplicate) && strings.Contains(err.Error(), "index: "+workspaceIDIndex) {
-		return errors.Wrapf(ErrWorkspaceAlreadyExists, "workspace %s", ws.ID)
-	}
-	if err != nil {
+	if err := workspaces.Create(ctx, ws); err != nil {
 		return errors.Wrapf(err, "create workspace %s", ws.ID)
 	}
 	return nil
+}
+
+// EnsureIDAvailable 确认工作空间 ID 未被占用，被占用时返回 ErrWorkspaceAlreadyExists。
+// ID 全局唯一，因此跨租户查询；创建流程须在创建任何外部资源之前调用
+func EnsureIDAvailable(ctx context.Context, workspaces *WorkspaceStore, id string) error {
+	_, err := workspaces.Get(ctx, store.TenantAll(), ByWorkspaceID(id))
+	if err == nil {
+		return errors.Wrapf(ErrWorkspaceAlreadyExists, "workspace %s", id)
+	}
+	if errors.Is(err, ErrWorkspaceNotFound) {
+		return nil
+	}
+	return errors.Wrapf(err, "check workspace %s exists", id)
 }
 
 // Update 更新已经存在的工作空间的可变字段，不存在时返回 ErrWorkspaceNotFound。

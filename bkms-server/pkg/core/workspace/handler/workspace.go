@@ -541,6 +541,17 @@ func (h *Handler) CreateWorkspace(c *gin.Context) {
 		return
 	}
 
+	// 先确认 ID 可用：EnsureBkSystems 与 InitWorkspaceUser 会按 ID 创建/复用外部资源和权限，
+	// 等到写库撞唯一索引时副作用已经落到已存在的工作空间上
+	if err := workspace.EnsureIDAvailable(ctx, h.workspaces(), input.ID); err != nil {
+		code := lo.Ternary(
+			errors.Is(err, workspace.ErrWorkspaceAlreadyExists),
+			bkerrs.ErrCodeAlreadyExists, bkerrs.ErrCodeInternalServerError,
+		)
+		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, code, "check workspace id"))
+		return
+	}
+
 	bkSystem, err := workspace.EnsureBkSystems(
 		ctx,
 		h.registry.DB,
@@ -591,7 +602,11 @@ func (h *Handler) CreateWorkspace(c *gin.Context) {
 		Creator:   auth.MustGetUser(ctx).ID,
 	}
 	if err = workspace.Create(ctx, h.workspaces(), ws); err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, ClassifyCreateWorkspaceErr(err), "create workspace in DB"))
+		code := lo.Ternary(
+			errors.Is(err, workspace.ErrWorkspaceConflict),
+			bkerrs.ErrCodeAlreadyExists, bkerrs.ErrCodeInternalServerError,
+		)
+		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, code, "create workspace in DB"))
 		return
 	}
 
@@ -1020,17 +1035,6 @@ func ClassifyEnsureBkSystemsErr(err error) bkerrs.ErrCode {
 		errors.Is(err, bcsmanager.ErrProjectBizMismatch),
 		errors.Is(err, bkci.ErrProjectCodeAlreadyUsed),
 		errors.Is(err, bkci.ErrWorkspaceAlreadyHasProject):
-		return bkerrs.ErrCodeAlreadyExists
-	default:
-		return bkerrs.ErrCodeInternalServerError
-	}
-}
-
-// ClassifyCreateWorkspaceErr 将工作空间入库时的冲突映射为 API 错误码
-func ClassifyCreateWorkspaceErr(err error) bkerrs.ErrCode {
-	switch {
-	case errors.Is(err, workspace.ErrWorkspaceAlreadyExists),
-		errors.Is(err, workspace.ErrBCSProjectAlreadyBound):
 		return bkerrs.ErrCodeAlreadyExists
 	default:
 		return bkerrs.ErrCodeInternalServerError

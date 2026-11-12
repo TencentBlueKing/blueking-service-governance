@@ -88,20 +88,6 @@ var _ = Describe("ClassifyEnsureBkSystemsErr", func() {
 		Entry("bcs project with the same code belongs to another biz", bcsmanager.ErrProjectBizMismatch),
 	)
 
-	DescribeTable("maps workspace insert conflicts to already exists",
-		func(sentinel error) {
-			err := fmt.Errorf("%w: create workspace demo", sentinel)
-			Expect(handler.ClassifyCreateWorkspaceErr(err)).To(Equal(bkerrs.ErrCodeAlreadyExists))
-		},
-		Entry("workspace id already used", workspace.ErrWorkspaceAlreadyExists),
-		Entry("bcs project already bound", workspace.ErrBCSProjectAlreadyBound),
-	)
-
-	It("keeps unexpected insert errors as internal server error", func() {
-		code := handler.ClassifyCreateWorkspaceErr(errors.New("create workspace demo"))
-		Expect(code).To(Equal(bkerrs.ErrCodeInternalServerError))
-	})
-
 	It("keeps unexpected errors as internal server error", func() {
 		code := handler.ClassifyEnsureBkSystemsErr(errors.New("init bkrepo project"))
 		Expect(code).To(Equal(bkerrs.ErrCodeInternalServerError))
