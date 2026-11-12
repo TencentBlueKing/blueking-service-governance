@@ -15538,6 +15538,12 @@ const docTemplate = `{
                     },
                     {
                         "type": "string",
+                        "description": "租户 ID 过滤，为空时返回全部租户的工作空间",
+                        "name": "tenantID",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
                         "description": "排序字段：id / displayName / updatedAt",
                         "name": "sortBy",
                         "in": "query"
@@ -16142,6 +16148,40 @@ const docTemplate = `{
                     },
                     "500": {
                         "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
+        "/platform/frontend-features": {
+            "get": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "platconfig"
+                ],
+                "summary": "查询前端特性开关",
+                "operationId": "GetFrontendFeatures",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.FrontendFeaturesResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
                         "schema": {
                             "$ref": "#/definitions/bkerrs.GinErrorOutput"
                         }
@@ -28217,6 +28257,18 @@ const docTemplate = `{
                 }
             }
         },
+        "serializer.FrontendFeaturesResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "description": "特性开关，key 为特性名称，value 表示是否开启",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "boolean"
+                    }
+                }
+            }
+        },
         "serializer.GPAConfigOutputObj": {
             "type": "object",
             "properties": {
@@ -35905,6 +35957,10 @@ const docTemplate = `{
                     "description": "工作空间状态",
                     "type": "string"
                 },
+                "tenantID": {
+                    "description": "所属租户 ID",
+                    "type": "string"
+                },
                 "updatedAt": {
                     "description": "更新时间",
                     "type": "string"
@@ -36070,6 +36126,10 @@ const docTemplate = `{
                 },
                 "state": {
                     "description": "工作空间状态",
+                    "type": "string"
+                },
+                "tenantID": {
+                    "description": "所属租户 ID",
                     "type": "string"
                 },
                 "updatedAt": {

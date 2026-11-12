@@ -5140,6 +5140,14 @@ definitions:
           type: string
         type: array
     type: object
+  serializer.FrontendFeaturesResponse:
+    properties:
+      data:
+        additionalProperties:
+          type: boolean
+        description: 特性开关，key 为特性名称，value 表示是否开启
+        type: object
+    type: object
   serializer.GPAConfigOutputObj:
     properties:
       appID:
@@ -10407,6 +10415,9 @@ definitions:
       state:
         description: 工作空间状态
         type: string
+      tenantID:
+        description: 所属租户 ID
+        type: string
       updatedAt:
         description: 更新时间
         type: string
@@ -10526,6 +10537,9 @@ definitions:
         type: string
       state:
         description: 工作空间状态
+        type: string
+      tenantID:
+        description: 所属租户 ID
         type: string
       updatedAt:
         description: 更新时间
@@ -20346,6 +20360,10 @@ paths:
         in: query
         name: state
         type: string
+      - description: 租户 ID 过滤，为空时返回全部租户的工作空间
+        in: query
+        name: tenantID
+        type: string
       - description: 排序字段：id / displayName / updatedAt
         in: query
         name: sortBy
@@ -20735,6 +20753,26 @@ paths:
       summary: 获取平台通用构建镜像可用 TAG 列表
       tags:
       - images
+  /platform/frontend-features:
+    get:
+      operationId: GetFrontendFeatures
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.FrontendFeaturesResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 查询前端特性开关
+      tags:
+      - platconfig
   /scoped-env-vars/detailed-list/{envID}:
     get:
       operationId: ListDetailedEnvScopedEnvVars

@@ -31,6 +31,8 @@ type ListWorkspacesQuery struct {
 	Keyword string `form:"keyword" binding:"max=64"`
 	// 空间状态过滤
 	State string `form:"state" binding:"omitempty,oneof=Ready Processing Disabled"`
+	// 租户 ID 过滤，为空时返回全部租户的工作空间
+	TenantID string `form:"tenantID" binding:"max=64"`
 	// 排序字段，仅支持白名单字段
 	SortBy string `form:"sortBy" binding:"omitempty,oneof=id displayName updatedAt,required_with=SortOrder"`
 	// 排序方向，需与排序字段配套使用
@@ -46,6 +48,7 @@ func (q ListWorkspacesQuery) ToListOptions() platmgtworkspace.WorkspaceListOptio
 	return platmgtworkspace.WorkspaceListOptions{
 		Keyword:   q.Keyword,
 		State:     q.State,
+		TenantID:  q.TenantID,
 		SortBy:    q.SortBy,
 		SortOrder: q.SortOrder,
 		Page:      q.Page,
@@ -63,6 +66,8 @@ type WorkspacePath struct {
 type WorkspaceWithStatsOutput struct {
 	// 工作空间 ID
 	ID string `json:"id"`
+	// 所属租户 ID
+	TenantID string `json:"tenantID"`
 	// 工作空间展示名称
 	DisplayName string `json:"displayName"`
 	// 工作空间描述
@@ -85,6 +90,7 @@ type WorkspaceWithStatsOutput struct {
 func NewWorkspaceWithStatsOutput(item platmgtworkspace.WorkspaceWithStats) *WorkspaceWithStatsOutput {
 	return &WorkspaceWithStatsOutput{
 		ID:          item.ID,
+		TenantID:    item.TenantID,
 		DisplayName: item.DisplayName,
 		Description: item.Description,
 		State:       item.State,
@@ -100,6 +106,8 @@ func NewWorkspaceWithStatsOutput(item platmgtworkspace.WorkspaceWithStats) *Work
 type WorkspaceInfoOutput struct {
 	// 工作空间 ID
 	ID string `json:"id"`
+	// 所属租户 ID
+	TenantID string `json:"tenantID"`
 	// 工作空间展示名称
 	DisplayName string `json:"displayName"`
 	// 工作空间描述
@@ -120,6 +128,7 @@ type WorkspaceInfoOutput struct {
 func NewWorkspaceInfoOutput(item platmgtworkspace.WorkspaceInfo) *WorkspaceInfoOutput {
 	return &WorkspaceInfoOutput{
 		ID:          item.ID,
+		TenantID:    item.TenantID,
 		DisplayName: item.DisplayName,
 		Description: item.Description,
 		State:       item.State,

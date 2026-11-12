@@ -29,6 +29,8 @@ import (
 type WorkspaceWithStats struct {
 	// ID is the unique identifier of the workspace.
 	ID string
+	// TenantID is the tenant the workspace belongs to.
+	TenantID string
 	// DisplayName is the display name shown for the workspace.
 	DisplayName string
 	// Description is the human-readable description of the workspace.
@@ -51,6 +53,8 @@ type WorkspaceWithStats struct {
 type WorkspaceInfo struct {
 	// ID is the unique identifier of the workspace.
 	ID string
+	// TenantID is the tenant the workspace belongs to.
+	TenantID string
 	// DisplayName is the display name shown for the workspace.
 	DisplayName string
 	// Description is the human-readable description of the workspace.
@@ -73,6 +77,8 @@ type WorkspaceListOptions struct {
 	Keyword string
 	// State filters workspaces by lifecycle state.
 	State string
+	// TenantID filters workspaces by the tenant they belong to, empty means all tenants.
+	TenantID string
 	// SortBy controls which white-listed field is used for sorting.
 	SortBy string
 	// SortOrder controls sorting direction and supports asc or desc.
@@ -110,9 +116,14 @@ func (o WorkspaceListOptions) sortOpt() store.Opt {
 }
 
 // ToWorkspaceStoreStatisticsOpt 将列表查询参数转换为顶部状态统计卡片使用的过滤条件。
-// 统计跟随关键字（Keyword）过滤，但与当前选中的状态标签页相互独立。
+// 统计跟随关键字（Keyword）与租户（TenantID）过滤，但与当前选中的状态标签页相互独立。
 func (o WorkspaceListOptions) ToWorkspaceStoreStatisticsOpt() store.Opt {
-	return bkmsworkspace.KeywordMatches(o.Keyword)
+	opts := []store.Opt{bkmsworkspace.KeywordMatches(o.Keyword)}
+	if o.TenantID != "" {
+		// 调用方查询时使用 TenantAll()，此时允许按 tenantID 字段筛选
+		opts = append(opts, store.Where("tenantID", o.TenantID))
+	}
+	return store.Combine(opts...)
 }
 
 // WorkspaceStateStatistics is the aggregated workspace state statistics for matched workspaces.

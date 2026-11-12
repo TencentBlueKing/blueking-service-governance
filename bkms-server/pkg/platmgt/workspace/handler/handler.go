@@ -59,6 +59,7 @@ func (h *GinHandler) service() *platmgtworkspace.Service {
 //	@Security	BkUserCredential
 //	@Param		keyword		query		string	false	"搜索关键词，匹配空间 ID / 空间名称"
 //	@Param		state		query		string	false	"空间状态过滤：Ready / Processing / Disabled"
+//	@Param		tenantID	query		string	false	"租户 ID 过滤，为空时返回全部租户的工作空间"
 //	@Param		sortBy		query		string	false	"排序字段：id / displayName / updatedAt"
 //	@Param		sortOrder	query		string	false	"排序方向：asc / desc"
 //	@Param		page		query		int		true	"页码，从 1 开始"

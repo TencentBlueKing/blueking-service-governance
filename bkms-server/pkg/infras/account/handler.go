@@ -39,6 +39,8 @@ type Config struct {
 	AuthEnvName string
 	// LoginURL 是 bk-login 服务的地址，用于拼接重定向时的登录链接
 	LoginURL string
+	// TokenCredential 是签发 token 时使用的用户凭证名称，从同名 cookie 中读取，由 usertoken.NewTokenClient 决定
+	TokenCredential string
 }
 
 // APIHandler implements the account Gin APIs.
@@ -61,8 +63,10 @@ func NewHandler(cfg Config, tokenClient usertoken.TokenClient) *APIHandler {
 //	@Router		/user_token/token [get]
 func (h *APIHandler) CreateToken(c *gin.Context) {
 	username, _ := c.Cookie("bk_uid")
-	ticket, _ := c.Cookie("bk_ticket")
-	if username == "" || ticket == "" {
+	credential, _ := c.Cookie(h.cfg.TokenCredential)
+	// API 网关 token 服务需要用户名，SSM 只凭 bk_token 识别用户
+	missingUsername := h.cfg.TokenCredential == usertoken.CredentialBkTicket && username == ""
+	if credential == "" || missingUsername {
 		if c.Query("redirect_login") != "true" {
 			writeLegacyError(c, "no user credentials found in cookie, please login first.")
 			return
@@ -80,7 +84,7 @@ func (h *APIHandler) CreateToken(c *gin.Context) {
 	token, err := h.tokenClient.GetToken(
 		ctx,
 		username,
-		map[string]string{"bk_ticket": ticket},
+		map[string]string{h.cfg.TokenCredential: credential},
 		h.cfg.AuthEnvName,
 		parseNeedNewToken(c.Query("need_new_token")),
 	)

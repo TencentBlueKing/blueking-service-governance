@@ -111,12 +111,37 @@ var _ = Describe("PlatWorkspaceService", func() {
 		Expect(items.Results).To(HaveLen(2))
 
 		Expect(items.Results[0].ID).To(Equal(wsB.ID))
+		Expect(items.Results[0].TenantID).To(Equal("tenant-other"))
 		Expect(items.Results[0].AppCount).To(Equal(1))
 		Expect(items.Results[0].EnvCount).To(Equal(2))
 
 		Expect(items.Results[1].ID).To(Equal(wsA.ID))
+		Expect(items.Results[1].TenantID).To(Equal(tenant.DefaultTenantID))
 		Expect(items.Results[1].AppCount).To(Equal(2))
 		Expect(items.Results[1].EnvCount).To(Equal(1))
+	})
+
+	It("should filter workspaces and statistics by tenant", func() {
+		otherCtx := tenant.WithTenantID(context.Background(), "tenant-other")
+		wsDefault := dbfactory.Workspace(ctx, workspaceStore)
+		wsOther := dbfactory.Workspace(otherCtx, workspaceStore)
+		defer func() {
+			_ = bkmsworkspace.Delete(ctx, workspaceStore, wsDefault.ID)
+			_ = bkmsworkspace.Delete(otherCtx, workspaceStore, wsOther.ID)
+		}()
+
+		items, err := service.List(platCtx, WorkspaceListOptions{
+			TenantID: "tenant-other",
+			Page:     1,
+			PageSize: 10,
+		})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(items.Count).To(Equal(int64(1)))
+		Expect(items.Results).To(HaveLen(1))
+		Expect(items.Results[0].ID).To(Equal(wsOther.ID))
+		Expect(items.Results[0].TenantID).To(Equal("tenant-other"))
+		Expect(items.Statistics.TotalCount).To(Equal(int64(1)))
+		Expect(items.Statistics.ReadyCount).To(Equal(int64(1)))
 	})
 
 	It("should filter by keyword and state and paginate results", func() {
@@ -261,6 +286,7 @@ var _ = Describe("PlatWorkspaceService", func() {
 		item, err := service.Get(platCtx, ws.ID)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(item.ID).To(Equal(ws.ID))
+		Expect(item.TenantID).To(Equal(tenant.DefaultTenantID))
 		Expect(item.DisplayName).To(Equal(ws.DisplayName))
 		Expect(item.State).To(Equal(string(ws.State)))
 		Expect(item.CreatedAt.IsZero()).To(BeFalse())

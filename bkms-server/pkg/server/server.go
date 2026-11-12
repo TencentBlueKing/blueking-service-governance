@@ -104,6 +104,8 @@ import (
 	platworkspaceimageregh "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/platmgt/workspace/imageregistry/handler"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/basic"
 	basichandler "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/basic/handler"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/platconfig"
+	platconfighandler "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/platconfig/handler"
 	storereg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appdefaults"
 	appdefaultshandler "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appdefaults/handler"
@@ -147,10 +149,17 @@ func RegisterRouter(ctx context.Context, cfg config.Config, serverRole string) (
 
 	// 初始化用户账号 account 相关 API
 	// 这批 API 不要求请求必须携带有效身份信息
-	tokenClient := usertoken.NewAPIGatewayTokenClient(cfg.Account.AuthBaseURL, cfg.BkApp.Code, cfg.BkApp.Secret)
+	tokenClient, tokenCredential := usertoken.NewTokenClient(ctx, usertoken.ClientConfig{
+		AuthBackendType:   cfg.Account.BackendType,
+		APIGatewayBaseURL: cfg.Account.AuthBaseURL,
+		SSMBaseURL:        cfg.Account.SSMBaseURL,
+		BkAppCode:         cfg.BkApp.Code,
+		BkAppSecret:       cfg.BkApp.Secret,
+	})
 	accountHandler := account.NewHandler(account.Config{
-		AuthEnvName: cfg.Account.AuthEnvName,
-		LoginURL:    cfg.Account.LoginURL,
+		AuthEnvName:     cfg.Account.AuthEnvName,
+		LoginURL:        cfg.Account.LoginURL,
+		TokenCredential: tokenCredential,
 	}, tokenClient)
 	authConfig := auth.Config{
 		BackendType:               cfg.Account.BackendType,
@@ -198,6 +207,12 @@ func RegisterRouter(ctx context.Context, cfg config.Config, serverRole string) (
 	if err != nil {
 		return nil, errors.Wrap(err, "new required auth middleware")
 	}
+
+	// 以下 Group 的 API 要求登录但不校验租户头，用于前端确定租户之前就需要调用的接口
+	v1NoTenant := r.Group("/bkms/v1/bkms-server")
+	v1NoTenant.Use(bkerrs.ErrorHandler(), requiredAuth)
+	platconfig.Register(v1NoTenant, platconfighandler.New(&cfg))
+
 	v1.Use(
 		bkerrs.ErrorHandler(),
 		requiredAuth,
