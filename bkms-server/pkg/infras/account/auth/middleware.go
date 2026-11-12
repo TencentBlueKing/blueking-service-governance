@@ -30,6 +30,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/pkg/errors"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/ctxkey"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth/backends"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/usertoken"
@@ -37,9 +38,9 @@ import (
 
 const (
 	// BackendBkTicket 使用 bk_ticket 完成用户认证。
-	BackendBkTicket = "bk_ticket"
+	BackendBkTicket = config.AuthBackendBkTicket
 	// BackendBkToken 使用 bk_token 完成用户认证。
-	BackendBkToken = "bk_token"
+	BackendBkToken = config.AuthBackendBkToken
 
 	// authTimeout 调用认证后端服务的超时时间。
 	authTimeout = 10 * time.Second

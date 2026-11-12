@@ -114,7 +114,11 @@ func (s *SSMTokenClient) post(ctx context.Context, path string, body map[string]
 	if err != nil {
 		return ClientResp{}, errors.Wrapf(err, "post %s", requestURL)
 	}
-	return toSuccessRespObj(resp.Body())
+	respObj, err := toSuccessRespObj(resp.Body())
+	if err != nil && resp.IsError() {
+		return respObj, errors.Wrapf(err, "post %s: status %d", requestURL, resp.StatusCode())
+	}
+	return respObj, err
 }
 
 // ssmVerifyResultData holds the data of the verifying token response.

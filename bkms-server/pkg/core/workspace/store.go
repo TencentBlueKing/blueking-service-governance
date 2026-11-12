@@ -58,6 +58,11 @@ func InState(state State) store.Opt {
 	return store.Where("state", state)
 }
 
+// InTenant 按所属租户匹配，须与 store.TenantAll() 一起使用，否则 store 会拒绝调用方自带的 tenantID 条件
+func InTenant(tenantID string) store.Opt {
+	return store.Where("tenantID", tenantID)
+}
+
 // KeywordMatches 模糊搜索，匹配 id、displayName，忽视大小写；关键字为空时不过滤
 func KeywordMatches(keyword string) store.Opt {
 	return store.ContainsIgnoreCase(keyword, "id", "displayName")

@@ -1,0 +1,39 @@
+docs {
+  测的是：已登录用户可以获取前端功能开关，返回值只包含白名单内的三个开关。
+  多租户开关与当前运行模式一致（BKMS_API_TEST_TENANT_ID 非空即多租户模式）。
+}
+
+meta {
+  name: frontend-features
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{serviceURL}}/platform/frontend-features
+  body: none
+  auth: inherit
+}
+
+assert {
+  res.status: eq 200
+  res.body.data: isJson
+}
+
+tests {
+  test("should only expose the whitelisted features", () => {
+    expect(Object.keys(res.body.data).sort()).to.deep.equal([
+      "INDEPENDENT_BK_REPO", "MULTI_TENANT_MODE", "WETERM",
+    ]);
+    Object.values(res.body.data).forEach(v => expect(v).to.be.a("boolean"));
+  });
+
+  test("should report the current tenant mode", () => {
+    expect(res.body.data.MULTI_TENANT_MODE).to.equal(Boolean(bru.getVar("apiTestTenantID")));
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 10000
+}

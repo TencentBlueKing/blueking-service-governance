@@ -22,15 +22,16 @@ package usertoken
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 
 	"github.com/mitchellh/mapstructure"
+	"github.com/pkg/errors"
 	"github.com/spf13/cast"
 )
 
 // TokenClient is the interface for managing user access tokens.
 type TokenClient interface {
-	// GetToken gets an access token of the given user.
+	// GetToken gets an access token of the given user. Implementations may ignore the
+	// arguments their token service does not need, see the doc of each implementation.
 	GetToken(
 		ctx context.Context, username string, credentials map[string]string, envName string, needNewToken bool,
 	) (*AccessToken, error)
@@ -54,10 +55,10 @@ type AccessToken struct {
 func parseUserAccessToken(respObj ClientResp) (*AccessToken, error) {
 	var data TokenResultData
 	if err := mapstructure.Decode(respObj.Data, &data); err != nil {
-		return nil, fmt.Errorf("parsing token data error")
+		return nil, errors.Wrap(err, "parsing token data")
 	}
 	if data.AccessToken == "" {
-		return nil, fmt.Errorf("access token not found")
+		return nil, errors.New("access token not found")
 	}
 	return &AccessToken{
 		AccessToken:  data.AccessToken,
@@ -69,17 +70,18 @@ func parseUserAccessToken(respObj ClientResp) (*AccessToken, error) {
 // toSuccessRespObj turn the response body into a structured object, return error if the
 // given content is malformed or the "code" in the content is not "0"("0" mean success).
 //
-// INFO: The response use 200 status code even if it's an error, so we won't check the status code.
+// INFO: The API gateway token service responds 200 even if it's an error, so the status code is
+// not checked here, callers whose service uses error status codes should report it themselves.
 func toSuccessRespObj(body []byte) (ClientResp, error) {
 	// Try to parse the response and check the "code"
 	respObj := ClientResp{}
 	if err := json.Unmarshal(body, &respObj); err != nil {
-		return respObj, fmt.Errorf("parsing response result: %w", err)
+		return respObj, errors.Wrap(err, "parsing response result")
 	}
 	// The code might be int(1308406) or string("0"), cast it to int anyway.
 	code := cast.ToInt(respObj.Code)
 	if code != 0 {
-		return respObj, fmt.Errorf("api error: %d-%s", code, respObj.Message)
+		return respObj, errors.Errorf("api error: %d-%s", code, respObj.Message)
 	}
 	return respObj, nil
 }

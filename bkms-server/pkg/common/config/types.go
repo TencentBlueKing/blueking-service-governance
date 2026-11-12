@@ -34,6 +34,14 @@ type BkAppConfig struct {
 	Secret string
 }
 
+// AccountConfig.BackendType 的可选值
+const (
+	// AuthBackendBkTicket 使用 bk_ticket 完成用户认证
+	AuthBackendBkTicket = "bk_ticket"
+	// AuthBackendBkToken 使用 bk_token 完成用户认证
+	AuthBackendBkToken = "bk_token"
+)
+
 // AccountConfig 是和用户账号鉴权、用户 Token 获取相关的配置项集合
 type AccountConfig struct {
 	// AuthBaseURL 是 auth 服务的基础 URL，通常由蓝鲸网关服务提供，usertoken 令牌相关功能使用
@@ -45,7 +53,8 @@ type AccountConfig struct {
 	// BackendType 是用户认证使用的后端类型，比如 bk_ticket 或 bk_token，默认值为 "bk_token"
 	BackendType string `validate:"omitempty,oneof=bk_ticket bk_token"`
 	// SSMBaseURL 是蓝鲸 SSM 服务的基础 URL，只能直连、不能经过网关。BackendType 为 bk_token 时，
-	// 配置后 usertoken 令牌相关功能改用 SSM 签发和校验，未配置时仍使用 AuthBaseURL 指向的网关 token 服务
+	// 配置后 usertoken 令牌相关功能改用 SSM 签发和校验，未配置时仍使用 AuthBaseURL 指向的网关 token 服务。
+	// 两种服务签发的 token 互不认可，切换后之前签发的 access token / refresh token 全部失效，需重新获取
 	SSMBaseURL string `validate:"omitempty,url"`
 }
 
