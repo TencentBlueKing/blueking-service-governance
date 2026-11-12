@@ -20,7 +20,9 @@ package rainbowtconf_test
 
 import (
 	"context"
+	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/TencentBlueKing/gopkg/stringx"
 	. "github.com/onsi/ginkgo/v2"
@@ -122,6 +124,31 @@ var _ = Describe("Entry", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(second.Updater).To(Equal("tester"))
 			Expect(second.UpdatedAt).To(Equal(first.UpdatedAt))
+		})
+
+		It("should succeed when the same app is saved concurrently for the first time", func() {
+			const workers = 8
+			var wg sync.WaitGroup
+			start := make(chan struct{})
+			errs := make([]error, workers)
+			for i := range workers {
+				wg.Add(1)
+				go func() {
+					defer GinkgoRecover()
+					defer wg.Done()
+					<-start
+					_, errs[i] = rainbowtconf.SaveURL(
+						ctx, db, appID, fmt.Sprintf("https://rainbow.example.com/console/%d", i), "tester",
+					)
+				}()
+			}
+			close(start)
+			wg.Wait()
+
+			for _, err := range errs {
+				Expect(err).NotTo(HaveOccurred())
+			}
+			Expect(entries.Count(ctx, rainbowtconf.ByApp(appID))).To(BeEquivalentTo(1))
 		})
 
 		It("should reject an invalid url without writing", func() {

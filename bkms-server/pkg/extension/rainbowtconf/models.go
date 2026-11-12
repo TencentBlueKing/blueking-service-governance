@@ -116,6 +116,15 @@ func SaveURL(ctx context.Context, db *mongo.Database, appID, rawURL, operator st
 		return nil, err
 	}
 
+	entry, err := saveURL(ctx, db, appID, u, operator)
+	if errors.Is(err, ErrEntryAlreadyExists) {
+		entry, err = saveURL(ctx, db, appID, u, operator)
+	}
+	return entry, err
+}
+
+// saveURL 按已校验的地址写入，地址不变时不写库
+func saveURL(ctx context.Context, db *mongo.Database, appID, u, operator string) (*Entry, error) {
 	current, err := GetEntry(ctx, db, appID)
 	if err != nil {
 		return nil, err
