@@ -75,7 +75,7 @@
       @click="emit('add')"
     >
       <i class="bkms-icon bkms-icon-jiahao mr-[2px] text-[16px]"></i>
-      {{ t('更新批次') }}
+      {{ t('发布批次') }}
     </button>
   </div>
 </template>

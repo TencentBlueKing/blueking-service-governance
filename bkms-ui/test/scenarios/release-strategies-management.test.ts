@@ -325,7 +325,7 @@ describe('发布策略管理：新建 / 编辑 / 查看', () => {
     // 默认一个批次：累计值留空待填写
     expect(screen.getAllByTestId('batch-card')).toHaveLength(1);
 
-    await userEvent.click(screen.getByRole('button', { name: '更新批次' }));
+    await userEvent.click(screen.getByRole('button', { name: '发布批次' }));
 
     const cards = screen.getAllByTestId('batch-card');
     expect(cards).toHaveLength(2);
@@ -342,7 +342,7 @@ describe('发布策略管理：新建 / 编辑 / 查看', () => {
     // 至少保留一批：默认只有一个批次时不可删除
     expect(within(screen.getByTestId('batch-card')).queryByTestId('batch-remove')).not.toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole('button', { name: '更新批次' }));
+    await userEvent.click(screen.getByRole('button', { name: '发布批次' }));
 
     const cards = screen.getAllByTestId('batch-card');
     expect(cards).toHaveLength(2);
@@ -355,7 +355,7 @@ describe('发布策略管理：新建 / 编辑 / 查看', () => {
 
   it('当用户删除批次时，应移除该批次并选中相邻批次，删到仅剩一批后不再可删', async () => {
     await openCreateDrawer();
-    await userEvent.click(screen.getByRole('button', { name: '更新批次' }));
+    await userEvent.click(screen.getByRole('button', { name: '发布批次' }));
 
     const cards = screen.getAllByTestId('batch-card');
     expect(cards).toHaveLength(2);
@@ -375,7 +375,7 @@ describe('发布策略管理：新建 / 编辑 / 查看', () => {
     // 第 1 批累计 10 个
     await fireEvent.update(screen.getByTestId('target-value'), '10');
     // 新增第 2 批并填写 5 个，小于上一批，触发「需大于上一批」
-    await userEvent.click(screen.getByRole('button', { name: '更新批次' }));
+    await userEvent.click(screen.getByRole('button', { name: '发布批次' }));
     await fireEvent.update(screen.getByTestId('target-value'), '5');
 
     await userEvent.click(screen.getByRole('button', { name: '提交' }));
@@ -481,7 +481,7 @@ describe('发布策略管理：新建 / 编辑 / 查看', () => {
     expect(within(header).getByText('平台内置')).toBeInTheDocument();
     expect(screen.getByPlaceholderText('请输入策略名称，1 ~ 32 个字符')).toBeDisabled();
     expect(screen.queryByRole('button', { name: '提交' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '更新批次' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '发布批次' })).not.toBeInTheDocument();
     // 查看态 footer：克隆为空间策略 / 预览策略 / 关闭
     expect(screen.getByRole('button', { name: '克隆为空间策略' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '预览策略' })).toBeInTheDocument();
