@@ -1,0 +1,32 @@
+global: # 全局配置
+  local_ip: ${BKMS_POD_IP} # 全局配置本地IP地址，需要使用容器环境变量渲染
+  threadmodel:
+    fiber:
+      - instance_name: fiber_instance # 线程模型实例名
+        concurrency_hint: 8 # 运行的线程数
+
+server:
+  app: ${BKMS_ENV_NAME} # 业务的应用名
+  server: ${BKMS_APP_NAME} # 进程服务名
+  admin_ip: 0.0.0.0 # 管理命令服务监听的 IP
+  admin_port: 21111 # 管理命令服务监听的端口
+  service:
+    - name: trpc.${BKMS_ENV_NAME}.${BKMS_APP_NAME}.Greeter # trpc服务，业务需要修改
+      protocol: trpc
+      network: tcp
+      ip: ${BKMS_POD_IP}
+      port: 8080
+
+plugins: # 插件配置
+  log: # 日志配置
+    default:
+      - name: default
+        min_level: 2 # 日志级别：0-trace 1-debug 2-info 3-warn 4-error 5-critical
+        format: '[%Y-%m-%d %H:%M:%S.%e] [thread %t] [%l] [%@] %v'
+        mode: 2 # 1-同步 2-异步 3-极速
+        sinks:
+          local_file:
+            filename: /usr/local/trpc/log/trpc.log # 本地文件日志存放的路径
+            roll_type: by_size # 按大小滚动
+            roll_size: 104857600 # 单个日志文件大小，单位字节
+            reserve_count: 10 # 保留的日志文件数

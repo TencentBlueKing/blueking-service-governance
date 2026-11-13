@@ -1321,6 +1321,8 @@ definitions:
     type: object
   github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_workload_appmodelcore_appspec_serializer.EmptyOutput:
     type: object
+  ? github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_workload_appmodelcore_frameworkcfgtmpl_serializer.EmptyOutput
+  : type: object
   github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_workload_envvars_serializer.EmptyOutput:
     type: object
   github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_workload_instance_serializer.EmptyOutput:
@@ -4330,6 +4332,35 @@ definitions:
         - $ref: '#/definitions/serializer.ScopedEnvVarOutputObj'
         description: 作用域级别环境变量
     type: object
+  serializer.CreateTemplateInput:
+    properties:
+      content:
+        description: 框架配置文件内容
+        type: string
+      fileName:
+        description: 框架配置文件名，规则与应用配置文件名一致
+        maxLength: 64
+        minLength: 1
+        type: string
+      framework:
+        description: 框架：trpc、taf
+        type: string
+      isDefault:
+        description: 是否设为创建应用时默认使用的模板
+        type: boolean
+      language:
+        description: 语言：go、cpp
+        type: string
+      name:
+        description: 模板名称，同一框架、同一语言下不能重复，不能为「平台默认」
+        type: string
+    required:
+    - content
+    - fileName
+    - framework
+    - language
+    - name
+    type: object
   serializer.CreateWorkspaceComponentInput:
     properties:
       compName:
@@ -7006,6 +7037,13 @@ definitions:
     properties:
       data:
         $ref: '#/definitions/serializer.RuntimeImagesOutputObjs'
+    type: object
+  serializer.ListTemplatesOutput:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/serializer.TemplateOutputObj'
+        type: array
     type: object
   serializer.ListTopologyNodeEventsOutput:
     properties:
@@ -9793,6 +9831,50 @@ definitions:
         description: 版本号类型
         type: string
     type: object
+  serializer.TemplateOutput:
+    properties:
+      data:
+        $ref: '#/definitions/serializer.TemplateOutputObj'
+    type: object
+  serializer.TemplateOutputObj:
+    properties:
+      builtin:
+        description: 是否为平台内置模板，内置模板只读
+        type: boolean
+      content:
+        description: 框架配置文件内容，列表接口不返回
+        type: string
+      createdAt:
+        description: 创建时间，内置模板为空
+        type: string
+      creator:
+        description: 创建人，内置模板为空
+        type: string
+      fileName:
+        description: 框架配置文件名
+        type: string
+      framework:
+        description: 框架
+        type: string
+      id:
+        description: 模板 ID，内置模板为 builtin-{framework}-{language}
+        type: string
+      isDefault:
+        description: 是否为所在框架、语言的默认模板
+        type: boolean
+      language:
+        description: 语言
+        type: string
+      name:
+        description: 模板名称
+        type: string
+      updatedAt:
+        description: 更新时间，内置模板为空
+        type: string
+      updater:
+        description: 最近修改人，内置模板为空
+        type: string
+    type: object
   serializer.ThresholdConfigInput:
     properties:
       method:
@@ -10559,6 +10641,27 @@ definitions:
         allOf:
         - $ref: '#/definitions/serializer.ScopedEnvVarOutputObj'
         description: 作用域级别环境变量
+    type: object
+  serializer.UpdateTemplateInput:
+    properties:
+      content:
+        description: 框架配置文件内容
+        type: string
+      fileName:
+        description: 框架配置文件名，规则与应用配置文件名一致
+        maxLength: 64
+        minLength: 1
+        type: string
+      isDefault:
+        description: 是否设为创建应用时默认使用的模板；不传不修改，取消默认后回落到平台默认模板
+        type: boolean
+      name:
+        description: 模板名称，同一框架、同一语言下不能重复，不能为「平台默认」
+        type: string
+    required:
+    - content
+    - fileName
+    - name
     type: object
   serializer.UpdateWorkspaceInfoInput:
     properties:
@@ -23513,6 +23616,219 @@ paths:
       summary: 获取指定环境下的泳道列表
       tags:
       - env
+  /workspaces/{workspaceID}/framework-config-templates:
+    get:
+      description: 返回平台内置模板与空间自定义模板，每个框架、语言先列内置模板；不返回模板内容
+      operationId: ListWorkspaceFrameworkConfigTemplates
+      parameters:
+      - description: 工作空间 ID
+        in: path
+        name: workspaceID
+        required: true
+        type: string
+      - description: 框架：trpc、taf
+        in: query
+        name: framework
+        type: string
+      - description: 语言：go、cpp
+        in: query
+        name: language
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.ListTemplatesOutput'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 查询工作空间框架配置模板列表
+      tags:
+      - framework-config-templates
+    post:
+      consumes:
+      - application/json
+      operationId: CreateWorkspaceFrameworkConfigTemplate
+      parameters:
+      - description: 工作空间 ID
+        in: path
+        name: workspaceID
+        required: true
+        type: string
+      - description: 框架配置模板
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/serializer.CreateTemplateInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.TemplateOutput'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+        "409":
+          description: 同一框架、语言下模板名称已存在，或并发设置了其它默认模板
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 新建工作空间框架配置模板
+      tags:
+      - framework-config-templates
+  /workspaces/{workspaceID}/framework-config-templates/{templateID}:
+    delete:
+      description: 删除默认模板后，该框架、语言回落到平台内置模板；平台内置模板不能删除
+      operationId: DeleteWorkspaceFrameworkConfigTemplate
+      parameters:
+      - description: 工作空间 ID
+        in: path
+        name: workspaceID
+        required: true
+        type: string
+      - description: 模板 ID
+        in: path
+        name: templateID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_workload_appmodelcore_frameworkcfgtmpl_serializer.EmptyOutput'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 删除工作空间框架配置模板
+      tags:
+      - framework-config-templates
+    get:
+      operationId: GetWorkspaceFrameworkConfigTemplate
+      parameters:
+      - description: 工作空间 ID
+        in: path
+        name: workspaceID
+        required: true
+        type: string
+      - description: 模板 ID，内置模板为 builtin-{framework}-{language}
+        in: path
+        name: templateID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.TemplateOutput'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 查询工作空间框架配置模板详情
+      tags:
+      - framework-config-templates
+    put:
+      consumes:
+      - application/json
+      description: 框架与语言不可修改；平台内置模板只读
+      operationId: UpdateWorkspaceFrameworkConfigTemplate
+      parameters:
+      - description: 工作空间 ID
+        in: path
+        name: workspaceID
+        required: true
+        type: string
+      - description: 模板 ID
+        in: path
+        name: templateID
+        required: true
+        type: string
+      - description: 框架配置模板
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/serializer.UpdateTemplateInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.TemplateOutput'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+        "409":
+          description: 同一框架、语言下模板名称已存在，或并发设置了其它默认模板
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 编辑工作空间框架配置模板
+      tags:
+      - framework-config-templates
+  /workspaces/{workspaceID}/framework-config-templates/{templateID}/default:
+    put:
+      description: 创建应用时默认使用该模板；对平台内置模板调用表示恢复使用平台默认模板
+      operationId: SetWorkspaceFrameworkConfigTemplateDefault
+      parameters:
+      - description: 工作空间 ID
+        in: path
+        name: workspaceID
+        required: true
+        type: string
+      - description: 模板 ID，内置模板为 builtin-{framework}-{language}
+        in: path
+        name: templateID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.TemplateOutput'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+        "409":
+          description: 并发设置了其它默认模板
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 设为默认框架配置模板
+      tags:
+      - framework-config-templates
   /workspaces/{workspaceID}/info:
     put:
       consumes:
