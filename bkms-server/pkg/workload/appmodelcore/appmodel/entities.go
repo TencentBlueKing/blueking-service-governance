@@ -131,8 +131,9 @@ type AppModel struct {
 
 // Workload represents a workload definition
 type Workload struct {
-	// Type 工作负载类型（兼容字段）。空值不得再被新规范化层视为 tRPC；
-	// 旧 plugin 注册表仍可能回退 tRPC，直到阶段 3 改分派。
+	// Type 工作负载类型（兼容字段），新应用不写入，渲染不读取。
+	//
+	// Deprecated: bkmsApp 迁移兼容，框架由 Application.Framework 决定。
 	Type string `bson:"type"`
 	// Name 工作负载名称, 通常与 App 保持一致
 	Name string `bson:"name"`
@@ -182,9 +183,13 @@ type Workload struct {
 	// FrameworkConfigVersion 描述 FrameworkConfig 的 schema 版本，初始为 1。
 	FrameworkConfigVersion int `bson:"frameworkConfigVersion,omitempty"`
 
-	// TrpcConfig 旧 tRPC 配置兼容 DTO，阶段 5 前回读仍以它为主数据之一。
+	// TrpcConfig 旧 tRPC 配置兼容 DTO，新应用不写入。
+	//
+	// Deprecated: bkmsApp 迁移兼容，语言已迁移到 Application.Language，文件信息已迁移到框架配置文件定义。
 	TrpcConfig TrpcConfig `bson:"trpcConfig,omitempty"`
-	// TafConfig 旧 TAF 配置兼容 DTO，阶段 5 前回读仍以它为主数据之一。
+	// TafConfig 旧 TAF 配置兼容 DTO，新应用不写入。
+	//
+	// Deprecated: bkmsApp 迁移兼容，文件信息已迁移到框架配置文件定义。
 	TafConfig TafConfig `bson:"tafConfig,omitempty"`
 }
 

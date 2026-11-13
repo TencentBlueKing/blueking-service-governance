@@ -185,22 +185,6 @@ var _ = Describe("Normalize", func() {
 		Expect(issueCodes(report)).To(ContainElement(appruntime.IssueOrphanApplication))
 	})
 
-	It("summarizes issues without copying file content", func() {
-		snap := appruntime.Snapshot{
-			AppID:              "app-conflict",
-			AppType:            appruntime.AppTypeTRPC,
-			TrpcSpecLanguage:   appruntime.LanguageGo,
-			TrpcConfigLanguage: appruntime.LanguageCpp,
-			HasTrpcFileContent: true,
-		}
-		summary := appruntime.Summarize([]appruntime.Report{appruntime.Inspect(snap)}, []appruntime.Snapshot{snap}, 5)
-		Expect(summary.Blocking).To(Equal(1))
-		Expect(summary.ByIssue[appruntime.IssueLanguageConflict]).To(Equal(1))
-		Expect(summary.Samples).To(HaveLen(1))
-		Expect(summary.Samples[0].HasTrpcFileContent).To(BeTrue())
-		Expect(summary.Samples[0].IssueCodes).To(ContainElement(appruntime.IssueLanguageConflict))
-	})
-
 	It("rejects unknown frameworkConfig versions", func() {
 		report := appruntime.Inspect(appruntime.Snapshot{
 			AppType:                appruntime.AppTypeBKMSApp,

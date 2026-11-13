@@ -26,6 +26,7 @@ import (
 
 	build "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/overview"
 	deploystatus "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/status"
 	_ "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/validators" // register global validators
@@ -67,13 +68,13 @@ type CreateAppInput struct {
 	// 应用 ID. 应用在全局范围内的唯一标识，默认情况下基于 name 自动生成，在 name 后追加后缀。
 	// 长度范围 1~63 个字符，以小写字母开头，可包含小写字母、数字、中划线，不能以中划线结尾
 	ID string `json:"id" binding:"required,app_id"`
-	// 应用类型
+	// 应用类型。trpc / taf 已废弃，请改用 POST /workspaces/{workspaceID}/bkmsapps；为兼容旧客户端仍接受，按 bkmsApp 创建
 	Type string `json:"type" binding:"required,oneof=trpc taf helm agones"`
 	// 构建配置
 	BuildConfig *BuildConfigInput `json:"buildConfig" binding:"required"`
 	// Helm 应用描述规范（type 为 helm/agones 时需要）
 	HelmSpec *HelmSpecInput `json:"helmSpec"`
-	// 应用模型规范（type 为 trpc/taf 时需要）
+	// 应用模型规范（type 为 trpc/taf 时需要，已废弃）
 	AppModelSpec *AppModelSpecInput `json:"appModelSpec"`
 }
 
@@ -156,14 +157,12 @@ type AppDetailOutputObj struct {
 }
 
 // FromModel fills output fields from app detail models.
-// fileName 和 filePath 来自 framework def。没有唯一的 framework def 时传空字符串。
-// todo 兼容：详情仍在 spec 返回这两个字段。调用方改读 def 后删除这两个参数。
 func (o *AppDetailOutputObj) FromModel(
 	app *bkmsapp.Application,
 	buildConfig *build.Config,
 	appModel *appmodel.AppModel,
 	components []ComponentOutputObj,
-	fileName, filePath string,
+	frameworkSpec FrameworkSpecView,
 ) *AppDetailOutputObj {
 	*o = AppDetailOutputObj{
 		ID:              app.ID,
@@ -179,7 +178,7 @@ func (o *AppDetailOutputObj) FromModel(
 		HelmSpec:        new(HelmSpecOutputObj).FromModel(app.HelmSpec),
 	}
 	if appModel != nil {
-		o.AppModelSpec = new(AppModelSpecOutputObj).FromModel(appModel, components, fileName, filePath)
+		o.AppModelSpec = new(AppModelSpecOutputObj).FromModel(appModel, components, frameworkSpec)
 	}
 	return o
 }
@@ -198,9 +197,9 @@ type AppModelSpecInput struct {
 	ShCommand string `json:"shCommand"`
 	// 容器环境变量，仅创建应用时生效；更新 tRPC/TAF Spec 时为兼容旧客户端接收但忽略
 	EnvVars []VariableInput `json:"envVars"`
-	// tRPC 框架配置
+	// tRPC 框架配置（已废弃）
 	TrpcSpec *TrpcSpecInput `json:"trpcSpec"`
-	// TAF 框架配置
+	// TAF 框架配置（已废弃）
 	TafSpec *TafSpecInput `json:"tafSpec"`
 }
 
@@ -228,9 +227,9 @@ type AppModelSpecOutputObj struct {
 	EnvVars []VariableOutputObj `json:"envVars"`
 	// 应用组件
 	Components []ComponentOutputObj `json:"components"`
-	// tRPC 框架配置
+	// tRPC 框架配置（已废弃，请读取 language 与配置文件定义），framework=trpc 时返回
 	TrpcSpec *TrpcSpecOutputObj `json:"trpcSpec,omitempty"`
-	// TAF 框架配置
+	// TAF 框架配置（已废弃，请读取配置文件定义），framework=taf 时返回
 	TafSpec *TafSpecOutputObj `json:"tafSpec,omitempty"`
 	// 框架扩展配置，仅 bkmsApp 应用返回
 	FrameworkConfig *map[string]any `json:"frameworkConfig,omitempty"`
@@ -267,12 +266,11 @@ type ComponentOutputObj struct {
 }
 
 // FromModel fills output fields from appmodel data.
-// fileName 和 filePath 来自 framework def，写入 trpcSpec 或 tafSpec。
-// todo 兼容：详情仍在 spec 返回这两个字段。调用方改读 def 后删除这两个参数。
+// trpcSpec / tafSpec 由 frameworkSpec 按框架输出。
 func (o *AppModelSpecOutputObj) FromModel(
 	am *appmodel.AppModel,
 	components []ComponentOutputObj,
-	fileName, filePath string,
+	frameworkSpec FrameworkSpecView,
 ) *AppModelSpecOutputObj {
 	if am == nil {
 		return nil
@@ -296,19 +294,19 @@ func (o *AppModelSpecOutputObj) FromModel(
 			IsSensitive: v.IsSensitive,
 		})
 	}
-	if am.Workload.Type == appmodel.WorkloadTypeTrpc || am.Workload.TrpcConfig.Language != "" {
+	switch frameworkSpec.Framework {
+	case appruntime.FrameworkTRPC:
 		o.TrpcSpec = &TrpcSpecOutputObj{
-			Language:    am.Workload.TrpcConfig.Language,
-			FileName:    fileName,
-			FilePath:    filePath,
-			FileContent: am.Workload.TrpcConfig.FileContent,
+			Language:    frameworkSpec.Language,
+			FileName:    frameworkSpec.FileName,
+			FilePath:    frameworkSpec.FilePath,
+			FileContent: frameworkSpec.FileContent,
 		}
-	}
-	if am.Workload.Type == appmodel.WorkloadTypeTaf {
+	case appruntime.FrameworkTAF:
 		o.TafSpec = &TafSpecOutputObj{
-			FileName:    fileName,
-			FilePath:    filePath,
-			FileContent: am.Workload.TafConfig.FileContent,
+			FileName:    frameworkSpec.FileName,
+			FilePath:    frameworkSpec.FilePath,
+			FileContent: frameworkSpec.FileContent,
 		}
 	}
 	if cfg, ok := am.Workload.GetFrameworkConfig(); ok {
@@ -723,4 +721,21 @@ func emptySliceIfNil[T any](items []T) []T {
 		return []T{}
 	}
 	return items
+}
+
+// variableInputsToModel 将 VariableInput 切片转换为 appmodel.Variable 切片
+func variableInputsToModel(vars []VariableInput) []appmodel.Variable {
+	if len(vars) == 0 {
+		return nil
+	}
+	result := make([]appmodel.Variable, 0, len(vars))
+	for _, v := range vars {
+		result = append(result, appmodel.Variable{
+			Key:         v.Key,
+			Value:       v.Value,
+			Description: v.Description,
+			IsSensitive: v.IsSensitive,
+		})
+	}
+	return result
 }

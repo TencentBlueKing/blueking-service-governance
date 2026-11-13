@@ -81,9 +81,6 @@ func (p *Plugin) Start(
 		return nil, errors.Wrap(err, "rendering TAF framework config")
 	}
 
-	// 回写渲染后的内容供其他组件使用
-	appModel.Workload.TafConfig.FileContent = frameworkParams[0].FileContent
-
 	return runtimerender.BuildConfig(runtimerender.ConfigParams{
 		WorkloadType:  appmodel.WorkloadTypeTaf,
 		ConfigMapName: appModel.Workload.Name,

@@ -31,6 +31,7 @@ import (
 	build "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/serializer"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/overview"
 	deploystatus "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/status"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
@@ -106,7 +107,7 @@ var _ = Describe("App deploy status serializers", func() {
 			ID:          "app-id",
 			WorkspaceID: "workspace-id",
 			Name:        "app-name",
-			Type:        bkmsapp.AppTypeTRPC,
+			Type:        appruntime.AppTypeTRPC,
 			Language:    "cpp",
 			Framework:   "trpc",
 			TrpcSpec:    &bkmsapp.TrpcSpec{Language: "go"},
@@ -218,7 +219,7 @@ var _ = Describe("App serializers", func() {
 			ID:          "app-id",
 			WorkspaceID: "workspace-1",
 			Name:        "demo-app",
-			Type:        bkmsapp.AppTypeTRPC,
+			Type:        appruntime.AppTypeTRPC,
 			DisplayName: "Demo App",
 			Creator:     "tester",
 		}
@@ -259,7 +260,8 @@ var _ = Describe("App serializers", func() {
 			ScopeEnvNames:        []string{"prod"},
 		}}
 
-		output := new(serializer.AppDetailOutputObj).FromModel(app, buildConfig, appModel, components, "", "")
+		output := new(serializer.AppDetailOutputObj).FromModel(app, buildConfig, appModel, components,
+			serializer.FrameworkSpecView{Framework: "trpc", Language: "go", FileContent: "content"})
 
 		Expect(output).To(Equal(&serializer.AppDetailOutputObj{
 			ID:              "app-id",
@@ -311,12 +313,12 @@ var _ = Describe("App serializers", func() {
 			ID:          "helm-app",
 			WorkspaceID: "workspace-1",
 			Name:        "helm-demo",
-			Type:        bkmsapp.AppTypeHelm,
+			Type:        appruntime.AppTypeHelm,
 			DisplayName: "Helm Demo",
 			Creator:     "tester",
 		}
 
-		output := new(serializer.AppDetailOutputObj).FromModel(app, nil, nil, nil, "", "")
+		output := new(serializer.AppDetailOutputObj).FromModel(app, nil, nil, nil, serializer.FrameworkSpecView{})
 
 		Expect(output.BuildConfig).To(BeNil())
 		Expect(output.HelmSpec).To(BeNil())
@@ -329,11 +331,11 @@ var _ = Describe("App serializers", func() {
 			ID:              "app-id",
 			WorkspaceID:     "workspace-1",
 			Name:            "demo-app",
-			Type:            bkmsapp.AppTypeTRPC,
+			Type:            appruntime.AppTypeTRPC,
 			VisibleEnvNames: []string{"test", "stag"},
 		}
 
-		output := new(serializer.AppDetailOutputObj).FromModel(app, nil, nil, nil, "", "")
+		output := new(serializer.AppDetailOutputObj).FromModel(app, nil, nil, nil, serializer.FrameworkSpecView{})
 
 		Expect(output.VisibleEnvNames).To(Equal([]string{"test", "stag"}))
 	})
@@ -445,7 +447,7 @@ var _ = Describe("App serializers", func() {
 			ScopeType: "global",
 		}}
 
-		output := new(serializer.AppModelSpecOutputObj).FromModel(appModel, components, "", "")
+		output := new(serializer.AppModelSpecOutputObj).FromModel(appModel, components, serializer.FrameworkSpecView{})
 
 		Expect(output.Command).To(Equal([]string{}))
 		Expect(output.Args).To(Equal([]string{}))
@@ -470,17 +472,15 @@ var _ = Describe("App serializers", func() {
 	It("maps app model spec output with taf config", func() {
 		appModel := &appmodel.AppModel{
 			Workload: appmodel.Workload{
-				Type:    appmodel.WorkloadTypeTaf,
 				Command: []string{"run"},
 				Args:    []string{"--taf"},
 				EnvVars: []appmodel.Variable{{Key: "MODE", Value: "taf"}},
-				TafConfig: appmodel.TafConfig{
-					FileContent: "taf-content",
-				},
 			},
 		}
 
-		output := new(serializer.AppModelSpecOutputObj).FromModel(appModel, nil, "", "")
+		output := new(serializer.AppModelSpecOutputObj).FromModel(
+			appModel, nil, serializer.FrameworkSpecView{Framework: "taf", FileContent: "taf-content"},
+		)
 
 		Expect(output).To(Equal(&serializer.AppModelSpecOutputObj{
 			Command:    []string{"run"},
@@ -493,21 +493,38 @@ var _ = Describe("App serializers", func() {
 		}))
 	})
 
-	It("fills framework file name and path from def", func() {
+	It("fills framework spec from the new model and ignores legacy fields", func() {
 		appModel := &appmodel.AppModel{
 			Workload: appmodel.Workload{
-				Type:       appmodel.WorkloadTypeTrpc,
-				TrpcConfig: appmodel.TrpcConfig{Language: "go"},
+				Type:       appmodel.WorkloadTypeTaf,
+				TrpcConfig: appmodel.TrpcConfig{Language: "cpp", FileContent: "legacy"},
 			},
 		}
 
+		output := new(serializer.AppModelSpecOutputObj).FromModel(appModel, nil, serializer.FrameworkSpecView{
+			Framework:   "trpc",
+			Language:    "go",
+			FileName:    "trpc_go.yaml",
+			FilePath:    "/usr/local/trpc/bin",
+			FileContent: "server: {}",
+		})
+
+		Expect(output.TafSpec).To(BeNil())
+		Expect(output.TrpcSpec).To(Equal(&serializer.TrpcSpecOutputObj{
+			Language:    "go",
+			FileName:    "trpc_go.yaml",
+			FilePath:    "/usr/local/trpc/bin",
+			FileContent: "server: {}",
+		}))
+	})
+
+	It("does not output trpcSpec or tafSpec for blank apps", func() {
 		output := new(serializer.AppModelSpecOutputObj).FromModel(
-			appModel, nil, "trpc_go.yaml", "/usr/local/trpc/bin",
+			&appmodel.AppModel{}, nil, serializer.FrameworkSpecView{Framework: "blank", Language: "go"},
 		)
 
-		Expect(output.TrpcSpec.FileName).To(Equal("trpc_go.yaml"))
-		Expect(output.TrpcSpec.FilePath).To(Equal("/usr/local/trpc/bin"))
-		Expect(output.TrpcSpec.Language).To(Equal("go"))
+		Expect(output.TrpcSpec).To(BeNil())
+		Expect(output.TafSpec).To(BeNil())
 	})
 
 	DescribeTable(
@@ -624,7 +641,7 @@ var _ = Describe("App serializers", func() {
 		Entry("valid trpc app input", serializer.CreateAppInput{
 			Name: "demo-app",
 			ID:   "demo-app",
-			Type: bkmsapp.AppTypeTRPC,
+			Type: appruntime.AppTypeTRPC,
 			BuildConfig: &serializer.BuildConfigInput{
 				SourceType: "pipeline",
 				PipelineBuildConfig: &serializer.PipelineBuildConfigInput{
@@ -642,7 +659,7 @@ var _ = Describe("App serializers", func() {
 		Entry("duplicate env var keys in trpc create input", serializer.CreateAppInput{
 			Name: "demo-app",
 			ID:   "demo-app",
-			Type: bkmsapp.AppTypeTRPC,
+			Type: appruntime.AppTypeTRPC,
 			BuildConfig: &serializer.BuildConfigInput{
 				SourceType: "pipeline",
 				PipelineBuildConfig: &serializer.PipelineBuildConfigInput{
@@ -667,7 +684,7 @@ var _ = Describe("App serializers", func() {
 		Entry("too long app name", serializer.CreateAppInput{
 			Name: "demo-app-abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdef",
 			ID:   "demo-app",
-			Type: bkmsapp.AppTypeTRPC,
+			Type: appruntime.AppTypeTRPC,
 			BuildConfig: &serializer.BuildConfigInput{
 				SourceType:          "pipeline",
 				PipelineBuildConfig: &serializer.PipelineBuildConfigInput{PipelineID: "pipeline-id"},
@@ -686,7 +703,7 @@ var _ = Describe("App serializers", func() {
 		Entry("too long app id", serializer.CreateAppInput{
 			Name: "demo-app",
 			ID:   "demo-app-abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdef",
-			Type: bkmsapp.AppTypeTRPC,
+			Type: appruntime.AppTypeTRPC,
 			BuildConfig: &serializer.BuildConfigInput{
 				SourceType:          "pipeline",
 				PipelineBuildConfig: &serializer.PipelineBuildConfigInput{PipelineID: "pipeline-id"},
@@ -705,7 +722,7 @@ var _ = Describe("App serializers", func() {
 		Entry("trpc app requires trpc spec", serializer.CreateAppInput{
 			Name: "demo-app",
 			ID:   "demo-app",
-			Type: bkmsapp.AppTypeTRPC,
+			Type: appruntime.AppTypeTRPC,
 			BuildConfig: &serializer.BuildConfigInput{
 				SourceType:          "pipeline",
 				PipelineBuildConfig: &serializer.PipelineBuildConfigInput{PipelineID: "pipeline-id"},
@@ -718,7 +735,7 @@ var _ = Describe("App serializers", func() {
 		Entry("sh command is mutually exclusive with args", serializer.CreateAppInput{
 			Name: "demo-app",
 			ID:   "demo-app",
-			Type: bkmsapp.AppTypeTRPC,
+			Type: appruntime.AppTypeTRPC,
 			BuildConfig: &serializer.BuildConfigInput{
 				SourceType:          "pipeline",
 				PipelineBuildConfig: &serializer.PipelineBuildConfigInput{PipelineID: "pipeline-id"},
@@ -739,7 +756,7 @@ var _ = Describe("App serializers", func() {
 		Entry("sh command must not be blank", serializer.CreateAppInput{
 			Name: "demo-app",
 			ID:   "demo-app",
-			Type: bkmsapp.AppTypeTRPC,
+			Type: appruntime.AppTypeTRPC,
 			BuildConfig: &serializer.BuildConfigInput{
 				SourceType:          "pipeline",
 				PipelineBuildConfig: &serializer.PipelineBuildConfigInput{PipelineID: "pipeline-id"},
@@ -759,7 +776,7 @@ var _ = Describe("App serializers", func() {
 		Entry("trpc app requires framework file location on create", serializer.CreateAppInput{
 			Name: "demo-app",
 			ID:   "demo-app",
-			Type: bkmsapp.AppTypeTRPC,
+			Type: appruntime.AppTypeTRPC,
 			BuildConfig: &serializer.BuildConfigInput{
 				SourceType:          "pipeline",
 				PipelineBuildConfig: &serializer.PipelineBuildConfigInput{PipelineID: "pipeline-id"},
@@ -774,7 +791,7 @@ var _ = Describe("App serializers", func() {
 		Entry("taf app requires framework file location on create", serializer.CreateAppInput{
 			Name: "demo-app",
 			ID:   "demo-app",
-			Type: bkmsapp.AppTypeTAF,
+			Type: appruntime.AppTypeTAF,
 			BuildConfig: &serializer.BuildConfigInput{
 				SourceType:          "pipeline",
 				PipelineBuildConfig: &serializer.PipelineBuildConfigInput{PipelineID: "pipeline-id"},
@@ -788,7 +805,7 @@ var _ = Describe("App serializers", func() {
 		Entry("helm app requires helm repo config for helm repo type", serializer.CreateAppInput{
 			Name: "helm-app",
 			ID:   "helm-app",
-			Type: bkmsapp.AppTypeHelm,
+			Type: appruntime.AppTypeHelm,
 			BuildConfig: &serializer.BuildConfigInput{
 				SourceType:       "imageRegistry",
 				ImageBuildConfig: &serializer.ImageBuildConfigInput{Name: "example.com/demo"},

@@ -1,0 +1,49 @@
+meta {
+  name: 13-taf-spec-updates-bkmsapp
+  type: http
+  seq: 13
+}
+
+put {
+  url: {{serviceURL}}/apps/{{bkmsAppTafID}}/taf-spec
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "appModelSpec": {
+      "command": ["sleep"],
+      "args": ["7200"],
+      "tafSpec": {"fileName": "app.conf", "filePath": "/usr/local/app/conf2"}
+    }
+  }
+}
+
+assert {
+  res.status: eq 200
+  res.body: isJson
+}
+
+script:post-response {
+  const axios = require("axios");
+  const {authHeaders} = require("./common");
+  const resp = await axios.get(`${bru.getEnvVar("serviceURL")}/apps/${bru.getVar("bkmsAppTafID")}`,
+    {headers: authHeaders()});
+  bru.setVar("bkmsAppTafDetailJSON", JSON.stringify(resp.data.data));
+}
+
+tests {
+  test("should update the start config of a bkmsApp through the legacy taf-spec api", () => {
+    const detail = JSON.parse(bru.getVar("bkmsAppTafDetailJSON"));
+    expect(detail.type).to.equal("bkmsApp");
+    expect(detail.appModelSpec.args).to.deep.equal(["7200"]);
+    expect(detail.appModelSpec.tafSpec.fileName).to.equal("app.conf");
+    expect(detail.appModelSpec.tafSpec.filePath).to.equal("/usr/local/app/conf2");
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 10000
+}

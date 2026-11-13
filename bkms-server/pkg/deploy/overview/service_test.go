@@ -38,6 +38,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil/dbfactory"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime"
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	appmodeldeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/appmodel"
@@ -130,7 +131,7 @@ var _ = Describe("overview.Service", func() {
 
 	Describe("GetOverview", func() {
 		It("rejects non AppModel application types", func() {
-			_, err := svc.GetOverview(ctx, &bkmsapp.Application{ID: "h1", Type: bkmsapp.AppTypeHelm})
+			_, err := svc.GetOverview(ctx, &bkmsapp.Application{ID: "h1", Type: appruntime.AppTypeHelm})
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("unsupported app type"))
 		})

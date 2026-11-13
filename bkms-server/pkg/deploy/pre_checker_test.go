@@ -29,7 +29,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
-	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	appmodeldeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/appmodel"
 	helmdeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/helm"
@@ -85,7 +85,7 @@ var _ = Describe("PreDeployChecker", func() {
 		workspaceID = "test-workspace-" + stringx.Random(6)
 		envName = "staging"
 		trafficLaneName = "lane-01"
-		appType = bkmsapp.AppTypeHelm
+		appType = appruntime.AppTypeHelm
 		appID = "test-app-" + stringx.Random(6)
 
 		checker = newTestChecker()
@@ -155,7 +155,7 @@ var _ = Describe("PreDeployChecker", func() {
 					Status:          appmodeldeploy.StatusDeployed,
 				})).To(Succeed())
 
-				params.AppType = bkmsapp.AppTypeBKMSApp
+				params.AppType = appruntime.AppTypeBKMSApp
 				err := checker.Do(ctx, params)
 				Expect(err).NotTo(HaveOccurred())
 			})

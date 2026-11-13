@@ -33,6 +33,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	bkciapi "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bkci"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
@@ -59,7 +60,7 @@ var _ = Describe("Service build validation", func() {
 			ID:          "test-app",
 			Name:        "test-app",
 			WorkspaceID: "test-workspace",
-			Type:        bkmsapp.AppTypeTRPC,
+			Type:        appruntime.AppTypeTRPC,
 			TrpcSpec:    &bkmsapp.TrpcSpec{Language: appmodel.LanguageGo},
 		}
 		cfg = &imagebuild.Config{
@@ -105,7 +106,7 @@ var _ = Describe("Service build validation", func() {
 	})
 
 	It("should reject platform generated Dockerfile build for non-TRPC app types", func() {
-		app.Type = bkmsapp.AppTypeTAF
+		app.Type = appruntime.AppTypeTAF
 		app.TrpcSpec = nil
 
 		err := buildService.validateBeforeBuild(ctx, app, cfg)
@@ -230,7 +231,7 @@ var _ = Describe("Service build revision check", func() {
 			ID:          "test-app-" + stringx.Random(6),
 			Name:        "test-app",
 			WorkspaceID: "test-workspace",
-			Type:        bkmsapp.AppTypeTRPC,
+			Type:        appruntime.AppTypeTRPC,
 		}
 		buildService = &Service{db: testutil.NewDB(GinkgoT())}
 

@@ -50,7 +50,6 @@ func init() {
 	rootCmd.AddCommand(migration.NewAppBscpCfgMgrCmd())
 	rootCmd.AddCommand(migration.NewBindBscpProjectCmd())
 	rootCmd.AddCommand(migration.NewListBscpProjectsCmd())
-	rootCmd.AddCommand(migration.NewScanAppRuntimeModelCmd())
 }
 
 // Execute ...

@@ -26,6 +26,7 @@ import (
 	"github.com/go-playground/validator/v10"
 
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime"
 	_ "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/validators" // register mount_dir
 	envvartypes "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars/types"
 )
@@ -87,7 +88,7 @@ func validateCreateAppInputStruct(sl validator.StructLevel) {
 	input := sl.Current().Interface().(CreateAppInput)
 
 	switch input.Type {
-	case bkmsapp.AppTypeTRPC:
+	case appruntime.AppTypeTRPC: //nolint:staticcheck // bkmsApp 迁移兼容：旧创建接口仍接受 trpc / taf
 		if input.AppModelSpec == nil {
 			sl.ReportError(nil, "AppModelSpec", "AppModelSpec", "required", "")
 			return
@@ -100,7 +101,7 @@ func validateCreateAppInputStruct(sl validator.StructLevel) {
 			sl, "AppModelSpec.TrpcSpec", input.AppModelSpec.TrpcSpec.FileName, input.AppModelSpec.TrpcSpec.FilePath,
 		)
 		validateAppModelSpecEnvVarsUnique(sl, input.AppModelSpec)
-	case bkmsapp.AppTypeTAF:
+	case appruntime.AppTypeTAF: //nolint:staticcheck // bkmsApp 迁移兼容：旧创建接口仍接受 trpc / taf
 		if input.AppModelSpec == nil {
 			sl.ReportError(nil, "AppModelSpec", "AppModelSpec", "required", "")
 			return
@@ -113,7 +114,7 @@ func validateCreateAppInputStruct(sl validator.StructLevel) {
 			sl, "AppModelSpec.TafSpec", input.AppModelSpec.TafSpec.FileName, input.AppModelSpec.TafSpec.FilePath,
 		)
 		validateAppModelSpecEnvVarsUnique(sl, input.AppModelSpec)
-	case bkmsapp.AppTypeHelm, bkmsapp.AppTypeAgones:
+	case appruntime.AppTypeHelm, appruntime.AppTypeAgones:
 		if input.HelmSpec == nil {
 			sl.ReportError(nil, "HelmSpec", "HelmSpec", "required", "")
 			return

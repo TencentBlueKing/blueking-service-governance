@@ -93,9 +93,6 @@ func (p *Plugin) Start(
 		return nil, errors.Wrap(err, "rendering tRPC framework config")
 	}
 
-	// 回写渲染后的内容供其他组件使用
-	appModel.Workload.TrpcConfig.FileContent = frameworkParams[0].FileContent
-
 	return runtimerender.BuildConfig(runtimerender.ConfigParams{
 		WorkloadType:  appmodel.WorkloadTypeTrpc,
 		ConfigMapName: appModel.Workload.Name,

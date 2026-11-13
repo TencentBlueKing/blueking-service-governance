@@ -24,7 +24,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-// 本文件的错误与 issue code 分为两组，用 BRIDGE-ONLY 标记区分，便于阶段 6 收缩时检索：
+// 本文件的错误与 issue code 分为两组，用 BRIDGE-ONLY 标记区分：
 //
 //   - 未标记的属于新模型自身的校验，迁移完成后仍然需要，调用方用 errors.Is 匹配。
 //   - 标记 BRIDGE-ONLY 的仅服务于桥接期。它们描述的是"同一份技术栈散落在多个持久化
@@ -42,7 +42,7 @@ const (
 )
 
 // BRIDGE-ONLY: 以下 issue code 全部源自新旧字段并存。
-// 阶段 6 删除 TrpcSpec / Workload.Type / TrpcConfig / TafConfig 之后，这些冲突在数据
+// 旧字段清理（删除 TrpcSpec / Workload.Type / TrpcConfig / TafConfig）之后，这些冲突在数据
 // 结构上不再可能出现，应连同 Inspect 中对应的判断分支一起删除。
 const (
 	IssueLanguageConflict        = "language_conflict"
@@ -71,8 +71,8 @@ var (
 // 新模型成为唯一事实来源后直接调用 ValidateStack 即可，该 sentinel 随之删除。
 var ErrNormalizeFailed = errors.New("runtime snapshot normalize failed")
 
-// Issue is a locatable normalize/scan finding. It never carries config body or secrets.
-// BRIDGE-ONLY: Issue / Report 是桥接期的冲突上报载体，服务于扫描报告与迁移决策。
+// Issue 技术栈解析发现的一条可定位问题，不携带配置正文或凭据。
+// BRIDGE-ONLY: Issue / Report 是桥接期的冲突上报载体。
 type Issue struct {
 	Code     string
 	Blocking bool
@@ -80,7 +80,7 @@ type Issue struct {
 	Fields   map[string]string
 }
 
-// Report is the inspect result for one application.
+// Report 单个应用的技术栈解析结果。
 type Report struct {
 	AppID                  string
 	PersistedType          string
@@ -91,13 +91,13 @@ type Report struct {
 	Issues                 []Issue
 }
 
-// Sources records which persisted field supplied each normalized value.
+// Sources 记录规范化后的框架、语言分别取自哪个持久化字段。
 type Sources struct {
 	LanguageFrom  string
 	FrameworkFrom string
 }
 
-// Blocking reports whether any issue forbids using the stack as a unified model.
+// Blocking 是否存在阻断性问题，有则不能把解析出的技术栈作为统一模型使用。
 func (r Report) Blocking() bool {
 	for _, issue := range r.Issues {
 		if issue.Blocking {
@@ -107,7 +107,7 @@ func (r Report) Blocking() bool {
 	return false
 }
 
-// Err returns a sentinel-wrapped error listing blocking issue codes.
+// Err 有阻断性问题时返回包装了 ErrNormalizeFailed 的错误，列出全部阻断性 issue code；否则返回 nil。
 func (r Report) Err() error {
 	if !r.Blocking() {
 		return nil
@@ -121,6 +121,7 @@ func (r Report) Err() error {
 	return errors.Wrapf(ErrNormalizeFailed, "app %s: %s", r.AppID, strings.Join(codes, ","))
 }
 
+// newIssue 构造一条 Issue。
 func newIssue(code string, blocking bool, message string, fields map[string]string) Issue {
 	return Issue{Code: code, Blocking: blocking, Message: message, Fields: fields}
 }

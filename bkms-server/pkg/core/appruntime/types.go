@@ -28,9 +28,13 @@ const (
 	AppTypeAgones = "agones"
 	// AppTypeBKMSApp 使用 AppModel 管理的默认应用类型。
 	AppTypeBKMSApp = "bkmsApp"
-	// AppTypeTRPC 旧持久化值，桥接期仍有效。
+	// AppTypeTRPC 旧的 trpc 应用类型，只出现在未迁移的存量数据中。
+	//
+	// Deprecated: bkmsApp 迁移兼容，新应用使用 AppTypeBKMSApp + FrameworkTRPC。
 	AppTypeTRPC = "trpc"
-	// AppTypeTAF 旧持久化值，桥接期仍有效。
+	// AppTypeTAF 旧的 taf 应用类型，只出现在未迁移的存量数据中。
+	//
+	// Deprecated: bkmsApp 迁移兼容，新应用使用 AppTypeBKMSApp + FrameworkTAF。
 	AppTypeTAF = "taf"
 )
 

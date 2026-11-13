@@ -27,19 +27,6 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime"
 )
 
-const (
-	// AppTypeHelm helm 应用：https://helm.sh/
-	AppTypeHelm = appruntime.AppTypeHelm
-	// AppTypeAgones agones 应用：https://agones.dev
-	AppTypeAgones = appruntime.AppTypeAgones
-	// AppTypeBKMSApp 使用 AppModel 管理的默认应用类型，底层使用 AppModel 应用模型。
-	AppTypeBKMSApp = appruntime.AppTypeBKMSApp
-	// AppTypeTRPC trpc 应用（桥接期旧持久化值）
-	AppTypeTRPC = appruntime.AppTypeTRPC
-	// AppTypeTAF taf 应用（桥接期旧持久化值）
-	AppTypeTAF = appruntime.AppTypeTAF
-)
-
 // Application is the main type for the project. An application is a deployable unit which can be defined in various
 // ways including a helm chart or other types.
 type Application struct {
@@ -70,6 +57,8 @@ type Application struct {
 
 	// **This field is only present for legacy trpc applications.**
 	// TrpcSpec is the compatibility DTO of the old trpc application spec.
+	//
+	// Deprecated: bkmsApp 迁移兼容，语言已迁移到 Language。
 	TrpcSpec *TrpcSpec `json:"trpcSpec" bson:"trpcSpec,omitempty"`
 
 	// **This field is only present for helm applications.**

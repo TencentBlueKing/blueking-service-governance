@@ -10629,6 +10629,7 @@ const docTemplate = `{
                         "BkUserCredential": []
                     }
                 ],
+                "description": "已废弃：构建部署接口已统一为 build-deploys，请改用 POST /apps/{appID}/envs/{envName}/build-deploys",
                 "consumes": [
                     "application/json"
                 ],
@@ -10640,6 +10641,7 @@ const docTemplate = `{
                 ],
                 "summary": "触发 TAF 应用构建并自动部署",
                 "operationId": "CreateTafBuildDeploy",
+                "deprecated": true,
                 "parameters": [
                     {
                         "type": "string",
@@ -10703,6 +10705,7 @@ const docTemplate = `{
                         "BkUserCredential": []
                     }
                 ],
+                "description": "已废弃：部署接口已统一为 bkmsapp-deploys，请改用 GET /apps/{appID}/envs/{envName}/bkmsapp-deploys",
                 "produces": [
                     "application/json"
                 ],
@@ -10711,6 +10714,7 @@ const docTemplate = `{
                 ],
                 "summary": "获取 TAF 应用部署记录列表",
                 "operationId": "ListTafDeployRecords",
+                "deprecated": true,
                 "parameters": [
                     {
                         "type": "string",
@@ -10777,6 +10781,7 @@ const docTemplate = `{
                         "BkUserCredential": []
                     }
                 ],
+                "description": "已废弃：部署接口已统一为 bkmsapp-deploys，请改用 POST /apps/{appID}/envs/{envName}/bkmsapp-deploys",
                 "consumes": [
                     "application/json"
                 ],
@@ -10788,6 +10793,7 @@ const docTemplate = `{
                 ],
                 "summary": "创建 TAF 应用部署",
                 "operationId": "CreateTafDeploy",
+                "deprecated": true,
                 "parameters": [
                     {
                         "type": "string",
@@ -10837,6 +10843,7 @@ const docTemplate = `{
                         "BkUserCredential": []
                     }
                 ],
+                "description": "已废弃：部署接口已统一为 bkmsapp-deploys，请改用 DELETE /apps/{appID}/envs/{envName}/bkmsapp-deploys",
                 "produces": [
                     "application/json"
                 ],
@@ -10845,6 +10852,7 @@ const docTemplate = `{
                 ],
                 "summary": "删除 TAF 应用部署（下架当前环境最新版本）",
                 "operationId": "DeleteTafDeploy",
+                "deprecated": true,
                 "parameters": [
                     {
                         "type": "string",
@@ -10893,6 +10901,7 @@ const docTemplate = `{
                         "BkUserCredential": []
                     }
                 ],
+                "description": "已废弃：部署接口已统一为 bkmsapp-deploys，请改用 GET /apps/{appID}/envs/{envName}/bkmsapp-deploys/latest-status",
                 "produces": [
                     "application/json"
                 ],
@@ -10901,6 +10910,7 @@ const docTemplate = `{
                 ],
                 "summary": "获取 TAF 应用最新一次部署的状态",
                 "operationId": "GetLatestTafDeployStatus",
+                "deprecated": true,
                 "parameters": [
                     {
                         "type": "string",
@@ -10949,6 +10959,7 @@ const docTemplate = `{
                         "BkUserCredential": []
                     }
                 ],
+                "description": "已废弃：部署接口已统一为 bkmsapp-deploys，请改用 GET /apps/{appID}/envs/{envName}/bkmsapp-deploys/precheck",
                 "produces": [
                     "application/json"
                 ],
@@ -10957,6 +10968,7 @@ const docTemplate = `{
                 ],
                 "summary": "TAF 部署前检查",
                 "operationId": "PreCheckTafDeploy",
+                "deprecated": true,
                 "parameters": [
                     {
                         "type": "string",
@@ -11005,6 +11017,7 @@ const docTemplate = `{
                         "BkUserCredential": []
                     }
                 ],
+                "description": "已废弃：部署接口已统一为 bkmsapp-deploys，请改用 bkmsapp-deploys 下的同名接口",
                 "produces": [
                     "application/json"
                 ],
@@ -11013,6 +11026,7 @@ const docTemplate = `{
                 ],
                 "summary": "获取 TAF 应用资源快照列表",
                 "operationId": "ListTafResourceSnapshots",
+                "deprecated": true,
                 "parameters": [
                     {
                         "type": "string",
@@ -11076,6 +11090,7 @@ const docTemplate = `{
                         "BkUserCredential": []
                     }
                 ],
+                "description": "已废弃：部署接口已统一为 bkmsapp-deploys，请改用 bkmsapp-deploys 下的同名接口",
                 "produces": [
                     "application/json"
                 ],
@@ -11084,6 +11099,7 @@ const docTemplate = `{
                 ],
                 "summary": "获取 TAF 类型应用部署记录下某个资源的快照详情（具体 k8s 资源的 Manifest 等）",
                 "operationId": "GetTafResourceSnapshot",
+                "deprecated": true,
                 "parameters": [
                     {
                         "type": "string",
@@ -11140,6 +11156,7 @@ const docTemplate = `{
                         "BkUserCredential": []
                     }
                 ],
+                "description": "已废弃：构建部署接口已统一为 build-deploys，请改用 POST /apps/{appID}/envs/{envName}/build-deploys",
                 "consumes": [
                     "application/json"
                 ],
@@ -11151,6 +11168,7 @@ const docTemplate = `{
                 ],
                 "summary": "触发 TRPC 应用构建并自动部署",
                 "operationId": "CreateTrpcBuildDeploy",
+                "deprecated": true,
                 "parameters": [
                     {
                         "type": "string",
@@ -11214,6 +11232,7 @@ const docTemplate = `{
                         "BkUserCredential": []
                     }
                 ],
+                "description": "已废弃：部署接口已统一为 bkmsapp-deploys，请改用 GET /apps/{appID}/envs/{envName}/bkmsapp-deploys",
                 "produces": [
                     "application/json"
                 ],
@@ -11222,6 +11241,7 @@ const docTemplate = `{
                 ],
                 "summary": "获取 Trpc 应用部署记录列表",
                 "operationId": "ListTrpcDeployRecords",
+                "deprecated": true,
                 "parameters": [
                     {
                         "type": "string",
@@ -11288,6 +11308,7 @@ const docTemplate = `{
                         "BkUserCredential": []
                     }
                 ],
+                "description": "已废弃：部署接口已统一为 bkmsapp-deploys，请改用 POST /apps/{appID}/envs/{envName}/bkmsapp-deploys",
                 "consumes": [
                     "application/json"
                 ],
@@ -11299,6 +11320,7 @@ const docTemplate = `{
                 ],
                 "summary": "创建 Trpc 应用部署",
                 "operationId": "CreateTrpcDeploy",
+                "deprecated": true,
                 "parameters": [
                     {
                         "type": "string",
@@ -11348,6 +11370,7 @@ const docTemplate = `{
                         "BkUserCredential": []
                     }
                 ],
+                "description": "已废弃：部署接口已统一为 bkmsapp-deploys，请改用 DELETE /apps/{appID}/envs/{envName}/bkmsapp-deploys",
                 "produces": [
                     "application/json"
                 ],
@@ -11356,6 +11379,7 @@ const docTemplate = `{
                 ],
                 "summary": "删除 Trpc 应用部署（下架当前环境最新版本）",
                 "operationId": "DeleteTrpcDeploy",
+                "deprecated": true,
                 "parameters": [
                     {
                         "type": "string",
@@ -11404,6 +11428,7 @@ const docTemplate = `{
                         "BkUserCredential": []
                     }
                 ],
+                "description": "已废弃：部署接口已统一为 bkmsapp-deploys，请改用 GET /apps/{appID}/envs/{envName}/bkmsapp-deploys/latest-status",
                 "produces": [
                     "application/json"
                 ],
@@ -11412,6 +11437,7 @@ const docTemplate = `{
                 ],
                 "summary": "获取 Trpc 应用最新一次部署的状态",
                 "operationId": "GetLatestTrpcDeployStatus",
+                "deprecated": true,
                 "parameters": [
                     {
                         "type": "string",
@@ -11460,6 +11486,7 @@ const docTemplate = `{
                         "BkUserCredential": []
                     }
                 ],
+                "description": "已废弃：部署接口已统一为 bkmsapp-deploys，请改用 GET /apps/{appID}/envs/{envName}/bkmsapp-deploys/precheck",
                 "produces": [
                     "application/json"
                 ],
@@ -11468,6 +11495,7 @@ const docTemplate = `{
                 ],
                 "summary": "Trpc 部署前检查",
                 "operationId": "PreCheckTrpcDeploy",
+                "deprecated": true,
                 "parameters": [
                     {
                         "type": "string",
@@ -11516,6 +11544,7 @@ const docTemplate = `{
                         "BkUserCredential": []
                     }
                 ],
+                "description": "已废弃：部署接口已统一为 bkmsapp-deploys，请改用 bkmsapp-deploys 下的同名接口",
                 "produces": [
                     "application/json"
                 ],
@@ -11524,6 +11553,7 @@ const docTemplate = `{
                 ],
                 "summary": "获取 Trpc 应用资源快照列表",
                 "operationId": "ListTrpcResourceSnapshots",
+                "deprecated": true,
                 "parameters": [
                     {
                         "type": "string",
@@ -11587,6 +11617,7 @@ const docTemplate = `{
                         "BkUserCredential": []
                     }
                 ],
+                "description": "已废弃：部署接口已统一为 bkmsapp-deploys，请改用 bkmsapp-deploys 下的同名接口",
                 "produces": [
                     "application/json"
                 ],
@@ -11595,6 +11626,7 @@ const docTemplate = `{
                 ],
                 "summary": "获取 Trpc 类型应用部署记录下某个资源的快照详情（具体 k8s 资源的 Manifest 等）",
                 "operationId": "GetTrpcResourceSnapshot",
+                "deprecated": true,
                 "parameters": [
                     {
                         "type": "string",
@@ -12862,6 +12894,7 @@ const docTemplate = `{
                         "BkUserCredential": []
                     }
                 ],
+                "description": "已废弃：启动配置已统一由 startup-config 修改，请改用 PUT /apps/{appID}/startup-config",
                 "consumes": [
                     "application/json"
                 ],
@@ -12873,6 +12906,7 @@ const docTemplate = `{
                 ],
                 "summary": "更新应用 Taf 配置",
                 "operationId": "UpdateAppTafSpec",
+                "deprecated": true,
                 "parameters": [
                     {
                         "type": "string",
@@ -12923,6 +12957,7 @@ const docTemplate = `{
                         "BkUserCredential": []
                     }
                 ],
+                "description": "已废弃：启动配置已统一由 startup-config 修改，请改用 PUT /apps/{appID}/startup-config。不允许修改语言",
                 "consumes": [
                     "application/json"
                 ],
@@ -12934,6 +12969,7 @@ const docTemplate = `{
                 ],
                 "summary": "更新应用 Trpc 配置",
                 "operationId": "UpdateAppTrpcSpec",
+                "deprecated": true,
                 "parameters": [
                     {
                         "type": "string",
@@ -17332,6 +17368,7 @@ const docTemplate = `{
                         "BkUserCredential": []
                     }
                 ],
+                "description": "type 为 trpc / taf 已废弃：平台托管应用统一为 bkmsApp，请改用 bkmsapps 接口；仍按 bkmsApp 创建",
                 "consumes": [
                     "application/json"
                 ],
@@ -24482,7 +24519,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "tafSpec": {
-                    "description": "TAF 框架配置",
+                    "description": "TAF 框架配置（已废弃）",
                     "allOf": [
                         {
                             "$ref": "#/definitions/serializer.TafSpecInput"
@@ -24490,7 +24527,7 @@ const docTemplate = `{
                     ]
                 },
                 "trpcSpec": {
-                    "description": "tRPC 框架配置",
+                    "description": "tRPC 框架配置（已废弃）",
                     "allOf": [
                         {
                             "$ref": "#/definitions/serializer.TrpcSpecInput"
@@ -24540,7 +24577,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "tafSpec": {
-                    "description": "TAF 框架配置",
+                    "description": "TAF 框架配置（已废弃，请读取配置文件定义），framework=taf 时返回",
                     "allOf": [
                         {
                             "$ref": "#/definitions/serializer.TafSpecOutputObj"
@@ -24548,7 +24585,7 @@ const docTemplate = `{
                     ]
                 },
                 "trpcSpec": {
-                    "description": "tRPC 框架配置",
+                    "description": "tRPC 框架配置（已废弃，请读取 language 与配置文件定义），framework=trpc 时返回",
                     "allOf": [
                         {
                             "$ref": "#/definitions/serializer.TrpcSpecOutputObj"
@@ -26771,7 +26808,7 @@ const docTemplate = `{
             ],
             "properties": {
                 "appModelSpec": {
-                    "description": "应用模型规范（type 为 trpc/taf 时需要）",
+                    "description": "应用模型规范（type 为 trpc/taf 时需要，已废弃）",
                     "allOf": [
                         {
                             "$ref": "#/definitions/serializer.AppModelSpecInput"
@@ -26803,7 +26840,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "type": {
-                    "description": "应用类型",
+                    "description": "应用类型。trpc / taf 已废弃，请改用 POST /workspaces/{workspaceID}/bkmsapps；为兼容旧客户端仍接受，按 bkmsApp 创建",
                     "type": "string",
                     "enum": [
                         "trpc",
@@ -35641,15 +35678,15 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "fileContent": {
-                    "description": "配置文件内容",
+                    "description": "框架配置文件内容，仅创建时使用",
                     "type": "string"
                 },
                 "fileName": {
-                    "description": "配置文件名，创建应用时必填，写入 framework def，应用模型不保存。\ntodo 兼容：更新时可不传；传了仍同步到 def。更新改走 def 接口后，该字段只用于创建。",
+                    "description": "框架配置文件名。创建时必填；修改时非空才同步到框架配置文件定义",
                     "type": "string"
                 },
                 "filePath": {
-                    "description": "配置文件路径，创建应用时必填，写入 framework def 的挂载目录，应用模型不保存。\ntodo 兼容：更新时可不传；传了仍同步到 def。更新改走 def 接口后，该字段只用于创建。",
+                    "description": "框架配置文件挂载目录。创建时必填；修改时非空才同步到框架配置文件定义",
                     "type": "string"
                 }
             }
@@ -35658,15 +35695,15 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "fileContent": {
-                    "description": "配置文件内容",
+                    "description": "框架配置文件的默认内容",
                     "type": "string"
                 },
                 "fileName": {
-                    "description": "配置文件名。\ntodo 兼容：详情仍返回该字段，值从 framework def 填回。调用方改读 def 后删除。",
+                    "description": "框架配置文件名",
                     "type": "string"
                 },
                 "filePath": {
-                    "description": "配置文件路径。\ntodo 兼容：详情仍返回该字段，值从 framework def 填回。调用方改读 def 后删除。",
+                    "description": "框架配置文件挂载目录",
                     "type": "string"
                 }
             }
@@ -36190,19 +36227,19 @@ const docTemplate = `{
             ],
             "properties": {
                 "fileContent": {
-                    "description": "配置文件内容",
+                    "description": "框架配置文件内容，仅创建时使用",
                     "type": "string"
                 },
                 "fileName": {
-                    "description": "配置文件名，创建应用时必填，写入 framework def，应用模型不保存。\ntodo 兼容：更新时可不传；传了仍同步到 def。更新改走 def 接口后，该字段只用于创建。",
+                    "description": "框架配置文件名。创建时必填；修改时非空才同步到框架配置文件定义",
                     "type": "string"
                 },
                 "filePath": {
-                    "description": "配置文件路径，创建应用时必填，写入 framework def 的挂载目录，应用模型不保存。\ntodo 兼容：更新时可不传；传了仍同步到 def。更新改走 def 接口后，该字段只用于创建。",
+                    "description": "框架配置文件挂载目录。创建时必填；修改时非空才同步到框架配置文件定义",
                     "type": "string"
                 },
                 "language": {
-                    "description": "编程语言",
+                    "description": "编程语言。修改时须与应用当前语言一致，不能切换",
                     "type": "string",
                     "enum": [
                         "go",
@@ -36215,15 +36252,15 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "fileContent": {
-                    "description": "配置文件内容",
+                    "description": "框架配置文件的默认内容",
                     "type": "string"
                 },
                 "fileName": {
-                    "description": "配置文件名。\ntodo 兼容：详情仍返回该字段，值从 framework def 填回。调用方改读 def 后删除。",
+                    "description": "框架配置文件名",
                     "type": "string"
                 },
                 "filePath": {
-                    "description": "配置文件路径。\ntodo 兼容：详情仍返回该字段，值从 framework def 填回。调用方改读 def 后删除。",
+                    "description": "框架配置文件挂载目录",
                     "type": "string"
                 },
                 "language": {

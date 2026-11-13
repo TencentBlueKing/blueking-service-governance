@@ -70,7 +70,7 @@ func ValidateCreate(app *bkmsapp.Application, params *CreateParams) error {
 
 // ValidateStack 校验应用为 bkmsApp，且框架与语言是框架目录中的合法组合。
 func ValidateStack(app *bkmsapp.Application) error {
-	if app.Type != bkmsapp.AppTypeBKMSApp {
+	if app.Type != appruntime.AppTypeBKMSApp {
 		return errors.Wrapf(ErrInvalidParams, "app %s: type %q is not bkmsApp", app.ID, app.Type)
 	}
 	if err := appruntime.ValidateStack(appruntime.Stack{

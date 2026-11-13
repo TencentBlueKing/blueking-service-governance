@@ -29,6 +29,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil/dbfactory"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime"
 	bkmsworkspace "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
@@ -76,9 +77,9 @@ var _ = Describe("ComponentRefResolver", func() {
 	})
 
 	It("collects references from every AppModel app, including taf and blank", func() {
-		trpcApp := newRefApp(bkmsapp.AppTypeTRPC, "", "")
-		tafApp := newRefApp(bkmsapp.AppTypeTAF, "", "")
-		blankApp := newRefApp(bkmsapp.AppTypeBKMSApp, "blank", "python")
+		trpcApp := newRefApp(appruntime.AppTypeTRPC, "", "")
+		tafApp := newRefApp(appruntime.AppTypeTAF, "", "")
+		blankApp := newRefApp(appruntime.AppTypeBKMSApp, "blank", "python")
 
 		refs, err := bkmsworkspace.NewComponentRefResolver(db).BuildRefMap(ctx, workspaceID)
 		Expect(err).NotTo(HaveOccurred())

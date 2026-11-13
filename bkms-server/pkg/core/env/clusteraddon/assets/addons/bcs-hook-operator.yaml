@@ -18,7 +18,7 @@ chartInfo:
         cpu: 1
         memory: 512Mi
 requiredForAppTypes:
-  # trpc / taf 为旧登记值，待废弃（M9 删除）
+  # trpc / taf 为旧登记值，已废弃
   - trpc
   - taf
   - bkmsApp

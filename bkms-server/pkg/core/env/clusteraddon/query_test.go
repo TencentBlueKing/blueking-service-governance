@@ -33,6 +33,7 @@ import (
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime"
 	clusteraddon "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/clusteraddon"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/helm"
@@ -268,19 +269,19 @@ var _ = Describe("Query", func() {
 			func(app *bkmsapp.Application, expected []string) {
 				Expect(clusteraddon.AddonAppTypesOf(app)).To(Equal(expected))
 			},
-			Entry("legacy trpc", &bkmsapp.Application{Type: bkmsapp.AppTypeTRPC}, []string{"bkmsApp", "trpc"}),
-			Entry("legacy taf", &bkmsapp.Application{Type: bkmsapp.AppTypeTAF}, []string{"bkmsApp", "taf"}),
+			Entry("legacy trpc", &bkmsapp.Application{Type: appruntime.AppTypeTRPC}, []string{"bkmsApp", "trpc"}),
+			Entry("legacy taf", &bkmsapp.Application{Type: appruntime.AppTypeTAF}, []string{"bkmsApp", "taf"}),
 			Entry("bkmsApp with trpc framework",
-				&bkmsapp.Application{Type: bkmsapp.AppTypeBKMSApp, Framework: "trpc", Language: "go"},
+				&bkmsapp.Application{Type: appruntime.AppTypeBKMSApp, Framework: "trpc", Language: "go"},
 				[]string{"bkmsApp", "trpc"}),
 			Entry("bkmsApp with blank framework",
-				&bkmsapp.Application{Type: bkmsapp.AppTypeBKMSApp, Framework: "blank", Language: "go"},
+				&bkmsapp.Application{Type: appruntime.AppTypeBKMSApp, Framework: "blank", Language: "go"},
 				[]string{"bkmsApp", "blank"}),
 			// 技术栈非法时取不到框架，仍按管理方式匹配
 			Entry("bkmsApp with invalid stack",
-				&bkmsapp.Application{Type: bkmsapp.AppTypeBKMSApp, Framework: "unknown"}, []string{"bkmsApp"}),
-			Entry("helm", &bkmsapp.Application{Type: bkmsapp.AppTypeHelm}, []string{"helm"}),
-			Entry("agones", &bkmsapp.Application{Type: bkmsapp.AppTypeAgones}, []string{"agones"}),
+				&bkmsapp.Application{Type: appruntime.AppTypeBKMSApp, Framework: "unknown"}, []string{"bkmsApp"}),
+			Entry("helm", &bkmsapp.Application{Type: appruntime.AppTypeHelm}, []string{"helm"}),
+			Entry("agones", &bkmsapp.Application{Type: appruntime.AppTypeAgones}, []string{"agones"}),
 		)
 	})
 
@@ -292,7 +293,7 @@ var _ = Describe("Query", func() {
 				mockey.Mock(helm.NewActionConfiguration).Return(&action.Configuration{}, nil).Build()
 				query := mockey.Mock(helm.ListReleases).Return(nil, nil).Build()
 				missing, err := clusteraddon.InspectRequiredAddons(context.Background(), defs,
-					[]string{bkmsapp.AppTypeBKMSApp, "blank"}, addonEnvironment("cluster", true), "")
+					[]string{appruntime.AppTypeBKMSApp, "blank"}, addonEnvironment("cluster", true), "")
 				Expect(err).NotTo(HaveOccurred())
 				Expect(
 					missing,
@@ -315,14 +316,14 @@ var _ = Describe("Query", func() {
 				})
 			},
 			Entry("bkmsApp registration matches blank",
-				[]string{bkmsapp.AppTypeBKMSApp}, []string{bkmsapp.AppTypeBKMSApp, "blank"}, true),
+				[]string{appruntime.AppTypeBKMSApp}, []string{appruntime.AppTypeBKMSApp, "blank"}, true),
 			// 按旧值登记的定义仍按框架匹配
 			Entry("legacy trpc registration matches trpc",
-				[]string{"trpc"}, []string{bkmsapp.AppTypeBKMSApp, "trpc"}, true),
+				[]string{"trpc"}, []string{appruntime.AppTypeBKMSApp, "trpc"}, true),
 			Entry("legacy trpc registration does not match blank",
-				[]string{"trpc"}, []string{bkmsapp.AppTypeBKMSApp, "blank"}, false),
+				[]string{"trpc"}, []string{appruntime.AppTypeBKMSApp, "blank"}, false),
 			Entry("bkmsApp registration does not match helm",
-				[]string{bkmsapp.AppTypeBKMSApp}, []string{bkmsapp.AppTypeHelm}, false),
+				[]string{appruntime.AppTypeBKMSApp}, []string{appruntime.AppTypeHelm}, false),
 		)
 
 		DescribeTable("queries each required namespace once",
@@ -340,7 +341,7 @@ var _ = Describe("Query", func() {
 						}).Build()
 					query := mockey.Mock(helm.ListReleases).Return(nil, nil).Build()
 					missing, err := clusteraddon.InspectRequiredAddons(context.Background(), defs,
-						[]string{bkmsapp.AppTypeBKMSApp, "blank"}, addonEnvironment("cluster", false), "")
+						[]string{appruntime.AppTypeBKMSApp, "blank"}, addonEnvironment("cluster", false), "")
 					Expect(err).NotTo(HaveOccurred())
 					Expect(namespaces).To(Equal(expectedNamespaces))
 					Expect(query.Times()).To(Equal(len(expectedNamespaces)))
@@ -368,7 +369,7 @@ var _ = Describe("Query", func() {
 						[]*clusteraddon.ClusterAddonDef{
 							def,
 						},
-						[]string{bkmsapp.AppTypeBKMSApp, "taf"},
+						[]string{appruntime.AppTypeBKMSApp, "taf"},
 						addonEnvironment("cluster", false),
 						"",
 					)
@@ -405,7 +406,7 @@ var _ = Describe("Query", func() {
 						context.Background(),
 						[]*clusteraddon.ClusterAddonDef{gameDeployDef(), hookOperatorDef()},
 						[]string{
-							bkmsapp.AppTypeBKMSApp,
+							appruntime.AppTypeBKMSApp,
 							"blank",
 						},
 						addonEnvironment("target-cluster", false),
@@ -428,14 +429,14 @@ var _ = Describe("Query", func() {
 		It("does not query optional addons", func() {
 			mockey.PatchConvey("optional addons", GinkgoT(), func() {
 				def := gameDeployDef()
-				def.OptionalForAppTypes = []string{bkmsapp.AppTypeHelm}
+				def.OptionalForAppTypes = []string{appruntime.AppTypeHelm}
 				config := mockey.Mock(helm.NewActionConfiguration).Return(&action.Configuration{}, nil).Build()
 				missing, err := clusteraddon.InspectRequiredAddons(
 					context.Background(),
 					[]*clusteraddon.ClusterAddonDef{
 						def,
 					},
-					[]string{bkmsapp.AppTypeHelm},
+					[]string{appruntime.AppTypeHelm},
 					addonEnvironment("cluster", false),
 					"",
 				)
@@ -453,7 +454,7 @@ func gameDeployDef() *clusteraddon.ClusterAddonDef {
 		DisplayName:             "Gamedeploy",
 		ChartInfo:               clusteraddon.HelmChartInfo{ChartName: "bcs-gamedeployment-operator"},
 		UnsupportedOnFederation: true,
-		RequiredForAppTypes:     []string{bkmsapp.AppTypeBKMSApp},
+		RequiredForAppTypes:     []string{appruntime.AppTypeBKMSApp},
 	}
 }
 
@@ -463,7 +464,7 @@ func hookOperatorDef() *clusteraddon.ClusterAddonDef {
 		DisplayName:             "Hook-operator",
 		ChartInfo:               clusteraddon.HelmChartInfo{ChartName: "bcs-hook-operator"},
 		UnsupportedOnFederation: true,
-		RequiredForAppTypes:     []string{bkmsapp.AppTypeBKMSApp},
+		RequiredForAppTypes:     []string{appruntime.AppTypeBKMSApp},
 	}
 }
 
@@ -471,7 +472,7 @@ func agonesDef() *clusteraddon.ClusterAddonDef {
 	return &clusteraddon.ClusterAddonDef{
 		Name:                "agones",
 		DisplayName:         "agones",
-		RequiredForAppTypes: []string{bkmsapp.AppTypeAgones},
+		RequiredForAppTypes: []string{appruntime.AppTypeAgones},
 	}
 }
 
