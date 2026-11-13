@@ -23,7 +23,7 @@
     @closed="handleClose"
   >
     <template #header>
-      <div class="w-full flex items-center justify-between px-[16px]">
+      <div class="w-full flex items-center justify-between pr-[16px]">
         <span class="text-[#313238] text-[16px]">{{ $t('实例监控') }}</span>
         <div class="flex items-center">
           <DatePicker
@@ -675,7 +675,7 @@
     return envGroups.value
       .map(group => ({
         id: 'env:' + group.envName,
-        name: group.envName,
+        name: envStore.envList.find(env => env.name === group.envName)?.displayName || group.envName,
         children: group.instances
           .map(instance => ({ id: getMonitorInstanceKey({ envName: group.envName, instance }), name: instance }))
           .filter(item => visible.has(item.id)),

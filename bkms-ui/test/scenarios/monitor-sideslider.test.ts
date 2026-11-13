@@ -25,6 +25,7 @@ import { fetchMonitorMetric } from '~/pages/application/detail/deploy/monitor-ch
 import MonitorSideslider from '~/pages/application/detail/deploy/monitor-sideslider.vue';
 
 import type * as BkDatePicker from '@blueking/date-picker';
+import type { EnvOutputObj } from '~/@types/env';
 import type { MonitorInstanceGroup } from '~/pages/application/detail/deploy/instance-list/types';
 import type { MonitorInstance, MonitorMetricTimeSeries } from '~/pages/application/detail/deploy/monitor-chart-bridge';
 
@@ -39,6 +40,7 @@ const mocks = vi.hoisted(() => ({
   message: vi.fn(),
   registerPoll: vi.fn<(callback: () => Promise<void>) => void>(),
 }));
+const envList = vi.hoisted((): Pick<EnvOutputObj, 'displayName' | 'kind' | 'name'>[] => []);
 
 vi.mock('vue-i18n', () => ({
   useI18n: () => ({
@@ -54,7 +56,7 @@ vi.mock('~/api/modules/v1', () => ({
 }));
 vi.mock('~/modules/i18n', () => ({ i18n: { global: { t: (key: string) => key } } }));
 vi.mock('~/stores/app-detail', () => ({ useAppDetail: () => ({ appID: 'demo-app' }) }));
-vi.mock('~/stores/deploy-env', () => ({ useDeployEnvStore: () => ({ currentEnv: 'prod' }) }));
+vi.mock('~/stores/deploy-env', () => ({ useDeployEnvStore: () => ({ currentEnv: 'prod', envList }) }));
 vi.mock('~/composables/use-interval', () => ({
   default: (callback: () => Promise<void>) => {
     mocks.registerPoll(callback);
@@ -344,6 +346,7 @@ function deferred<T>() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  envList.length = 0;
   vi.setSystemTime(new Date(2026, 10, 5, 12));
   mocks.rankInstances.mockImplementation(({ instances: candidates, limit }: { instances?: string[]; limit: number }) =>
     Promise.resolve(rank(candidates?.slice(0, limit) ?? ['pod-1', 'pod-2'])),
@@ -598,6 +601,33 @@ describe('实例监控侧栏', () => {
     await wrapper.get('input[placeholder="输入实例名称搜索"]').setValue('pod-');
     expect(wrapper.findAll('[data-testid="instance-candidate"]')).toHaveLength(100);
     expect(wrapper.text()).toContain('仅展示前 100 个结果，请缩小搜索范围');
+    wrapper.unmount();
+  });
+
+  it('多环境实例树分组展示环境名称，实例键和监控查询使用内部名', async () => {
+    const envNames = ['dev', 'feat-preview-123', 'test'];
+    envList.push(
+      { name: 'dev', displayName: '开发环境', kind: 'standard' },
+      { name: 'feat-preview-123', displayName: '预览环境', kind: 'feature' },
+      { name: 'test', kind: 'standard' },
+    );
+    mocks.rankInstances.mockResolvedValue(rank(['web-0']));
+    const { wrapper } = await mountSlider(
+      undefined,
+      envNames.map(envName => ({ envName, instances: ['web-0'] })),
+    );
+
+    await wrapper.get('input[placeholder="输入实例名称搜索"]').setValue('web-0');
+    const displayNames = ['开发环境', '预览环境', 'test'];
+    expect(wrapper.getComponent({ name: 'TreeStub' }).props('data')).toEqual(
+      envNames.map((envName, index) => ({
+        id: `env:${envName}`,
+        name: displayNames[index],
+        children: [{ id: instanceKey('web-0', envName), name: 'web-0' }],
+      })),
+    );
+    expect(mocks.rankInstances.mock.calls.map(([query]) => query.envName)).toEqual(envNames);
+    expect(new Set(mocks.getInstanceTimeSeries.mock.calls.map(([query]) => query.envName))).toEqual(new Set(envNames));
     wrapper.unmount();
   });
 

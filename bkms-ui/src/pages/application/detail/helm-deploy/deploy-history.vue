@@ -158,6 +158,7 @@
     v-model:is-show="previewRollbackConfig.isShow"
     :app-name="appDetailStore.app"
     :deploy-i-d="previewRollbackConfig.historyID"
+    :env-display-name="envDisplayName"
     :env-name="envName"
     :traffic-lane-name="laneName"
     @success="handleRollbackSuccess"
@@ -182,6 +183,7 @@
   import { useHelmDeploy } from './use-helm-deploy';
 
   interface IProps {
+    envDisplayName?: string;
     envName: string;
     initialLoading?: boolean;
     laneName: string;
