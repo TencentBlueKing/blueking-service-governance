@@ -30,7 +30,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkci"
 	helmchartbuild "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/chart"
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/platformaccount"
 	bkciapi "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bkci"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/taskq"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/misc/audit"
@@ -109,11 +109,12 @@ func (p *poller) runTick(ctx context.Context, args Args) error {
 		return p.terminate(ctx, record, args, helmchartbuild.StatusPollingTimeout)
 	}
 
-	user, err := auth.GetUser(ctx)
+	// 触发者的登录态可能已过期，用虚拟账号查询构建状态
+	caller, err := platformaccount.GetCaller(ctx)
 	if err != nil {
-		return errors.Wrapf(taskq.ErrStopRetry, "get authed user: %v", err)
+		return errors.Wrapf(taskq.ErrStopRetry, "get caller: %v", err)
 	}
-	apiClient, err := bkciapi.New(user)
+	apiClient, err := bkciapi.New(caller)
 	if err != nil {
 		return errors.Wrapf(taskq.ErrStopRetry, "create bkci api client: %v", err)
 	}

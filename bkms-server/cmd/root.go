@@ -51,6 +51,7 @@ func init() {
 	rootCmd.AddCommand(migration.NewBindBscpProjectCmd())
 	rootCmd.AddCommand(migration.NewListBscpProjectsCmd())
 	rootCmd.AddCommand(migration.NewScanAppRuntimeModelCmd())
+	rootCmd.AddCommand(migration.NewGrantPlatformAccountCmd())
 }
 
 // Execute ...
