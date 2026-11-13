@@ -16,7 +16,7 @@
  * to the current version of the project delivered to anyone in the future.
  */
 /**
- * 场景级测试：应用详情壳层路由守卫（ROUTES 未收录，本头即场景说明）
+ * 场景级测试：应用详情壳层路由守卫、异步导航和应用切换。
  *
  * 来源：detail.vue:134 onBeforeRouteUpdate（业务「特性环境支持设置环境变量」引入）
  * V = 3（判定节点 ×2：isSwitchingFeatureEnvApp 五条件与 / isCleanInstanceList 防重定向死循环）
@@ -25,8 +25,8 @@
  *   ② 目标已是干净 instance 列表（仅 activeTab 一个参数）→ 放行（防 replace 重定向死循环）
  *   ③ 非特性环境视图（view !== 'feature-envs'）下切换应用 → 放行（等价类）
  *   ④ 同应用内的路由更新（name 相同）→ 放行（等价类）
- * stub/mock：bkmsserver 最小集 + v1 Proxy 兜底 + vue-router 捕获守卫回调；历史栈回归使用
- *            真实 Vue Router / memory history，其余子页面仍隔离 + vue-i18n useI18n 直译
+ * stub/mock：bkmsserver 最小集 + v1 Proxy 兜底 + vue-router 捕获守卫回调；历史栈和七彩石开关
+ *            使用真实 Vue Router / memory history 与 Pinia，隔离子页面和 HTTP 接口。
  * 变异验证：3 处全部命中（恒真→③④红 / 死循环判定删除→②红 / query 串改→①红），已精确还原
  * backlog：无
  */
@@ -36,15 +36,18 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useRouter } from 'vue-router';
+import CustomRouterComponent from '~/components/custom-router-component.vue';
 import { appNavigationConfig } from '~/config/navigation/app';
 import AppDetailShell from '~/pages/application/detail.vue';
 import { useAppDetail } from '~/stores/app-detail';
+import { useSpaceStore } from '~/stores/space';
 
 import { installVxeShims } from '../helpers/mock-table';
 
 import type { VueWrapper } from '@vue/test-utils';
 import type { NavigationGuard, RouteLocationNormalizedGeneric, Router } from 'vue-router';
 import type * as VueRouter from 'vue-router';
+import type { CfgSwitchesOutput } from '~/@types/v1/cfgswitch';
 import type { NavigationItem } from '~/config/navigation/types';
 
 const mocks = vi.hoisted(() => ({
@@ -57,6 +60,9 @@ const mocks = vi.hoisted(() => ({
   listPageApps: vi.fn(),
   detail: vi.fn(),
   runtime: vi.fn(),
+  cfgSwitches: vi.fn(),
+  getRainbowTConf: vi.fn(),
+  putRainbowTConf: vi.fn(),
   push: vi.fn(),
   replace: vi.fn(),
   realRouter: null as null | Router,
@@ -69,6 +75,7 @@ function mountShell(): {
 } {
   const pinia = createPinia();
   setActivePinia(pinia);
+  useSpaceStore().updateCurrentSpace(mocks.space);
   mocks.routeUpdateGuards.length = 0;
   const wrapper = mount(AppDetailShell, {
     shallow: true,
@@ -107,7 +114,15 @@ vi.mock('~/api/modules/v1', async () => (await import('../helpers/mock-api')).v1
 vi.mock('~/api/modules/v1/app', () => ({
   AppService: { listApps: mocks.apps, getAppRuntimeMods: mocks.runtime },
 }));
-vi.mock('~/stores/space', () => ({ useSpaceStore: () => ({ currentSpace: mocks.space }) }));
+vi.mock('~/api/modules/v1/cfgswitch', () => ({
+  CfgswitchService: { getCfgSwitches: mocks.cfgSwitches },
+}));
+vi.mock('~/api/modules/v1/rainbowtconf', () => ({
+  RainbowtconfService: {
+    getRainbowTConf: mocks.getRainbowTConf,
+    putRainbowTConf: mocks.putRainbowTConf,
+  },
+}));
 
 beforeAll(() => {
   installVxeShims();
@@ -121,6 +136,8 @@ beforeEach(() => {
   mocks.listPageApps.mockResolvedValue([]);
   mocks.detail.mockResolvedValue(undefined);
   mocks.runtime.mockResolvedValue(undefined);
+  mocks.cfgSwitches.mockReset().mockResolvedValue({});
+  mocks.getRainbowTConf.mockResolvedValue({ url: 'https://config.example.test/' });
   useRouter().currentRoute.value = loc({ name: '' });
 });
 
@@ -196,7 +213,18 @@ async function mountShellWithHistory(
     type = 'bkmsApp',
     fromList = false,
     renderIcons = fromList,
-  }: { fromList?: boolean; menuName?: string; renderIcons?: boolean; type?: string } = {},
+    query = { stale: 'observation-query' },
+    previousAppID = '',
+    renderDetailPage = false,
+  }: {
+    fromList?: boolean;
+    menuName?: string;
+    previousAppID?: string;
+    query?: Record<string, string>;
+    renderDetailPage?: boolean;
+    renderIcons?: boolean;
+    type?: string;
+  } = {},
 ) {
   const {
     createRouter,
@@ -216,7 +244,12 @@ async function mountShellWithHistory(
         path: '/:space/app/:name',
         component: AppDetailShell,
         children: [
-          { path: ':type/:menuName', name: 'detail', component: { template: '<div data-test="application-page" />' } },
+          {
+            path: ':type/:menuName',
+            name: 'detail',
+            component: renderDetailPage ? CustomRouterComponent : { template: '<div data-test="application-page" />' },
+            meta: { menuId: 'APP' },
+          },
         ],
       },
     ],
@@ -227,11 +260,13 @@ async function mountShellWithHistory(
     await router.push({
       name: 'detail',
       params: { space: 'ws-1', name, type, menuName },
-      query: { stale: 'observation-query' },
+      query,
     });
   }
   const pinia = createPinia();
   setActivePinia(pinia);
+  useSpaceStore().updateCurrentSpace(mocks.space);
+  useAppDetail().updateAppID(previousAppID);
   const wrapper = mount(routerView, {
     global: {
       plugins: [pinia, router],
@@ -696,6 +731,195 @@ describe('应用详情壳层：能力局部加载', () => {
       await flushPromises();
       expect(menuKeys(wrapper)).toContain('observation');
       expect(useRouter().currentRoute.value.params).toMatchObject({ name: 'b', menuName: 'observation' });
+    } finally {
+      wrapper.unmount();
+    }
+  });
+});
+
+describe('应用详情壳层：七彩石空间开关', () => {
+  const apps = [
+    { id: 'app-a', name: 'a', type: 'trpc' },
+    { id: 'app-b', name: 'b', type: 'trpc' },
+  ];
+  const businessPage = { type: 'trpc', menuName: 'businessConfig', query: { activeTab: 'rainbow' } };
+
+  beforeEach(() => {
+    mocks.space = 'ws-1';
+    mocks.apps.mockResolvedValue(apps);
+    mocks.detail.mockImplementation(async ({ appID }: { appID: string }) => apps.find(app => app.id === appID));
+    mocks.runtime.mockResolvedValue({ mods: { apmServiceName: { supported: true } } });
+  });
+
+  it.each([
+    ['bkmsApp', 'module'],
+    ['trpc', 'module'],
+    ['taf', 'module'],
+    ['helm', 'network'],
+    ['agones', 'network'],
+  ])('%s 开通七彩石后将业务配置紧跟在 %s 后面', async (type, precedingMenu) => {
+    const app = { ...apps[0], type };
+    mocks.apps.mockResolvedValue([app]);
+    mocks.detail.mockResolvedValue(app);
+    mocks.cfgSwitches.mockResolvedValue({ rainbowTConf: true });
+    const { wrapper } = await mountShellWithHistory(app.name, { type, menuName: 'info' });
+    try {
+      const keys = menuKeys(wrapper);
+      expect(keys).toContain(precedingMenu);
+      expect(keys[keys.indexOf(precedingMenu) + 1]).toBe('businessConfig');
+    } finally {
+      wrapper.unmount();
+    }
+  });
+
+  it.each([true, false])('业务配置直达等待空间开关，再决定是否保留链接（已开启：%s）', async enabled => {
+    let resolveSwitch!: (value: CfgSwitchesOutput) => void;
+    mocks.cfgSwitches.mockReturnValue(new Promise<CfgSwitchesOutput>(resolve => (resolveSwitch = resolve)));
+    const { router, wrapper } = await mountShellWithHistory('a', businessPage);
+    try {
+      expect(mocks.cfgSwitches.mock.calls.map(([params]) => params.workspaceID)).toEqual(['ws-1']);
+      expect(router.currentRoute.value.params.menuName).toBe('businessConfig');
+      expect(router.currentRoute.value.query).toEqual({ activeTab: 'rainbow' });
+      expect(menuKeys(wrapper)).not.toContain('businessConfig');
+      expect(wrapper.find('[data-test="application-page"]').exists()).toBe(false);
+
+      resolveSwitch({ bscp: true, rainbowTConf: enabled });
+      await flushPromises();
+      expect(router.currentRoute.value.params.menuName).toBe(enabled ? 'businessConfig' : 'info');
+      expect(router.currentRoute.value.query).toEqual(enabled ? { activeTab: 'rainbow' } : {});
+      expect(menuKeys(wrapper).includes('businessConfig')).toBe(enabled);
+      expect(wrapper.find('[data-test="application-page"]').exists()).toBe(true);
+
+      router.back();
+      await flushPromises();
+      expect(router.currentRoute.value.name).toBe('app');
+    } finally {
+      wrapper.unmount();
+    }
+  });
+
+  it('直达时开关加载失败，保留链接并在重试成功后挂载业务配置', async () => {
+    mocks.cfgSwitches.mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce({ rainbowTConf: true });
+    const { router, wrapper } = await mountShellWithHistory('a', businessPage);
+    try {
+      expect(router.currentRoute.value.params.menuName).toBe('businessConfig');
+      expect(wrapper.text()).toContain('七彩石开关加载失败');
+      expect(menuKeys(wrapper)).not.toContain('businessConfig');
+      expect(wrapper.find('[data-test="application-page"]').exists()).toBe(false);
+      const retry = wrapper.findAll('button').find(button => button.text() === '重试');
+      expect(retry).toBeDefined();
+      await retry!.trigger('click');
+      await flushPromises();
+
+      expect(mocks.cfgSwitches).toHaveBeenCalledTimes(2);
+      expect(router.currentRoute.value.params.menuName).toBe('businessConfig');
+      expect(router.currentRoute.value.query).toEqual({ activeTab: 'rainbow' });
+      expect(wrapper.text()).not.toContain('七彩石开关加载失败');
+      expect(menuKeys(wrapper)).toContain('businessConfig');
+      expect(wrapper.find('[data-test="application-page"]').exists()).toBe(true);
+    } finally {
+      wrapper.unmount();
+    }
+  });
+
+  it('同一空间切换应用时复用开关并保留业务配置菜单', async () => {
+    mocks.cfgSwitches.mockResolvedValue({ rainbowTConf: true });
+    const { router, wrapper } = await mountShellWithHistory('a', businessPage);
+    try {
+      wrapper.findComponent({ name: 'Select' }).vm.$emit('update:modelValue', 'b');
+      await flushPromises();
+      expect(router.currentRoute.value.params).toMatchObject({ name: 'b', menuName: 'businessConfig' });
+      expect(menuKeys(wrapper)).toContain('businessConfig');
+      expect(mocks.cfgSwitches).toHaveBeenCalledTimes(1);
+    } finally {
+      wrapper.unmount();
+    }
+  });
+
+  it('确认业务配置深链的应用后才读取该应用的七彩石地址', async () => {
+    mocks.cfgSwitches.mockResolvedValue({ rainbowTConf: true });
+    const { router, wrapper } = await mountShellWithHistory('b', {
+      ...businessPage,
+      previousAppID: 'previous-workspace-app',
+      renderDetailPage: true,
+    });
+    try {
+      expect(router.currentRoute.value.params).toMatchObject({ name: 'b', menuName: 'businessConfig' });
+      expect(mocks.getRainbowTConf.mock.calls.map(([params]) => params.appID)).toEqual(['app-b']);
+      expect(wrapper.get('iframe').attributes('src')).toBe('https://config.example.test/');
+    } finally {
+      wrapper.unmount();
+    }
+  });
+
+  it.each(['应用列表请求失败', '空间没有可见应用', '列表只有其他应用'])(
+    '%s时业务配置深链返回应用列表',
+    async scenario => {
+      mocks.cfgSwitches.mockResolvedValue({ rainbowTConf: true });
+      if (scenario === '应用列表请求失败') {
+        mocks.apps.mockRejectedValueOnce(new Error('offline'));
+      } else {
+        mocks.apps.mockResolvedValueOnce(scenario === '空间没有可见应用' ? [] : [apps[0]]);
+      }
+      const { router, wrapper } = await mountShellWithHistory('b', {
+        ...businessPage,
+        previousAppID: 'previous-workspace-app',
+        renderDetailPage: true,
+      });
+      try {
+        expect(mocks.getRainbowTConf).not.toHaveBeenCalled();
+        expect(mocks.putRainbowTConf).not.toHaveBeenCalled();
+        expect(router.currentRoute.value.name).toBe('app');
+        expect(router.currentRoute.value.query).toEqual({});
+      } finally {
+        wrapper.unmount();
+      }
+    },
+  );
+
+  it('从已打开的业务配置跳到同空间已删除应用的深链，不读取其他应用', async () => {
+    mocks.cfgSwitches.mockResolvedValue({ rainbowTConf: true });
+    const { router, wrapper } = await mountShellWithHistory('a', { ...businessPage, renderDetailPage: true });
+    try {
+      await router.push({
+        name: 'detail',
+        params: { space: 'ws-1', name: 'deleted-app', type: 'trpc', menuName: 'businessConfig' },
+        query: { activeTab: 'rainbow' },
+      });
+      await flushPromises();
+      expect(mocks.getRainbowTConf.mock.calls.map(([params]) => params.appID)).toEqual(['app-a']);
+      expect(router.currentRoute.value.name).toBe('app');
+      expect(router.currentRoute.value.query).toEqual({});
+    } finally {
+      wrapper.unmount();
+    }
+  });
+
+  it('切换空间后，旧空间迟到的开启结果不能展示新空间的业务配置', async () => {
+    let resolveOldSwitch!: (value: CfgSwitchesOutput) => void;
+    mocks.cfgSwitches.mockImplementation(({ workspaceID }: { workspaceID: string }) =>
+      workspaceID === 'ws-1'
+        ? new Promise<CfgSwitchesOutput>(resolve => (resolveOldSwitch = resolve))
+        : Promise.resolve({ bscp: true, rainbowTConf: false }),
+    );
+    const { router, wrapper } = await mountShellWithHistory('a', businessPage);
+    try {
+      useSpaceStore().updateCurrentSpace('ws-2');
+      await flushPromises();
+      await router.push({
+        name: 'detail',
+        params: { space: 'ws-2', name: 'b', type: 'trpc', menuName: 'businessConfig' },
+        query: { activeTab: 'rainbow' },
+      });
+      await flushPromises();
+      expect(router.currentRoute.value.params).toMatchObject({ space: 'ws-2', menuName: 'info' });
+
+      resolveOldSwitch({ rainbowTConf: true });
+      await flushPromises();
+      expect(mocks.cfgSwitches.mock.calls.map(([params]) => params.workspaceID)).toEqual(['ws-1', 'ws-2']);
+      expect(useSpaceStore().rainbowTConfStatus).toBe('disabled');
+      expect(menuKeys(wrapper)).not.toContain('businessConfig');
+      expect(router.currentRoute.value.params).toMatchObject({ space: 'ws-2', menuName: 'info' });
     } finally {
       wrapper.unmount();
     }

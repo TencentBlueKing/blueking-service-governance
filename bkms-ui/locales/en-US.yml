@@ -2101,6 +2101,22 @@ HostPort 目前仅对绑定联邦集群的环境生效: HostPort currently only 
 仪表盘: Dashboard
 配置仪表盘: Configure Dashboards
 暂未配置仪表盘: No dashboards configured
+业务配置: Business Configuration
+七彩石: Rainbow
+配置七彩石: Configure Rainbow
+暂未配置七彩石: Rainbow has not been configured
+配置页面地址后，会在下方嵌入七彩石页面。: The Rainbow page will appear below after you save its URL.
+七彩石页面地址: Rainbow page URL
+请输入七彩石页面地址: Enter the Rainbow page URL
+只支持 https。建议填写适配 iframe、没有顶部导航的七彩石页面地址。: Use an HTTPS URL for a Rainbow page that supports iframe embedding and has no top navigation.
+请输入有效的 HTTPS 地址: Enter a valid HTTPS URL
+七彩石页面地址不能超过 2048 个字符: The Rainbow page URL must be 2048 characters or fewer
+七彩石页面地址不能包含用户名或密码: The Rainbow page URL cannot contain a username or password
+七彩石开关加载失败: Failed to check whether Rainbow is enabled
+七彩石配置加载失败: Failed to load the Rainbow configuration
+没有权限查看七彩石配置: You do not have permission to view the Rainbow configuration
+没有权限修改七彩石配置: You do not have permission to edit the Rainbow configuration
+请联系空间管理员: Contact your workspace administrator
 添加仪表盘: Add Dashboard
 编辑仪表盘: Edit Dashboard
 请选择仪表盘: Select a dashboard
