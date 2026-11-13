@@ -1,6 +1,6 @@
 [
   {
-    "dropIndexes": "workspace_framework_templates",
+    "dropIndexes": "workspace_framework_config_templates",
     "index": [
       "idx_workspaceID_framework_language_name",
       "idx_workspaceID_framework_language_default",

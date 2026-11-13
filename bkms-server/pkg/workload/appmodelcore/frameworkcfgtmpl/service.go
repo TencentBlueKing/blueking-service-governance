@@ -16,7 +16,7 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
-package frameworktmpl
+package frameworkcfgtmpl
 
 import (
 	"context"
@@ -32,7 +32,7 @@ import (
 // CreateParams 创建自定义模板的参数。
 type CreateParams struct {
 	Framework string
-	// Language 框架只支持一种语言时可以为空。
+	// Language 语言，如 go、cpp。
 	Language string
 	Definition
 	// IsDefault 是否同时设为分组的默认模板。

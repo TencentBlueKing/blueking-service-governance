@@ -16,7 +16,7 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
-package frameworktmpl
+package frameworkcfgtmpl
 
 import (
 	"errors"
@@ -38,8 +38,7 @@ var _ = Describe("Template validation", func() {
 		},
 		Entry("trpc go", "trpc", "go", Group{"trpc", "go"}, appcfg.FileFormatYAML),
 		Entry("trpc cpp", "trpc", "cpp", Group{"trpc", "cpp"}, appcfg.FileFormatYAML),
-		Entry("taf with explicit cpp", "taf", "cpp", Group{"taf", "cpp"}, appcfg.FileFormatTAF),
-		Entry("taf fills its only language", "taf", "", Group{"taf", "cpp"}, appcfg.FileFormatTAF),
+		Entry("taf cpp", "taf", "cpp", Group{"taf", "cpp"}, appcfg.FileFormatTAF),
 	)
 
 	DescribeTable("ResolveGroup rejects groups without a framework config file",
@@ -50,6 +49,7 @@ var _ = Describe("Template validation", func() {
 		Entry("blank framework", "blank", "go"),
 		Entry("unsupported language", "trpc", "python"),
 		Entry("trpc without language", "trpc", ""),
+		Entry("taf without language", "taf", ""),
 		Entry("unknown framework", "unknown", "go"),
 	)
 

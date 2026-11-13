@@ -16,7 +16,7 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
-package frameworktmpl
+package frameworkcfgtmpl
 
 import "github.com/gin-gonic/gin"
 
@@ -32,10 +32,10 @@ type Handler interface {
 
 // Register registers workspace framework config template routes.
 func Register(rg *gin.RouterGroup, h Handler) {
-	rg.GET("/workspaces/:workspaceID/framework-templates", h.ListTemplates)
-	rg.POST("/workspaces/:workspaceID/framework-templates", h.CreateTemplate)
-	rg.GET("/workspaces/:workspaceID/framework-templates/:templateID", h.GetTemplate)
-	rg.PUT("/workspaces/:workspaceID/framework-templates/:templateID", h.UpdateTemplate)
-	rg.DELETE("/workspaces/:workspaceID/framework-templates/:templateID", h.DeleteTemplate)
-	rg.PUT("/workspaces/:workspaceID/framework-templates/:templateID/default", h.SetDefaultTemplate)
+	rg.GET("/workspaces/:workspaceID/framework-config-templates", h.ListTemplates)
+	rg.POST("/workspaces/:workspaceID/framework-config-templates", h.CreateTemplate)
+	rg.GET("/workspaces/:workspaceID/framework-config-templates/:templateID", h.GetTemplate)
+	rg.PUT("/workspaces/:workspaceID/framework-config-templates/:templateID", h.UpdateTemplate)
+	rg.DELETE("/workspaces/:workspaceID/framework-config-templates/:templateID", h.DeleteTemplate)
+	rg.PUT("/workspaces/:workspaceID/framework-config-templates/:templateID/default", h.SetDefaultTemplate)
 }

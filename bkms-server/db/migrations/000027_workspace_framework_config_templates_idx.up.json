@@ -1,6 +1,6 @@
 [
   {
-    "createIndexes": "workspace_framework_templates",
+    "createIndexes": "workspace_framework_config_templates",
     "indexes": [
       {
         "key": {

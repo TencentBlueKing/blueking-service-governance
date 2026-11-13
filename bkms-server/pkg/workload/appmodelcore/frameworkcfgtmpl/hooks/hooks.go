@@ -27,12 +27,12 @@ import (
 
 	bkmsworkspace "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/frameworktmpl"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/frameworkcfgtmpl"
 )
 
 // CleanupTemplatesByWorkspaceHookName identifies the callback that removes a
 // workspace's framework config templates during workspace deletion.
-const CleanupTemplatesByWorkspaceHookName = "frameworktmpl.cleanup_templates_by_workspace"
+const CleanupTemplatesByWorkspaceHookName = "frameworkcfgtmpl.cleanup_templates_by_workspace"
 
 // RegisterPreDeleteHooks registers framework config template cleanup before workspace deletion.
 func RegisterPreDeleteHooks(db *mongo.Database) {
@@ -42,8 +42,8 @@ func RegisterPreDeleteHooks(db *mongo.Database) {
 // NewCleanupTemplatesByWorkspaceHook removes all templates before deleting a workspace.
 func NewCleanupTemplatesByWorkspaceHook(db *mongo.Database) bkmsworkspace.PreDeleteHook {
 	return func(ctx context.Context, workspaceID string) error {
-		templates := store.Of(db, frameworktmpl.TemplateMeta)
-		if _, err := templates.DeleteMany(ctx, frameworktmpl.ByWorkspace(workspaceID)); err != nil {
+		templates := store.Of(db, frameworkcfgtmpl.TemplateMeta)
+		if _, err := templates.DeleteMany(ctx, frameworkcfgtmpl.ByWorkspace(workspaceID)); err != nil {
 			return errors.Wrapf(err, "delete framework config templates of workspace %s", workspaceID)
 		}
 		return nil

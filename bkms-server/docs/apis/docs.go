@@ -19836,7 +19836,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/workspaces/{workspaceID}/framework-templates": {
+        "/workspaces/{workspaceID}/framework-config-templates": {
             "get": {
                 "security": [
                     {
@@ -19851,10 +19851,10 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "framework-templates"
+                    "framework-config-templates"
                 ],
                 "summary": "查询工作空间框架配置模板列表",
-                "operationId": "ListWorkspaceFrameworkTemplates",
+                "operationId": "ListWorkspaceFrameworkConfigTemplates",
                 "parameters": [
                     {
                         "type": "string",
@@ -19907,10 +19907,10 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "framework-templates"
+                    "framework-config-templates"
                 ],
                 "summary": "新建工作空间框架配置模板",
-                "operationId": "CreateWorkspaceFrameworkTemplate",
+                "operationId": "CreateWorkspaceFrameworkConfigTemplate",
                 "parameters": [
                     {
                         "type": "string",
@@ -19945,7 +19945,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/workspaces/{workspaceID}/framework-templates/{templateID}": {
+        "/workspaces/{workspaceID}/framework-config-templates/{templateID}": {
             "get": {
                 "security": [
                     {
@@ -19959,10 +19959,10 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "framework-templates"
+                    "framework-config-templates"
                 ],
                 "summary": "查询工作空间框架配置模板详情",
-                "operationId": "GetWorkspaceFrameworkTemplate",
+                "operationId": "GetWorkspaceFrameworkConfigTemplate",
                 "parameters": [
                     {
                         "type": "string",
@@ -20011,10 +20011,10 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "framework-templates"
+                    "framework-config-templates"
                 ],
                 "summary": "编辑工作空间框架配置模板",
-                "operationId": "UpdateWorkspaceFrameworkTemplate",
+                "operationId": "UpdateWorkspaceFrameworkConfigTemplate",
                 "parameters": [
                     {
                         "type": "string",
@@ -20069,10 +20069,10 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "framework-templates"
+                    "framework-config-templates"
                 ],
                 "summary": "删除工作空间框架配置模板",
-                "operationId": "DeleteWorkspaceFrameworkTemplate",
+                "operationId": "DeleteWorkspaceFrameworkConfigTemplate",
                 "parameters": [
                     {
                         "type": "string",
@@ -20093,7 +20093,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_workload_appmodelcore_frameworktmpl_serializer.EmptyOutput"
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_workload_appmodelcore_frameworkcfgtmpl_serializer.EmptyOutput"
                         }
                     },
                     "400": {
@@ -20105,7 +20105,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/workspaces/{workspaceID}/framework-templates/{templateID}/default": {
+        "/workspaces/{workspaceID}/framework-config-templates/{templateID}/default": {
             "put": {
                 "security": [
                     {
@@ -20120,10 +20120,10 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "framework-templates"
+                    "framework-config-templates"
                 ],
                 "summary": "设为默认框架配置模板",
-                "operationId": "SetWorkspaceFrameworkTemplateDefault",
+                "operationId": "SetWorkspaceFrameworkConfigTemplateDefault",
                 "parameters": [
                     {
                         "type": "string",
@@ -23605,7 +23605,7 @@ const docTemplate = `{
         "github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_workload_appmodelcore_appspec_serializer.EmptyOutput": {
             "type": "object"
         },
-        "github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_workload_appmodelcore_frameworktmpl_serializer.EmptyOutput": {
+        "github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_workload_appmodelcore_frameworkcfgtmpl_serializer.EmptyOutput": {
             "type": "object"
         },
         "github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_workload_envvars_serializer.EmptyOutput": {
@@ -28004,6 +28004,7 @@ const docTemplate = `{
                 "content",
                 "fileName",
                 "framework",
+                "language",
                 "name"
             ],
             "properties": {
@@ -28024,7 +28025,7 @@ const docTemplate = `{
                     "type": "boolean"
                 },
                 "language": {
-                    "description": "语言：go、cpp。框架只支持一种语言时（如 TAF）可以不填",
+                    "description": "语言：go、cpp",
                     "type": "string"
                 },
                 "name": {

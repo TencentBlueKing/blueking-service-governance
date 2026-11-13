@@ -16,7 +16,7 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
-package frameworktmpl
+package frameworkcfgtmpl
 
 import (
 	"regexp"
@@ -43,13 +43,7 @@ const (
 var fileNamePattern = regexp.MustCompile(`^[a-zA-Z0-9_.-]+$`)
 
 // ResolveGroup 校验框架与语言的组合是否支持框架配置文件，并返回文件格式。
-// 语言为空且框架只支持一种语言时（如 TAF 只支持 cpp），自动补全为该语言。
 func ResolveGroup(framework, language string) (Group, appcfg.FileFormat, error) {
-	if language == "" {
-		if def, ok := appruntime.LookupFramework(framework); ok && len(def.SupportedLanguages) == 1 {
-			language = def.SupportedLanguages[0]
-		}
-	}
 	group := Group{Framework: framework, Language: language}
 	stack := appruntime.Stack{Type: appruntime.AppTypeBKMSApp, Framework: framework, Language: language}
 	// mods.Resolve 为兼容存量应用允许缺语言，模板必须落到具体语言，先做严格校验。

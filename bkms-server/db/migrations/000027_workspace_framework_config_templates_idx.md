@@ -1,6 +1,6 @@
 # 空间框架配置模板索引
 
-`workspace_framework_templates` 存放工作空间自定义的框架配置模板（tRPC、TAF），
+`workspace_framework_config_templates` 存放工作空间自定义的框架配置模板（tRPC、TAF），
 平台内置模板随代码发布，不入库。工作空间 ID 全局唯一，唯一索引不需要再加 `tenantID` 前缀。
 
 - `idx_workspaceID_framework_language_name`（unique）

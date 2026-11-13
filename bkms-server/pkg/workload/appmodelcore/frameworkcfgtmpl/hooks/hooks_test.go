@@ -29,8 +29,8 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil/dbfactory"
 	bkmsworkspace "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/frameworktmpl"
-	frameworktmplhooks "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/frameworktmpl/hooks"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/frameworkcfgtmpl"
+	frameworkcfgtmplhooks "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/frameworkcfgtmpl/hooks"
 )
 
 var _ = Describe("Framework config template lifecycle hooks", func() {
@@ -45,24 +45,24 @@ var _ = Describe("Framework config template lifecycle hooks", func() {
 
 		db = testutil.NewDB(GinkgoT())
 		workspaceStore = store.Of(db, bkmsworkspace.Meta)
-		frameworktmplhooks.RegisterPreDeleteHooks(db)
+		frameworkcfgtmplhooks.RegisterPreDeleteHooks(db)
 	})
 
 	AfterEach(func() {
 		if workspace != nil {
 			Expect(bkmsworkspace.Delete(ctx, workspaceStore, workspace.ID)).To(Succeed())
 		}
-		Expect(testutil.CleanupMetaColl(frameworktmpl.TemplateMeta)).To(Succeed())
+		Expect(testutil.CleanupMetaColl(frameworkcfgtmpl.TemplateMeta)).To(Succeed())
 		bkmsworkspace.ResetLifecycleHooksForTest()
 	})
 
 	It("removes templates when their workspace is deleted", func() {
 		workspace = dbfactory.Workspace(ctx, workspaceStore)
 		workspaceID := workspace.ID
-		_, err := frameworktmpl.Create(ctx, db, workspaceID, frameworktmpl.CreateParams{
+		_, err := frameworkcfgtmpl.Create(ctx, db, workspaceID, frameworkcfgtmpl.CreateParams{
 			Framework:  "trpc",
 			Language:   "go",
-			Definition: frameworktmpl.Definition{Name: "tpl", FileName: "trpc_go.yaml", Content: "a: 1\n"},
+			Definition: frameworkcfgtmpl.Definition{Name: "tpl", FileName: "trpc_go.yaml", Content: "a: 1\n"},
 			IsDefault:  true,
 		})
 		Expect(err).NotTo(HaveOccurred())
@@ -70,7 +70,8 @@ var _ = Describe("Framework config template lifecycle hooks", func() {
 		Expect(bkmsworkspace.Delete(ctx, workspaceStore, workspaceID)).To(Succeed())
 		workspace = nil
 
-		templates, err := store.Of(db, frameworktmpl.TemplateMeta).List(ctx, frameworktmpl.ByWorkspace(workspaceID))
+		templates, err := store.Of(db, frameworkcfgtmpl.TemplateMeta).
+			List(ctx, frameworkcfgtmpl.ByWorkspace(workspaceID))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(templates).To(BeEmpty())
 	})
