@@ -24,8 +24,8 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
 )
 
-// FxModule 提供接入点解析器 Resolver
+// FxModule 提供接入点解析器 Resolver 与接入点管理 Manager
 var FxModule = fx.Module("polaris-access-point",
 	database.PrivateFxModule,
-	fx.Provide(NewResolver),
+	fx.Provide(NewResolver, NewManager),
 )

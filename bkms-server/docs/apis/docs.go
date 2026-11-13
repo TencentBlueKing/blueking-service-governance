@@ -20109,7 +20109,7 @@ const docTemplate = `{
                         "BkUserCredential": []
                     }
                 ],
-                "description": "保存前服务端重新执行连通测试，失败或北极星开启了客户端鉴权时拒绝；Token 选填，加密存储。\n传入 clusterIDs 时同时把这些集群绑定到该接入点",
+                "description": "保存前服务端重新执行连通测试，失败时拒绝；Token 选填，加密存储。\n传入 clusterIDs 时同时把这些集群绑定到该接入点",
                 "consumes": [
                     "application/json"
                 ],
@@ -20165,7 +20165,7 @@ const docTemplate = `{
                         "BkUserCredential": []
                     }
                 ],
-                "description": "依次检查网络、鉴权开关、Token，返回失败的原因与北极星上的命名空间，整体 10 秒超时。\n传入已有接入点 ID 且 token 为空时使用已保存的 Token，并记录本次结果",
+                "description": "依次检查网络、鉴权开关、Token，返回失败的原因与北极星上的命名空间，整体 10 秒超时。\n传入已有接入点 ID 时记录本次结果；此时 token 缺省时使用已保存的 Token，显式传空字符串表示不带 Token",
                 "consumes": [
                     "application/json"
                 ],
@@ -21460,12 +21460,10 @@ const docTemplate = `{
             "type": "string",
             "enum": [
                 "networkUnreachable",
-                "clientAuthEnabled",
                 "tokenInvalid"
             ],
             "x-enum-varnames": [
                 "FailureNetworkUnreachable",
-                "FailureClientAuthEnabled",
                 "FailureTokenInvalid"
             ]
         },
@@ -26499,10 +26497,6 @@ const docTemplate = `{
                     "description": "测试时间",
                     "type": "string"
                 },
-                "clientAuth": {
-                    "description": "是否开启客户端鉴权",
-                    "type": "boolean"
-                },
                 "consoleAuth": {
                     "description": "是否开启控制台鉴权",
                     "type": "boolean"
@@ -26516,10 +26510,9 @@ const docTemplate = `{
                     "type": "boolean"
                 },
                 "reason": {
-                    "description": "失败的原因，通过时为空：networkUnreachable 网络不通 / clientAuthEnabled 开启了客户端鉴权 / tokenInvalid Token 无效",
+                    "description": "失败的原因，通过时为空：networkUnreachable 网络不通 / tokenInvalid Token 无效",
                     "enum": [
                         "networkUnreachable",
-                        "clientAuthEnabled",
                         "tokenInvalid"
                     ],
                     "allOf": [
@@ -26561,10 +26554,6 @@ const docTemplate = `{
         "serializer.ConnectivityTestOutput": {
             "type": "object",
             "properties": {
-                "clientAuth": {
-                    "description": "是否开启客户端鉴权",
-                    "type": "boolean"
-                },
                 "consoleAuth": {
                     "description": "是否开启控制台鉴权",
                     "type": "boolean"
@@ -26585,10 +26574,9 @@ const docTemplate = `{
                     "type": "boolean"
                 },
                 "reason": {
-                    "description": "失败的原因，通过时为空：networkUnreachable 网络不通 / clientAuthEnabled 开启了客户端鉴权 / tokenInvalid Token 无效",
+                    "description": "失败的原因，通过时为空：networkUnreachable 网络不通 / tokenInvalid Token 无效",
                     "enum": [
                         "networkUnreachable",
-                        "clientAuthEnabled",
                         "tokenInvalid"
                     ],
                     "allOf": [
@@ -27785,7 +27773,7 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "bkCIProjectID": {
-                    "description": "蓝盾项目 ID;\n创建时，新建容器项目，无需填写\n创建时，绑定已有容器项目，必填.",
+                    "description": "蓝盾项目 ID / 绑定容器项目时的 BCS 项目 code。\n创建时，新建容器项目，无需填写。\n创建时，绑定已有容器项目，必填。",
                     "type": "string"
                 },
                 "description": {

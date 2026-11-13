@@ -102,14 +102,12 @@ type OperatorInstallInput struct {
 type ConnectivityResultOutput struct {
 	// 是否通过
 	OK bool `json:"ok"`
-	// 失败的原因，通过时为空：networkUnreachable 网络不通 / clientAuthEnabled 开启了客户端鉴权 / tokenInvalid Token 无效
-	Reason accesspoint.FailureReason `json:"reason" enums:"networkUnreachable,clientAuthEnabled,tokenInvalid"`
+	// 失败的原因，通过时为空：networkUnreachable 网络不通 / tokenInvalid Token 无效
+	Reason accesspoint.FailureReason `json:"reason" enums:"networkUnreachable,tokenInvalid"`
 	// 失败原因或提示信息
 	Message string `json:"message"`
 	// 是否开启控制台鉴权
 	ConsoleAuth bool `json:"consoleAuth"`
-	// 是否开启客户端鉴权
-	ClientAuth bool `json:"clientAuth"`
 	// 测试时间
 	CheckedAt time.Time `json:"checkedAt"`
 }
@@ -124,7 +122,6 @@ func NewConnectivityResultOutput(r *accesspoint.ConnectivityResult) *Connectivit
 		Reason:      r.Reason,
 		Message:     r.Message,
 		ConsoleAuth: r.ConsoleAuth,
-		ClientAuth:  r.ClientAuth,
 		CheckedAt:   r.CheckedAt,
 	}
 }
@@ -171,16 +168,25 @@ func NewAccessPointOutput(p *accesspoint.PolarisAccessPoint, boundClusterCount i
 type ConnectivityTestOutput struct {
 	// 是否通过
 	OK bool `json:"ok"`
-	// 失败的原因，通过时为空：networkUnreachable 网络不通 / clientAuthEnabled 开启了客户端鉴权 / tokenInvalid Token 无效
-	Reason accesspoint.FailureReason `json:"reason" enums:"networkUnreachable,clientAuthEnabled,tokenInvalid"`
+	// 失败的原因，通过时为空：networkUnreachable 网络不通 / tokenInvalid Token 无效
+	Reason accesspoint.FailureReason `json:"reason" enums:"networkUnreachable,tokenInvalid"`
 	// 失败原因或提示信息
 	Message string `json:"message"`
 	// 是否开启控制台鉴权
 	ConsoleAuth bool `json:"consoleAuth"`
-	// 是否开启客户端鉴权
-	ClientAuth bool `json:"clientAuth"`
 	// 北极星上的命名空间（已过滤系统命名空间 Polaris），网络不通时为空
 	Namespaces []string `json:"namespaces"`
+}
+
+// NewConnectivityTestOutput 由连通测试结果构造输出
+func NewConnectivityTestOutput(r *accesspoint.ConnectivityReport) *ConnectivityTestOutput {
+	return &ConnectivityTestOutput{
+		OK:          r.OK,
+		Reason:      r.Reason,
+		Message:     r.Message,
+		ConsoleAuth: r.ConsoleAuth,
+		Namespaces:  lo.Ternary(r.Namespaces == nil, []string{}, r.Namespaces),
+	}
 }
 
 // NetworkInfoOutput 平台访问北极星的网络信息

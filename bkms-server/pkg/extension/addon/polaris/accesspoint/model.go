@@ -73,9 +73,14 @@ func (p *PolarisAccessPoint) ToAccessPoint() *AccessPoint {
 		Capabilities: CapabilitiesOf(KindWorkspace),
 	}
 	if len(p.ClientHosts) > 0 {
-		ap.OpenAPIBaseURL = "http://" + net.JoinHostPort(p.ClientHosts[0], strconv.Itoa(OpenAPIPort))
+		ap.OpenAPIBaseURL = OpenAPIBaseURL(p.ClientHosts[0])
 	}
 	return ap
+}
+
+// OpenAPIBaseURL 返回自建接入点的 OpenAPI 地址：只使用第一个客户端地址，端口固定为 OpenAPIPort
+func OpenAPIBaseURL(host string) string {
+	return "http://" + net.JoinHostPort(host, strconv.Itoa(OpenAPIPort))
 }
 
 // FailureReason 连通测试失败的原因，供前端选择提示
@@ -84,8 +89,6 @@ type FailureReason string
 const (
 	// FailureNetworkUnreachable 网络不通：GET /naming/v1/namespaces 失败
 	FailureNetworkUnreachable FailureReason = "networkUnreachable"
-	// FailureClientAuthEnabled 北极星开启了客户端鉴权（clientOpen=true），暂不支持
-	FailureClientAuthEnabled FailureReason = "clientAuthEnabled"
 	// FailureTokenInvalid Token 无效
 	FailureTokenInvalid FailureReason = "tokenInvalid"
 )
@@ -100,8 +103,6 @@ type ConnectivityResult struct {
 	Message string `bson:"message"`
 	// ConsoleAuth 北极星是否开启控制台鉴权（consoleOpen）
 	ConsoleAuth bool `bson:"consoleAuth"`
-	// ClientAuth 北极星是否开启客户端鉴权（clientOpen）
-	ClientAuth bool `bson:"clientAuth"`
 	// CheckedAt 测试时间
 	CheckedAt time.Time `bson:"checkedAt"`
 }
