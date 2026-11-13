@@ -120,3 +120,4 @@ graph TD
   - 部署渲染（`workload/bscpcfg.BuildFromStore`）不再注入 BSCP 容器，已绑定的应用再次部署后也会移除。
   `app-bscpcfg-mgr enable` 命令只负责初始化 PostHook 与 Metadata，不再控制开关。
 - **workspace 绑定前置**：使用前必须通过 `bind-bscp-project` 命令（或创建 workspace 时自动）绑定 workspace 与 BSCP 项目，写入 `BkSystems.BkBSCPProjectID / Key` 并创建 credential。
+- **关闭 BSCP 对接**：`featureIntegrations.disableBSCP: true` 时，`/bscp`、`/apps/:appID/bscpcfg` 路由以及应用配置中 BSCP 来源的读写均返回 `BSCP_DISABLED`，本地来源配置不受影响；创建 workspace 时跳过 BSCP 绑定，`bind-bscp-project` 命令直接报错。重新启用后，关闭期间创建的 workspace 需逐个执行 `bind-bscp-project` 补绑。

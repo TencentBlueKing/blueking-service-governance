@@ -12402,6 +12402,104 @@ const docTemplate = `{
                 }
             }
         },
+        "/apps/{appID}/rainbow-tconf": {
+            "get": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "description": "未配置时 url 为空；应用所在空间未开启七彩石配置开关时不可用",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "rainbowtconf"
+                ],
+                "summary": "获取应用的七彩石入口",
+                "operationId": "GetRainbowTConf",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "应用 ID",
+                        "name": "appID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.RainbowTConfResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "description": "地址仅支持 https；应用所在空间未开启七彩石配置开关时不可用",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "rainbowtconf"
+                ],
+                "summary": "设置应用的七彩石入口",
+                "operationId": "PutRainbowTConf",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "应用 ID",
+                        "name": "appID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "七彩石页面地址",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/serializer.PutRainbowTConfInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.RainbowTConfResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
         "/apps/{appID}/recommended-image-tag": {
             "get": {
                 "security": [
@@ -32826,6 +32924,43 @@ const docTemplate = `{
                     "items": {
                         "type": "integer"
                     }
+                }
+            }
+        },
+        "serializer.PutRainbowTConfInput": {
+            "type": "object",
+            "required": [
+                "url"
+            ],
+            "properties": {
+                "url": {
+                    "description": "七彩石页面地址，仅支持 https",
+                    "type": "string"
+                }
+            }
+        },
+        "serializer.RainbowTConfOutput": {
+            "type": "object",
+            "properties": {
+                "updatedAt": {
+                    "description": "最近修改时间，未配置时为 null",
+                    "type": "string"
+                },
+                "updater": {
+                    "description": "最近修改人，未配置时为空",
+                    "type": "string"
+                },
+                "url": {
+                    "description": "七彩石页面地址，未配置时为空",
+                    "type": "string"
+                }
+            }
+        },
+        "serializer.RainbowTConfResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/serializer.RainbowTConfOutput"
                 }
             }
         },

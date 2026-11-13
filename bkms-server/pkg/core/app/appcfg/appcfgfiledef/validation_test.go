@@ -19,12 +19,51 @@
 package appcfgfiledef
 
 import (
+	"context"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bscp"
 )
+
+var _ = Describe("validateBSCPConfig when bscp is disabled", func() {
+	var (
+		originalCfg *config.Config
+		ctx         context.Context
+		h           *Handler
+	)
+
+	BeforeEach(func() {
+		originalCfg = config.G
+		config.G = &config.Config{}
+		config.G.FeatureIntegrations.DisableBSCP = true
+		ctx = auth.WithUser(context.Background(), auth.User{ID: "admin"})
+		h = &Handler{}
+	})
+
+	AfterEach(func() {
+		config.G = originalCfg
+	})
+
+	It("should return ErrDisabled for bscp source", func() {
+		input := &BSCPConfigInput{BizID: "100", ServiceID: "1", ID: "1"}
+
+		cfg, err := h.validateBSCPConfig(ctx, appcfg.ContentSourceTypeBSCP, input, appcfg.FileFormatYAML)
+		Expect(err).To(MatchError(bscp.ErrDisabled))
+		Expect(cfg).To(BeNil())
+	})
+
+	It("should not affect local source", func() {
+		cfg, err := h.validateBSCPConfig(ctx, appcfg.ContentSourceTypeLocal, nil, appcfg.FileFormatYAML)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(cfg).To(BeNil())
+	})
+})
 
 var _ = Describe("validateConfigKindForApp", func() {
 	DescribeTable("allows or rejects config kinds by app",
