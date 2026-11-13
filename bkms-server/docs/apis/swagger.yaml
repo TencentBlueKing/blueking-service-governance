@@ -23695,6 +23695,10 @@ paths:
           description: Bad Request
           schema:
             $ref: '#/definitions/bkerrs.GinErrorOutput'
+        "409":
+          description: 同一框架、语言下模板名称已存在，或并发设置了其它默认模板
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
       security:
       - BkUserInfo: []
       - BkUserCredential: []
@@ -23796,6 +23800,10 @@ paths:
           description: Bad Request
           schema:
             $ref: '#/definitions/bkerrs.GinErrorOutput'
+        "409":
+          description: 同一框架、语言下模板名称已存在，或并发设置了其它默认模板
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
       security:
       - BkUserInfo: []
       - BkUserCredential: []
@@ -23826,6 +23834,10 @@ paths:
             $ref: '#/definitions/serializer.TemplateOutput'
         "400":
           description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+        "409":
+          description: 并发设置了其它默认模板
           schema:
             $ref: '#/definitions/bkerrs.GinErrorOutput'
       security:

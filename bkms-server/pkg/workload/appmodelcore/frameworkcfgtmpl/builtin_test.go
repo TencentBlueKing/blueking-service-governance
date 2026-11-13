@@ -56,11 +56,12 @@ var _ = Describe("Builtin templates", func() {
 		}
 	})
 
-	It("looks up builtin templates by ID and group as copies", func() {
+	It("looks up builtin templates by ID as copies", func() {
 		group := Group{Framework: appruntime.FrameworkTRPC, Language: appruntime.LanguageGo}
-		view, ok := builtinOf(group)
+		view, ok := lookupBuiltin(builtinID(group))
 		Expect(ok).To(BeTrue())
 		Expect(view.ID).To(Equal("builtin-trpc-go"))
+		Expect(view.Group).To(Equal(group))
 		Expect(view.Builtin).To(BeTrue())
 		Expect(view.Name).To(Equal(BuiltinName))
 

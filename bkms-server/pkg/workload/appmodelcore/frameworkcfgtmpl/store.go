@@ -32,7 +32,7 @@ type TemplateStore = store.GenericStore[Template]
 
 // TemplateMeta 空间自定义模板的存储元数据。
 //
-// 索引（由 golang-migrate 维护，见 db/migrations/000026_workspace_framework_config_templates_idx）：
+// 索引（由 golang-migrate 维护，见 db/migrations/000027_workspace_framework_config_templates_idx）：
 // - 唯一：workspaceID + framework + language + name，同一分组下模板名称不重复
 // - 唯一（partial，isDefault 为 true）：workspaceID + framework + language，每个分组至多一个默认模板
 var TemplateMeta = store.Meta[Template]{

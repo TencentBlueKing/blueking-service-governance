@@ -36,9 +36,11 @@ const builtinIDPrefix = "builtin-"
 var builtinFS embed.FS
 
 type builtinSource struct {
-	group    Group
+	group Group
+	// fileName 对外的框架配置文件名，创建应用时以此名称挂载。
 	fileName string
-	path     string
+	// embedPath 模板内容在 builtinFS 中的路径，按「框架_语言」命名以免分组间重名。
+	embedPath string
 }
 
 // builtins 平台内置模板，每个支持框架配置文件的分组恰好一个，顺序即列表中分组的展示顺序。
@@ -52,11 +54,12 @@ var builtins = lo.Map([]builtinSource{
 		Group:    src.group,
 		Name:     BuiltinName,
 		FileName: src.fileName,
-		Content:  string(lo.Must(builtinFS.ReadFile(src.path))),
+		Content:  string(lo.Must(builtinFS.ReadFile(src.embedPath))),
 		Builtin:  true,
 	}
 })
 
+// builtinID 内置框架配置文件 id
 func builtinID(group Group) string {
 	return builtinIDPrefix + group.Framework + "-" + group.Language
 }
@@ -68,9 +71,4 @@ func isBuiltinID(id string) bool {
 // lookupBuiltin 按 ID 查找内置模板，返回副本。
 func lookupBuiltin(id string) (View, bool) {
 	return lo.Find(builtins, func(v View) bool { return v.ID == id })
-}
-
-// builtinOf 返回分组的内置模板，返回副本。
-func builtinOf(group Group) (View, bool) {
-	return lo.Find(builtins, func(v View) bool { return v.Group == group })
 }
