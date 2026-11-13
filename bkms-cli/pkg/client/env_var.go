@@ -338,7 +338,7 @@ func (c *SvcBasedClient) ListPublicEnvVars(ctx context.Context, workspaceID stri
 		return nil, errors.Wrap(err, "list public env vars")
 	}
 	if resp.StatusCode() != http.StatusOK {
-		return nil, errors.Errorf("list public env vars failed: [%d] -> %s", resp.StatusCode(), resp.Body())
+		return nil, formatAPIError(resp, "list public env vars")
 	}
 	return respData.Data, nil
 }
@@ -355,7 +355,7 @@ func (c *SvcBasedClient) CreateScopedEnvVar(
 		return nil, errors.Wrap(err, "create scoped env var")
 	}
 	if resp.StatusCode() != http.StatusOK {
-		return nil, errors.Errorf("create scoped env var failed: [%d] -> %s", resp.StatusCode(), resp.Body())
+		return nil, formatAPIError(resp, "create scoped env var")
 	}
 	return respData.Data, nil
 }
@@ -376,7 +376,7 @@ func (c *SvcBasedClient) UpdateScopedEnvVar(
 		return nil, errors.Wrap(err, "update scoped env var")
 	}
 	if resp.StatusCode() != http.StatusOK {
-		return nil, errors.Errorf("update scoped env var failed: [%d] -> %s", resp.StatusCode(), resp.Body())
+		return nil, formatAPIError(resp, "update scoped env var")
 	}
 	return respData.Data, nil
 }
@@ -394,7 +394,7 @@ func (c *SvcBasedClient) DeleteScopedEnvVar(ctx context.Context, workspaceID, sc
 		return errors.Wrap(err, "delete scoped env var")
 	}
 	if resp.StatusCode() != http.StatusOK {
-		return errors.Errorf("delete scoped env var failed: [%d] -> %s", resp.StatusCode(), resp.Body())
+		return formatAPIError(resp, "delete scoped env var")
 	}
 	return nil
 }
@@ -409,7 +409,7 @@ func (c *SvcBasedClient) ListAppDefinedEnvVars(ctx context.Context, appID string
 		return nil, errors.Wrap(err, "list app defined env vars")
 	}
 	if resp.StatusCode() != http.StatusOK {
-		return nil, errors.Errorf("list app defined env vars failed: [%d] -> %s", resp.StatusCode(), resp.Body())
+		return nil, formatAPIError(resp, "list app defined env vars")
 	}
 	return respData.Data, nil
 }
@@ -426,7 +426,7 @@ func (c *SvcBasedClient) CreateAppDefinedEnvVar(
 		return nil, errors.Wrap(err, "create app defined env var")
 	}
 	if resp.StatusCode() != http.StatusOK {
-		return nil, errors.Errorf("create app defined env var failed: [%d] -> %s", resp.StatusCode(), resp.Body())
+		return nil, formatAPIError(resp, "create app defined env var")
 	}
 	return respData.Data, nil
 }
@@ -443,7 +443,7 @@ func (c *SvcBasedClient) UpdateAppDefinedEnvVar(
 		return nil, errors.Wrap(err, "update app defined env var")
 	}
 	if resp.StatusCode() != http.StatusOK {
-		return nil, errors.Errorf("update app defined env var failed: [%d] -> %s", resp.StatusCode(), resp.Body())
+		return nil, formatAPIError(resp, "update app defined env var")
 	}
 	return respData.Data, nil
 }
@@ -457,7 +457,7 @@ func (c *SvcBasedClient) DeleteAppDefinedEnvVar(ctx context.Context, appID, key 
 		return errors.Wrap(err, "delete app defined env var")
 	}
 	if resp.StatusCode() != http.StatusOK {
-		return errors.Errorf("delete app defined env var failed: [%d] -> %s", resp.StatusCode(), resp.Body())
+		return formatAPIError(resp, "delete app defined env var")
 	}
 	return nil
 }
@@ -472,7 +472,7 @@ func (c *SvcBasedClient) ListEnvScopedEnvVars(ctx context.Context, envID string)
 		return nil, errors.Wrap(err, "list env scoped env vars")
 	}
 	if resp.StatusCode() != http.StatusOK {
-		return nil, errors.Errorf("list env scoped env vars failed: [%d] -> %s", resp.StatusCode(), resp.Body())
+		return nil, formatAPIError(resp, "list env scoped env vars")
 	}
 	return respData.Data, nil
 }
@@ -491,7 +491,7 @@ func (c *SvcBasedClient) ListAppEnvVars(ctx context.Context, appID, envName stri
 		return nil, errors.Wrap(err, "list app env vars")
 	}
 	if resp.StatusCode() != http.StatusOK {
-		return nil, errors.Errorf("list app env vars failed: [%d] -> %s", resp.StatusCode(), resp.Body())
+		return nil, formatAPIError(resp, "list app env vars")
 	}
 	return respData.Data, nil
 }
@@ -516,7 +516,7 @@ func (c *SvcBasedClient) uploadEnvFile(ctx context.Context, path, filePath strin
 		return nil, errors.Wrap(err, "upload env file")
 	}
 	if r.StatusCode() != http.StatusOK {
-		return nil, errors.Errorf("import env vars failed: [%d] -> %s", r.StatusCode(), r.Body())
+		return nil, formatAPIError(r, "import env vars")
 	}
 	if resp.Data == nil {
 		return nil, errors.New("unexpected empty response from import API")
@@ -544,7 +544,7 @@ func (c *SvcBasedClient) uploadEnvFileForPreview(
 		return nil, errors.Wrap(err, "preview env file")
 	}
 	if r.StatusCode() != http.StatusOK {
-		return nil, errors.Errorf("preview env vars failed: [%d] -> %s", r.StatusCode(), r.Body())
+		return nil, formatAPIError(r, "preview env vars")
 	}
 	if resp.Data == nil {
 		return nil, errors.New("unexpected empty response from preview API")
@@ -563,7 +563,7 @@ func (c *SvcBasedClient) downloadEnvFile(ctx context.Context, path string, param
 		return "", errors.Wrap(err, "download env file")
 	}
 	if r.StatusCode() != http.StatusOK {
-		return "", errors.Errorf("export env vars failed: [%d] -> %s", r.StatusCode(), r.Body())
+		return "", formatAPIError(r, "export env vars")
 	}
 	return r.String(), nil
 }
