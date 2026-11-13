@@ -388,5 +388,18 @@ var _ = Describe("LocalManager", func() {
 			Expect(members).To(Equal([]string{"u1", "u2"}))
 			Expect(fake.gotRoleID).To(Equal("role-x"))
 		})
+
+		It("hides the platform account from the members", func() {
+			originCfg := config.G
+			config.G = &config.Config{PlatformAccount: config.PlatformAccountConfig{
+				Enabled: true, Username: "bkms-platform", AccessToken: "token",
+			}}
+			DeferCleanup(func() { config.G = originCfg })
+
+			fake.listMembersResp = []string{"u1", "bkms-platform", "u2"}
+			members, err := mgr.ListRoleMembers(ctx, "role-x")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(members).To(Equal([]string{"u1", "u2"}))
+		})
 	})
 })

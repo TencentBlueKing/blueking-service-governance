@@ -219,6 +219,13 @@ svcConf:
     # 关闭 BSCP 对接，未部署 BSCP 的环境设为 true
     # 关闭期间创建的工作空间没有 BSCP 绑定，重新启用后需逐个执行 bind-bscp-project 命令补绑
     disableBSCP: false
+  # 平台级虚拟账号，未启用时使用请求用户本人调用外部系统
+  # 启用前须先用开启了虚拟账号的配置执行 grant_platform_account 命令为存量空间补发权限
+  platformAccount:
+    enabled: false
+    username: ""
+    # 虚拟账号的 access_token
+    accessToken: ""
   # 蓝鲸 API 环境配置
   bkApiStages:
     # BSCP

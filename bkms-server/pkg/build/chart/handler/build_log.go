@@ -27,7 +27,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/chart/serializer"
 	buildlog "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/log"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/platformaccount"
 	bkciapi "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bkci"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/perm"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
@@ -105,7 +105,7 @@ func (h *Handler) prepareBuildLogDeps(
 		return nil, err
 	}
 
-	bkciClient, err := bkciapi.New(auth.MustGetUser(ctx))
+	bkciClient, err := bkciapi.New(platformaccount.MustGetCaller(ctx))
 	if err != nil {
 		return nil, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "init bkci client")
 	}

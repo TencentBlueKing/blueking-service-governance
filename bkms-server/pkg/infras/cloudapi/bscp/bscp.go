@@ -256,6 +256,7 @@ func (c *ApiClient) listServiceFiles(ctx context.Context, bizID, svcID, versionI
 				bizID:     bizID,
 				svcID:     svcID,
 				signature: cast.ToString(mapx.Get(v, "commit_spec.content.signature", 0)),
+				client:    c,
 			})
 		}
 	}

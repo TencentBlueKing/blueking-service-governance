@@ -26,7 +26,6 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 )
 
 // Biz BSCP 业务（接口中被称为空间）
@@ -154,6 +153,8 @@ type File struct {
 	bizID     string
 	svcID     string
 	signature string
+	// client 获取该文件的客户端，下载内容时沿用它的身份
+	client *ApiClient
 }
 
 // ID ...
@@ -180,19 +181,17 @@ func (f *File) Type() ConfigType {
 	return ConfigTypeFile
 }
 
-// Content 通过 API 下载文件内容
+// Content 通过 API 下载文件内容，使用获取该文件时的身份
 func (f *File) Content(ctx context.Context) (string, error) {
 	// stub 模式下直接返回模拟内容
 	if config.G.Development.UseStubBSCP {
 		return "stub-file-content", nil
 	}
 
-	apiClient, err := newApiClient(auth.MustGetUser(ctx))
-	if err != nil {
-		return "", errors.Wrap(err, "initial bscp client")
+	if f.client == nil {
+		return "", errors.Errorf("bscp file %s has no client", f.Name())
 	}
-
-	return apiClient.getFileContent(ctx, f.bizID, f.svcID, f.signature)
+	return f.client.getFileContent(ctx, f.bizID, f.svcID, f.signature)
 }
 
 var _ Config = &File{}

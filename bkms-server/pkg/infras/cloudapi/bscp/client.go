@@ -93,7 +93,7 @@ func New(user auth.User) (Client, error) {
 }
 
 // newApiClient 创建 ApiClient
-// 仅供包内部需要直接访问 ApiClient 私有方法的场景使用（如 File.Content）
+// 仅供包内部需要直接访问 ApiClient 私有方法的场景使用
 func newApiClient(user auth.User) (*ApiClient, error) {
 	authInfo, err := generateAuthInfo(user)
 	if err != nil {

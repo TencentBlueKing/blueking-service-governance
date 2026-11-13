@@ -72,6 +72,11 @@ the user to install them. ALWAYS prefer using `rg` rather than `find` or `grep`.
 * ALWAYS add a comment for extra indexes in the store source file
 * Before writing code that touches multi-tenancy (`Meta.TenantScoped`, `store.TenantAll` / `store.TenantOf`, tenant in ctx, taskq envelope, tests of tenant scoped collections), read `design_notes/tenant_isolation.md`
 
+#### Calling external systems
+
+* Check permissions in BKMS first, then call external systems (BKCI, BCS, etc.) as the platform virtual account: use `platformaccount.MustGetCaller(ctx)` in request handling paths, and `platformaccount.GetCaller(ctx)` where there may be no logged-in user. Do not use `auth.MustGetUser` / `auth.GetUser` as the caller identity.
+* Some calls intentionally keep the user's own identity (e.g. custom pipelines, reading BSCP configs, linking repositories via Git OAuth). Before adding or changing an external call, read `design_notes/platform_account_external_calls.md` and update its call-site tables.
+
 ### API Tests
 
 #### Pre-requirement: Start local bkms-server service
