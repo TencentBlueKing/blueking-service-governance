@@ -28,35 +28,36 @@ import (
 )
 
 var _ = Describe("NewTokenClient", func() {
-	cfg := ClientConfig{
-		APIGatewayBaseURL: "http://apigw.example.com",
-		SSMBaseURL:        "http://bkssm.example.com",
-		BkAppCode:         "app-code",
-		BkAppSecret:       "app-secret",
+	app := config.BkAppConfig{Code: "app-code", Secret: "app-secret"}
+	account := config.AccountConfig{
+		AuthBaseURL: "http://apigw.example.com",
+		SSMBaseURL:  "http://bkssm.example.com",
 	}
 
 	It("uses SSM when the auth backend is bk_token and SSM is configured", func() {
-		cfg := cfg
-		cfg.AuthBackendType = config.AuthBackendBkToken
-		client, credential := NewTokenClient(context.Background(), cfg)
+		account := account
+		account.BackendType = config.AuthBackendBkToken
+		client := NewTokenClient(context.Background(), account, app)
 		Expect(client).To(BeAssignableToTypeOf(&SSMTokenClient{}))
-		Expect(credential).To(Equal(CredentialBkToken))
+		Expect(client.CredentialName()).To(Equal(CredentialBkToken))
+		Expect(client.RequiresUsername()).To(BeFalse())
 	})
 
 	It("falls back to the API gateway when SSM is not configured", func() {
-		cfg := cfg
-		cfg.AuthBackendType = config.AuthBackendBkToken
-		cfg.SSMBaseURL = ""
-		client, credential := NewTokenClient(context.Background(), cfg)
+		account := account
+		account.BackendType = config.AuthBackendBkToken
+		account.SSMBaseURL = ""
+		client := NewTokenClient(context.Background(), account, app)
 		Expect(client).To(BeAssignableToTypeOf(&APIGatewayTokenClient{}))
-		Expect(credential).To(Equal(CredentialBkTicket))
+		Expect(client.CredentialName()).To(Equal(CredentialBkTicket))
+		Expect(client.RequiresUsername()).To(BeTrue())
 	})
 
 	It("uses the API gateway when the auth backend is bk_ticket", func() {
-		cfg := cfg
-		cfg.AuthBackendType = config.AuthBackendBkTicket
-		client, credential := NewTokenClient(context.Background(), cfg)
+		account := account
+		account.BackendType = config.AuthBackendBkTicket
+		client := NewTokenClient(context.Background(), account, app)
 		Expect(client).To(BeAssignableToTypeOf(&APIGatewayTokenClient{}))
-		Expect(credential).To(Equal(CredentialBkTicket))
+		Expect(client.CredentialName()).To(Equal(CredentialBkTicket))
 	})
 })

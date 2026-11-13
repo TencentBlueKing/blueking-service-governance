@@ -51,6 +51,12 @@ type SSMTokenClient struct {
 	BkAppSecret string
 }
 
+// CredentialName returns "bk_token".
+func (s *SSMTokenClient) CredentialName() string { return CredentialBkToken }
+
+// RequiresUsername returns false, SSM identifies the user by the bk_token only.
+func (s *SSMTokenClient) RequiresUsername() bool { return false }
+
 // GetToken gets an access token of the user who owns the "bk_token" in credentials.
 //
 // SSM identifies the user by "bk_token" only and doesn't isolate tokens by environment,

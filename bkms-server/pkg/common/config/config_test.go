@@ -313,6 +313,44 @@ asynq:
 			))
 		})
 
+		DescribeTable("requires authBaseURL only when the API gateway token service is used",
+			func(account, errMsg string) {
+				configContent := `
+bkApp:
+  code: test-app
+  secret: test-secret
+account:
+  loginURL: http://login.example.com
+` + account + `
+metrics:
+  port: 8081
+httpServer:
+  address: 127.0.0.1
+  port: 32303
+asynq:
+  redis:
+    host: localhost
+    port: 6380
+`
+				Expect(os.WriteFile(configFile, []byte(configContent), 0o644)).To(Succeed())
+
+				cfg, err := config.Load(ctx, configFile)
+
+				if errMsg == "" {
+					Expect(err).NotTo(HaveOccurred())
+					Expect(cfg.Account.UseSSMTokenService()).To(BeTrue())
+					return
+				}
+				Expect(err).To(MatchError(ContainSubstring(errMsg)))
+			},
+			Entry("bk_token with ssmBaseURL",
+				"  backendType: bk_token\n  ssmBaseURL: http://bkssm.example.com", ""),
+			Entry("bk_token without ssmBaseURL",
+				"  backendType: bk_token", "account.authBaseURL is required"),
+			Entry("bk_ticket ignores ssmBaseURL",
+				"  backendType: bk_ticket\n  ssmBaseURL: http://bkssm.example.com", "account.authBaseURL is required"),
+		)
+
 		It("should successfully load config without bkMonitor section", func() {
 			// bkMonitor 段完全缺省时，config 仍能成功加载，BkMonitor 字段应为零值
 			// 该用例保护"apm 相关配置全为可选"这一契约，防止未来误加必填校验

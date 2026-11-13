@@ -30,6 +30,13 @@ import (
 
 // TokenClient is the interface for managing user access tokens.
 type TokenClient interface {
+	// CredentialName returns the name of the user credential GetToken needs, which is also the name
+	// of the cookie that holds the credential in the browser.
+	CredentialName() string
+
+	// RequiresUsername reports whether GetToken needs the username besides the credential.
+	RequiresUsername() bool
+
 	// GetToken gets an access token of the given user. Implementations may ignore the
 	// arguments their token service does not need, see the doc of each implementation.
 	GetToken(

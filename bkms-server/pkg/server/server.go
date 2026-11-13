@@ -149,17 +149,10 @@ func RegisterRouter(ctx context.Context, cfg config.Config, serverRole string) (
 
 	// 初始化用户账号 account 相关 API
 	// 这批 API 不要求请求必须携带有效身份信息
-	tokenClient, tokenCredential := usertoken.NewTokenClient(ctx, usertoken.ClientConfig{
-		AuthBackendType:   cfg.Account.BackendType,
-		APIGatewayBaseURL: cfg.Account.AuthBaseURL,
-		SSMBaseURL:        cfg.Account.SSMBaseURL,
-		BkAppCode:         cfg.BkApp.Code,
-		BkAppSecret:       cfg.BkApp.Secret,
-	})
+	tokenClient := usertoken.NewTokenClient(ctx, cfg.Account, cfg.BkApp)
 	accountHandler := account.NewHandler(account.Config{
-		AuthEnvName:     cfg.Account.AuthEnvName,
-		LoginURL:        cfg.Account.LoginURL,
-		TokenCredential: tokenCredential,
+		AuthEnvName: cfg.Account.AuthEnvName,
+		LoginURL:    cfg.Account.LoginURL,
 	}, tokenClient)
 	authConfig := auth.Config{
 		BackendType:               cfg.Account.BackendType,
@@ -201,23 +194,19 @@ func RegisterRouter(ctx context.Context, cfg config.Config, serverRole string) (
 	buildtrigger.RegisterCallback(callbackGroup, buildTriggerHandler)
 
 	// Register authenticated business APIs under /v1.
-	// 以下 Group 的所有 API 均要求请求必须携带有效身份信息
-	v1 := r.Group("/bkms/v1/bkms-server")
+	// 以下 Group 的所有 API 均要求请求必须携带有效身份信息，通用中间件统一挂在 authed 上
 	requiredAuth, err := auth.Required(authConfig, tokenClient)
 	if err != nil {
 		return nil, errors.Wrap(err, "new required auth middleware")
 	}
+	authed := r.Group("/bkms/v1/bkms-server")
+	authed.Use(bkerrs.ErrorHandler(), requiredAuth)
 
-	// 以下 Group 的 API 要求登录但不校验租户头，用于前端确定租户之前就需要调用的接口
-	v1NoTenant := r.Group("/bkms/v1/bkms-server")
-	v1NoTenant.Use(bkerrs.ErrorHandler(), requiredAuth)
-	platconfig.Register(v1NoTenant, platconfighandler.New(&cfg))
+	// 直接注册在 authed 上的 API 不校验租户头，用于前端确定租户之前就需要调用的接口
+	platconfig.Register(authed, platconfighandler.New(&cfg))
 
-	v1.Use(
-		bkerrs.ErrorHandler(),
-		requiredAuth,
-		tenant.Required(cfg.Tenant.EnableMultiTenantMode, tenantVerifier),
-	)
+	v1 := authed.Group("")
+	v1.Use(tenant.Required(cfg.Tenant.EnableMultiTenantMode, tenantVerifier))
 	app.Register(v1, apphandler.New(storereg.G()))
 	deploy.Register(v1, deployhandler.New(storereg.G()))
 	workspace.Register(v1, workspacehandler.New(storereg.G()))

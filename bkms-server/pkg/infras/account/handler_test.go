@@ -38,8 +38,10 @@ var _ = Describe("APIHandler.CreateToken", func() {
 		tokenClient = usertoken.NewMockTokenClient(GinkgoT())
 	})
 
-	doRequest := func(credential string, cookies ...*http.Cookie) *httptest.ResponseRecorder {
-		h := NewHandler(Config{AuthEnvName: "prod", TokenCredential: credential}, tokenClient)
+	doRequest := func(credentialName string, cookies ...*http.Cookie) *httptest.ResponseRecorder {
+		tokenClient.EXPECT().CredentialName().Return(credentialName)
+		tokenClient.EXPECT().RequiresUsername().Return(credentialName == usertoken.CredentialBkTicket).Maybe()
+		h := NewHandler(Config{AuthEnvName: "prod"}, tokenClient)
 		r := gin.New()
 		r.GET("/user_token/token", h.CreateToken)
 
