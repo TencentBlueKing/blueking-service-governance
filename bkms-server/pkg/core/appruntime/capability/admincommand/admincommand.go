@@ -48,7 +48,7 @@ const (
 
 // trpcAdminLayouts 各语言下 admin 地址的写法。
 //
-// tRPC 目前只支持 go、cpp，其余语言暂不可达；框架目录为 tRPC 开放对应语言后自动生效。
+// tRPC 目前只支持 go、cpp、python，其余语言暂不可达；框架目录为 tRPC 开放对应语言后自动生效。
 var trpcAdminLayouts = map[string]TrpcConfigLayout{
 	appruntime.LanguageGo:     TrpcLayoutNested,
 	appruntime.LanguagePython: TrpcLayoutNested,

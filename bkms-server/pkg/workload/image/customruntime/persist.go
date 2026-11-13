@@ -96,6 +96,11 @@ func (m *PersistManager) PersistAfterSave(ctx context.Context, workspaceID strin
 
 // persistOne 对单条 builder / runner 做路径判定后 get_or_create，并按需初始化 TAG 快照
 func (m *PersistManager) persistOne(ctx context.Context, workspaceID string, imageType ImageType, image string) error {
+	// 单阶段模板（如 python）不配置构建镜像，空值无需落库也不算解析失败
+	if image == "" {
+		return nil
+	}
+
 	// 保存前已校验过引用；解析失败说明不是可落库的 name:tag，跳过
 	ref, err := workloadruntime.ParseTaggedImageReference(image)
 	if err != nil {

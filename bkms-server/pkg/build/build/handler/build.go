@@ -35,6 +35,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime/runtimemod/mods"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/registry"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/misc/audit"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
@@ -121,7 +122,7 @@ func (h *Handler) UpdateBuildConfig(c *gin.Context) {
 	}
 
 	// 校验放在所有副作用之前，避免非法配置已登记代码库或落库
-	if err = h.validatePlatformBuildImages(ctx, app.WorkspaceID, cfg); err != nil {
+	if err = h.validatePlatformBuildImages(ctx, app, cfg); err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return
 	}
@@ -148,11 +149,15 @@ func (h *Handler) UpdateBuildConfig(c *gin.Context) {
 }
 
 // validatePlatformBuildImages 校验平台构建的 builder / runner 镜像，镜像源故障报内部错误，其余报参数错误
+//
+// 是否必须配置构建镜像由应用技术栈的平台构建能力决定
 func (h *Handler) validatePlatformBuildImages(
-	ctx context.Context, workspaceID string, cfg *imagebuild.Config,
+	ctx context.Context, app *bkmsapp.Application, cfg *imagebuild.Config,
 ) error {
 	imageReferenceValidator := workloadruntime.NewImageReferenceValidator(h.registry.DB)
-	err := build.ValidatePlatformBuildImages(ctx, imageReferenceValidator, h.persistMgr, cfg, workspaceID)
+	err := build.ValidatePlatformBuildImages(
+		ctx, imageReferenceValidator, h.persistMgr, mods.Of(app).PlatformBuild, cfg, app.WorkspaceID,
+	)
 	if err == nil {
 		return nil
 	}

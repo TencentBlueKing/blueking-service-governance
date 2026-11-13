@@ -24,6 +24,8 @@ import (
 	"strings"
 
 	"github.com/pkg/errors"
+
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-dockerfile-generator/pkg/dockerfile"
 )
 
 const (
@@ -108,11 +110,14 @@ func LoadFromEnviron(environ []string) (Config, error) {
 
 func validateBKMSGeneratedConfig(cfg Config) error {
 	requiredValues := map[string]string{
-		EnvDockerfileLanguage:     cfg.Language,
-		EnvDockerfilePath:         cfg.DockerfilePath,
-		EnvDockerfileBuilderImage: cfg.BuilderImage,
-		EnvDockerfileRunnerImage:  cfg.RunnerImage,
-		EnvImageName:              cfg.ImageName,
+		EnvDockerfileLanguage:    cfg.Language,
+		EnvDockerfilePath:        cfg.DockerfilePath,
+		EnvDockerfileRunnerImage: cfg.RunnerImage,
+		EnvImageName:             cfg.ImageName,
+	}
+	// 只有带 builder 阶段的模板才需要构建镜像；python 单阶段模板只用运行镜像
+	if dockerfile.RequiresBuilderImage(cfg.Language) {
+		requiredValues[EnvDockerfileBuilderImage] = cfg.BuilderImage
 	}
 	for name, value := range requiredValues {
 		if strings.TrimSpace(value) == "" {

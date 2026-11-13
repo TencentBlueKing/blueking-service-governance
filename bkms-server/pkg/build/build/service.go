@@ -100,14 +100,15 @@ func (s *Service) validateBeforeBuild(ctx context.Context, app *bkmsapp.Applicat
 	if app == nil {
 		return errors.New("application must not be nil for platform generated Dockerfile build")
 	}
-	// 平台生成 Dockerfile 的支持范围由能力声明决定（目前仅 trpc + go）
-	if _, err := platformbuild.DockerfileLanguage(mods.Of(app).PlatformBuild); err != nil {
+	// 平台生成 Dockerfile 的支持范围由能力声明决定（目前仅 trpc + go / python）
+	platformBuild := mods.Of(app).PlatformBuild
+	if _, err := platformbuild.DockerfileLanguage(platformBuild); err != nil {
 		return errors.Wrap(err, "platform generated Dockerfile build")
 	}
 	// 确保 builder & runner 镜像可用：落在工作空间生效镜像源路径下的按自定义镜像向仓库确认，
-	// 其余仍要求来自平台维护的运行时镜像清单
+	// 其余仍要求来自平台维护的运行时镜像清单；不需要构建镜像的语言留空时跳过 builder
 	if err := ValidatePlatformBuildImages(
-		ctx, s.imageReferenceValidator, s.customImageChecker, cfg, app.WorkspaceID,
+		ctx, s.imageReferenceValidator, s.customImageChecker, platformBuild, cfg, app.WorkspaceID,
 	); err != nil {
 		return errors.Wrap(err, "validate platform generated Dockerfile build images")
 	}
@@ -150,11 +151,17 @@ func (s *Service) validateCustomImageCredential(
 }
 
 // usesCustomBuildImage builder / runner 是否有一条落在工作空间生效镜像源路径下
+//
+// 空镜像不参与判定：单阶段模板（如 python）不配置构建镜像
 func (s *Service) usesCustomBuildImage(ctx context.Context, workspaceID string, images ...string) (bool, error) {
 	if s.customImageChecker == nil || workspaceID == "" {
 		return false, nil
 	}
 	for _, image := range images {
+		if image == "" {
+			continue
+		}
+
 		ref, err := workloadruntime.ParseTaggedImageReference(image)
 		if err != nil {
 			return false, errors.Wrapf(err, "parse image %s", image)

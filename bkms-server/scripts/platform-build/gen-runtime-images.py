@@ -25,14 +25,15 @@
 gen-runtime-images.py
 
 用途：
-    从 golang 官方镜像的 tag 清单中筛选出符合平台使用要求的精确小版本
-    tag（形如 golang:X.Y.Z 或 golang:X.Y.Z-alpineA.B），并生成一份用于镜像同步的清单文件。
+    从 golang / python 官方镜像的 tag 清单中筛选出符合平台使用要求的精确小版本
+    tag（形如 golang:X.Y.Z、golang:X.Y.Z-alpineA.B、python:X.Y.Z-slim），
+    并生成一份用于镜像同步的清单文件。
 
 支持两种输入源（二选一，必须显式指定）：
-    - --source skopeo：直接调用 `skopeo list-tags docker://golang` 拉取
-    - --source file --input <path>：从本地文件读取 tag 清单
+    - --source skopeo：直接调用 `skopeo list-tags docker://golang` 与 `docker://python` 拉取
+    - --source file --golang-input <path> --python-input <path>：分别从本地文件读取两份 tag 清单
 
-过滤规则：
+golang 过滤规则：
     1. 只保留 X.Y.Z 或 X.Y.Z-alpineA.B 形式的三段式精确版本
        - 丢弃：滚动 tag（如 1.25、1.25.5-alpine、1.20-alpine3.19）
        - 丢弃：预发布/开发版本（tip-、rc-、beta、pre 等）
@@ -42,17 +43,24 @@ gen-runtime-images.py
        - 例如 1.25.6-alpine3.22 与 1.25.6-alpine3.23，仅保留 1.25.6-alpine3.23
     4. Debian 系精确小版本（X.Y.Z）与 alpine 精确小版本会同时保留
 
+python 过滤规则（作为 python 平台通用构建的运行镜像）：
+    1. 只保留 X.Y.Z-slim 形式的精确版本：基于 Debian、自带 pip，且不受 PEP 668 限制
+       - 丢弃：滚动 tag（如 3.12-slim）、预发布版本（如 3.14.0rc1-slim）
+       - 丢弃：带发行版代号（如 -slim-bookworm）、alpine、windows 等其他变体
+    2. 只保留 python 大版本 >= 3.10 的 tag
+
 产出：
     脚本会将镜像清单写入 --output 指定的文件（默认：configs/workload-runtime-images.txt）。
     输出文件内容包含：
       - golang 系列：过滤后的所有 golang:X.Y.Z 与 golang:X.Y.Z-alpineA.B
       - alpine 系列：从 golang:X.Y.Z-alpineA.B 中反向提取的所有独立 alpine:A.B
+      - python 系列：过滤后的所有 python:X.Y.Z-slim
     输出文件的父目录必须已经存在，否则直接报错退出。
 
 使用示例：
     # 从本地文件读取，生成默认位置的清单
     uv run scripts/platform-build/gen-runtime-images.py \\
-        --source file --input golang-alpine.txt
+        --source file --golang-input golang-alpine.txt --python-input python.txt
 
     # 直接调用 skopeo 拉取远端 tag
     uv run scripts/platform-build/gen-runtime-images.py --source skopeo
@@ -79,6 +87,12 @@ TAG_PATTERN = re.compile(
 
 # 最低支持的 go 版本（含），例如 (1, 20) 表示 1.20 起
 MIN_GO_VERSION = (1, 20)
+
+# 匹配形如 "3.12.7-slim" 的 python 精确版本 tag，分组：major, minor, patch
+PYTHON_TAG_PATTERN = re.compile(r"^(\d+)\.(\d+)\.(\d+)-slim$")
+
+# 最低支持的 python 版本（含）：3.9 已停止维护，poetry / uv 的新版本也陆续不再支持
+MIN_PYTHON_VERSION = (3, 10)
 
 # 默认输出路径，产出的镜像清单文件用于镜像同步脚本消费
 DEFAULT_OUTPUT_PATH = "configs/workload-runtime-images.txt"
@@ -163,6 +177,29 @@ def filter_and_pick_latest(tags: Iterable[str]) -> list[str]:
     ]
 
 
+def filter_python_tags(tags: Iterable[str]) -> list[str]:
+    """按规则过滤 python tag，返回按版本升序排列的 python:X.Y.Z-slim。
+
+    只认 X.Y.Z-slim 一种变体：正则天然排除滚动 tag、预发布版本与其他发行版变体，
+    每个精确版本至多一条，因此不需要像 golang alpine 那样再按发行版去重。
+    """
+    # key: (major, minor, patch)，用于排序与去重
+    selected: dict[tuple[int, int, int], str] = {}
+
+    for tag in tags:
+        m = PYTHON_TAG_PATTERN.match(tag)
+        if not m:
+            continue
+
+        major, minor, patch = int(m.group(1)), int(m.group(2)), int(m.group(3))
+        if (major, minor) < MIN_PYTHON_VERSION:
+            continue
+
+        selected[(major, minor, patch)] = tag
+
+    return [f"python:{tag}" for _, tag in sorted(selected.items())]
+
+
 def extract_alpine_versions(golang_images: Iterable[str]) -> list[str]:
     """从 golang:X.Y.Z-alpineA.B 列表中反向提取所有用到的 alpine:A.B。
 
@@ -185,6 +222,7 @@ def extract_alpine_versions(golang_images: Iterable[str]) -> list[str]:
 def render_output(
     golang_images: list[str],
     alpine_images: list[str],
+    python_images: list[str],
     source_desc: str,
 ) -> str:
     """按 images.txt 的既有格式渲染输出内容。
@@ -208,6 +246,9 @@ def render_output(
     lines.append("")
     lines.append("# ========== alpine 系列 ==========")
     lines.extend(alpine_images)
+    lines.append("")
+    lines.append("# ========== python 系列 ==========")
+    lines.extend(python_images)
     lines.append("")  # 末尾留一个空行，保持 POSIX 风格
     return "\n".join(lines)
 
@@ -229,7 +270,7 @@ def write_output(path: str, content: str) -> None:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="过滤 golang 镜像 tag，生成用于镜像同步的清单文件",
+        description="过滤 golang / python 镜像 tag，生成用于镜像同步的清单文件",
     )
     parser.add_argument(
         "--source",
@@ -238,8 +279,12 @@ def parse_args() -> argparse.Namespace:
         help="tag 数据源：skopeo 表示直接调用命令拉取；file 表示从本地文件读取",
     )
     parser.add_argument(
-        "--input",
-        help="当 --source=file 时必填，指定本地 tag 清单文件路径",
+        "--golang-input",
+        help="当 --source=file 时必填，指定本地 golang tag 清单文件路径",
+    )
+    parser.add_argument(
+        "--python-input",
+        help="当 --source=file 时必填，指定本地 python tag 清单文件路径",
     )
     parser.add_argument(
         "--output",
@@ -248,9 +293,10 @@ def parse_args() -> argparse.Namespace:
     )
     args = parser.parse_args()
 
-    # file 模式下 --input 必填，argparse 的 choices 无法直接表达联动关系，手动校验
-    if args.source == "file" and not args.input:
-        parser.error("--source=file 时必须同时提供 --input <path>")
+    # file 模式下两份输入都必填，argparse 的 choices 无法直接表达联动关系，手动校验；
+    # 缺 python 输入时不能静默跳过，否则重新生成会把已有的 python 系列整段删掉
+    if args.source == "file" and not (args.golang_input and args.python_input):
+        parser.error("--source=file 时必须同时提供 --golang-input <path> 与 --python-input <path>")
     return args
 
 
@@ -258,22 +304,26 @@ def main() -> int:
     args = parse_args()
 
     if args.source == "file":
-        tags = read_tags_from_file(args.input)
+        tags = read_tags_from_file(args.golang_input)
+        python_tags = read_tags_from_file(args.python_input)
     else:
         tags = read_tags_from_skopeo()
+        python_tags = read_tags_from_skopeo("docker://python")
     # 生成产物注释里只标注来源类型，避免把本地路径等易变信息写进文件
     source_desc = args.source
 
     golang_images = filter_and_pick_latest(tags)
     alpine_images = extract_alpine_versions(golang_images)
+    python_images = filter_python_tags(python_tags)
 
-    content = render_output(golang_images, alpine_images, source_desc)
+    content = render_output(golang_images, alpine_images, python_images, source_desc)
     write_output(args.output, content)
 
     # 只打印一个简短摘要到 stdout，方便人类确认；详细内容看输出文件
     print(
         f"[OK] 写入 {args.output}："
-        f"golang {len(golang_images)} 条, alpine {len(alpine_images)} 条"
+        f"golang {len(golang_images)} 条, alpine {len(alpine_images)} 条, "
+        f"python {len(python_images)} 条"
     )
     return 0
 
