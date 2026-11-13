@@ -30,12 +30,19 @@ type Handler interface {
 	SetDefaultTemplate(c *gin.Context)
 }
 
-// Register registers workspace framework config template routes.
+// Register 注册工作空间级别的框架配置模板相关路由。
 func Register(rg *gin.RouterGroup, h Handler) {
-	rg.GET("/workspaces/:workspaceID/framework-config-templates", h.ListTemplates)
-	rg.POST("/workspaces/:workspaceID/framework-config-templates", h.CreateTemplate)
-	rg.GET("/workspaces/:workspaceID/framework-config-templates/:templateID", h.GetTemplate)
-	rg.PUT("/workspaces/:workspaceID/framework-config-templates/:templateID", h.UpdateTemplate)
-	rg.DELETE("/workspaces/:workspaceID/framework-config-templates/:templateID", h.DeleteTemplate)
-	rg.PUT("/workspaces/:workspaceID/framework-config-templates/:templateID/default", h.SetDefaultTemplate)
+	tmpl := rg.Group("/workspaces/:workspaceID/framework-config-templates")
+	// 获取当前工作空间下的框架配置模板列表
+	tmpl.GET("", h.ListTemplates)
+	// 在当前工作空间下创建新的框架配置模板
+	tmpl.POST("", h.CreateTemplate)
+	// 根据模板 ID 获取单个框架配置模板详情
+	tmpl.GET("/:templateID", h.GetTemplate)
+	// 根据模板 ID 更新指定的框架配置模板
+	tmpl.PUT("/:templateID", h.UpdateTemplate)
+	// 根据模板 ID 删除指定的框架配置模板
+	tmpl.DELETE("/:templateID", h.DeleteTemplate)
+	// 将指定模板设为当前工作空间的默认框架配置模板
+	tmpl.PUT("/:templateID/default", h.SetDefaultTemplate)
 }

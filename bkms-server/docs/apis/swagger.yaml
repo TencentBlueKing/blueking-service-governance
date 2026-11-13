@@ -4127,10 +4127,12 @@ definitions:
   serializer.CreateTemplateInput:
     properties:
       content:
-        description: 框架配置文件内容，最大 64KB
+        description: 框架配置文件内容
         type: string
       fileName:
-        description: 框架配置文件名
+        description: 框架配置文件名，规则与应用配置文件名一致
+        maxLength: 64
+        minLength: 1
         type: string
       framework:
         description: 框架：trpc、taf
@@ -10238,10 +10240,12 @@ definitions:
   serializer.UpdateTemplateInput:
     properties:
       content:
-        description: 框架配置文件内容，最大 64KB
+        description: 框架配置文件内容
         type: string
       fileName:
-        description: 框架配置文件名
+        description: 框架配置文件名，规则与应用配置文件名一致
+        maxLength: 64
+        minLength: 1
         type: string
       isDefault:
         description: 是否设为创建应用时默认使用的模板；不传不修改，取消默认后回落到平台默认模板

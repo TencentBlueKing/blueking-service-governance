@@ -53,12 +53,11 @@ var _ = Describe("Template validation", func() {
 		Entry("unknown framework", "unknown", "go"),
 	)
 
-	It("trims name and file name", func() {
-		def, err := Definition{Name: "  my tpl ", FileName: " trpc_go.yaml ", Content: "a: 1\n"}.
+	It("trims name", func() {
+		def, err := Definition{Name: "  my tpl ", FileName: "trpc_go.yaml", Content: "a: 1\n"}.
 			normalize(appcfg.FileFormatYAML)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(def.Name).To(Equal("my tpl"))
-		Expect(def.FileName).To(Equal("trpc_go.yaml"))
 	})
 
 	DescribeTable(
@@ -78,16 +77,8 @@ var _ = Describe("Template validation", func() {
 		),
 		Entry("reserved name", Definition{Name: BuiltinName, FileName: "a.yaml", Content: "a: 1"},
 			appcfg.FileFormatYAML, "reserved"),
-		Entry("invalid file name", Definition{Name: "t", FileName: "conf/a.yaml", Content: "a: 1"},
-			appcfg.FileFormatYAML, "file name"),
 		Entry("blank content", Definition{Name: "t", FileName: "a.yaml", Content: "\n "},
 			appcfg.FileFormatYAML, "content is required"),
-		Entry(
-			"too large content",
-			Definition{Name: "t", FileName: "a.yaml", Content: strings.Repeat("a", MaxContentSize+1)},
-			appcfg.FileFormatYAML,
-			"content exceeds",
-		),
 		Entry("invalid yaml", Definition{Name: "t", FileName: "a.yaml", Content: "a: [1"},
 			appcfg.FileFormatYAML, "not valid YAML"),
 	)

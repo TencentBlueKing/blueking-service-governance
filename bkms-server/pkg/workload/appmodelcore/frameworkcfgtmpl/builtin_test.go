@@ -50,9 +50,7 @@ var _ = Describe("Builtin templates", func() {
 			_, format, err := ResolveGroup(b.Framework, b.Language)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(b.Content).NotTo(BeEmpty(), b.ID)
-			Expect(len(b.Content)).To(BeNumerically("<=", MaxContentSize), b.ID)
 			Expect(appcfg.FrameworkPolicy{}.ValidateContent(b.Content, format)).To(Succeed(), b.ID)
-			Expect(fileNamePattern.MatchString(b.FileName)).To(BeTrue(), b.ID)
 		}
 	})
 

@@ -205,8 +205,12 @@ func SetDefault(ctx context.Context, db *mongo.Database, workspaceID, id string)
 	if before.IsDefault {
 		return before, before, nil
 	}
+	// target 为 nil 表示清除分组的自定义默认、回落到内置模板；非 nil 时指向要设为默认的模板。
+	// 这里用指针区分两种语义：nil = 回落内置模板，非 nil = 该自定义模板自身。
 	var target *bson.ObjectID
 	if !before.Builtin {
+		// 自定义模板：先把字符串 ID 解析成 bson.ObjectID（经 Get 校验必合法，故用 lo.Must 取值），
+		// 再包成指针交给 setDefault。对内置模板则保持 target 为 nil，表达"清除自定义默认"。
 		target = lo.ToPtr(lo.Must(bson.ObjectIDFromHex(before.ID)))
 	}
 	if err = setDefault(ctx, store.Of(db, TemplateMeta), workspaceID, before.Group, target); err != nil {

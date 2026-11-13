@@ -27194,12 +27194,14 @@ const docTemplate = `{
             ],
             "properties": {
                 "content": {
-                    "description": "框架配置文件内容，最大 64KB",
+                    "description": "框架配置文件内容",
                     "type": "string"
                 },
                 "fileName": {
-                    "description": "框架配置文件名",
-                    "type": "string"
+                    "description": "框架配置文件名，规则与应用配置文件名一致",
+                    "type": "string",
+                    "maxLength": 64,
+                    "minLength": 1
                 },
                 "framework": {
                     "description": "框架：trpc、taf",
@@ -36108,12 +36110,14 @@ const docTemplate = `{
             ],
             "properties": {
                 "content": {
-                    "description": "框架配置文件内容，最大 64KB",
+                    "description": "框架配置文件内容",
                     "type": "string"
                 },
                 "fileName": {
-                    "description": "框架配置文件名",
-                    "type": "string"
+                    "description": "框架配置文件名，规则与应用配置文件名一致",
+                    "type": "string",
+                    "maxLength": 64,
+                    "minLength": 1
                 },
                 "isDefault": {
                     "description": "是否设为创建应用时默认使用的模板；不传不修改，取消默认后回落到平台默认模板",
