@@ -25,9 +25,13 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/pkg/errors"
 	"github.com/samber/lo"
 	"golang.org/x/sync/errgroup"
 
+	bcsmanager "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bcs"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkci"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/cmdb"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
@@ -40,6 +44,7 @@ import (
 	helmdeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/helm"
 	deploystatus "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/status"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bkcc"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/perm"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/taskq"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/misc/audit"
@@ -536,9 +541,27 @@ func (h *Handler) CreateWorkspace(c *gin.Context) {
 		return
 	}
 
-	bkSystem, err := workspace.EnsureBkSystems(ctx, h.registry.DB, input.ID, input.BkCIProjectID, input.BkCCBizID)
+	// 先确认 ID 可用：EnsureBkSystems 与 InitWorkspaceUser 会按 ID 创建/复用外部资源和权限，
+	// 等到写库撞唯一索引时副作用已经落到已存在的工作空间上
+	if err := workspace.EnsureIDAvailable(ctx, h.workspaces(), input.ID); err != nil {
+		code := lo.Ternary(
+			errors.Is(err, workspace.ErrWorkspaceAlreadyExists),
+			bkerrs.ErrCodeAlreadyExists, bkerrs.ErrCodeInternalServerError,
+		)
+		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, code, "check workspace id"))
+		return
+	}
+
+	bkSystem, err := workspace.EnsureBkSystems(
+		ctx,
+		h.registry.DB,
+		input.ID,
+		input.DisplayName,
+		input.BkCIProjectID,
+		input.BkCCBizID,
+	)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "ensure blueking system"))
+		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, ClassifyEnsureBkSystemsErr(err), "ensure blueking system"))
 		return
 	}
 
@@ -578,8 +601,12 @@ func (h *Handler) CreateWorkspace(c *gin.Context) {
 		BkSystems: *bkSystem,
 		Creator:   auth.MustGetUser(ctx).ID,
 	}
-	if err = h.workspaces().Create(ctx, ws); err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "create workspace in DB"))
+	if err = workspace.Create(ctx, h.workspaces(), ws); err != nil {
+		code := lo.Ternary(
+			errors.Is(err, workspace.ErrWorkspaceConflict),
+			bkerrs.ErrCodeAlreadyExists, bkerrs.ErrCodeInternalServerError,
+		)
+		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, code, "create workspace in DB"))
 		return
 	}
 
@@ -992,6 +1019,26 @@ func (h *Handler) hasActiveDeploymentsInWorkspace(ctx context.Context, workspace
 		}
 	}
 	return false, nil
+}
+
+// ClassifyEnsureBkSystemsErr 将确保蓝鲸系统依赖时的错误映射为 API 错误码
+func ClassifyEnsureBkSystemsErr(err error) bkerrs.ErrCode {
+	switch {
+	case errors.Is(err, workspace.ErrIndependentWorkspaceBizRequired),
+		errors.Is(err, workspace.ErrIndependentWorkspaceBizInvalid),
+		errors.Is(err, workspace.ErrBoundBCSProjectInvalid),
+		errors.Is(err, bkcc.ErrBusinessNotFound),
+		errors.Is(err, cmdb.ErrBusinessLevel2Missing):
+		return bkerrs.ErrCodeInvalidRequest
+	case errors.Is(err, workspace.ErrBCSProjectAlreadyExists),
+		errors.Is(err, workspace.ErrBCSProjectAlreadyBound),
+		errors.Is(err, bcsmanager.ErrProjectBizMismatch),
+		errors.Is(err, bkci.ErrProjectCodeAlreadyUsed),
+		errors.Is(err, bkci.ErrWorkspaceAlreadyHasProject):
+		return bkerrs.ErrCodeAlreadyExists
+	default:
+		return bkerrs.ErrCodeInternalServerError
+	}
 }
 
 func abortIfEnvClusterNamespaceOccupied(c *gin.Context, err error) bool {

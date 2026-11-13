@@ -20,11 +20,13 @@ package bkci
 
 import (
 	"context"
+	"strings"
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bkci"
@@ -35,6 +37,9 @@ import (
 
 // ErrProjectCodeAlreadyUsed 项目 Code 已存在但不属于指定工作空间（项目与工作空间是一对一绑定的关系）
 var ErrProjectCodeAlreadyUsed = errors.New("project code already used")
+
+// ErrWorkspaceAlreadyHasProject 工作空间已经绑定了另一个蓝盾项目，不能再绑定不同的项目
+var ErrWorkspaceAlreadyHasProject = errors.New("workspace already has a bkci project")
 
 // ErrBuildTriggerPipelineRequireEnsure 触发专用流水线必须通过 TriggerPipelineManager.Ensure 创建
 // Initialize 不会注入回调 URL/凭证，也不能生成带 appID 的显示名，因此禁止走该创建路径
@@ -57,14 +62,16 @@ func NewProjectManager(db *mongo.Database, workspaceID string) *ProjectManager {
 // 重要：
 //  1. ctx 中应该携带 username 和 ticket
 //  2. 如果没指定 projectCode，则使用默认规则生成（bkms-{workspaceID})
+//  3. 多租户模式下 projectCode 会补齐租户前缀（{tenantID}.{projectCode}），入库的是蓝盾侧的项目 Code
 func (m *ProjectManager) Initialize(
 	ctx context.Context,
 	projectCode, obsProductID, obsProductName string,
 ) (*Project, error) {
 	// 如果没有指定 projectCode（使用已有项目），则使用默认规则生成
 	if projectCode == "" {
-		projectCode = m.genDefaultProjectCode(m.workspaceID)
+		projectCode = DefaultProjectCode(m.workspaceID)
 	}
+	projectCode = addBKCIProjectTenantPrefix(ctx, projectCode)
 
 	projStore := store.Of(m.db, ProjectMeta)
 
@@ -79,7 +86,9 @@ func (m *ProjectManager) Initialize(
 			return proj, nil
 		}
 		// 空间关联的是其他项目，报错
-		return nil, errors.Errorf("workspace %s already has project %s", m.workspaceID, proj.Code)
+		return nil, errors.Wrapf(
+			ErrWorkspaceAlreadyHasProject, "workspace %s already has project %s", m.workspaceID, proj.Code,
+		)
 	}
 
 	// 2. 检查 projectCode 是否已经被占用。蓝盾项目 Code 全局唯一（code_1 唯一索引不含 tenantID），
@@ -164,7 +173,10 @@ func (m *ProjectManager) createBKCIProject(
 	if err != nil {
 		return nil, errors.Wrapf(err, "create bkci client")
 	}
-	if err = client.CreateProject(ctx, projectCode, obsProductID, obsProductName, organization); err != nil {
+	// 创建时传不带租户前缀的 Code，多租户蓝盾会自行加上前缀
+	if err = client.CreateProject(
+		ctx, trimBKCIProjectTenantPrefix(ctx, projectCode), obsProductID, obsProductName, organization,
+	); err != nil {
 		// 可能存在下面的情况，都应该容忍
 		// 1. RPC 超时取消，导致项目创建后没有记录到 DB
 		// 2. 用户指定的是已经存在的蓝盾项目
@@ -181,9 +193,36 @@ func (m *ProjectManager) createBKCIProject(
 	return project, nil
 }
 
-// genDefaultProjectCode 生成默认的蓝盾项目 Code
-func (m *ProjectManager) genDefaultProjectCode(workspaceID string) string {
+// DefaultProjectCode 生成未指定蓝盾项目时使用的项目 Code。
+func DefaultProjectCode(workspaceID string) string {
 	return "bkms-" + workspaceID
+}
+
+// addBKCIProjectTenantPrefix 为项目 Code 补齐租户前缀，得到蓝盾侧的项目 Code（多租户蓝盾为 {tenantID}.{code}）。
+// 已带前缀（如从蓝盾项目列表中选择的已有项目）时原样返回。
+func addBKCIProjectTenantPrefix(ctx context.Context, code string) string {
+	prefix := getBKCIProjectTenantPrefix(ctx)
+	if prefix == "" || strings.HasPrefix(code, prefix) {
+		return code
+	}
+	return prefix + code
+}
+
+// trimBKCIProjectTenantPrefix 去掉项目 Code 的租户前缀，是 addBKCIProjectTenantPrefix 的逆操作
+func trimBKCIProjectTenantPrefix(ctx context.Context, code string) string {
+	return strings.TrimPrefix(code, getBKCIProjectTenantPrefix(ctx))
+}
+
+// getBKCIProjectTenantPrefix 返回多租户蓝盾项目 Code 的租户前缀（{tenantID}.），非多租户模式或 ctx 无租户时返回空
+func getBKCIProjectTenantPrefix(ctx context.Context) string {
+	if config.G == nil || !config.G.Tenant.EnableMultiTenantMode {
+		return ""
+	}
+	tenantID, ok := tenant.GetTenantID(ctx)
+	if !ok {
+		return ""
+	}
+	return tenantID + "."
 }
 
 // PipelineManager 蓝盾流水线管理

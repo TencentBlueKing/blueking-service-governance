@@ -68,6 +68,8 @@ func SetUpGlobalDatabase() error {
 	// Force using kubeconfig for cluster access in tests
 	// TODO: Update tests to not depend on this setting if possible
 	cfg.Development.UseKubeConfigCluster = true
+	// 内部构建会注册真实 TOF 客户端。单测环境没有可访问的组件 API，统一走空实现。
+	cfg.Development.UseStubTof = true
 
 	// 在任意一份测试配置上只翻转多租户开关，免得每份配置再维护一份多租户副本。
 	// cfg 即 config.G，被测代码随之以多租户模式运行；覆盖发生在 config.Load 之后，
