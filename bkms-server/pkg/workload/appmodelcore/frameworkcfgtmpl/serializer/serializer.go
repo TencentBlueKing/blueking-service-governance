@@ -22,6 +22,7 @@ package serializer
 import (
 	"time"
 
+	_ "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg/serializer" // register app_config_file_name
 	_ "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/validators" // register global validators
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/frameworkcfgtmpl"
 )
@@ -56,9 +57,9 @@ type CreateTemplateInput struct {
 	Language string `json:"language" binding:"required"`
 	// 模板名称，同一框架、同一语言下不能重复，不能为「平台默认」
 	Name string `json:"name" binding:"required"`
-	// 框架配置文件名
-	FileName string `json:"fileName" binding:"required"`
-	// 框架配置文件内容，最大 64KB
+	// 框架配置文件名，规则与应用配置文件名一致
+	FileName string `json:"fileName" binding:"required,min=1,max=64,app_config_file_name"`
+	// 框架配置文件内容
 	Content string `json:"content" binding:"required"`
 	// 是否设为创建应用时默认使用的模板
 	IsDefault bool `json:"isDefault"`
@@ -83,9 +84,9 @@ func (input *CreateTemplateInput) ToParams(operator string) frameworkcfgtmpl.Cre
 type UpdateTemplateInput struct {
 	// 模板名称，同一框架、同一语言下不能重复，不能为「平台默认」
 	Name string `json:"name" binding:"required"`
-	// 框架配置文件名
-	FileName string `json:"fileName" binding:"required"`
-	// 框架配置文件内容，最大 64KB
+	// 框架配置文件名，规则与应用配置文件名一致
+	FileName string `json:"fileName" binding:"required,min=1,max=64,app_config_file_name"`
+	// 框架配置文件内容
 	Content string `json:"content" binding:"required"`
 	// 是否设为创建应用时默认使用的模板；不传不修改，取消默认后回落到平台默认模板
 	IsDefault *bool `json:"isDefault"`

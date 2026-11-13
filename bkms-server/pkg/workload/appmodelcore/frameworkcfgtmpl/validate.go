@@ -19,7 +19,6 @@
 package frameworkcfgtmpl
 
 import (
-	"regexp"
 	"strings"
 	"unicode/utf8"
 
@@ -33,14 +32,7 @@ import (
 const (
 	// MaxNameLength 模板名称的最大字符数。
 	MaxNameLength = 64
-	// MaxFileNameLength 配置文件名的最大长度。
-	MaxFileNameLength = 64
-	// MaxContentSize 模板内容的最大字节数。
-	MaxContentSize = 64 * 1024
 )
-
-// 与应用配置文件名的规则保持一致，模板的文件名会原样成为应用的框架配置文件名。
-var fileNamePattern = regexp.MustCompile(`^[a-zA-Z0-9_.-]+$`)
 
 // ResolveGroup 校验框架与语言的组合是否支持框架配置文件，并返回文件格式。
 func ResolveGroup(framework, language string) (Group, appcfg.FileFormat, error) {
@@ -60,10 +52,10 @@ func ResolveGroup(framework, language string) (Group, appcfg.FileFormat, error) 
 	return group, appcfg.FileFormat(set.FrameworkFile.Props.Format), nil
 }
 
-// normalize 去掉名称与文件名首尾的空白，并按分组的文件格式校验内容。
+// normalize 去掉名称首尾的空白，并按分组的文件格式校验内容。
+// 文件名的规则与应用配置文件名一致，由请求的 binding tag（app_config_file_name）校验。
 func (d Definition) normalize(format appcfg.FileFormat) (Definition, error) {
 	d.Name = strings.TrimSpace(d.Name)
-	d.FileName = strings.TrimSpace(d.FileName)
 	switch {
 	case d.Name == "":
 		return d, errors.Wrap(ErrInvalidTemplate, "name is required")
@@ -71,13 +63,8 @@ func (d Definition) normalize(format appcfg.FileFormat) (Definition, error) {
 		return d, errors.Wrapf(ErrInvalidTemplate, "name exceeds %d characters", MaxNameLength)
 	case d.Name == BuiltinName:
 		return d, errors.Wrapf(ErrInvalidTemplate, "name %q is reserved for the builtin template", BuiltinName)
-	case len(d.FileName) > MaxFileNameLength || !fileNamePattern.MatchString(d.FileName):
-		return d, errors.Wrapf(ErrInvalidTemplate,
-			"file name must be 1-%d letters, digits, '_', '-' or '.'", MaxFileNameLength)
 	case strings.TrimSpace(d.Content) == "":
 		return d, errors.Wrap(ErrInvalidTemplate, "content is required")
-	case len(d.Content) > MaxContentSize:
-		return d, errors.Wrapf(ErrInvalidTemplate, "content exceeds %d bytes", MaxContentSize)
 	}
 	if err := (appcfg.FrameworkPolicy{}).ValidateContent(d.Content, format); err != nil {
 		return d, errors.Wrapf(ErrInvalidTemplate, "%v", err)
