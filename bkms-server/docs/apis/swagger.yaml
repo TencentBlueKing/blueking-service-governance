@@ -1,5 +1,29 @@
 basePath: /v1
 definitions:
+  accesspoint.FailureReason:
+    enum:
+    - networkUnreachable
+    - clientAuthEnabled
+    - tokenInvalid
+    type: string
+    x-enum-varnames:
+    - FailureNetworkUnreachable
+    - FailureClientAuthEnabled
+    - FailureTokenInvalid
+  accesspoint.OperatorStatus:
+    enum:
+    - ready
+    - installing
+    - failed
+    - outdated
+    - not_installed
+    type: string
+    x-enum-varnames:
+    - OperatorStatusReady
+    - OperatorStatusInstalling
+    - OperatorStatusFailed
+    - OperatorStatusOutdated
+    - OperatorStatusNotInstalled
   admin.RoleCode:
     enum:
     - admin
@@ -1303,6 +1327,16 @@ definitions:
     type: object
   github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_workload_networking_serializer.EmptyOutput:
     type: object
+  installtask.Status:
+    enum:
+    - running
+    - succeeded
+    - failed
+    type: string
+    x-enum-varnames:
+    - StatusRunning
+    - StatusSucceeded
+    - StatusFailed
   runtimemod.PublicModView:
     properties:
       props:
@@ -1347,6 +1381,99 @@ definitions:
     - ReasonUnsupportedStack
     - ReasonInvalidStack
     - ReasonIncompleteLanguage
+  serializer.AccessPointCreateInput:
+    properties:
+      clientHosts:
+        description: 客户端地址，IP 或域名，1 ~ 10 个；OpenAPI 端口固定为 8090，SDK 端口固定为 8091
+        items:
+          type: string
+        type: array
+      clusterIDs:
+        description: 绑定到该接入点的集群 ID；缺省表示不绑定集群
+        items:
+          type: string
+        type: array
+      consoleURL:
+        description: 北极星控制台地址，IP:Port 或域名，缺省协议时补 http://
+        type: string
+      name:
+        description: 接入点名称，空间内唯一
+        type: string
+      token:
+        description: 北极星鉴权 Token，选填
+        type: string
+    required:
+    - clientHosts
+    - consoleURL
+    - name
+    type: object
+  serializer.AccessPointListResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/serializer.AccessPointOutput'
+        type: array
+    type: object
+  serializer.AccessPointOutput:
+    properties:
+      boundClusterCount:
+        description: 绑定的集群数量
+        type: integer
+      clientHosts:
+        description: 客户端地址
+        items:
+          type: string
+        type: array
+      consoleURL:
+        description: 北极星控制台地址
+        type: string
+      hasToken:
+        description: 是否填写了 Token
+        type: boolean
+      id:
+        description: 接入点 ID
+        type: string
+      lastConnectivity:
+        allOf:
+        - $ref: '#/definitions/serializer.ConnectivityResultOutput'
+        description: 最近一次连通测试结果，从未测试时为 null
+      name:
+        description: 接入点名称
+        type: string
+      updatedAt:
+        description: 最近修改时间
+        type: string
+      updater:
+        description: 最近修改人
+        type: string
+    type: object
+  serializer.AccessPointResponse:
+    properties:
+      data:
+        $ref: '#/definitions/serializer.AccessPointOutput'
+    type: object
+  serializer.AccessPointUpdateInput:
+    properties:
+      clientHosts:
+        description: 客户端地址
+        items:
+          type: string
+        type: array
+      clusterIDs:
+        description: 绑定到该接入点的集群 ID，全量替换；显式传空数组表示解除全部绑定
+        items:
+          type: string
+        type: array
+      consoleURL:
+        description: 北极星控制台地址
+        type: string
+      name:
+        description: 接入点名称
+        type: string
+      token:
+        description: 北极星鉴权 Token；显式传空字符串表示清除
+        type: string
+    type: object
   serializer.AddWorkspaceUserInput:
     properties:
       userIDs:
@@ -3326,6 +3453,87 @@ definitions:
         description: 冲突级别：none 无冲突，warn 软冲突（可保存），error 硬冲突（禁止保存）
         type: string
     type: object
+  serializer.ConnectivityResultOutput:
+    properties:
+      checkedAt:
+        description: 测试时间
+        type: string
+      clientAuth:
+        description: 是否开启客户端鉴权
+        type: boolean
+      consoleAuth:
+        description: 是否开启控制台鉴权
+        type: boolean
+      message:
+        description: 失败原因或提示信息
+        type: string
+      ok:
+        description: 是否通过
+        type: boolean
+      reason:
+        allOf:
+        - $ref: '#/definitions/accesspoint.FailureReason'
+        description: 失败的原因，通过时为空：networkUnreachable 网络不通 / clientAuthEnabled 开启了客户端鉴权
+          / tokenInvalid Token 无效
+        enum:
+        - networkUnreachable
+        - clientAuthEnabled
+        - tokenInvalid
+    type: object
+  serializer.ConnectivityTestInput:
+    properties:
+      clientHosts:
+        description: 客户端地址
+        items:
+          type: string
+        type: array
+      consoleURL:
+        description: 北极星控制台地址
+        type: string
+      id:
+        description: 已有接入点的 ID
+        type: string
+      token:
+        description: 北极星鉴权 Token
+        type: string
+    required:
+    - clientHosts
+    - consoleURL
+    type: object
+  serializer.ConnectivityTestOutput:
+    properties:
+      clientAuth:
+        description: 是否开启客户端鉴权
+        type: boolean
+      consoleAuth:
+        description: 是否开启控制台鉴权
+        type: boolean
+      message:
+        description: 失败原因或提示信息
+        type: string
+      namespaces:
+        description: 北极星上的命名空间（已过滤系统命名空间 Polaris），网络不通时为空
+        items:
+          type: string
+        type: array
+      ok:
+        description: 是否通过
+        type: boolean
+      reason:
+        allOf:
+        - $ref: '#/definitions/accesspoint.FailureReason'
+        description: 失败的原因，通过时为空：networkUnreachable 网络不通 / clientAuthEnabled 开启了客户端鉴权
+          / tokenInvalid Token 无效
+        enum:
+        - networkUnreachable
+        - clientAuthEnabled
+        - tokenInvalid
+    type: object
+  serializer.ConnectivityTestResponse:
+    properties:
+      data:
+        $ref: '#/definitions/serializer.ConnectivityTestOutput'
+    type: object
   serializer.CreateAlertStrategyBody:
     properties:
       displayName:
@@ -4565,6 +4773,8 @@ definitions:
       startTime:
         type: string
     type: object
+  serializer.EmptyResponse:
+    type: object
   serializer.EnvAppDeployStatusOutput:
     properties:
       appID:
@@ -5139,6 +5349,19 @@ definitions:
         items:
           type: string
         type: array
+    type: object
+  serializer.FrontendFeaturesOutput:
+    properties:
+      polarisWorkspaceAccessPoint:
+        description: |-
+          是否允许空间自建北极星接入点并按集群绑定。为 false 时前端隐藏接入点管理、集群绑定、组件安装等入口，
+          所有集群都使用平台托管接入点
+        type: boolean
+    type: object
+  serializer.FrontendFeaturesResponse:
+    properties:
+      data:
+        $ref: '#/definitions/serializer.FrontendFeaturesOutput'
     type: object
   serializer.GPAConfigOutputObj:
     properties:
@@ -6933,6 +7156,26 @@ definitions:
       status:
         type: string
     type: object
+  serializer.NamespacesResponse:
+    properties:
+      data:
+        items:
+          type: string
+        type: array
+    type: object
+  serializer.NetworkInfoOutput:
+    properties:
+      egressIPs:
+        description: 平台访问北极星的出口 IP，需加入北极星白名单
+        items:
+          type: string
+        type: array
+    type: object
+  serializer.NetworkInfoResponse:
+    properties:
+      data:
+        $ref: '#/definitions/serializer.NetworkInfoOutput'
+    type: object
   serializer.NetworkParamsOutput:
     properties:
       cidrs:
@@ -7057,6 +7300,60 @@ definitions:
       username:
         description: 操作人用户名
         type: string
+    type: object
+  serializer.OperatorInstallInput:
+    properties:
+      chartVersion:
+        description: chart 版本
+        type: string
+      clusterIDs:
+        description: 目标集群 ID，必须已绑定该接入点
+        items:
+          type: string
+        minItems: 1
+        type: array
+    required:
+    - chartVersion
+    - clusterIDs
+    type: object
+  serializer.OperatorTaskListResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/serializer.OperatorTaskOutput'
+        type: array
+    type: object
+  serializer.OperatorTaskOutput:
+    properties:
+      chartVersion:
+        description: chart 版本
+        type: string
+      clusterID:
+        description: 目标集群 ID
+        type: string
+      finishedAt:
+        description: 结束时间，运行中为 null
+        type: string
+      id:
+        description: 任务 ID
+        type: string
+      message:
+        description: 失败原因等补充信息
+        type: string
+      operator:
+        description: 发起人
+        type: string
+      startedAt:
+        description: 开始时间
+        type: string
+      status:
+        allOf:
+        - $ref: '#/definitions/installtask.Status'
+        description: 任务状态
+        enum:
+        - running
+        - succeeded
+        - failed
     type: object
   serializer.PaginatedAppConfigFileVersionOutputObjs:
     properties:
@@ -7516,6 +7813,51 @@ definitions:
       data:
         $ref: '#/definitions/serializer.PlatCfgSwitchOutput'
     type: object
+  serializer.PolarisClusterEnvOutput:
+    properties:
+      id:
+        description: 环境 ID
+        type: string
+      isFeature:
+        description: 是否为特性环境
+        type: boolean
+      name:
+        description: 环境名称
+        type: string
+    type: object
+  serializer.PolarisClusterListResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/serializer.PolarisClusterOutput'
+        type: array
+    type: object
+  serializer.PolarisClusterOutput:
+    properties:
+      accessPointID:
+        description: 绑定的自建接入点 ID；未绑定为空，此时集群不能使用北极星
+        type: string
+      accessPointName:
+        description: 绑定的自建接入点名称，未绑定为空
+        type: string
+      clusterID:
+        description: 集群 ID
+        type: string
+      clusterName:
+        description: 集群名称
+        type: string
+      clusterStatus:
+        description: 集群状态
+        type: string
+      envs:
+        description: 集群上的空间环境（含特性环境）
+        items:
+          $ref: '#/definitions/serializer.PolarisClusterEnvOutput'
+        type: array
+      inUse:
+        description: 集群上是否有环境被北极星配置使用；为 true 时不能解绑或换绑
+        type: boolean
+    type: object
   serializer.PolarisConfigOutputObj:
     properties:
       appID:
@@ -7672,6 +8014,69 @@ definitions:
       name:
         description: 配置名称
         type: string
+    type: object
+  serializer.PolarisOperatorListOutput:
+    properties:
+      chartVersions:
+        description: 可选的 chart 版本，从新到旧
+        items:
+          type: string
+        type: array
+      operators:
+        description: 候选集群的组件状态
+        items:
+          $ref: '#/definitions/serializer.PolarisOperatorOutput'
+        type: array
+    type: object
+  serializer.PolarisOperatorListResponse:
+    properties:
+      data:
+        $ref: '#/definitions/serializer.PolarisOperatorListOutput'
+    type: object
+  serializer.PolarisOperatorOutput:
+    properties:
+      accessPointID:
+        description: 集群绑定的自建接入点 ID，未绑定为空
+        type: string
+      chartVersion:
+        description: 已安装的 chart 版本，未安装为空
+        type: string
+      clusterID:
+        description: 集群 ID
+        type: string
+      driftFields:
+        description: 与接入点期望值不一致的 values 键，仅 outdated 时非空
+        items:
+          type: string
+        type: array
+      installed:
+        description: 是否已安装
+        type: boolean
+      lastTask:
+        allOf:
+        - $ref: '#/definitions/serializer.OperatorTaskOutput'
+        description: 最近一次安装任务，没有任务时为 null
+      namespace:
+        description: helm release 所在命名空间，未安装为空
+        type: string
+      releaseName:
+        description: helm release 名称，未安装为空
+        type: string
+      status:
+        allOf:
+        - $ref: '#/definitions/accesspoint.OperatorStatus'
+        description: 组件状态
+        enum:
+        - ready
+        - installing
+        - failed
+        - outdated
+        - not_installed
+    type: object
+  serializer.PolarisOperatorResponse:
+    properties:
+      data:
+        $ref: '#/definitions/serializer.PolarisOperatorOutput'
     type: object
   serializer.PolicyFormInput:
     properties:
@@ -20107,6 +20512,32 @@ paths:
       summary: 部署/更新集群插件
       tags:
       - cluster-addon
+  /envs/{envID}/polaris-operator:
+    get:
+      operationId: GetEnvPolarisOperator
+      parameters:
+      - description: 环境 ID
+        in: path
+        name: envID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.PolarisOperatorResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 获取环境的北极星组件状态
+      tags:
+      - polaris-access-points
   /envs/{envID}/port-pools:
     get:
       operationId: ListPortPools
@@ -20229,6 +20660,27 @@ paths:
       summary: 更新端口池
       tags:
       - port-pool
+  /frontend-features:
+    get:
+      description: 返回由部署配置决定的功能开关，前端据此决定页面入口是否展示
+      operationId: GetFrontendFeatures
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.FrontendFeaturesResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 获取前端功能开关
+      tags:
+      - frontend-features
   /kube-insight/reports:
     get:
       operationId: GetLatestEnvReport
@@ -23171,6 +23623,333 @@ paths:
       summary: 获取操作审计记录列表
       tags:
       - operation-audit
+  /workspaces/{workspaceID}/polaris-access-points:
+    get:
+      description: 允许空间自建接入点时返回空间自建接入点
+      operationId: ListPolarisAccessPoints
+      parameters:
+      - description: 工作空间 ID
+        in: path
+        name: workspaceID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.AccessPointListResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 获取空间的北极星接入点列表
+      tags:
+      - polaris-access-points
+    post:
+      consumes:
+      - application/json
+      description: |-
+        保存前服务端重新执行连通测试，失败或北极星开启了客户端鉴权时拒绝；Token 选填，加密存储。
+        传入 clusterIDs 时同时把这些集群绑定到该接入点
+      operationId: CreatePolarisAccessPoint
+      parameters:
+      - description: 工作空间 ID
+        in: path
+        name: workspaceID
+        required: true
+        type: string
+      - description: 接入点
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/serializer.AccessPointCreateInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.AccessPointResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 创建北极星接入点
+      tags:
+      - polaris-access-points
+  /workspaces/{workspaceID}/polaris-access-points/{accessPointID}:
+    delete:
+      description: 接入点仍绑定集群，或仍有北极星配置固定使用它时拒绝删除
+      operationId: DeletePolarisAccessPoint
+      parameters:
+      - description: 工作空间 ID
+        in: path
+        name: workspaceID
+        required: true
+        type: string
+      - description: 接入点 ID
+        in: path
+        name: accessPointID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.EmptyResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 删除北极星接入点
+      tags:
+      - polaris-access-points
+    patch:
+      consumes:
+      - application/json
+      description: |-
+        字段缺省表示不修改；客户端地址或 Token 变化时重新执行连通测试，失败时拒绝保存。
+        接入点被北极星配置使用时仍允许修改地址，集群组件会显示为需要更新。
+        传入 clusterIDs 时全量替换该接入点绑定的集群
+      operationId: UpdatePolarisAccessPoint
+      parameters:
+      - description: 工作空间 ID
+        in: path
+        name: workspaceID
+        required: true
+        type: string
+      - description: 接入点 ID
+        in: path
+        name: accessPointID
+        required: true
+        type: string
+      - description: 待修改的字段
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/serializer.AccessPointUpdateInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.AccessPointResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 更新北极星接入点
+      tags:
+      - polaris-access-points
+  /workspaces/{workspaceID}/polaris-access-points/{accessPointID}/namespaces:
+    get:
+      description: 实时读取空间自建接入点上的北极星命名空间，并过滤系统命名空间 Polaris
+      operationId: ListPolarisAccessPointNamespaces
+      parameters:
+      - description: 工作空间 ID
+        in: path
+        name: workspaceID
+        required: true
+        type: string
+      - description: 接入点 ID
+        in: path
+        name: accessPointID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.NamespacesResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 获取北极星接入点的命名空间
+      tags:
+      - polaris-access-points
+  /workspaces/{workspaceID}/polaris-access-points/{accessPointID}/operator-installs:
+    post:
+      consumes:
+      - application/json
+      description: 集群必须已绑定该接入点；每个集群创建一个异步任务，同一集群同时只允许一个运行中的任务。
+      operationId: InstallPolarisOperators
+      parameters:
+      - description: 工作空间 ID
+        in: path
+        name: workspaceID
+        required: true
+        type: string
+      - description: 接入点 ID
+        in: path
+        name: accessPointID
+        required: true
+        type: string
+      - description: 目标集群与 chart 版本
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/serializer.OperatorInstallInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.OperatorTaskListResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 安装或更新北极星组件
+      tags:
+      - polaris-access-points
+  /workspaces/{workspaceID}/polaris-access-points/connectivity-test:
+    post:
+      consumes:
+      - application/json
+      description: |-
+        依次检查网络、鉴权开关、Token，返回失败的原因与北极星上的命名空间，整体 10 秒超时。
+        传入已有接入点 ID 且 token 为空时使用已保存的 Token，并记录本次结果
+      operationId: TestPolarisAccessPointConnectivity
+      parameters:
+      - description: 工作空间 ID
+        in: path
+        name: workspaceID
+        required: true
+        type: string
+      - description: 接入地址
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/serializer.ConnectivityTestInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.ConnectivityTestResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 测试北极星接入点连通性
+      tags:
+      - polaris-access-points
+  /workspaces/{workspaceID}/polaris-access-points/network-info:
+    get:
+      description: 返回平台访问北极星的出口 IP，用户需要把它们加入自建北极星的白名单
+      operationId: GetPolarisAccessPointNetworkInfo
+      parameters:
+      - description: 工作空间 ID
+        in: path
+        name: workspaceID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.NetworkInfoResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 获取平台访问北极星的网络信息
+      tags:
+      - polaris-access-points
+  /workspaces/{workspaceID}/polaris-clusters:
+    get:
+      description: 候选集群为空间 BCS 项目下的全部非共享集群，含没有环境的集群；先列出有环境的集群，同类按集群 ID 排序。
+      operationId: ListPolarisClusters
+      parameters:
+      - description: 工作空间 ID
+        in: path
+        name: workspaceID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.PolarisClusterListResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 获取北极星集群绑定视图
+      tags:
+      - polaris-access-points
+  /workspaces/{workspaceID}/polaris-operators:
+    get:
+      description: 返回候选集群的组件状态、与接入点不一致的参数、最近的安装任务，以及可选的 chart 版本。
+      operationId: ListPolarisOperators
+      parameters:
+      - description: 工作空间 ID
+        in: path
+        name: workspaceID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.PolarisOperatorListResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 获取北极星组件状态视图
+      tags:
+      - polaris-access-points
   /workspaces/{workspaceID}/release-strategies:
     get:
       operationId: ListReleaseStrategies

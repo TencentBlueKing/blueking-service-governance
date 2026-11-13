@@ -30,6 +30,7 @@ import (
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris/accesspoint"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
@@ -538,5 +539,51 @@ var _ = Describe("PolarisConfigStore", func() {
 				Expect(stored.EnvStates).To(HaveKey("dev"))
 			})
 		})
+	})
+})
+
+var _ = Describe("ListConfigUsagesByAccessPoint", func() {
+	var (
+		ctx         context.Context
+		db          *mongo.Database
+		configStore *polaris.ConfigStore
+		testAppID   string
+	)
+
+	BeforeEach(func() {
+		ctx = testutil.NewDefaultTenantContext()
+		db = testutil.NewDB(GinkgoT())
+		configStore = store.Of(db, polaris.ConfigMeta)
+		testAppID = "test-app-" + stringx.Random(5)
+		DeferCleanup(func() { _, _ = configStore.DeleteMany(ctx, polaris.ByApp(testAppID)) })
+	})
+
+	createConfig := func(name, accessPointID string) {
+		cfg := newTestConfig(testAppID, name, nil, nil)
+		cfg.AccessPointID = accessPointID
+		Expect(configStore.Create(ctx, cfg)).To(Succeed())
+	}
+
+	It("should list configs that use the access point even when they have no scope envs", func() {
+		accessPointID := "ap-" + stringx.Random(8)
+		createConfig("using-1", accessPointID)
+		createConfig("using-2", accessPointID)
+		createConfig("other", "ap-"+stringx.Random(8))
+		createConfig("legacy", "")
+
+		usages, err := polaris.ListConfigUsagesByAccessPoint(ctx, db, accessPointID)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(usages).To(ConsistOf(
+			accesspoint.ConfigUsage{AppID: testAppID, ConfigName: "using-1"},
+			accesspoint.ConfigUsage{AppID: testAppID, ConfigName: "using-2"},
+		))
+	})
+
+	It("should return an empty list when no config uses the access point", func() {
+		createConfig("other", "ap-"+stringx.Random(8))
+
+		usages, err := polaris.ListConfigUsagesByAccessPoint(ctx, db, "ap-"+stringx.Random(8))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(usages).To(BeEmpty())
 	})
 })

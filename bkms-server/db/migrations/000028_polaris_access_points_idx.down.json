@@ -1,0 +1,29 @@
+[
+  {
+    "dropIndexes": "polaris_access_points",
+    "index": [
+      "idx_workspaceID_name",
+      "tenantID_1"
+    ]
+  },
+  {
+    "dropIndexes": "polaris_cluster_bindings",
+    "index": [
+      "idx_workspaceID_clusterID",
+      "idx_workspaceID_accessPointID",
+      "tenantID_1"
+    ]
+  },
+  {
+    "dropIndexes": "cluster_addon_install_tasks",
+    "index": [
+      "idx_clusterID_namespace_addonName_createdAt",
+      "idx_clusterID_namespace_addonName_running",
+      "tenantID_1"
+    ]
+  },
+  {
+    "dropIndexes": "polaris_configs",
+    "index": "idx_accessPointID"
+  }
+]

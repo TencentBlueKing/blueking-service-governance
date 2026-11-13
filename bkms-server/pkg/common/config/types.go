@@ -224,6 +224,10 @@ type PolarisConfig struct {
 	Address string
 	// JoinPoint 北极星接入点(如 default)，与 Address 二选一
 	JoinPoint string
+
+	// AllowWorkspaceAccessPoints 是否允许空间登记自建北极星接入点并按集群绑定，缺省为 false。
+	// 为 false 时只有平台托管接入点，所有集群隐式绑定到它（内部版）；社区版需显式配置为 true
+	AllowWorkspaceAccessPoints bool
 }
 
 // TenantConfig 多租户相关配置。
@@ -350,6 +354,12 @@ type LoggingWriterFileConfig struct {
 type EncryptConfig struct {
 	// 加密密钥
 	Secret string
+}
+
+// NetworkConfig 平台自身的网络配置
+type NetworkConfig struct {
+	// EgressIPs 平台访问外部系统（如自建北极星）时的出口 IP，供用户在对方配置白名单
+	EgressIPs []string
 }
 
 // --------------------------- 业务功能配置 ---------------------------
@@ -484,6 +494,8 @@ type Config struct {
 	Logging LoggingConfig
 	// 加密配置
 	Encrypt EncryptConfig
+	// Network 平台自身的网络配置
+	Network NetworkConfig
 
 	// --------------------------- 业务功能配置 ---------------------------
 	// ClusterAddons 集群插件（Addons）配置

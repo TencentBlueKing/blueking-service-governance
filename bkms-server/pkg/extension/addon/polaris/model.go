@@ -37,6 +37,7 @@ import (
 	"github.com/samber/lo"
 	"go.mongodb.org/mongo-driver/v2/bson"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris/accesspoint"
 	polarisInfra "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/polaris"
 )
 
@@ -110,6 +111,10 @@ type PolarisConfig struct {
 	// ScopeEnvNames 生效的环境列表
 	ScopeEnvNames []string `bson:"scopeEnvNames"`
 
+	// AccessPointID 配置使用的北极星接入点 ID，创建时由生效环境的集群绑定推导并固定；
+	// 为空表示平台托管接入点（存量数据），解析见 accesspoint.Resolver.ResolveForPolarisConfig
+	AccessPointID string `bson:"accessPointID"`
+
 	// DepSvcInstID 关联的依赖服务实例 ID（平台创建时有值，用于后续管理）
 	DepSvcInstID bson.ObjectID `bson:"depSvcInstID,omitempty"`
 
@@ -131,6 +136,18 @@ type PolarisConfig struct {
 	CreatedAt time.Time `bson:"createdAt"`
 	// UpdatedAt 更新时间
 	UpdatedAt time.Time `bson:"updatedAt"`
+}
+
+var _ accesspoint.PolarisConfigRef = (*PolarisConfig)(nil)
+
+// GetAppID 返回配置所属应用 ID
+func (c *PolarisConfig) GetAppID() string {
+	return c.AppID
+}
+
+// GetAccessPointID 返回配置使用的接入点 ID，存量配置为空
+func (c *PolarisConfig) GetAccessPointID() string {
+	return c.AccessPointID
 }
 
 // GenerateName 生成配置名称
