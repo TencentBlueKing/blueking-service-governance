@@ -207,6 +207,23 @@ var _ = Describe("Framework config template service", func() {
 			Expect(defaultIDs(frameworkcfgtmpl.Group{Framework: "trpc", Language: "cpp"})).
 				To(Equal([]string{trpcCppBuiltinID}))
 		})
+
+		It("keeps the existing default and writes nothing when a new default has a duplicate name", func() {
+			group := frameworkcfgtmpl.Group{Framework: "trpc", Language: "go"}
+			current := create("trpc", "go", "same", true)
+
+			_, err := frameworkcfgtmpl.Create(ctx, db, workspaceID, frameworkcfgtmpl.CreateParams{
+				Framework:  "trpc",
+				Language:   "go",
+				Definition: frameworkcfgtmpl.Definition{Name: "same", FileName: "a.yaml", Content: "a: 1"},
+				IsDefault:  true,
+			})
+			Expect(errors.Is(err, frameworkcfgtmpl.ErrTemplateConflict)).To(BeTrue())
+			Expect(defaultIDs(group)).To(Equal([]string{current.ID}))
+			views, err := frameworkcfgtmpl.List(ctx, db, workspaceID, group)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(views).To(HaveLen(2))
+		})
 	})
 
 	Context("Update", func() {
@@ -278,6 +295,37 @@ var _ = Describe("Framework config template service", func() {
 				Definition: frameworkcfgtmpl.Definition{Name: "taken", FileName: "a.yaml", Content: "a: 1"},
 			})
 			Expect(errors.Is(err, frameworkcfgtmpl.ErrTemplateConflict)).To(BeTrue())
+		})
+
+		It("clears isDefault on the edited template only", func() {
+			group := frameworkcfgtmpl.Group{Framework: "trpc", Language: "go"}
+			edited := create("trpc", "go", "edited", false)
+			other := create("trpc", "go", "other", true)
+
+			_, after, err := frameworkcfgtmpl.Update(ctx, db, workspaceID, edited.ID, frameworkcfgtmpl.UpdateParams{
+				Definition: frameworkcfgtmpl.Definition{Name: "edited", FileName: "a.yaml", Content: "a: 1\n"},
+				IsDefault:  lo.ToPtr(false),
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(after.IsDefault).To(BeFalse())
+			Expect(defaultIDs(group)).To(Equal([]string{other.ID}))
+		})
+
+		It("writes neither content nor default when setting a default with a duplicate name", func() {
+			group := frameworkcfgtmpl.Group{Framework: "trpc", Language: "go"}
+			current := create("trpc", "go", "taken", true)
+			edited := create("trpc", "go", "edited", false)
+
+			_, _, err := frameworkcfgtmpl.Update(ctx, db, workspaceID, edited.ID, frameworkcfgtmpl.UpdateParams{
+				Definition: frameworkcfgtmpl.Definition{Name: "taken", FileName: "a.yaml", Content: "changed: 1\n"},
+				IsDefault:  lo.ToPtr(true),
+			})
+			Expect(errors.Is(err, frameworkcfgtmpl.ErrTemplateConflict)).To(BeTrue())
+			Expect(defaultIDs(group)).To(Equal([]string{current.ID}))
+			stored, err := frameworkcfgtmpl.Get(ctx, db, workspaceID, edited.ID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(stored.Name).To(Equal("edited"))
+			Expect(stored.Content).NotTo(ContainSubstring("changed"))
 		})
 	})
 

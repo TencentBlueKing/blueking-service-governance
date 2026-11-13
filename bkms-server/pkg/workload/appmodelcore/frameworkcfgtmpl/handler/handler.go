@@ -136,6 +136,7 @@ func (h *Handler) GetTemplate(c *gin.Context) {
 //	@Param		body		body		serializer.CreateTemplateInput	true	"框架配置模板"
 //	@Success	200			{object}	serializer.TemplateOutput
 //	@Failure	400			{object}	bkerrs.GinErrorOutput
+//	@Failure	409			{object}	bkerrs.GinErrorOutput	"同一框架、语言下模板名称已存在，或并发设置了其它默认模板"
 //	@Router		/workspaces/{workspaceID}/framework-config-templates [post]
 func (h *Handler) CreateTemplate(c *gin.Context) {
 	var uri serializer.WorkspaceURIInput
@@ -175,6 +176,7 @@ func (h *Handler) CreateTemplate(c *gin.Context) {
 //	@Param		body		body		serializer.UpdateTemplateInput	true	"框架配置模板"
 //	@Success	200			{object}	serializer.TemplateOutput
 //	@Failure	400			{object}	bkerrs.GinErrorOutput
+//	@Failure	409			{object}	bkerrs.GinErrorOutput	"同一框架、语言下模板名称已存在，或并发设置了其它默认模板"
 //	@Router		/workspaces/{workspaceID}/framework-config-templates/{templateID} [put]
 func (h *Handler) UpdateTemplate(c *gin.Context) {
 	var uri serializer.TemplateURIInput
@@ -250,6 +252,7 @@ func (h *Handler) DeleteTemplate(c *gin.Context) {
 //	@Param		templateID	path		string	true	"模板 ID，内置模板为 builtin-{framework}-{language}"
 //	@Success	200			{object}	serializer.TemplateOutput
 //	@Failure	400			{object}	bkerrs.GinErrorOutput
+//	@Failure	409			{object}	bkerrs.GinErrorOutput	"并发设置了其它默认模板"
 //	@Router		/workspaces/{workspaceID}/framework-config-templates/{templateID}/default [put]
 func (h *Handler) SetDefaultTemplate(c *gin.Context) {
 	var uri serializer.TemplateURIInput
@@ -293,9 +296,10 @@ func apiError(err error, operation string) error {
 	switch {
 	case errors.Is(err, frameworkcfgtmpl.ErrTemplateNotFound):
 		return bkerrs.Wrap(err, bkerrs.ErrCodeNotFound, operation)
+	case errors.Is(err, frameworkcfgtmpl.ErrTemplateConflict):
+		return bkerrs.Wrap(err, bkerrs.ErrCodeAlreadyExists, operation)
 	case errors.Is(err, frameworkcfgtmpl.ErrInvalidTemplate),
-		errors.Is(err, frameworkcfgtmpl.ErrBuiltinReadOnly),
-		errors.Is(err, frameworkcfgtmpl.ErrTemplateConflict):
+		errors.Is(err, frameworkcfgtmpl.ErrBuiltinReadOnly):
 		return bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, operation)
 	default:
 		return bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, operation)
@@ -311,10 +315,10 @@ func recordAudit(
 ) {
 	options := []audit.Option{audit.WithWorkspaceID(workspaceID)}
 	if before != nil {
-		options = append(options, audit.WithDataBefore(before))
+		options = append(options, audit.WithDataBefore(new(serializer.TemplateOutputObj).FromView(before)))
 	}
 	if after != nil {
-		options = append(options, audit.WithDataAfter(after))
+		options = append(options, audit.WithDataAfter(new(serializer.TemplateOutputObj).FromView(after)))
 	}
 	go audit.AddOperationRecordAsync(
 		context.WithoutCancel(ctx),

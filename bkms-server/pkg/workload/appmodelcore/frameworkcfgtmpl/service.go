@@ -43,7 +43,7 @@ type CreateParams struct {
 // UpdateParams 编辑自定义模板的参数，分组（框架与语言）不可修改。
 type UpdateParams struct {
 	Definition
-	// IsDefault 为 nil 时不改变默认状态；从 true 改为 false 时，分组回落到内置模板。
+	// IsDefault 为 nil 时不改变默认状态；取消默认模板的默认状态后，分组回落到内置模板。
 	IsDefault *bool
 	Operator  string
 }
@@ -121,17 +121,17 @@ func Create(ctx context.Context, db *mongo.Database, workspaceID string, params 
 		Name:        def.Name,
 		FileName:    def.FileName,
 		Content:     def.Content,
+		IsDefault:   params.IsDefault,
 		Creator:     params.Operator,
 		Updater:     params.Operator,
 	}
-	if err = s.Create(ctx, tmpl); err != nil {
-		return nil, errors.Wrapf(err, "create template %q", def.Name)
-	}
 	if params.IsDefault {
-		if err = setDefault(ctx, s, workspaceID, group, &tmpl.ID); err != nil {
+		if err = prepareDefault(ctx, s, workspaceID, group, def.Name, nil); err != nil {
 			return nil, err
 		}
-		tmpl.IsDefault = true
+	}
+	if err = s.Create(ctx, tmpl); err != nil {
+		return nil, errors.Wrapf(err, "create template %q", def.Name)
 	}
 	return tmpl.view(), nil
 }
@@ -162,16 +162,19 @@ func Update(
 	updated.FileName = def.FileName
 	updated.Content = def.Content
 	updated.Updater = params.Operator
-	if err = s.Update(
-		ctx, &updated, store.UpdateSelected("name", "fileName", "content", "updater"), ByID(workspaceID, old.ID),
-	); err != nil {
-		return nil, nil, errors.Wrapf(err, "update template %s", id)
-	}
-	if params.IsDefault != nil && *params.IsDefault != old.IsDefault {
-		if err = setDefault(ctx, s, workspaceID, old.Group, lo.Ternary(*params.IsDefault, &old.ID, nil)); err != nil {
-			return nil, nil, err
+	fields := []string{"name", "fileName", "content", "updater"}
+	// 默认状态与内容在同一次写入中提交；取消默认只改本模板，不能清除其它请求设置的默认。
+	if params.IsDefault != nil {
+		if *params.IsDefault {
+			if err = prepareDefault(ctx, s, workspaceID, old.Group, def.Name, &old.ID); err != nil {
+				return nil, nil, err
+			}
 		}
 		updated.IsDefault = *params.IsDefault
+		fields = append(fields, "isDefault")
+	}
+	if err = s.Update(ctx, &updated, store.UpdateSelected(fields...), ByID(workspaceID, old.ID)); err != nil {
+		return nil, nil, errors.Wrapf(err, "update template %s", id)
 	}
 	return old.view(), updated.view(), nil
 }
@@ -215,16 +218,10 @@ func SetDefault(ctx context.Context, db *mongo.Database, workspaceID, id string)
 }
 
 // setDefault 把 target 设为分组的默认模板；target 为 nil 时清除自定义默认，分组回落到内置模板。
-//
-// 先清除其它默认再置位，不使用事务：并发设置同一分组时，部分唯一索引保证至多一个成功，
-// 其余返回 ErrTemplateConflict。默认状态不属于模板内容，不刷新 updatedAt。
+// 默认状态不属于模板内容，不刷新 updatedAt。
 func setDefault(ctx context.Context, s *TemplateStore, workspaceID string, group Group, target *bson.ObjectID) error {
-	clearOpts := []store.Opt{DefaultOf(workspaceID, group), store.KeepUpdatedAt()}
-	if target != nil {
-		clearOpts = append(clearOpts, store.Filter(bson.M{"_id": bson.M{"$ne": *target}}))
-	}
-	if _, err := s.UpdateMany(ctx, map[string]any{"isDefault": false}, clearOpts...); err != nil {
-		return errors.Wrapf(err, "clear default template of %s/%s", group.Framework, group.Language)
+	if err := clearOtherDefaults(ctx, s, workspaceID, group, target); err != nil {
+		return err
 	}
 	if target == nil {
 		return nil
@@ -233,6 +230,46 @@ func setDefault(ctx context.Context, s *TemplateStore, workspaceID string, group
 		ctx, map[string]any{"isDefault": true}, ByID(workspaceID, *target), store.KeepUpdatedAt(),
 	); err != nil {
 		return errors.Wrapf(err, "set template %s as default", target.Hex())
+	}
+	return nil
+}
+
+// prepareDefault 在以默认状态写入模板 self（新建时为 nil）之前，检查名称未被占用并清除分组内其它默认。
+//
+// 不使用事务：清除后的写入若被部分唯一索引拒绝，说明并发请求已把另一个模板设为默认，
+// 本次返回 ErrTemplateConflict 且不写入任何内容；只有清除后写入因其它原因失败时，分组才会回落到内置模板。
+// 预先检查名称是为了避免模板因重名写入失败却已清掉原有默认。
+func prepareDefault(
+	ctx context.Context, s *TemplateStore, workspaceID string, group Group, name string, self *bson.ObjectID,
+) error {
+	opts := []store.Opt{ByGroup(workspaceID, group), store.Where("name", name)}
+	if self != nil {
+		opts = append(opts, store.Filter(bson.M{"_id": bson.M{"$ne": *self}}))
+	}
+	taken, err := s.Exists(ctx, opts...)
+	if err != nil {
+		return errors.Wrapf(err, "check name of template %q", name)
+	}
+	if taken {
+		return errors.Wrapf(ErrTemplateConflict, "template %q already exists", name)
+	}
+	return clearOtherDefaults(ctx, s, workspaceID, group, self)
+}
+
+// clearOtherDefaults 清除分组内除 keep 以外的默认标记，keep 为 nil 时清除全部。
+func clearOtherDefaults(
+	ctx context.Context,
+	s *TemplateStore,
+	workspaceID string,
+	group Group,
+	keep *bson.ObjectID,
+) error {
+	opts := []store.Opt{DefaultOf(workspaceID, group), store.KeepUpdatedAt()}
+	if keep != nil {
+		opts = append(opts, store.Filter(bson.M{"_id": bson.M{"$ne": *keep}}))
+	}
+	if _, err := s.UpdateMany(ctx, map[string]any{"isDefault": false}, opts...); err != nil {
+		return errors.Wrapf(err, "clear default template of %s/%s", group.Framework, group.Language)
 	}
 	return nil
 }

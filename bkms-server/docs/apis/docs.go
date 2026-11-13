@@ -19912,6 +19912,12 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/bkerrs.GinErrorOutput"
                         }
+                    },
+                    "409": {
+                        "description": "同一框架、语言下模板名称已存在，或并发设置了其它默认模板",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
                     }
                 }
             }
@@ -20023,6 +20029,12 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/bkerrs.GinErrorOutput"
                         }
+                    },
+                    "409": {
+                        "description": "同一框架、语言下模板名称已存在，或并发设置了其它默认模板",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
                     }
                 }
             },
@@ -20120,6 +20132,12 @@ const docTemplate = `{
                     },
                     "400": {
                         "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    },
+                    "409": {
+                        "description": "并发设置了其它默认模板",
                         "schema": {
                             "$ref": "#/definitions/bkerrs.GinErrorOutput"
                         }
