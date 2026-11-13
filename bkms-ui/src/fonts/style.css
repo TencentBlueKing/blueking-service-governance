@@ -1,433 +1,580 @@
 @font-face {
 	font-family: "bkms";
 	src: url("fonts/iconcool.svg#iconcool") format("svg"),
-url("fonts/iconcool.ttf") format("truetype"),
-url("fonts/iconcool.woff") format("woff"),
-url("fonts/iconcool.eot?#iefix") format("embedded-opentype");
-    font-weight: normal;
-    font-style: normal;
+		url("fonts/iconcool.ttf") format("truetype"),
+		url("fonts/iconcool.woff") format("woff"),
+		url("fonts/iconcool.eot?#iefix") format("embedded-opentype");
+	font-weight: normal;
+	font-style: normal;
 }
 
 .bkms-icon {
-  /* use !important to prevent issues with browser extensions that change fonts */
-  font-family: 'bkms' !important;
-  speak: none;
-  font-style: normal;
-  font-weight: normal;
-  font-variant: normal;
-  text-transform: none;
-  line-height: 1;
-  text-align: center;
-  /* Better Font Rendering =========== */
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+	/* use !important to prevent issues with browser extensions that change fonts */
+	font-family: 'bkms' !important;
+	speak: none;
+	font-style: normal;
+	font-weight: normal;
+	font-variant: normal;
+	text-transform: none;
+	line-height: 1;
+	text-align: center;
+	/* Better Font Rendering =========== */
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
 }
 
 .bkms-icon-setting-line:before {
 	content: "\e150";
 }
+
 .bkms-icon-warning-circle:before {
 	content: "\e114";
 }
+
 .bkms-icon-setting-fill:before {
 	content: "\e1b2";
 }
+
 .bkms-icon-time-circle-fill:before {
 	content: "\e122";
 }
+
 .bkms-icon-angle-down:before {
 	content: "\e14a";
 }
+
 .bkms-icon-angle-left:before {
 	content: "\e14b";
 }
+
 .bkms-icon-angle-right:before {
 	content: "\e14c";
 }
+
 .bkms-icon-angle-up:before {
 	content: "\e149";
 }
+
 .bkms-icon-help-document:before {
 	content: "\e11f";
 }
+
 .bkms-icon-refresh:before {
 	content: "\e120";
 }
+
 .bkms-icon-file:before {
 	content: "\e123";
 }
+
 .bkms-icon-jump-link:before {
 	content: "\e1b4";
 }
+
 .bkms-icon-close-circle-shape:before {
 	content: "\e10f";
 }
+
 .bkms-icon-dashboard-2-shape:before {
 	content: "\e1bf";
 }
+
 .bkms-icon-info-circle-shape:before {
 	content: "\e10e";
 }
+
 .bkms-icon-cc-home:before {
 	content: "\e132";
 }
+
 .bkms-icon-cc-model2:before {
 	content: "\e1c0";
 }
+
 .bkms-icon-return-small:before {
 	content: "\e10b";
 }
+
 .bkms-icon-more-fill:before {
 	content: "\e142";
 }
+
 .bkms-icon-auto-refresh-line:before {
 	content: "\e16d";
 }
+
 .bkms-icon-plus-circle:before {
 	content: "\e1d0";
 }
+
+.bkms-icon-plus-circle:before {
+	content: "\e1d0";
+}
+
 .bkms-icon-un-full-screen-2:before {
 	content: "\e113";
 }
+
 .bkms-icon-filliscreen-line:before {
 	content: "\e112";
 }
+
 .bkms-icon-yuanma:before {
 	content: "\e19f";
 }
+
 .bkms-icon-qiyeweixin:before {
 	content: "\e1b8";
 }
+
 .bkms-icon-daochu:before {
 	content: "\e1be";
 }
+
 .bkms-icon-usergroup:before {
 	content: "\e1b5";
 }
+
 .bkms-icon-return:before {
 	content: "\e14d";
 }
+
 .bkms-icon-tools:before {
 	content: "\e127";
 }
+
 .bkms-icon-cuo:before {
 	content: "\e13c";
 }
+
 .bkms-icon-dui:before {
 	content: "\e13d";
 }
+
 .bkms-icon-tishi:before {
 	content: "\e13b";
 }
+
 .bkms-icon-default:before {
 	content: "\e115";
 }
+
 .bkms-icon-success:before {
 	content: "\e116";
 }
+
 .bkms-icon-failed:before {
 	content: "\e117";
 }
+
 .bkms-icon-waiting:before {
 	content: "\e118";
 }
+
 .bkms-icon-warning-2:before {
 	content: "\e11b";
 }
+
 .bkms-icon-youjian:before {
 	content: "\e1b9";
 }
+
 .bkms-icon-duanxin:before {
 	content: "\e1ba";
 }
+
 .bkms-icon-yuyin:before {
 	content: "\e1bb";
 }
+
 .bkms-icon-user-line:before {
 	content: "\e1b6";
 }
+
 .bkms-icon-jiangxu:before {
 	content: "\e155";
 }
+
 .bkms-icon-shengxu:before {
 	content: "\e154";
 }
+
 .bkms-icon-yanjing-kejian:before {
 	content: "\e125";
 }
+
 .bkms-icon-wangye:before {
 	content: "\e144";
 }
+
 .bkms-icon-status-unknown:before {
 	content: "\e11c";
 }
+
 .bkms-icon-space-basic:before {
 	content: "\e108";
 }
+
 .bkms-icon-clone:before {
 	content: "\e137";
 }
+
 .bkms-icon-helm:before {
 	content: "\e102";
 }
+
 .bkms-icon-trpc:before {
 	content: "\e105";
 }
+
 .bkms-icon-minus-circle-shape:before {
 	content: "\e106";
 }
+
 .bkms-icon-branchs:before {
 	content: "\e107";
 }
+
 .bkms-icon-commit:before {
 	content: "\e109";
 }
+
 .bkms-icon-plus-circle-shape:before {
 	content: "\e10a";
 }
+
 .bkms-icon-BKCDN:before {
 	content: "\e10c";
 }
+
 .bkms-icon-HelmCharts:before {
 	content: "\e10d";
 }
+
 .bkms-icon-guanlikongjian-3:before {
 	content: "\e1a4";
 }
+
 .bkms-icon-setting:before {
 	content: "\e110";
 }
+
 .bkms-icon-triangle-warning:before {
 	content: "\e111";
 }
+
 .bkms-icon-loading:before {
 	content: "\e11d";
 }
+
 .bkms-icon-circle-info:before {
 	content: "\e11e";
 }
+
 .bkms-icon-deployment-request:before {
 	content: "\e128";
 }
+
 .bkms-icon-chuangjianyingyong:before {
 	content: "\e124";
 }
+
 .bkms-icon-artifact-management:before {
 	content: "\e126";
 }
+
 .bkms-icon-monitor:before {
 	content: "\e129";
 }
+
 .bkms-icon-component-configuration:before {
 	content: "\e12b";
 }
+
 .bkms-icon-alert-records:before {
 	content: "\e12d";
 }
+
 .bkms-icon-basic-info:before {
 	content: "\e12f";
 }
+
 .bkms-icon-orchestration:before {
 	content: "\e12e";
 }
+
 .bkms-icon-historical-tasks:before {
 	content: "\e130";
 }
+
 .bkms-icon-double-column:before {
 	content: "\e133";
 }
+
 .bkms-icon-single-column:before {
 	content: "\e134";
 }
+
 .bkms-icon-time-2:before {
 	content: "\e135";
 }
+
 .bkms-icon-build:before {
 	content: "\e136";
 }
+
 .bkms-icon-quanbu-xuanzhong:before {
 	content: "\e145";
 }
+
 .bkms-icon-yingyongbushu:before {
 	content: "\e138";
 }
+
 .bkms-icon-shezhi:before {
 	content: "\e13a";
 }
+
 .bkms-icon-arrows-right:before {
 	content: "\e13e";
 }
+
 .bkms-icon-download:before {
 	content: "\e13f";
 }
+
 .bkms-icon-down-shape:before {
 	content: "\e141";
 }
+
 .bkms-icon-right-shape:before {
 	content: "\e140";
 }
+
 .bkms-icon-polaris:before {
 	content: "\e146";
 }
+
 .bkms-icon-shitu-lianglan:before {
 	content: "\e148";
 }
+
 .bkms-icon-shitu-liebiao:before {
 	content: "\e147";
 }
+
 .bkms-icon-anzhuang:before {
 	content: "\e14e";
 }
+
 .bkms-icon-taf:before {
 	content: "\e153";
 }
+
 .bkms-icon-full-screen:before {
 	content: "\e157";
 }
+
 .bkms-icon-shipei:before {
 	content: "\e159";
 }
+
 .bkms-icon-kafei:before {
 	content: "\e158";
 }
+
 .bkms-icon-jicheng:before {
 	content: "\e15a";
 }
+
 .bkms-icon-plus:before {
 	content: "\e18c";
 }
+
 .bkms-icon-minus:before {
 	content: "\e18d";
 }
+
 .bkms-icon-command:before {
 	content: "\e191";
 }
+
 .bkms-icon-ctrl:before {
 	content: "\e18e";
 }
+
 .bkms-icon-shift:before {
 	content: "\e18f";
 }
+
 .bkms-icon-z:before {
 	content: "\e190";
 }
+
 .bkms-icon-dongzuo-xiazai:before {
 	content: "\e193";
 }
+
 .bkms-icon-jiahao:before {
 	content: "\e198";
 }
+
 .bkms-icon-jianhao:before {
 	content: "\e19b";
 }
+
 .bkms-icon-sousuo:before {
 	content: "\e194";
 }
+
 .bkms-icon-beautify:before {
 	content: "\e192";
 }
+
 .bkms-icon-kuangxuan:before {
 	content: "\e195";
 }
+
 .bkms-icon-redo:before {
 	content: "\e196";
 }
+
 .bkms-icon-undo:before {
 	content: "\e19a";
 }
+
 .bkms-icon-reset-1_1:before {
 	content: "\e197";
 }
+
 .bkms-icon-map:before {
 	content: "\e199";
 }
+
 .bkms-icon-jiegou-shuxing:before {
 	content: "\e19d";
 }
+
 .bkms-icon-shitu-liebiao-2:before {
 	content: "\e19c";
 }
+
 .bkms-icon-agones:before {
 	content: "\e19e";
 }
+
 .bkms-icon-expand-small:before {
 	content: "\e1a2";
 }
+
 .bkms-icon-sync-data:before {
 	content: "\e1a3";
 }
+
 .bkms-icon-bianliang:before {
 	content: "\e1a5";
 }
+
 .bkms-icon-bianliang-2:before {
 	content: "\e1a7";
 }
+
 .bkms-icon-variable:before {
 	content: "\e1a8";
 }
+
 .bkms-icon-record:before {
 	content: "\e1a9";
 }
+
 .bkms-icon-folder:before {
 	content: "\e1aa";
 }
+
 .bkms-icon-code:before {
 	content: "\e1ac";
 }
+
 .bkms-icon-form-mode:before {
 	content: "\e1ad";
 }
+
 .bkms-icon-normal:before {
 	content: "\e1b0";
 }
+
 .bkms-icon-abnormal:before {
 	content: "\e1b1";
 }
+
 .bkms-icon-half-circle:before {
 	content: "\e1b3";
 }
+
 .bkms-icon-business-config:before {
 	content: "\e1b7";
 }
+
 .bkms-icon-daoru:before {
 	content: "\e1bc";
 }
+
 .bkms-icon-release-strategies:before {
 	content: "\e1c3";
 }
+
 .bkms-icon-go:before {
 	content: "\e1c4";
 }
+
 .bkms-icon-python:before {
 	content: "\e1c5";
 }
+
 .bkms-icon-node:before {
 	content: "\e1c6";
 }
+
 .bkms-icon-java:before {
 	content: "\e1c7";
 }
+
 .bkms-icon-js:before {
 	content: "\e1c8";
 }
+
 .bkms-icon-workspace:before {
 	content: "\e1cc";
 }
+
 .bkms-icon-app:before {
 	content: "\e1ce";
 }
+
 .bkms-icon-env:before {
 	content: "\e1c9";
 }
+
 .bkms-icon-cluster:before {
 	content: "\e1cd";
 }
+
 .bkms-icon-cpu:before {
 	content: "\e1ca";
 }
+
 .bkms-icon-memory:before {
 	content: "\e1cb";
 }
+
 .bkms-icon-user-fill:before {
 	content: "\e1cf";
+}
+
+.bkms-icon-pause:before {
+	content: "\e1d1";
+}
+
+.bkms-icon-success-2:before {
+	content: "\e1d2";
 }

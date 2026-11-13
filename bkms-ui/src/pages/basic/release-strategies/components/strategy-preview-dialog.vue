@@ -134,14 +134,9 @@
     <template #footer>
       <div class="flex items-center justify-end gap-[8px]">
         <Button
-          v-if="showSubmit"
-          data-testid="preview-submit"
-          theme="primary"
-          @click="handleSubmit"
+          data-testid="preview-close"
+          @click="visible = false"
         >
-          {{ t('提交') }}
-        </Button>
-        <Button @click="visible = false">
           {{ t('关闭') }}
         </Button>
       </div>
@@ -164,16 +159,11 @@
     batches: StrategyBatchForm[];
     /** 策略名称：作为标题副标题展示，便于确认预览对象 */
     name?: string;
-    /** 是否展示「提交」按钮（查看态预览不需要提交） */
-    showSubmit?: boolean;
   }
 
   const props = withDefaults(defineProps<Props>(), {
     name: '',
-    showSubmit: true,
   });
-
-  const emit = defineEmits<{ submit: [] }>();
 
   const visible = defineModel<boolean>('isShow', { default: false });
 
@@ -196,12 +186,6 @@
   /** 暂停标签文案：时间线标签与设计稿一致用「·」分隔 */
   function formatPauseTagText(row: StrategyPreviewRow, tf: (key: string) => string): string {
     return row.pauseTheme === 'warn' ? tf('永久暂停 · 手动继续') : row.pauseText;
-  }
-
-  /** 弹窗内提交：关闭预览并交给外层执行保存 */
-  function handleSubmit() {
-    visible.value = false;
-    emit('submit');
   }
 
   // 实例方块状态色：已更新 / 本批新增 / 待更新

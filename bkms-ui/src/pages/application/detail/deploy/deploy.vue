@@ -213,12 +213,13 @@
         <template v-else-if="activeTab === 'instance'">
           <!--
             分批发布控制横幅 / 灰度发布进度视图互斥渲染：
-            点击横幅「查看发布进度」后隐藏横幅并切换为独立进度视图，点「返回实例列表」复原。
+            点击横幅「查看发布详情」后隐藏横幅并切换为独立进度视图，点「返回实例列表」复原。
           -->
           <BatchReleaseBanner
             v-if="batchReleaseView && !isBatchReleaseProgressActive"
             class="mb-[16px]"
             :pending-action="batchReleasePendingAction"
+            :progress="batchReleaseProgress"
             :view="batchReleaseView"
             @action="handleBatchReleaseAction"
             @close="handleBatchReleaseClose"
@@ -228,10 +229,12 @@
             v-else-if="isBatchReleaseProgressActive && batchReleaseView"
             :key="curEnv"
             class="mb-[16px]"
+            :ended-at="latestDeployStatus?.endedAt"
             :env-item="trpcDeployStore.curEnvItem"
             :env-name="curEnv"
             :pending-action="batchReleasePendingAction"
             :progress="batchReleaseProgress"
+            :started-at="latestDeployStatus?.startedAt"
             :view="batchReleaseView"
             @action="handleBatchReleaseAction"
             @back="showBatchReleaseProgress = false"
@@ -699,7 +702,7 @@
   });
 
   /**
-   * 灰度发布进度视图显隐：点击横幅「查看发布进度」进入，点「返回实例列表」退出。
+   * 灰度发布进度视图显隐：点击横幅「查看发布详情」进入，点「返回实例列表」退出。
    * 横幅消失（切 Tab、发布关闭、完成被关闭）或切换环境时复位回横幅态。
    */
   const showBatchReleaseProgress = ref(false);

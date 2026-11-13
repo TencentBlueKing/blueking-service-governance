@@ -22,7 +22,7 @@
       class="mb-[16px] shrink-0"
       closable
       theme="info"
-      :title="t('发布策略在空间内共享，应用部署时可选用。平台内置策略只读，可克隆后按需调整。')"
+      :title="t('发布策略用于应用的分批灰度发布，在空间内共享。仅适用于 tRPC、TAF 等平台托管应用（联邦集群除外）。')"
     />
     <Alert
       v-if="isError"
@@ -54,6 +54,7 @@
     </FlexRow>
     <Loading :loading="isLoading">
       <Table
+        ref="tableRef"
         :data="strategies"
         :max-height="maxHeight"
         :pagination="pagination"
@@ -220,7 +221,7 @@
 </template>
 
 <script setup lang="ts">
-  import { computed, h, onMounted, ref, watch } from 'vue';
+  import { computed, h, nextTick, onMounted, ref, watch } from 'vue';
 
   import { Table, TableColumn } from '@blueking/table';
   import { Alert, Button, InfoBox, Input, Loading, Message, Popover, Tag } from 'bkui-vue';
@@ -250,6 +251,7 @@
     keyword,
     pagination,
     allStrategies,
+    filteredStrategies,
     strategies,
     fetchList,
     handlePageLimitChange,
@@ -266,6 +268,8 @@
   const sidesliderVisible = ref(false);
   const sidesliderMode = ref<SidesliderMode>('create');
   const currentStrategy = ref<ReleaseStrategyOutputObj>();
+  /** 表格实例：保存后用于高亮（row-config.isCurrent）刚保存的策略行 */
+  const tableRef = ref<{ getVxeTableInstance?: () => { setCurrentRow?: (row: unknown) => unknown } }>();
 
   const targetTexts = computed(() => ({ full: t('全量'), unit: t('个') }));
 
@@ -318,8 +322,27 @@
     });
   }
 
-  function handleSaved() {
-    fetchList();
+  /**
+   * 保存（新建 / 编辑 / 克隆）后定位到该策略：
+   * 列表切回第一页并高亮该行（排序规则下刚保存的空间策略会排到首行）；
+   * 若当前搜索条件把该行过滤掉了，先清空关键字，保证用户能直接看到保存结果。
+   */
+  async function handleSaved(saved?: ReleaseStrategyOutputObj) {
+    await fetchList();
+    pagination.value.current = 1;
+    if (!saved) return;
+
+    const isSaved = (item: ReleaseStrategyOutputObj) => (saved.id ? item.id === saved.id : item.name === saved.name);
+
+    if (keyword.value && !filteredStrategies.value.some(isSaved)) {
+      keyword.value = '';
+      pagination.value.current = 1;
+    }
+    await nextTick();
+
+    // 目标行不在当前页时 setCurrentRow 不会命中，故仅在第一页存在该行时定位
+    const row = strategies.value.find(isSaved);
+    if (row) void tableRef.value?.getVxeTableInstance?.()?.setCurrentRow?.(row);
   }
 
   function openClone(row: ReleaseStrategyOutputObj) {

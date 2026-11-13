@@ -18,10 +18,10 @@
 /**
  * 场景级测试：发布策略管理页（ROUTES 未收录，本头即场景说明）
  *
- * V = 17（判定节点：列表加载成功 / 加载失败 / 搜索过滤空态 / 名称点击打开抽屉 / 新建提交 /
+ * V = 19（判定节点：列表加载成功 / 加载失败 / 搜索过滤空态 / 名称点击打开抽屉 / 新建提交 /
  *          新建校验拦截 / 新增批次追加到末尾 / 仅剩一批时不可删除 / 累计值递增校验提示 /
  *          预览前置校验拦截 / 预览弹窗换算 / 编辑提交 / 查看只读 / 查看态克隆为空间策略 /
- *          克隆取消不创建 / 删除确认 / 删除取消）
+ *          克隆取消不创建 / 删除确认 / 删除取消 / 新建后回到首页并选中 / 克隆后回到首页并选中）
  * 路径：
  *   1. 列表加载成功：空间策略在前、内置策略带「平台内置」标签、批次摘要渲染
  *   2. 列表加载失败：顶部展示错误提示（保留旧数据）
@@ -33,13 +33,14 @@
  *   7. 最少一批：仅剩一个批次时不提供删除入口
  *   8. 累计值递增校验：不大于上一批时卡片红字 + 输入框红框，未修正不提交
  *   9. 预览前置校验：表单未通过校验时点击「预览策略」不打开弹窗
- *   10. 预览弹窗：校验通过后打开，按实例数换算批次时间线
+ *   10. 预览弹窗：校验通过后打开，按实例数换算批次时间线（仅确认，无提交入口）
  *   11. 编辑策略：抽屉回显名称 → 提交调用 update
  *   12. 查看策略：抽屉只读，提供「克隆为空间策略 / 预览策略 / 关闭」
  *   13. 查看态克隆：切到克隆表单、预填「原名_克隆01」与全部批次，提交走 create
  *   14. 克隆取消：关闭抽屉，不产生新策略
  *   15. 删除策略：InfoBox 确认后调用 delete 并重新拉取列表
  *   16. 删除取消：InfoBox 不确认 → 不调用 delete
+ *   17. 保存定位：新建 / 克隆成功后重新拉取列表、回到第一页并选中该行（关键词过滤掉时先清空搜索）
  *
  * stub/mock：
  *   - ReleaseStrategiesService（list/create/update/delete）→ harness vi.fn
@@ -58,6 +59,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/vue
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import ReleaseStrategiesPage from '~/pages/basic/release-strategies/index.vue';
 
+import { I18nTStub } from '../helpers/mock-i18n';
 import { installVxeShims } from '../helpers/mock-table';
 
 const harness = vi.hoisted(() => ({
@@ -158,6 +160,8 @@ async function renderPage() {
   return render(ReleaseStrategiesPage, {
     global: {
       mocks: { $t: translate },
+      // 说明文案含加粗片段，走 <i18n-t> 插值组件；此处按 keypath 直译
+      components: { 'i18n-t': I18nTStub },
       stubs: {
         FlexRow: FlexRowStub,
       },
@@ -257,6 +261,89 @@ describe('发布策略管理：新建 / 编辑 / 查看', () => {
       { interceptorErr: false },
     );
     expect(mocks.message).toHaveBeenCalledWith({ theme: 'success', message: '策略已创建' });
+  });
+
+  it('新建策略保存成功后，应回到第一页并选中该策略行', async () => {
+    // 12 条历史策略：首页只切出 10 行，用于验证保存后回到第一页
+    const others = Array.from({ length: 12 }, (_, index) => ({
+      id: `strategy-old-${index}`,
+      name: `历史策略${index}`,
+      description: '',
+      isBuiltin: false,
+      workspaceID: 'ws-1',
+      updatedAt: '2026-01-01T00:00:00Z',
+      batches: [{ target: '1', pauseMode: 'none' }],
+    }));
+    const created = {
+      id: 'strategy-new',
+      name: '灰度放量',
+      description: '',
+      isBuiltin: false,
+      workspaceID: 'ws-1',
+      updatedAt: '2026-02-01T00:00:00Z',
+      batches: [{ target: '3', pauseMode: 'permanent' }],
+    };
+    harness.listReleaseStrategies.mockResolvedValueOnce(others).mockResolvedValue([created, ...others]);
+    harness.createReleaseStrategy.mockResolvedValue(created);
+
+    await openCreateDrawer();
+    await fillCreateForm('灰度放量', '3');
+    await userEvent.click(screen.getByRole('button', { name: '提交' }));
+
+    // 保存后重新拉取列表
+    await waitFor(() => expect(harness.listReleaseStrategies).toHaveBeenCalledTimes(2));
+    // 选中刚保存的行（vxe row-config.isCurrent）
+    const currentRow = await waitFor(() => {
+      const node = document.querySelector('[data-current="true"]');
+      if (!node) throw new Error('尚未选中新建的策略行');
+      return node as HTMLElement;
+    });
+    expect(within(currentRow).getByText('灰度放量')).toBeInTheDocument();
+    // 回到第一页：13 条数据只切出 10 行，新建行（更新时间最新）排在首行
+    const rows = screen.getAllByTestId('table-row');
+    expect(rows).toHaveLength(10);
+    expect(rows[0]).toBe(currentRow);
+  });
+
+  it('克隆策略保存成功后，应回到第一页并选中克隆出的策略行', async () => {
+    const others = Array.from({ length: 12 }, (_, index) => ({
+      id: `strategy-old-${index}`,
+      name: `历史策略${index}`,
+      description: '',
+      isBuiltin: false,
+      workspaceID: 'ws-1',
+      updatedAt: '2026-01-01T00:00:00Z',
+      batches: [{ target: '1', pauseMode: 'none' }],
+    }));
+    const cloned = {
+      id: 'strategy-cloned',
+      name: '生产谨慎发布_克隆01',
+      description: '谨慎放量',
+      isBuiltin: false,
+      workspaceID: 'ws-1',
+      updatedAt: '2026-02-01T00:00:00Z',
+      batches: [{ target: '1', pauseMode: 'none' }],
+    };
+    harness.listReleaseStrategies
+      .mockResolvedValueOnce([strategyList[0], ...others])
+      .mockResolvedValue([cloned, strategyList[0], ...others]);
+    harness.createReleaseStrategy.mockResolvedValue(cloned);
+
+    await renderPage();
+    await screen.findByText('生产谨慎发布');
+    await userEvent.click(screen.getAllByRole('button', { name: '克隆' })[0]);
+    // 克隆态名称已预填，直接提交
+    await userEvent.click(await screen.findByRole('button', { name: '提交' }));
+
+    await waitFor(() => expect(harness.createReleaseStrategy).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(harness.listReleaseStrategies).toHaveBeenCalledTimes(2));
+    const currentRow = await waitFor(() => {
+      const node = document.querySelector('[data-current="true"]');
+      if (!node) throw new Error('尚未选中克隆出的策略行');
+      return node as HTMLElement;
+    });
+    expect(within(currentRow).getByText('生产谨慎发布_克隆01')).toBeInTheDocument();
+    expect(screen.getAllByTestId('table-row')).toHaveLength(10);
   });
 
   it('当用户新建策略名称为空时，应被校验拦截且不调用 create', async () => {
@@ -421,12 +508,17 @@ describe('发布策略管理：新建 / 编辑 / 查看', () => {
     expect(harness.createReleaseStrategy).not.toHaveBeenCalled();
   });
 
-  it('预览弹窗底部应能直接提交策略', async () => {
+  it('预览弹窗只做确认，不提供提交入口，关闭后需回到抽屉提交', async () => {
     await openCreateDrawer();
     await fillCreateForm('灰度放量', '3');
 
     await userEvent.click(screen.getByRole('button', { name: '预览策略' }));
-    await userEvent.click(await screen.findByTestId('preview-submit'));
+    await screen.findAllByTestId('preview-row');
+    // 预览仅用于确认配置，弹窗内不再提供提交按钮
+    expect(screen.queryByTestId('preview-submit')).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByTestId('preview-close'));
+    await userEvent.click(screen.getByRole('button', { name: '提交' }));
 
     await waitFor(() => expect(harness.createReleaseStrategy).toHaveBeenCalledTimes(1));
     expect(harness.createReleaseStrategy).toHaveBeenCalledWith(

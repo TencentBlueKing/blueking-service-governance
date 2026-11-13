@@ -52,7 +52,11 @@
       <Alert
         class="shrink-0"
         theme="info"
-        :title="t('策略保存在当前空间，空间下所有应用都可以选用')"
+        :title="
+          showBuiltinTag
+            ? t('平台内置策略不可编辑。如需调整，请克隆为空间策略后修改。')
+            : t('策略在空间内共享，供 tRPC、TAF 等平台托管应用分批灰度发布时选用；保存后仅对后续新部署生效。')
+        "
       />
 
       <BkmsContent
@@ -181,8 +185,6 @@
     v-model:is-show="previewVisible"
     :batches="formModel.batches"
     :name="formModel.name"
-    :show-submit="!isView"
-    @submit="handleSubmit"
   />
 </template>
 

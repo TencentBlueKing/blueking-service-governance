@@ -16,7 +16,7 @@
  - to the current version of the project delivered to anyone in the future.
 -->
 
-<!-- 灰度发布进度视图：返回栏 + 语义色大横幅（状态 / 元信息 / 平铺操作按钮）+ Steps 批次步骤条 + 灰度实例列表 -->
+<!-- 灰度发布进度视图：返回栏 + 语义色大横幅（状态 + 发布策略详情浮层 / 平铺操作按钮）+ Steps 批次步骤条 + 灰度实例列表 -->
 <template>
   <div
     class="flex flex-col gap-[16px]"
@@ -88,6 +88,48 @@
           >
             {{ $t(statusTag.key, statusTag.params ?? []) }}
           </Tag>
+          <!-- 策略段：竖线 + 发布策略名 + ⓘ Hover 详情浮层（低频核对字段收纳）；策略名为空整段隐藏 -->
+          <template v-if="strategyName">
+            <Divider
+              class="!mx-0 !h-[12px]"
+              color="#DCDEE5"
+              direction="vertical"
+              type="solid"
+            />
+            <span
+              class="shrink-0 text-[12px] leading-[20px]"
+              data-testid="batch-release-progress-strategy"
+            >
+              <span class="text-[#979BA5]">{{ $t('发布策略') }}：</span>
+              <span class="text-[#4D4F56]">{{ strategyName }}</span>
+            </span>
+            <Popover
+              placement="bottom"
+              :popover-delay="[300, 100]"
+              theme="light"
+              trigger="hover"
+            >
+              <i
+                class="bkms-icon bkms-icon-circle-info strategy-info-icon shrink-0 text-[14px]"
+                data-testid="batch-release-progress-strategy-info"
+              ></i>
+              <template #content>
+                <div
+                  class="release-detail-popover"
+                  data-testid="batch-release-progress-strategy-detail"
+                >
+                  <div
+                    v-for="row in strategyDetailRows"
+                    :key="row.label"
+                    class="release-detail-popover__row"
+                  >
+                    <span class="release-detail-popover__label">{{ row.label }}</span>
+                    <span class="release-detail-popover__value">{{ row.value }}</span>
+                  </div>
+                </div>
+              </template>
+            </Popover>
+          </template>
         </div>
         <!-- 操作按钮全部平铺：主操作 → 回退上一批 / 跳过剩余批次 → 回滚，复用横幅的二次确认链路 -->
         <div
@@ -108,14 +150,12 @@
           </Button>
         </div>
       </div>
-      <!-- 元信息行：仅展示有数据支撑的字段；标签灰色、数值加粗深色，对齐设计稿 -->
+      <!-- 元信息行：批次 / 已更新 / 镜像等已由步骤条与实例表筛选胶囊直观展示，仅失败态保留失败原因 -->
       <div
+        v-if="view.kind === 'failed' && view.message"
         class="mt-[6px] flex flex-wrap items-center gap-x-[24px] gap-y-[4px] text-[12px] leading-[20px] text-[#4D4F56]"
       >
-        <span
-          v-if="view.message && view.kind === 'failed'"
-          class="flex items-center gap-[4px]"
-        >
+        <span class="flex items-center gap-[4px]">
           <span>{{ $t('失败原因') }}</span>
           <span
             v-bk-tooltips="{ content: view.message, disabled: !view.message }"
@@ -123,40 +163,6 @@
           >
             {{ view.message }}
           </span>
-        </span>
-        <span
-          v-if="strategyName"
-          class="flex items-center gap-[4px]"
-        >
-          <span>{{ $t('发布策略') }}</span>
-          <span class="text-[#313238]">{{ strategyName }}</span>
-        </span>
-        <i18n-t
-          class="flex items-center gap-[4px]"
-          keypath="共 {0} 批"
-          tag="span"
-        >
-          <span class="font-bold text-[#313238]">{{ stepsData.length }}</span>
-        </i18n-t>
-        <i18n-t
-          v-if="view.batchIndex != null"
-          class="flex items-center gap-[4px]"
-          keypath="当前第 {0} 批"
-          tag="span"
-        >
-          <span class="font-bold text-[#313238]">{{ view.batchIndex }}</span>
-        </i18n-t>
-        <i18n-t
-          class="flex items-center gap-[4px]"
-          keypath="已更新 {0}/{1} 个实例"
-          tag="span"
-        >
-          <span class="font-bold text-[#313238]">{{ view.updatedReplicas }}</span>
-          <span class="font-bold text-[#313238]">{{ view.replicas }}</span>
-        </i18n-t>
-        <span class="flex items-center gap-[4px]">
-          <span>{{ $t('镜像') }}</span>
-          <span class="font-bold text-[#313238]">{{ versionText }}</span>
         </span>
       </div>
       <!-- Steps 批次步骤条 -->
@@ -184,7 +190,7 @@
 <script lang="ts" setup>
   import { computed, h, onUnmounted, ref, watch } from 'vue';
 
-  import { Button, Divider, Steps, Tag } from 'bkui-vue';
+  import { Button, Divider, Popover, Steps, Tag } from 'bkui-vue';
   import { useI18n } from 'vue-i18n';
   import { envTypeMap, envTypeTagClassMap } from '~/composables/use-env-manager';
 
@@ -194,6 +200,9 @@
     type BatchReleaseBannerView,
     type BatchReleaseStepVM,
     buildBatchReleaseSteps,
+    formatBatchReleaseDuration,
+    formatBatchReleaseStartedAt,
+    resolveBatchReleaseDurationSeconds,
     resolvePausedStatusTag,
     resolveTimedPauseRemainingSeconds,
   } from '../batch-release';
@@ -203,6 +212,8 @@
   import type { EnvOutput } from '~/@types/v1/env';
 
   const props = defineProps<{
+    /** 最新部署记录结束时间（latest-status 下发；终态「总耗时」口径，Go 零值视为未设置） */
+    endedAt?: string;
     /** 当前环境对象（展示名 / 类型 Tag / 特性 Tag 数据来源） */
     envItem?: EnvOutput | null;
     /** 当前环境名（灰度实例列表请求作用域） */
@@ -211,6 +222,8 @@
     pendingAction?: BatchReleaseAction | null;
     /** 分批发布进度接口数据 */
     progress: BatchReleaseProgressOutputObj | null;
+    /** 最新部署记录开始时间（latest-status 下发，浮层「开始时间 / 已耗时」数据源） */
+    startedAt?: string;
     /** 由 resolveBatchReleaseBanner 收敛出的展示模型 */
     view: BatchReleaseBannerView;
   }>();
@@ -282,22 +295,27 @@
 
   const isBusy = computed(() => !!props.pendingAction);
 
+  /** 耗时口径的终态：已完成 / 失败 / 已回滚展示总耗时，不再逐秒跳动。 */
+  const TERMINAL_DURATION_KINDS = new Set<BatchReleaseBannerView['kind']>(['completed', 'failed', 'rolledBack']);
+
+  /** 进行中且已开始：已耗时需要逐秒刷新；定时暂停倒计时同样依赖逐秒时间源。 */
+  const isElapsedTicking = computed(() => !!props.startedAt && !TERMINAL_DURATION_KINDS.has(props.view.kind));
+
   /**
-   * 逐秒时间源：定时暂停的 mm:ss 倒计时按当前时间实时换算，不等 5s 轮询；
-   * 仅在定时暂停态开启 1s 定时器，其余时间静止（取值无意义，相关计算不依赖它）。
-   * 只跟随 progress.batchPhase：view 由外层收敛门控，与倒计时是否展示无关。
+   * 逐秒时间源：定时暂停的 mm:ss 倒计时与进行中的「已耗时」按当前时间实时换算，不等 5s 轮询；
+   * 仅在需要时开启 1s 定时器，其余时间静止（取值无意义，相关计算不依赖它）。
    */
   const now = ref(Date.now());
   let countdownTimer: ReturnType<typeof setInterval> | undefined;
   watch(
-    () => props.progress?.batchPhase === 'timed-paused',
-    isTimedPaused => {
-      if (isTimedPaused && !countdownTimer) {
+    () => props.progress?.batchPhase === 'timed-paused' || isElapsedTicking.value,
+    shouldTick => {
+      if (shouldTick && !countdownTimer) {
         now.value = Date.now();
         countdownTimer = setInterval(() => {
           now.value = Date.now();
         }, 1000);
-      } else if (!isTimedPaused && countdownTimer) {
+      } else if (!shouldTick && countdownTimer) {
         clearInterval(countdownTimer);
         countdownTimer = undefined;
       }
@@ -318,6 +336,31 @@
   });
 
   const strategyName = computed(() => props.progress?.strategyName || '');
+
+  /**
+   * ⓘ 浮层的核对字段（有数据才显示行）。
+   * 稳定展示发布策略 / 镜像变更；开始时间与已耗时依赖 latest-status 的 startedAt / endedAt，
+   * 缺失时整行隐藏；失败策略因接口暂无字段暂不渲染，词条已预留，待后端回填后放开。
+   * 耗时口径：进行中展示「已耗时」（随逐秒时间源刷新），已完成 / 失败 / 已回滚展示「总耗时」。
+   */
+  const strategyDetailRows = computed(() => {
+    const rows: { label: string; value: string }[] = [];
+    if (strategyName.value) rows.push({ label: t('发布策略'), value: strategyName.value });
+    rows.push({ label: t('镜像变更'), value: versionText.value });
+    if (props.startedAt) {
+      rows.push({ label: t('开始时间'), value: formatBatchReleaseStartedAt(props.startedAt) });
+      const isTerminal = TERMINAL_DURATION_KINDS.has(props.view.kind);
+      const seconds = resolveBatchReleaseDurationSeconds({
+        endedAt: props.endedAt,
+        isTerminal,
+        now: now.value,
+        startedAt: props.startedAt,
+      });
+      const duration = formatBatchReleaseDuration(seconds);
+      rows.push({ label: t(isTerminal ? '总耗时' : '已耗时'), value: t(duration.key, duration.params) });
+    }
+    return rows;
+  });
 
   /**
    * 状态标题文案（对齐设计稿：进行中/暂停/失败统一「灰度发布中」，批次信息由元信息行与步骤条承载）。
@@ -367,14 +410,21 @@
     return step.isAutoFull ? body : [...titleSegments('第 {0} 批', [step.batchIndex]), ' · ', ...body];
   }
 
-  /** 单参数文案片段：数字/数值加粗，前后文本保持普通字重。 */
+  /** 多参数文案片段：参数数字/数值加粗，文本段保持普通字重（百分比标题含「25%」「3」两个参数）。 */
   function titleSegments(key: string, params: (number | string)[]): TitleSegment[] {
     if (!params.length) return [t(key)];
-    const [before, after] = t(
+    const parts = t(
       key,
       params.map(() => TITLE_PARAM_MARK),
     ).split(TITLE_PARAM_MARK);
-    return [before, h('span', { class: 'fw-bold' }, String(params[0])), after];
+    const segments: TitleSegment[] = [];
+    parts.forEach((text, index) => {
+      if (text) segments.push(text);
+      if (index < params.length) {
+        segments.push(h('span', { class: 'fw-bold' }, String(params[index])));
+      }
+    });
+    return segments;
   }
 
   /** Steps 批次步骤条数据：title/description 传 VNode 承载「标题 + 状态 Tag」与副文本。 */
@@ -431,6 +481,17 @@
 </script>
 
 <style lang="postcss" scoped>
+  /* ⓘ 信息图标：默认浅灰，hover 变主蓝色 */
+  .strategy-info-icon {
+    color: #979ba5;
+    cursor: pointer;
+    transition: color 0.2s;
+
+    &:hover {
+      color: #3a84ff;
+    }
+  }
+
   :deep(.bk-step) {
     display: flex;
     flex-direction: column;
@@ -478,5 +539,34 @@
     &:last-child .bk-step-number::after {
       display: none;
     }
+  }
+</style>
+
+<!-- Popover 内容会 Teleport 到 body，样式需写在非 scoped 中 -->
+<style lang="postcss">
+  .release-detail-popover {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 4px;
+  }
+
+  .release-detail-popover__row {
+    display: grid;
+    grid-template-columns: max-content max-content;
+    align-items: baseline;
+    column-gap: 24px;
+    font-size: 12px;
+    line-height: 20px;
+  }
+
+  .release-detail-popover__label {
+    color: #979ba5;
+    white-space: nowrap;
+  }
+
+  .release-detail-popover__value {
+    color: #313238;
+    white-space: nowrap;
   }
 </style>
