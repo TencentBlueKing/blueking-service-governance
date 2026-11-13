@@ -45,7 +45,7 @@ tests {
     // Verify we have different types of apps
     const appTypes = [...new Set(res.body.data.map(app => app.type))];
     expect(appTypes).to.include('helm');
-    expect(appTypes).to.include('trpc');
+    expect(appTypes).to.include('bkmsApp');
   });
 }
 
