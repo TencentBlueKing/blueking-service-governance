@@ -376,6 +376,26 @@ var _ = Describe("BkMonitor Serializer", func() {
 					StartTime: 1781366400,
 					EndTime:   1781452799,
 				}, true),
+				Entry("instances at the upper limit", serializer.RankInstancesQueryInput{
+					Instances: makeInstances(serializer.MaxInstances),
+					StartTime: 1781366400,
+					EndTime:   1781452799,
+				}, false),
+				Entry("instances exceed the upper limit", serializer.RankInstancesQueryInput{
+					Instances: makeInstances(serializer.MaxInstances + 1),
+					StartTime: 1781366400,
+					EndTime:   1781452799,
+				}, true),
+				Entry("blank instances are not counted", serializer.RankInstancesQueryInput{
+					Instances: append(makeInstances(serializer.MaxInstances), "", "  "),
+					StartTime: 1781366400,
+					EndTime:   1781452799,
+				}, false),
+				Entry("only blank instances", serializer.RankInstancesQueryInput{
+					Instances: []string{"", "  "},
+					StartTime: 1781366400,
+					EndTime:   1781452799,
+				}, false),
 			)
 		})
 
@@ -392,6 +412,17 @@ var _ = Describe("BkMonitor Serializer", func() {
 				Expect(input.RankType).To(Equal(serializer.RankTypeTop))
 				Expect(input.Interval).To(Equal(serializer.DefaultInterval))
 				Expect(input.Method).To(Equal("sum"))
+				Expect(input.Instances).To(BeEmpty())
+			})
+
+			It("trims instances and drops blank ones", func() {
+				input := serializer.RankInstancesQueryInput{
+					Instances: []string{" pod-a ", "", "  ", "pod-b"},
+					StartTime: 1781366400,
+					EndTime:   1781452799,
+				}
+				input.Normalize()
+				Expect(input.Instances).To(Equal([]string{"pod-a", "pod-b"}))
 			})
 
 			It("keeps specified values", func() {

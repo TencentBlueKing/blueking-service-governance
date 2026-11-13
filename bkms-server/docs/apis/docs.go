@@ -8145,7 +8145,7 @@ const docTemplate = `{
             }
         },
         "/apps/{appID}/envs/{envName}/bkmonitor/instance-ranks": {
-            "get": {
+            "post": {
                 "security": [
                     {
                         "BkUserInfo": []
@@ -8153,6 +8153,9 @@ const docTemplate = `{
                     {
                         "BkUserCredential": []
                     }
+                ],
+                "consumes": [
+                    "application/json"
                 ],
                 "produces": [
                     "application/json"
@@ -8178,65 +8181,13 @@ const docTemplate = `{
                         "required": true
                     },
                     {
-                        "type": "integer",
-                        "description": "取前 N 个实例，1~50，默认 10",
-                        "name": "limit",
-                        "in": "query"
-                    },
-                    {
-                        "enum": [
-                            "cpu_limit_usage",
-                            "memory_limit_usage",
-                            "cpu_usage",
-                            "memory_usage"
-                        ],
-                        "type": "string",
-                        "description": "排名指标",
-                        "name": "rankBy",
-                        "in": "query"
-                    },
-                    {
-                        "enum": [
-                            "top",
-                            "bottom"
-                        ],
-                        "type": "string",
-                        "description": "排名方向，默认 top",
-                        "name": "rankType",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "排名时间范围的开始时间（Unix 时间戳，秒）",
-                        "name": "startTime",
-                        "in": "query",
-                        "required": true
-                    },
-                    {
-                        "type": "integer",
-                        "description": "排名时间范围的结束时间（Unix 时间戳，秒）",
-                        "name": "endTime",
-                        "in": "query",
-                        "required": true
-                    },
-                    {
-                        "type": "integer",
-                        "description": "子查询步长（秒），最小 60，默认 60",
-                        "name": "interval",
-                        "in": "query"
-                    },
-                    {
-                        "enum": [
-                            "sum",
-                            "max",
-                            "min",
-                            "count",
-                            "avg"
-                        ],
-                        "type": "string",
-                        "description": "汇聚方法，默认 sum",
-                        "name": "method",
-                        "in": "query"
+                        "description": "查询参数",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/serializer.RankInstancesQueryInput"
+                        }
                     }
                 ],
                 "responses": {
@@ -34130,6 +34081,71 @@ const docTemplate = `{
             "properties": {
                 "data": {
                     "$ref": "#/definitions/serializer.RainbowTConfOutput"
+                }
+            }
+        },
+        "serializer.RankInstancesQueryInput": {
+            "type": "object",
+            "required": [
+                "endTime",
+                "startTime"
+            ],
+            "properties": {
+                "endTime": {
+                    "description": "EndTime 排名时间范围的结束时间（Unix 时间戳，秒）",
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "instances": {
+                    "description": "Instances 候选实例（Pod）名称，过滤空白后最多 50 个；为空时在最新部署的工作负载的全部 Pod 中排名，\n非空时只在这批 Pod 中排名，不校验实例是否属于该环境",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "interval": {
+                    "description": "Interval 子查询步长（秒），最小为 60 秒，建议与图表汇聚周期一致",
+                    "type": "integer"
+                },
+                "limit": {
+                    "description": "Limit 取前 N 个实例，取值 1~50，默认 10",
+                    "type": "integer",
+                    "maximum": 50,
+                    "minimum": 1
+                },
+                "method": {
+                    "description": "Method 同一 Pod 内多个容器的数据如何合并，默认 sum，建议与图表汇聚方法一致",
+                    "type": "string",
+                    "enum": [
+                        "sum",
+                        "max",
+                        "min",
+                        "count",
+                        "avg"
+                    ]
+                },
+                "rankBy": {
+                    "description": "RankBy 排名指标，默认 cpu_limit_usage：\n  - cpu_limit_usage: CPU 使用率（用量 / limits）\n  - memory_limit_usage: 内存使用率（Working Set / limits）\n  - cpu_usage: CPU 用量（核数）\n  - memory_usage: 内存用量（Working Set，字节）",
+                    "type": "string",
+                    "enum": [
+                        "cpu_limit_usage",
+                        "memory_limit_usage",
+                        "cpu_usage",
+                        "memory_usage"
+                    ]
+                },
+                "rankType": {
+                    "description": "RankType 排名方向：top 按排名指标平均值从高到低、bottom 从低到高，默认 top",
+                    "type": "string",
+                    "enum": [
+                        "top",
+                        "bottom"
+                    ]
+                },
+                "startTime": {
+                    "description": "StartTime 排名时间范围的开始时间（Unix 时间戳，秒）",
+                    "type": "integer",
+                    "minimum": 1
                 }
             }
         },

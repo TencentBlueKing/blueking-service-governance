@@ -483,26 +483,21 @@ func (h *Handler) GetInstanceTimeSeries(c *gin.Context) {
 //	@ID			RankInstances
 //	@Summary	按指定指标的平均值查询环境实例的 Top / Bottom N
 //	@Tags		bkintegrations-bkmonitor
+//	@Accept		json
 //	@Produce	json
 //	@Security	BkUserInfo
 //	@Security	BkUserCredential
-//	@Param		appID		path		string	true	"应用 ID"
-//	@Param		envName		path		string	true	"环境名称"
-//	@Param		limit		query		int		false	"取前 N 个实例，1~50，默认 10"
-//	@Param		rankBy		query		string	false	"排名指标"	Enums(cpu_limit_usage,memory_limit_usage,cpu_usage,memory_usage)
-//	@Param		rankType	query		string	false	"排名方向，默认 top"	Enums(top, bottom)
-//	@Param		startTime	query		int		true	"排名时间范围的开始时间（Unix 时间戳，秒）"
-//	@Param		endTime		query		int		true	"排名时间范围的结束时间（Unix 时间戳，秒）"
-//	@Param		interval	query		int		false	"子查询步长（秒），最小 60，默认 60"
-//	@Param		method		query		string	false	"汇聚方法，默认 sum"	Enums(sum, max, min, count, avg)
-//	@Success	200			{object}	serializer.RankInstancesResp
-//	@Failure	400			{object}	bkerrs.GinErrorOutput
-//	@Router		/apps/{appID}/envs/{envName}/bkmonitor/instance-ranks [get]
+//	@Param		appID	path		string							true	"应用 ID"
+//	@Param		envName	path		string							true	"环境名称"
+//	@Param		body	body		serializer.RankInstancesQueryInput	true	"查询参数"
+//	@Success	200		{object}	serializer.RankInstancesResp
+//	@Failure	400		{object}	bkerrs.GinErrorOutput
+//	@Router		/apps/{appID}/envs/{envName}/bkmonitor/instance-ranks [post]
 func (h *Handler) RankInstances(c *gin.Context) {
 	ctx := c.Request.Context()
 	var uriInput serializer.AppEnvURIInput
 	var queryInput serializer.RankInstancesQueryInput
-	if err := ginutils.BindURIQuery(c, &uriInput, &queryInput); err != nil {
+	if err := ginutils.BindURIJSON(c, &uriInput, &queryInput); err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return
 	}
@@ -513,30 +508,20 @@ func (h *Handler) RankInstances(c *gin.Context) {
 		return
 	}
 
-	// 仅 AppModel 类型应用存在部署记录，才能拿到用于圈定候选实例的工作负载
-	if !appruntime.IsAppModelType(target.app.Type) {
-		bkerrs.AbortWithErr(c, bkerrs.Errorf(
-			bkerrs.ErrCodeInvalidArgument, "top instances is not supported for app type %s", target.app.Type,
-		))
-		return
-	}
-	// 取默认泳道（空泳道名）最新部署记录的主工作负载，只查部署记录、不访问集群
-	workloadKind, workloadName, err := appmodeldeploy.GetLatestWorkload(
-		ctx, h.registry.DB, target.app.ID, target.env.Name, "",
-	)
-	if err != nil {
-		if errors.Is(err, appmodeldeploy.ErrDeployRecordNotFound) {
-			bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeNotFound, "deploy record not found"))
+	// 传了实例时只在这批 Pod 中排名；否则取最新部署的工作负载，在它的全部 Pod 中排名
+	var workloadKind, workloadName string
+	if len(queryInput.Instances) == 0 {
+		if workloadKind, workloadName, err = h.getRankWorkload(ctx, target); err != nil {
+			bkerrs.AbortWithErr(c, err)
 			return
 		}
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get deployed workload"))
-		return
 	}
 
 	ranks, err := bkmmodel.NewMetricTimeSeriesService().RankInstances(ctx, &bkmmodel.InstanceRankQuery{
 		BkBizID:      target.bkBizID,
 		ClusterID:    target.env.Cluster.ClusterID,
 		Namespace:    target.env.Cluster.Namespace,
+		Instances:    queryInput.Instances,
 		WorkloadKind: workloadKind,
 		WorkloadName: workloadName,
 		RankBy:       queryInput.RankBy,
@@ -558,6 +543,25 @@ func (h *Handler) RankInstances(c *gin.Context) {
 			return &serializer.InstanceRankOutput{Instance: r.Instance, Value: r.Value, Unit: r.Unit}
 		}),
 	})
+}
+
+// getRankWorkload 取默认泳道（空泳道名）最新部署记录的主工作负载，用于圈定排名的候选 Pod；只查部署记录、不访问集群。
+// 仅 AppModel 类型应用存在部署记录
+func (h *Handler) getRankWorkload(ctx context.Context, target *instanceMonitorTarget) (string, string, error) {
+	if !appruntime.IsAppModelType(target.app.Type) {
+		return "", "", bkerrs.Errorf(
+			bkerrs.ErrCodeInvalidArgument,
+			"ranking all instances is not supported for app type %s, specify instances instead", target.app.Type,
+		)
+	}
+	kind, name, err := appmodeldeploy.GetLatestWorkload(ctx, h.registry.DB, target.app.ID, target.env.Name, "")
+	if err != nil {
+		if errors.Is(err, appmodeldeploy.ErrDeployRecordNotFound) {
+			return "", "", bkerrs.Wrap(err, bkerrs.ErrCodeNotFound, "deploy record not found")
+		}
+		return "", "", bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get deployed workload")
+	}
+	return kind, name, nil
 }
 
 // instanceMonitorTarget 实例监控查询的目标：应用、环境与蓝鲸监控业务 ID
