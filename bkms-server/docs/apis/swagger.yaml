@@ -8711,6 +8711,63 @@ definitions:
       data:
         $ref: '#/definitions/serializer.RainbowTConfOutput'
     type: object
+  serializer.RankInstancesQueryInput:
+    properties:
+      endTime:
+        description: EndTime 排名时间范围的结束时间（Unix 时间戳，秒）
+        minimum: 1
+        type: integer
+      instances:
+        description: |-
+          Instances 候选实例（Pod）名称，过滤空白后最多 50 个；为空时在最新部署的工作负载的全部 Pod 中排名，
+          非空时只在这批 Pod 中排名，不校验实例是否属于该环境
+        items:
+          type: string
+        type: array
+      interval:
+        description: Interval 子查询步长（秒），最小为 60 秒，建议与图表汇聚周期一致
+        type: integer
+      limit:
+        description: Limit 取前 N 个实例，取值 1~50，默认 10
+        maximum: 50
+        minimum: 1
+        type: integer
+      method:
+        description: Method 同一 Pod 内多个容器的数据如何合并，默认 sum，建议与图表汇聚方法一致
+        enum:
+        - sum
+        - max
+        - min
+        - count
+        - avg
+        type: string
+      rankBy:
+        description: |-
+          RankBy 排名指标，默认 cpu_limit_usage：
+            - cpu_limit_usage: CPU 使用率（用量 / limits）
+            - memory_limit_usage: 内存使用率（Working Set / limits）
+            - cpu_usage: CPU 用量（核数）
+            - memory_usage: 内存用量（Working Set，字节）
+        enum:
+        - cpu_limit_usage
+        - memory_limit_usage
+        - cpu_usage
+        - memory_usage
+        type: string
+      rankType:
+        description: RankType 排名方向：top 按排名指标平均值从高到低、bottom 从低到高，默认 top
+        enum:
+        - top
+        - bottom
+        type: string
+      startTime:
+        description: StartTime 排名时间范围的开始时间（Unix 时间戳，秒）
+        minimum: 1
+        type: integer
+    required:
+    - endTime
+    - startTime
+    type: object
   serializer.RankInstancesResp:
     properties:
       data:
@@ -16118,7 +16175,9 @@ paths:
       tags:
       - bkintegrations-bkmonitor
   /apps/{appID}/envs/{envName}/bkmonitor/instance-ranks:
-    get:
+    post:
+      consumes:
+      - application/json
       operationId: RankInstances
       parameters:
       - description: 应用 ID
@@ -16131,50 +16190,12 @@ paths:
         name: envName
         required: true
         type: string
-      - description: 取前 N 个实例，1~50，默认 10
-        in: query
-        name: limit
-        type: integer
-      - description: 排名指标
-        enum:
-        - cpu_limit_usage
-        - memory_limit_usage
-        - cpu_usage
-        - memory_usage
-        in: query
-        name: rankBy
-        type: string
-      - description: 排名方向，默认 top
-        enum:
-        - top
-        - bottom
-        in: query
-        name: rankType
-        type: string
-      - description: 排名时间范围的开始时间（Unix 时间戳，秒）
-        in: query
-        name: startTime
+      - description: 查询参数
+        in: body
+        name: body
         required: true
-        type: integer
-      - description: 排名时间范围的结束时间（Unix 时间戳，秒）
-        in: query
-        name: endTime
-        required: true
-        type: integer
-      - description: 子查询步长（秒），最小 60，默认 60
-        in: query
-        name: interval
-        type: integer
-      - description: 汇聚方法，默认 sum
-        enum:
-        - sum
-        - max
-        - min
-        - count
-        - avg
-        in: query
-        name: method
-        type: string
+        schema:
+          $ref: '#/definitions/serializer.RankInstancesQueryInput'
       produces:
       - application/json
       responses:

@@ -57,6 +57,7 @@ func init() {
 			panic("failed to register metric_key validator: " + err.Error())
 		}
 		v.RegisterStructValidation(validateGetInstanceTimeSeriesQueryInput, GetInstanceTimeSeriesQueryInput{})
+		v.RegisterStructValidation(validateRankInstancesQueryInput, RankInstancesQueryInput{})
 	}
 }
 
@@ -72,6 +73,15 @@ func validateGetInstanceTimeSeriesQueryInput(sl validator.StructLevel) {
 			"instances must contain at least one non-empty value", "")
 	}
 	if count > MaxInstances {
+		sl.ReportError(input.Instances, "Instances", "Instances",
+			fmt.Sprintf("instances must contain at most %d values", MaxInstances), "")
+	}
+}
+
+// validateRankInstancesQueryInput 结构体级校验：instances 可以为空，过滤空白后最多 MaxInstances 个
+func validateRankInstancesQueryInput(sl validator.StructLevel) {
+	input := sl.Current().Interface().(RankInstancesQueryInput)
+	if len(trimInstances(input.Instances)) > MaxInstances {
 		sl.ReportError(input.Instances, "Instances", "Instances",
 			fmt.Sprintf("instances must contain at most %d values", MaxInstances), "")
 	}
