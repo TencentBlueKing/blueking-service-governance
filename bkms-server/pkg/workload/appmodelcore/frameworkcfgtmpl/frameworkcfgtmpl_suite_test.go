@@ -16,7 +16,7 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
-package frameworktmpl_test
+package frameworkcfgtmpl_test
 
 import (
 	"testing"

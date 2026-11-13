@@ -23,7 +23,7 @@ import (
 	"time"
 
 	_ "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/validators" // register global validators
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/frameworktmpl"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/frameworkcfgtmpl"
 )
 
 // WorkspaceURIInput binds a workspace-scoped path.
@@ -52,8 +52,8 @@ type ListTemplatesQueryInput struct {
 type CreateTemplateInput struct {
 	// 框架：trpc、taf
 	Framework string `json:"framework" binding:"required"`
-	// 语言：go、cpp。框架只支持一种语言时（如 TAF）可以不填
-	Language string `json:"language"`
+	// 语言：go、cpp
+	Language string `json:"language" binding:"required"`
 	// 模板名称，同一框架、同一语言下不能重复，不能为「平台默认」
 	Name string `json:"name" binding:"required"`
 	// 框架配置文件名
@@ -65,11 +65,11 @@ type CreateTemplateInput struct {
 }
 
 // ToParams converts the input to create params.
-func (input *CreateTemplateInput) ToParams(operator string) frameworktmpl.CreateParams {
-	return frameworktmpl.CreateParams{
+func (input *CreateTemplateInput) ToParams(operator string) frameworkcfgtmpl.CreateParams {
+	return frameworkcfgtmpl.CreateParams{
 		Framework: input.Framework,
 		Language:  input.Language,
-		Definition: frameworktmpl.Definition{
+		Definition: frameworkcfgtmpl.Definition{
 			Name:     input.Name,
 			FileName: input.FileName,
 			Content:  input.Content,
@@ -92,9 +92,9 @@ type UpdateTemplateInput struct {
 }
 
 // ToParams converts the input to update params.
-func (input *UpdateTemplateInput) ToParams(operator string) frameworktmpl.UpdateParams {
-	return frameworktmpl.UpdateParams{
-		Definition: frameworktmpl.Definition{
+func (input *UpdateTemplateInput) ToParams(operator string) frameworkcfgtmpl.UpdateParams {
+	return frameworkcfgtmpl.UpdateParams{
+		Definition: frameworkcfgtmpl.Definition{
 			Name:     input.Name,
 			FileName: input.FileName,
 			Content:  input.Content,
@@ -133,7 +133,7 @@ type TemplateOutputObj struct {
 }
 
 // FromView fills the output from a template view.
-func (output *TemplateOutputObj) FromView(view *frameworktmpl.View) *TemplateOutputObj {
+func (output *TemplateOutputObj) FromView(view *frameworkcfgtmpl.View) *TemplateOutputObj {
 	*output = TemplateOutputObj{
 		ID:        view.ID,
 		Framework: view.Framework,

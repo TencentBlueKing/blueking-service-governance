@@ -16,12 +16,12 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
-// Package frameworktmpl 管理工作空间的框架配置模板。
+// Package frameworkcfgtmpl 管理工作空间的框架配置模板。
 //
 // 模板分平台内置与空间自定义两种：内置模板随代码发布、只读，不入库；
-// 自定义模板存储在 workspace_framework_templates 集合。模板只用于创建 tRPC、TAF
+// 自定义模板存储在 workspace_framework_config_templates 集合。模板只用于创建 tRPC、TAF
 // 应用时填充框架配置文件，不影响已创建的应用。
-package frameworktmpl
+package frameworkcfgtmpl
 
 import (
 	"time"

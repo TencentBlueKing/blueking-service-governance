@@ -1,7 +1,7 @@
 # 空间框架配置模板
 
 创建 tRPC、TAF 应用时，框架配置文件的初始内容来自模板。工作空间可以维护自己的模板，
-并为每个框架、语言指定默认模板。代码位于 `pkg/workload/appmodelcore/frameworktmpl`。
+并为每个框架、语言指定默认模板。代码位于 `pkg/workload/appmodelcore/frameworkcfgtmpl`。
 
 模板只用于创建应用时填充框架配置文件：前端选择模板后把内容和文件名填入
 `frameworkConfigFile`，创建接口与配置文件的存储都不感知模板。因此修改、删除模板不影响已创建的应用。
@@ -16,13 +16,13 @@
 | trpc | cpp | `trpc_cpp.yaml` | yaml |
 | taf | cpp | `config.conf` | taf |
 
-TAF 只支持 cpp，创建模板时语言可以不填，由后端补全为 `cpp`。这样所有分组共用同一套唯一约束。
+创建模板时框架和语言都必填，后端不做补全。即使某个框架目前只支持一种语言（如 TAF 只支持 cpp），也要显式传入，这样框架以后支持更多语言时接口语义不变。
 
 ## 平台内置模板与空间自定义模板
 
-- 内置模板放在 `frameworktmpl/builtin/`，通过 `go:embed` 打进二进制，每个分组恰好一个，
+- 内置模板放在 `frameworkcfgtmpl/builtin/`，通过 `go:embed` 打进二进制，每个分组恰好一个，
   名称固定为「平台默认」，ID 为 `builtin-{framework}-{language}`。内置模板只读，不入库。
-- 自定义模板存储在 `workspace_framework_templates` 集合，列表接口把两者拼接返回，
+- 自定义模板存储在 `workspace_framework_config_templates` 集合，列表接口把两者拼接返回，
   每个分组先列内置模板，再按更新时间倒序列自定义模板。
 
 ## 默认模板
@@ -38,7 +38,7 @@ TAF 只支持 cpp，创建模板时语言可以不填，由后端补全为 `cpp`
 
 ## 接口
 
-均挂在 `/workspaces/{workspaceID}/framework-templates` 下，查询需要空间查看权限，写操作需要空间编辑权限：
+均挂在 `/workspaces/{workspaceID}/framework-config-templates` 下，查询需要空间查看权限，写操作需要空间编辑权限：
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
@@ -52,11 +52,13 @@ TAF 只支持 cpp，创建模板时语言可以不填，由后端补全为 `cpp`
 ## 校验
 
 - 名称：去掉首尾空白后 1~64 个字符，不能为「平台默认」，同一分组下不重复；
-- 文件名：规则与应用配置文件名一致（字母、数字、`_`、`-`、`.`），最长 64；
+- 文件名：规则与应用配置文件名一致（字母、数字、`_`、`-`、`.`），最长 64。接口层面不限定取值，
+  前端固定传入分组的内置文件名且不允许修改。应用进程按启动参数或框架默认路径（如 tRPC-Go 的
+  `./trpc_go.yaml`）读取配置，改名后需要同步调整启动参数，否则部署成功但进程读不到配置；
 - 内容：不能为空，最大 64KB，按分组格式校验（复用 `appcfg.FrameworkPolicy.ValidateContent`）。
 
 ## 审计与清理
 
-- 写操作记录审计，资源类型为 `frameworkTemplate`，资源 ID 为模板 ID，并带上工作空间 ID；
+- 写操作记录审计，资源类型为 `frameworkConfigTemplate`，资源 ID 为模板 ID，并带上工作空间 ID；
   切换默认的审计记录不包含文件内容；
 - 删除工作空间前通过 `hooks.RegisterPreDeleteHooks` 清理该空间的全部模板。

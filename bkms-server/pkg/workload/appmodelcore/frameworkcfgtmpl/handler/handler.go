@@ -32,8 +32,8 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/perm"
 	storereg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/frameworktmpl"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/frameworktmpl/serializer"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/frameworkcfgtmpl"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/frameworkcfgtmpl/serializer"
 )
 
 // Handler handles workspace framework config template APIs.
@@ -48,10 +48,10 @@ func New(registry *storereg.Registry) *Handler {
 
 // ListTemplates lists framework config templates of a workspace.
 //
-//	@ID			ListWorkspaceFrameworkTemplates
+//	@ID			ListWorkspaceFrameworkConfigTemplates
 //	@Summary	查询工作空间框架配置模板列表
 //	@Description	返回平台内置模板与空间自定义模板，每个框架、语言先列内置模板；不返回模板内容
-//	@Tags		framework-templates
+//	@Tags		framework-config-templates
 //	@Produce	json
 //	@Security	BkUserInfo
 //	@Security	BkUserCredential
@@ -60,7 +60,7 @@ func New(registry *storereg.Registry) *Handler {
 //	@Param		language	query		string	false	"语言：go、cpp"
 //	@Success	200			{object}	serializer.ListTemplatesOutput
 //	@Failure	400			{object}	bkerrs.GinErrorOutput
-//	@Router		/workspaces/{workspaceID}/framework-templates [get]
+//	@Router		/workspaces/{workspaceID}/framework-config-templates [get]
 func (h *Handler) ListTemplates(c *gin.Context) {
 	var uri serializer.WorkspaceURIInput
 	var query serializer.ListTemplatesQueryInput
@@ -75,7 +75,7 @@ func (h *Handler) ListTemplates(c *gin.Context) {
 		return
 	}
 
-	views, err := frameworktmpl.List(ctx, h.registry.DB, workspace.ID, frameworktmpl.Group{
+	views, err := frameworkcfgtmpl.List(ctx, h.registry.DB, workspace.ID, frameworkcfgtmpl.Group{
 		Framework: query.Framework,
 		Language:  query.Language,
 	})
@@ -83,7 +83,7 @@ func (h *Handler) ListTemplates(c *gin.Context) {
 		bkerrs.AbortWithErr(c, apiError(err, "list framework templates"))
 		return
 	}
-	data := lo.Map(views, func(view *frameworktmpl.View, _ int) *serializer.TemplateOutputObj {
+	data := lo.Map(views, func(view *frameworkcfgtmpl.View, _ int) *serializer.TemplateOutputObj {
 		return new(serializer.TemplateOutputObj).FromView(view)
 	})
 	ginutils.OK(c, serializer.ListTemplatesOutput{Data: data})
@@ -91,9 +91,9 @@ func (h *Handler) ListTemplates(c *gin.Context) {
 
 // GetTemplate returns a framework config template with its content.
 //
-//	@ID			GetWorkspaceFrameworkTemplate
+//	@ID			GetWorkspaceFrameworkConfigTemplate
 //	@Summary	查询工作空间框架配置模板详情
-//	@Tags		framework-templates
+//	@Tags		framework-config-templates
 //	@Produce	json
 //	@Security	BkUserInfo
 //	@Security	BkUserCredential
@@ -101,7 +101,7 @@ func (h *Handler) ListTemplates(c *gin.Context) {
 //	@Param		templateID	path		string	true	"模板 ID，内置模板为 builtin-{framework}-{language}"
 //	@Success	200			{object}	serializer.TemplateOutput
 //	@Failure	400			{object}	bkerrs.GinErrorOutput
-//	@Router		/workspaces/{workspaceID}/framework-templates/{templateID} [get]
+//	@Router		/workspaces/{workspaceID}/framework-config-templates/{templateID} [get]
 func (h *Handler) GetTemplate(c *gin.Context) {
 	var uri serializer.TemplateURIInput
 	if err := ginutils.BindURI(c, &uri); err != nil {
@@ -115,7 +115,7 @@ func (h *Handler) GetTemplate(c *gin.Context) {
 		return
 	}
 
-	view, err := frameworktmpl.Get(ctx, h.registry.DB, workspace.ID, uri.TemplateID)
+	view, err := frameworkcfgtmpl.Get(ctx, h.registry.DB, workspace.ID, uri.TemplateID)
 	if err != nil {
 		bkerrs.AbortWithErr(c, apiError(err, "get framework template"))
 		return
@@ -125,9 +125,9 @@ func (h *Handler) GetTemplate(c *gin.Context) {
 
 // CreateTemplate creates a workspace framework config template.
 //
-//	@ID			CreateWorkspaceFrameworkTemplate
+//	@ID			CreateWorkspaceFrameworkConfigTemplate
 //	@Summary	新建工作空间框架配置模板
-//	@Tags		framework-templates
+//	@Tags		framework-config-templates
 //	@Accept		json
 //	@Produce	json
 //	@Security	BkUserInfo
@@ -136,7 +136,7 @@ func (h *Handler) GetTemplate(c *gin.Context) {
 //	@Param		body		body		serializer.CreateTemplateInput	true	"框架配置模板"
 //	@Success	200			{object}	serializer.TemplateOutput
 //	@Failure	400			{object}	bkerrs.GinErrorOutput
-//	@Router		/workspaces/{workspaceID}/framework-templates [post]
+//	@Router		/workspaces/{workspaceID}/framework-config-templates [post]
 func (h *Handler) CreateTemplate(c *gin.Context) {
 	var uri serializer.WorkspaceURIInput
 	var input serializer.CreateTemplateInput
@@ -151,7 +151,7 @@ func (h *Handler) CreateTemplate(c *gin.Context) {
 		return
 	}
 
-	created, err := frameworktmpl.Create(ctx, h.registry.DB, workspace.ID, input.ToParams(auth.MustGetUser(ctx).ID))
+	created, err := frameworkcfgtmpl.Create(ctx, h.registry.DB, workspace.ID, input.ToParams(auth.MustGetUser(ctx).ID))
 	if err != nil {
 		bkerrs.AbortWithErr(c, apiError(err, "create framework template"))
 		return
@@ -162,10 +162,10 @@ func (h *Handler) CreateTemplate(c *gin.Context) {
 
 // UpdateTemplate updates a workspace framework config template.
 //
-//	@ID			UpdateWorkspaceFrameworkTemplate
+//	@ID			UpdateWorkspaceFrameworkConfigTemplate
 //	@Summary	编辑工作空间框架配置模板
 //	@Description	框架与语言不可修改；平台内置模板只读
-//	@Tags		framework-templates
+//	@Tags		framework-config-templates
 //	@Accept		json
 //	@Produce	json
 //	@Security	BkUserInfo
@@ -175,7 +175,7 @@ func (h *Handler) CreateTemplate(c *gin.Context) {
 //	@Param		body		body		serializer.UpdateTemplateInput	true	"框架配置模板"
 //	@Success	200			{object}	serializer.TemplateOutput
 //	@Failure	400			{object}	bkerrs.GinErrorOutput
-//	@Router		/workspaces/{workspaceID}/framework-templates/{templateID} [put]
+//	@Router		/workspaces/{workspaceID}/framework-config-templates/{templateID} [put]
 func (h *Handler) UpdateTemplate(c *gin.Context) {
 	var uri serializer.TemplateURIInput
 	var input serializer.UpdateTemplateInput
@@ -190,7 +190,7 @@ func (h *Handler) UpdateTemplate(c *gin.Context) {
 		return
 	}
 
-	before, after, err := frameworktmpl.Update(
+	before, after, err := frameworkcfgtmpl.Update(
 		ctx, h.registry.DB, workspace.ID, uri.TemplateID, input.ToParams(auth.MustGetUser(ctx).ID),
 	)
 	if err != nil {
@@ -203,10 +203,10 @@ func (h *Handler) UpdateTemplate(c *gin.Context) {
 
 // DeleteTemplate deletes a workspace framework config template.
 //
-//	@ID			DeleteWorkspaceFrameworkTemplate
+//	@ID			DeleteWorkspaceFrameworkConfigTemplate
 //	@Summary	删除工作空间框架配置模板
 //	@Description	删除默认模板后，该框架、语言回落到平台内置模板；平台内置模板不能删除
-//	@Tags		framework-templates
+//	@Tags		framework-config-templates
 //	@Produce	json
 //	@Security	BkUserInfo
 //	@Security	BkUserCredential
@@ -214,7 +214,7 @@ func (h *Handler) UpdateTemplate(c *gin.Context) {
 //	@Param		templateID	path		string	true	"模板 ID"
 //	@Success	200			{object}	serializer.EmptyOutput
 //	@Failure	400			{object}	bkerrs.GinErrorOutput
-//	@Router		/workspaces/{workspaceID}/framework-templates/{templateID} [delete]
+//	@Router		/workspaces/{workspaceID}/framework-config-templates/{templateID} [delete]
 func (h *Handler) DeleteTemplate(c *gin.Context) {
 	var uri serializer.TemplateURIInput
 	if err := ginutils.BindURI(c, &uri); err != nil {
@@ -228,7 +228,7 @@ func (h *Handler) DeleteTemplate(c *gin.Context) {
 		return
 	}
 
-	deleted, err := frameworktmpl.Delete(ctx, h.registry.DB, workspace.ID, uri.TemplateID)
+	deleted, err := frameworkcfgtmpl.Delete(ctx, h.registry.DB, workspace.ID, uri.TemplateID)
 	if err != nil {
 		bkerrs.AbortWithErr(c, apiError(err, "delete framework template"))
 		return
@@ -239,10 +239,10 @@ func (h *Handler) DeleteTemplate(c *gin.Context) {
 
 // SetDefaultTemplate sets a template as the default of its framework and language.
 //
-//	@ID			SetWorkspaceFrameworkTemplateDefault
+//	@ID			SetWorkspaceFrameworkConfigTemplateDefault
 //	@Summary	设为默认框架配置模板
 //	@Description	创建应用时默认使用该模板；对平台内置模板调用表示恢复使用平台默认模板
-//	@Tags		framework-templates
+//	@Tags		framework-config-templates
 //	@Produce	json
 //	@Security	BkUserInfo
 //	@Security	BkUserCredential
@@ -250,7 +250,7 @@ func (h *Handler) DeleteTemplate(c *gin.Context) {
 //	@Param		templateID	path		string	true	"模板 ID，内置模板为 builtin-{framework}-{language}"
 //	@Success	200			{object}	serializer.TemplateOutput
 //	@Failure	400			{object}	bkerrs.GinErrorOutput
-//	@Router		/workspaces/{workspaceID}/framework-templates/{templateID}/default [put]
+//	@Router		/workspaces/{workspaceID}/framework-config-templates/{templateID}/default [put]
 func (h *Handler) SetDefaultTemplate(c *gin.Context) {
 	var uri serializer.TemplateURIInput
 	if err := ginutils.BindURI(c, &uri); err != nil {
@@ -264,7 +264,7 @@ func (h *Handler) SetDefaultTemplate(c *gin.Context) {
 		return
 	}
 
-	before, after, err := frameworktmpl.SetDefault(ctx, h.registry.DB, workspace.ID, uri.TemplateID)
+	before, after, err := frameworkcfgtmpl.SetDefault(ctx, h.registry.DB, workspace.ID, uri.TemplateID)
 	if err != nil {
 		bkerrs.AbortWithErr(c, apiError(err, "set default framework template"))
 		return
@@ -283,7 +283,7 @@ func (h *Handler) SetDefaultTemplate(c *gin.Context) {
 	ginutils.OK(c, serializer.TemplateOutput{Data: new(serializer.TemplateOutputObj).FromView(after)})
 }
 
-func withoutContent(view *frameworktmpl.View) *frameworktmpl.View {
+func withoutContent(view *frameworkcfgtmpl.View) *frameworkcfgtmpl.View {
 	copied := *view
 	copied.Content = ""
 	return &copied
@@ -291,11 +291,11 @@ func withoutContent(view *frameworktmpl.View) *frameworktmpl.View {
 
 func apiError(err error, operation string) error {
 	switch {
-	case errors.Is(err, frameworktmpl.ErrTemplateNotFound):
+	case errors.Is(err, frameworkcfgtmpl.ErrTemplateNotFound):
 		return bkerrs.Wrap(err, bkerrs.ErrCodeNotFound, operation)
-	case errors.Is(err, frameworktmpl.ErrInvalidTemplate),
-		errors.Is(err, frameworktmpl.ErrBuiltinReadOnly),
-		errors.Is(err, frameworktmpl.ErrTemplateConflict):
+	case errors.Is(err, frameworkcfgtmpl.ErrInvalidTemplate),
+		errors.Is(err, frameworkcfgtmpl.ErrBuiltinReadOnly),
+		errors.Is(err, frameworkcfgtmpl.ErrTemplateConflict):
 		return bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, operation)
 	default:
 		return bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, operation)
@@ -307,7 +307,7 @@ func recordAudit(
 	workspaceID string,
 	operation audit.OperationType,
 	templateID string,
-	before, after *frameworktmpl.View,
+	before, after *frameworkcfgtmpl.View,
 ) {
 	options := []audit.Option{audit.WithWorkspaceID(workspaceID)}
 	if before != nil {
@@ -319,7 +319,7 @@ func recordAudit(
 	go audit.AddOperationRecordAsync(
 		context.WithoutCancel(ctx),
 		operation,
-		audit.ResourceTypeFrameworkTemplate,
+		audit.ResourceTypeFrameworkConfigTemplate,
 		templateID,
 		options...,
 	)

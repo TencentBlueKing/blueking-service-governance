@@ -1297,7 +1297,7 @@ definitions:
     type: object
   github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_workload_appmodelcore_appspec_serializer.EmptyOutput:
     type: object
-  ? github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_workload_appmodelcore_frameworktmpl_serializer.EmptyOutput
+  ? github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_workload_appmodelcore_frameworkcfgtmpl_serializer.EmptyOutput
   : type: object
   github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_workload_envvars_serializer.EmptyOutput:
     type: object
@@ -4139,7 +4139,7 @@ definitions:
         description: 是否设为创建应用时默认使用的模板
         type: boolean
       language:
-        description: 语言：go、cpp。框架只支持一种语言时（如 TAF）可以不填
+        description: 语言：go、cpp
         type: string
       name:
         description: 模板名称，同一框架、同一语言下不能重复，不能为「平台默认」
@@ -4148,6 +4148,7 @@ definitions:
     - content
     - fileName
     - framework
+    - language
     - name
     type: object
   serializer.CreateWorkspaceComponentInput:
@@ -23159,10 +23160,10 @@ paths:
       summary: 获取指定环境下的泳道列表
       tags:
       - env
-  /workspaces/{workspaceID}/framework-templates:
+  /workspaces/{workspaceID}/framework-config-templates:
     get:
       description: 返回平台内置模板与空间自定义模板，每个框架、语言先列内置模板；不返回模板内容
-      operationId: ListWorkspaceFrameworkTemplates
+      operationId: ListWorkspaceFrameworkConfigTemplates
       parameters:
       - description: 工作空间 ID
         in: path
@@ -23193,11 +23194,11 @@ paths:
       - BkUserCredential: []
       summary: 查询工作空间框架配置模板列表
       tags:
-      - framework-templates
+      - framework-config-templates
     post:
       consumes:
       - application/json
-      operationId: CreateWorkspaceFrameworkTemplate
+      operationId: CreateWorkspaceFrameworkConfigTemplate
       parameters:
       - description: 工作空间 ID
         in: path
@@ -23226,11 +23227,11 @@ paths:
       - BkUserCredential: []
       summary: 新建工作空间框架配置模板
       tags:
-      - framework-templates
-  /workspaces/{workspaceID}/framework-templates/{templateID}:
+      - framework-config-templates
+  /workspaces/{workspaceID}/framework-config-templates/{templateID}:
     delete:
       description: 删除默认模板后，该框架、语言回落到平台内置模板；平台内置模板不能删除
-      operationId: DeleteWorkspaceFrameworkTemplate
+      operationId: DeleteWorkspaceFrameworkConfigTemplate
       parameters:
       - description: 工作空间 ID
         in: path
@@ -23248,7 +23249,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_workload_appmodelcore_frameworktmpl_serializer.EmptyOutput'
+            $ref: '#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_workload_appmodelcore_frameworkcfgtmpl_serializer.EmptyOutput'
         "400":
           description: Bad Request
           schema:
@@ -23258,9 +23259,9 @@ paths:
       - BkUserCredential: []
       summary: 删除工作空间框架配置模板
       tags:
-      - framework-templates
+      - framework-config-templates
     get:
-      operationId: GetWorkspaceFrameworkTemplate
+      operationId: GetWorkspaceFrameworkConfigTemplate
       parameters:
       - description: 工作空间 ID
         in: path
@@ -23288,12 +23289,12 @@ paths:
       - BkUserCredential: []
       summary: 查询工作空间框架配置模板详情
       tags:
-      - framework-templates
+      - framework-config-templates
     put:
       consumes:
       - application/json
       description: 框架与语言不可修改；平台内置模板只读
-      operationId: UpdateWorkspaceFrameworkTemplate
+      operationId: UpdateWorkspaceFrameworkConfigTemplate
       parameters:
       - description: 工作空间 ID
         in: path
@@ -23327,11 +23328,11 @@ paths:
       - BkUserCredential: []
       summary: 编辑工作空间框架配置模板
       tags:
-      - framework-templates
-  /workspaces/{workspaceID}/framework-templates/{templateID}/default:
+      - framework-config-templates
+  /workspaces/{workspaceID}/framework-config-templates/{templateID}/default:
     put:
       description: 创建应用时默认使用该模板；对平台内置模板调用表示恢复使用平台默认模板
-      operationId: SetWorkspaceFrameworkTemplateDefault
+      operationId: SetWorkspaceFrameworkConfigTemplateDefault
       parameters:
       - description: 工作空间 ID
         in: path
@@ -23359,7 +23360,7 @@ paths:
       - BkUserCredential: []
       summary: 设为默认框架配置模板
       tags:
-      - framework-templates
+      - framework-config-templates
   /workspaces/{workspaceID}/info:
     put:
       consumes:

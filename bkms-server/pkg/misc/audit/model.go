@@ -159,8 +159,8 @@ const (
 	ResourceTypeAlertStrategy ResourceType = "alertStrategy"
 	// ResourceTypeDashboard 应用仪表盘绑定
 	ResourceTypeDashboard ResourceType = "dashboard"
-	// ResourceTypeFrameworkTemplate 空间框架配置模板
-	ResourceTypeFrameworkTemplate ResourceType = "frameworkTemplate"
+	// ResourceTypeFrameworkConfigTemplate 空间框架配置模板
+	ResourceTypeFrameworkConfigTemplate ResourceType = "frameworkConfigTemplate"
 )
 
 // AllResourceTypes 所有资源类型
@@ -174,7 +174,7 @@ var AllResourceTypes = []ResourceType{
 	ResourceTypePortPool,
 	ResourceTypeAlertStrategy,
 	ResourceTypeDashboard,
-	ResourceTypeFrameworkTemplate,
+	ResourceTypeFrameworkConfigTemplate,
 }
 
 // DisplayName 资源类型展示用名称 TODO 国际化
@@ -198,7 +198,7 @@ func (t ResourceType) DisplayName() string {
 		return "告警策略"
 	case ResourceTypeDashboard:
 		return "仪表盘"
-	case ResourceTypeFrameworkTemplate:
+	case ResourceTypeFrameworkConfigTemplate:
 		return "框架配置模板"
 	default:
 		// 默认返回原始值

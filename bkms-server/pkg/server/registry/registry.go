@@ -37,7 +37,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
 	alertstrategyhooks "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/bkmonitor/alert/strategy/hooks"
 	appdefaultshooks "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appdefaults/hooks"
-	frameworktmplhooks "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/frameworktmpl/hooks"
+	frameworkcfgtmplhooks "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/frameworkcfgtmpl/hooks"
 	envvarhooks "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars/hooks"
 )
 
@@ -115,7 +115,7 @@ func (r *Registry) registerStoreHooks() {
 	appcfghooks.RegisterDeleteHooks(r.DB)
 	alertstrategyhooks.RegisterUpdateHooks(r.DB)
 	appdefaultshooks.RegisterPreDeleteHooks(r.DB)
-	frameworktmplhooks.RegisterPreDeleteHooks(r.DB)
+	frameworkcfgtmplhooks.RegisterPreDeleteHooks(r.DB)
 	releasestrategyhooks.RegisterPreDeleteHooks(r.DB)
 	cfgswitchmodel.RegisterPreDeleteHooks(r.DB)
 }
