@@ -37,6 +37,50 @@ func (_m *MockTokenClient) EXPECT() *MockTokenClient_Expecter {
 	return &MockTokenClient_Expecter{mock: &_m.Mock}
 }
 
+// CredentialName provides a mock function for the type MockTokenClient
+func (_mock *MockTokenClient) CredentialName() string {
+	ret := _mock.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for CredentialName")
+	}
+
+	var r0 string
+	if returnFunc, ok := ret.Get(0).(func() string); ok {
+		r0 = returnFunc()
+	} else {
+		r0 = ret.Get(0).(string)
+	}
+	return r0
+}
+
+// MockTokenClient_CredentialName_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'CredentialName'
+type MockTokenClient_CredentialName_Call struct {
+	*mock.Call
+}
+
+// CredentialName is a helper method to define mock.On call
+func (_e *MockTokenClient_Expecter) CredentialName() *MockTokenClient_CredentialName_Call {
+	return &MockTokenClient_CredentialName_Call{Call: _e.mock.On("CredentialName")}
+}
+
+func (_c *MockTokenClient_CredentialName_Call) Run(run func()) *MockTokenClient_CredentialName_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *MockTokenClient_CredentialName_Call) Return(s string) *MockTokenClient_CredentialName_Call {
+	_c.Call.Return(s)
+	return _c
+}
+
+func (_c *MockTokenClient_CredentialName_Call) RunAndReturn(run func() string) *MockTokenClient_CredentialName_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // GetToken provides a mock function for the type MockTokenClient
 func (_mock *MockTokenClient) GetToken(ctx context.Context, username string, credentials map[string]string, envName string, needNewToken bool) (*AccessToken, error) {
 	ret := _mock.Called(ctx, username, credentials, envName, needNewToken)
@@ -265,6 +309,50 @@ func (_c *MockTokenClient_RefreshToken_Call) Return(accessToken *AccessToken, er
 }
 
 func (_c *MockTokenClient_RefreshToken_Call) RunAndReturn(run func(ctx context.Context, refreshToken string, envName string, needNewToken bool) (*AccessToken, error)) *MockTokenClient_RefreshToken_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// RequiresUsername provides a mock function for the type MockTokenClient
+func (_mock *MockTokenClient) RequiresUsername() bool {
+	ret := _mock.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for RequiresUsername")
+	}
+
+	var r0 bool
+	if returnFunc, ok := ret.Get(0).(func() bool); ok {
+		r0 = returnFunc()
+	} else {
+		r0 = ret.Get(0).(bool)
+	}
+	return r0
+}
+
+// MockTokenClient_RequiresUsername_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'RequiresUsername'
+type MockTokenClient_RequiresUsername_Call struct {
+	*mock.Call
+}
+
+// RequiresUsername is a helper method to define mock.On call
+func (_e *MockTokenClient_Expecter) RequiresUsername() *MockTokenClient_RequiresUsername_Call {
+	return &MockTokenClient_RequiresUsername_Call{Call: _e.mock.On("RequiresUsername")}
+}
+
+func (_c *MockTokenClient_RequiresUsername_Call) Run(run func()) *MockTokenClient_RequiresUsername_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *MockTokenClient_RequiresUsername_Call) Return(b bool) *MockTokenClient_RequiresUsername_Call {
+	_c.Call.Return(b)
+	return _c
+}
+
+func (_c *MockTokenClient_RequiresUsername_Call) RunAndReturn(run func() bool) *MockTokenClient_RequiresUsername_Call {
 	_c.Call.Return(run)
 	return _c
 }

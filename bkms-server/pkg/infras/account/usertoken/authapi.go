@@ -53,6 +53,12 @@ type APIGatewayTokenClient struct {
 	BkAppSecret string
 }
 
+// CredentialName returns "bk_ticket".
+func (b *APIGatewayTokenClient) CredentialName() string { return CredentialBkTicket }
+
+// RequiresUsername returns true, the token service needs the username along with the bk_ticket.
+func (b *APIGatewayTokenClient) RequiresUsername() bool { return true }
+
 // GetToken gets an access token of the given user.
 //
 // - username is the username of the user.

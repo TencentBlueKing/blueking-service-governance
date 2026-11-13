@@ -111,6 +111,10 @@ func Load(ctx context.Context, cfgFile string) (*Config, error) {
 		return nil, errors.Wrap(err, "validate AccountConfig")
 	}
 
+	if !cfg.Account.UseSSMTokenService() && cfg.Account.AuthBaseURL == "" {
+		return nil, errors.New("account.authBaseURL is required unless backendType is bk_token and ssmBaseURL is set")
+	}
+
 	if err := validateBkLoginDependencies(&cfg); err != nil {
 		return nil, err
 	}

@@ -18,6 +18,8 @@
 
 package auth
 
+import "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/usertoken"
+
 const (
 	// BKAuthKey for http header or trpc metadata
 	BKAuthKey = "X-Bk-Authed-User-Info"
@@ -27,9 +29,9 @@ const (
 	// CredKeyAccessToken 认证凭据类型：access_token
 	CredKeyAccessToken = "access_token"
 	// CredKeyBkTicket 认证凭据类型：bk_ticket
-	CredKeyBkTicket = "bk_ticket"
+	CredKeyBkTicket = usertoken.CredentialBkTicket
 	// CredKeyBkToken 认证凭据类型：bk_token
-	CredKeyBkToken = "bk_token"
+	CredKeyBkToken = usertoken.CredentialBkToken
 )
 
 // RequestUser 表示请求上下文中的用户身份。

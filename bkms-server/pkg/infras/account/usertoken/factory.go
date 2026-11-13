@@ -31,29 +31,17 @@ const (
 	CredentialBkToken  = "bk_token"
 )
 
-// ClientConfig 是创建 TokenClient 所需的配置
-type ClientConfig struct {
-	// AuthBackendType 是用户登录认证使用的后端类型，取值见 config.AuthBackendBkTicket / AuthBackendBkToken
-	AuthBackendType string
-	// APIGatewayBaseURL 是 API 网关 token 服务的基础 URL
-	APIGatewayBaseURL string
-	// SSMBaseURL 是蓝鲸 SSM 服务的基础 URL
-	SSMBaseURL  string
-	BkAppCode   string
-	BkAppSecret string
-}
-
-// NewTokenClient 根据登录认证方式选择 token 服务，返回 client 以及签发 token 时所需的用户凭证名称。
+// NewTokenClient 根据账号配置选择 token 服务，选择规则见 config.AccountConfig.UseSSMTokenService。
 //
-// 登录态为 bk_token 且配置了 SSM 地址时使用 SSM，否则使用 API 网关 token 服务（需要 bk_ticket）。
-// 未配置 SSM 时回退到 API 网关，是为了兼容此前未显式配置 backendType（默认 bk_token）的存量部署。
+// 登录态为 bk_token 但未配置 SSM 地址时回退到 API 网关 token 服务（需要 bk_ticket），
+// 是为了兼容此前未显式配置 backendType（默认 bk_token）的存量部署。
 // 返回的 client 同时用于签发和校验 token，两种服务签发的 token 互不认可，切换后需重新获取。
-func NewTokenClient(ctx context.Context, cfg ClientConfig) (TokenClient, string) {
-	if cfg.AuthBackendType == config.AuthBackendBkToken {
-		if cfg.SSMBaseURL != "" {
-			return NewSSMTokenClient(cfg.SSMBaseURL, cfg.BkAppCode, cfg.BkAppSecret), CredentialBkToken
-		}
+func NewTokenClient(ctx context.Context, account config.AccountConfig, app config.BkAppConfig) TokenClient {
+	if account.UseSSMTokenService() {
+		return NewSSMTokenClient(account.SSMBaseURL, app.Code, app.Secret)
+	}
+	if account.BackendType == config.AuthBackendBkToken {
 		log.Warn(ctx, "account.ssmBaseURL is not configured, user token falls back to the API gateway token service")
 	}
-	return NewAPIGatewayTokenClient(cfg.APIGatewayBaseURL, cfg.BkAppCode, cfg.BkAppSecret), CredentialBkTicket
+	return NewAPIGatewayTokenClient(account.AuthBaseURL, app.Code, app.Secret)
 }
