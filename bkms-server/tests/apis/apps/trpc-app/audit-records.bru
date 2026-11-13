@@ -30,14 +30,13 @@ tests {
       !item.group.envName
     );
 
+    // 旧 trpc-spec 接口按新模型处理，只修改启动配置，不写 TrpcConfig 等旧字段
     const record = candidates.find((item) => {
       const after = item.data?.after ? JSON.parse(item.data.after) : null;
       return after &&
         after.Workload &&
-        after.Workload.TrpcConfig &&
-        after.Workload.TrpcConfig.Language === "go" &&
-        !after.Workload.TrpcConfig.FileName &&
-        !after.Workload.TrpcConfig.FilePath;
+        !after.Workload.Type &&
+        !after.Workload.TrpcConfig?.Language;
     });
 
     expect(record, `matched records: ${JSON.stringify(candidates, null, 2)}`).to.exist;
