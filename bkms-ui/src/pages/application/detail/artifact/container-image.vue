@@ -92,6 +92,7 @@
         </Button>
       </Alert>
       <Table
+        ref="tableRef"
         v-bkloading="{ loading: isLoading, zIndex: 8 }"
         auto-resize
         class="mt-[16px] w-full artifact-table"
@@ -133,28 +134,33 @@
           fixed="left"
           :label="t('镜像 Tag')"
           show-overflow="tooltip"
-          :width="160"
+          :width="200"
         >
           <template #default="{ row }">
-            {{ row.tag || '--' }}
-            <Tag
-              v-if="row.isPromoted"
-              v-bk-tooltips="{
-                content: getPromotedTooltipContent(row),
-                extCls: 'promoted-tag-tooltip',
-              }"
-              class="ml-[8px]"
-              theme="success"
-            >
-              <div class="flex items-center gap-[4px] relative">
-                <Done
-                  class="absolute top-[-2px] left-[-7px]"
-                  :height="26"
-                  :width="26"
-                ></Done>
-                <span class="ml-[18px]">{{ $t('已晋级') }}</span>
-              </div>
-            </Tag>
+            <div class="flex min-w-0 items-center">
+              <span class="artifact-tag-text truncate">
+                {{ row.tag || '--' }}
+              </span>
+              <Tag
+                v-if="row.isPromoted"
+                v-bk-tooltips="{
+                  content: getPromotedTooltipContent(row),
+                  extCls: 'promoted-tag-tooltip',
+                }"
+                class="ml-[8px] shrink-0"
+                theme="success"
+                @mouseenter.stop="handlePromotedTagMouseEnter"
+              >
+                <div class="flex items-center gap-[4px] relative">
+                  <Done
+                    class="absolute top-[-2px] left-[-7px]"
+                    :height="26"
+                    :width="26"
+                  ></Done>
+                  <span class="ml-[18px]">{{ $t('已晋级') }}</span>
+                </div>
+              </Tag>
+            </div>
           </template>
         </TableColumn>
         <!-- 源材料：与构建管理一致，分支 / Tag 为纯文本，Commit 为链接 -->
@@ -402,6 +408,8 @@
 
   const ARTIFACT_POLLING_INTERVAL = 60 * 1000;
 
+  const tableRef = ref<null | { getVxeTableInstance?: () => { closeTooltip?: () => void } }>(null);
+
   const ExpandContent = defineAsyncComponent(() => import('./components/artifact-expand.vue'));
 
   const { t } = useI18n();
@@ -442,7 +450,15 @@
       column: { field?: string };
       row: AppImageOutputObj;
     }) => {
-      if (column.field === 'tag' && row.isPromoted) return '';
+      if (column.field === 'tag') {
+        // 截断发生在内部 .artifact-tag-text 上，单元格自身不溢出，需按内部文本溢出判断
+        const textElement = cell.querySelector<HTMLElement>('.artifact-tag-text');
+        if (textElement && textElement.scrollWidth > textElement.clientWidth) {
+          return row.tag || '';
+        }
+        // 未溢出：已晋级行"已晋级"标识自带 tooltip，抑制默认 tooltip 避免冲突
+        return row.isPromoted ? '' : undefined;
+      }
       // 源材料内容溢出时展示完整修订 + commit 短哈希，与构建管理一致
       if (column.field === 'sourceMaterial') {
         const overflowElement = cell.children[0] as HTMLElement | undefined;
@@ -575,6 +591,14 @@
   function handleClearFilters() {
     searchValue.value = [];
     fetchArtifactList();
+  }
+
+  /**
+   * hover「已晋级」Tag 时：阻断 mouseenter 冒泡避免触发表格 tooltip，
+   * 并关闭可能已打开的表格 tooltip（如先 hover 溢出文本再移入 Tag）
+   */
+  function handlePromotedTagMouseEnter() {
+    tableRef.value?.getVxeTableInstance?.()?.closeTooltip?.();
   }
 
   /** 跳转代码仓库 commit 页 */
