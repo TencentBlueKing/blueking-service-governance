@@ -255,6 +255,8 @@ const (
 	AttributeImageRegistry Attribute = "imageRegistry"
 	// AttributeBatchRelease 分批发布（手动操作）
 	AttributeBatchRelease Attribute = "batchRelease"
+	// AttributePolarisAccessPoint 空间北极星接入点
+	AttributePolarisAccessPoint Attribute = "polarisAccessPoint"
 )
 
 // DisplayName 属性展示用名称 TODO 国际化
@@ -310,6 +312,8 @@ func (t Attribute) DisplayName() string {
 		return "镜像仓库"
 	case AttributeBatchRelease:
 		return "分批发布"
+	case AttributePolarisAccessPoint:
+		return "北极星接入点"
 	default:
 		// 默认返回原始值
 		return string(t)

@@ -3,12 +3,10 @@ definitions:
   accesspoint.FailureReason:
     enum:
     - networkUnreachable
-    - clientAuthEnabled
     - tokenInvalid
     type: string
     x-enum-varnames:
     - FailureNetworkUnreachable
-    - FailureClientAuthEnabled
     - FailureTokenInvalid
   accesspoint.OperatorStatus:
     enum:
@@ -3458,9 +3456,6 @@ definitions:
       checkedAt:
         description: 测试时间
         type: string
-      clientAuth:
-        description: 是否开启客户端鉴权
-        type: boolean
       consoleAuth:
         description: 是否开启控制台鉴权
         type: boolean
@@ -3473,11 +3468,9 @@ definitions:
       reason:
         allOf:
         - $ref: '#/definitions/accesspoint.FailureReason'
-        description: 失败的原因，通过时为空：networkUnreachable 网络不通 / clientAuthEnabled 开启了客户端鉴权
-          / tokenInvalid Token 无效
+        description: 失败的原因，通过时为空：networkUnreachable 网络不通 / tokenInvalid Token 无效
         enum:
         - networkUnreachable
-        - clientAuthEnabled
         - tokenInvalid
     type: object
   serializer.ConnectivityTestInput:
@@ -3502,9 +3495,6 @@ definitions:
     type: object
   serializer.ConnectivityTestOutput:
     properties:
-      clientAuth:
-        description: 是否开启客户端鉴权
-        type: boolean
       consoleAuth:
         description: 是否开启控制台鉴权
         type: boolean
@@ -3522,11 +3512,9 @@ definitions:
       reason:
         allOf:
         - $ref: '#/definitions/accesspoint.FailureReason'
-        description: 失败的原因，通过时为空：networkUnreachable 网络不通 / clientAuthEnabled 开启了客户端鉴权
-          / tokenInvalid Token 无效
+        description: 失败的原因，通过时为空：networkUnreachable 网络不通 / tokenInvalid Token 无效
         enum:
         - networkUnreachable
-        - clientAuthEnabled
         - tokenInvalid
     type: object
   serializer.ConnectivityTestResponse:
@@ -4375,9 +4363,9 @@ definitions:
         type: integer
       bkCIProjectID:
         description: |-
-          蓝盾项目 ID;
-          创建时，新建容器项目，无需填写
-          创建时，绑定已有容器项目，必填.
+          蓝盾项目 ID / 绑定容器项目时的 BCS 项目 code。
+          创建时，新建容器项目，无需填写。
+          创建时，绑定已有容器项目，必填。
         type: string
       description:
         description: 描述信息（0-512 字符）
@@ -23654,7 +23642,7 @@ paths:
       consumes:
       - application/json
       description: |-
-        保存前服务端重新执行连通测试，失败或北极星开启了客户端鉴权时拒绝；Token 选填，加密存储。
+        保存前服务端重新执行连通测试，失败时拒绝；Token 选填，加密存储。
         传入 clusterIDs 时同时把这些集群绑定到该接入点
       operationId: CreatePolarisAccessPoint
       parameters:
@@ -23838,7 +23826,7 @@ paths:
       - application/json
       description: |-
         依次检查网络、鉴权开关、Token，返回失败的原因与北极星上的命名空间，整体 10 秒超时。
-        传入已有接入点 ID 且 token 为空时使用已保存的 Token，并记录本次结果
+        传入已有接入点 ID 时记录本次结果；此时 token 缺省时使用已保存的 Token，显式传空字符串表示不带 Token
       operationId: TestPolarisAccessPointConnectivity
       parameters:
       - description: 工作空间 ID

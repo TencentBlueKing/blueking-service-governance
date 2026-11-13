@@ -27,9 +27,9 @@ import (
 // ConfigUsage 一份固定使用某个接入点的北极星配置
 type ConfigUsage struct {
 	// AppID 配置所属应用 ID
-	AppID string
+	AppID string `json:"appID"`
 	// ConfigName 配置名称
-	ConfigName string
+	ConfigName string `json:"configName"`
 }
 
 // ConfigUsageLister 返回使用指定 accessPointID 的全部北极星配置，没有时返回空切片。
