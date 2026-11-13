@@ -31,7 +31,8 @@
  *           ⑨ 进行中 / 失败禁用顶部「部署」入口，完成 / 已回滚不阻塞
  *           ⑩ 操作在途时所有入口置灰，重复点击不重复发请求
  *           ⑪ 完成态关闭后按 deployID 记住
- *           ⑫ 点击横幅「查看发布进度」隐藏横幅并切换为灰度发布进度视图（独立组件，互斥渲染）
+ *           ⑫ 点击横幅「查看发布详情」隐藏横幅并切换为灰度发布进度视图（独立组件，互斥渲染；
+ *              标题行策略段 + ⓘ 浮层收纳低频核对字段，元信息行仅失败态保留失败原因，步骤条标题带换算累计实例数）
  *           ⑬ 进度视图内操作按钮全部平铺（无「更多」），复用横幅同一操作链路
  *           ⑭ 进度视图点「返回实例列表」复原回横幅态
  *           ⑮ 骨架占位仅在「loading 且无进度快照」时展示：环境切换收旧横幅进骨架态；
@@ -42,7 +43,7 @@
  *       ⑤ 定时暂停继续发布 ⑥ 批次序号未回填仍展示按钮 ⑦ 已完成→成功 Alert + 关闭记忆
  *       ⑧ 失败→回退上一批 ⑨ 已回滚→提示 + 部署可用 ⑩ 非分批发布不请求 ⑪ 操作失败保留状态
  *       ⑫ 请求挂起→按钮置灰且不重发→返回后恢复 ⑬ 未部署环境不请求进度
- *       ⑭ 查看发布进度→横幅隐藏 + 面板呈现 ⑮ 面板平铺按钮复用确认链路 ⑯ 返回实例列表
+ *       ⑭ 查看发布详情→横幅隐藏 + 面板呈现 ⑮ 面板平铺按钮复用确认链路 ⑯ 返回实例列表
  *       ⑰ 切换环境→旧横幅收起 + 骨架占位→新环境进度返回后展示新横幅 ⑱ 关闭后轮询补查→骨架不出现
  *       ⑲ 两个环境分别关闭→切回已关闭环境仍隐藏 + 记忆落 sessionStorage（localStorage 无残留）
  * 变异验证：M1 环境切换不重置快照（deploy.vue watch 注销）→ ⑰ 红；M2 showSkeleton 退化为只看
@@ -233,8 +234,8 @@ function collectText(node: unknown): string {
 
 /**
  * i18n-t stub（本文件专用）：把 keypath 的 {0}/{1} 占位符替换为默认插槽子节点的纯文本，
- * 使「共 3 批」「已更新 8/20 个实例」这类插值文案可被 getByText 直接命中
- * （共享 I18nTStub 只直译 keypath）。命名插槽（如横幅的 #index/#version）非断言目标，忽略。
+ * 使带插值的文案可被 getByText 直接命中（共享 I18nTStub 只直译 keypath）。
+ * 命名插槽（如横幅的 #index/#version）非断言目标，忽略。
  *
  * 用普通对象而非 defineComponent 声明：测试文件里已有多个 mock 组件，
  * 再调用 defineComponent 会触发 vue/one-component-per-file，普通对象同样支持 setup 返回渲染函数。
@@ -278,6 +279,7 @@ function buildProgress(overrides: ProgressOverrides = {}): BatchReleaseProgressO
     oldImageTag: 'v1.8.2',
     replicas: 20,
     status: 'deploying',
+    strategyName: '分四批灰度',
     updatedReplicas: 8,
     ...rest,
   };
@@ -352,7 +354,7 @@ describe('实例列表分批发布控制：横幅与操作', () => {
     expect(banner).toHaveAttribute('data-kind', 'updating');
     expect(within(banner).getByText('灰度发布中')).toBeInTheDocument();
     // 本批更新中：直接按钮为「暂停 → 更多 → 回滚」
-    expect(buttonLabelsOf(banner)).toEqual(['查看发布进度', '暂停', '更多', '回滚']);
+    expect(buttonLabelsOf(banner)).toEqual(['查看发布详情', '暂停', '更多', '回滚']);
     expect(within(banner).getByRole('button', { name: '暂停' })).toBeEnabled();
     expect(within(banner).getByRole('button', { name: '回滚' })).toBeEnabled();
     expect(within(banner).queryByRole('button', { name: '继续发布' })).toBeNull();
@@ -403,10 +405,11 @@ describe('实例列表分批发布控制：横幅与操作', () => {
     const banner = await findBanner();
 
     expect(banner).toHaveAttribute('data-kind', 'paused');
-    expect(within(banner).getByText('第 3 批已暂停')).toBeInTheDocument();
+    // 设计稿：等待手动继续为蓝色过程态，状态词展示「第 N 批已完成」
+    expect(within(banner).getByText('第 3 批已完成')).toBeInTheDocument();
     expect(within(banner).getByRole('button', { name: '继续发布' })).toBeEnabled();
     // 暂停态没有暂停入口；更多位于「继续发布」与「回滚」之间
-    expect(buttonLabelsOf(banner)).toEqual(['查看发布进度', '继续发布', '更多', '回滚']);
+    expect(buttonLabelsOf(banner)).toEqual(['查看发布详情', '继续发布', '更多', '回滚']);
     expect(within(banner).queryByRole('button', { name: '暂停' })).toBeNull();
     expect(within(banner).queryByRole('button', { name: '回退上一批' })).toBeNull();
 
@@ -430,8 +433,10 @@ describe('实例列表分批发布控制：横幅与操作', () => {
     const banner = await findBanner();
 
     expect(banner).toHaveAttribute('data-kind', 'paused');
+    // 到期后 statusTag 退化为「已暂停」，横幅按黄色警示态展示「第 N 批已暂停」
+    expect(within(banner).getByText('第 3 批已暂停')).toBeInTheDocument();
     expect(within(banner).getByRole('button', { name: '继续发布' })).toBeEnabled();
-    expect(buttonLabelsOf(banner)).toEqual(['查看发布进度', '继续发布', '更多', '回滚']);
+    expect(buttonLabelsOf(banner)).toEqual(['查看发布详情', '继续发布', '更多', '回滚']);
 
     await userEvent.click(within(banner).getByRole('button', { name: '继续发布' }));
     await waitFor(() => expectOperateCalledWith('continue'));
@@ -454,8 +459,12 @@ describe('实例列表分批发布控制：横幅与操作', () => {
     const banner = await findBanner();
 
     expect(banner).toHaveAttribute('data-kind', 'paused');
+    // 设计稿：定时暂停为蓝色过程态，状态词「第 N 批已完成」+ 加粗倒计时
+    // （i18n-t 插槽插值在测试 mock 下不渲染，倒计时值由纯函数单测的 statusTag.params 断言覆盖）
+    expect(within(banner).getByText('第 3 批已完成')).toBeInTheDocument();
+    expect(within(banner).queryByText('第 3 批已暂停')).toBeNull();
     // 顺序：主操作（继续发布）→ 暂停 → 更多 → 回滚
-    expect(buttonLabelsOf(banner)).toEqual(['查看发布进度', '继续发布', '暂停', '更多', '回滚']);
+    expect(buttonLabelsOf(banner)).toEqual(['查看发布详情', '继续发布', '暂停', '更多', '回滚']);
 
     await userEvent.click(within(banner).getByRole('button', { name: '暂停' }));
     await waitFor(() => expectOperateCalledWith('pause'));
@@ -475,7 +484,7 @@ describe('实例列表分批发布控制：横幅与操作', () => {
     const banner = await findBanner();
 
     expect(banner).toHaveAttribute('data-kind', 'updating');
-    expect(buttonLabelsOf(banner)).toEqual(['查看发布进度', '暂停', '更多', '回滚']);
+    expect(buttonLabelsOf(banner)).toEqual(['查看发布详情', '暂停', '更多', '回滚']);
     expect(within(banner).queryByRole('button', { name: '继续发布' })).toBeNull();
     // 拿不到批次序号时无法确认存在上一批：回退上一批置灰展示，点击不发起请求
     expect(within(banner).getByText('回退上一批')).toHaveClass('!pointer-events-none');
@@ -489,7 +498,7 @@ describe('实例列表分批发布控制：横幅与操作', () => {
     const banner = await findBanner();
 
     expect(banner).toHaveAttribute('data-kind', 'updating');
-    expect(buttonLabelsOf(banner)).toEqual(['查看发布进度', '暂停', '更多', '回滚']);
+    expect(buttonLabelsOf(banner)).toEqual(['查看发布详情', '暂停', '更多', '回滚']);
     expect(within(banner).queryByRole('button', { name: '继续发布' })).toBeNull();
     expect(within(banner).getByText('跳过剩余批次')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '部署' })).toBeDisabled();
@@ -511,7 +520,7 @@ describe('实例列表分批发布控制：横幅与操作', () => {
     expect(banner).toHaveAttribute('data-kind', 'completed');
     expect(within(banner).getByText('灰度发布已完成')).toBeInTheDocument();
     // 完成态没有任何批次操作按钮，只剩右上角无文字的关闭图标按钮（bk-alert 内置 .bk-alert-close）
-    expect(buttonLabelsOf(banner).filter(Boolean)).toEqual(['查看发布进度']);
+    expect(buttonLabelsOf(banner).filter(Boolean)).toEqual(['查看发布详情']);
     const closeButton = banner.querySelector('.bk-alert-close');
     expect(closeButton).not.toBeNull();
     // 完成态不再阻塞新的部署入口
@@ -638,7 +647,7 @@ describe('实例列表分批发布控制：横幅与操作', () => {
     }
   });
 
-  it('当分批发布失败时，应展示失败原因并提供回退上一批与回滚入口（无重试）', async () => {
+  it('当分批发布失败时，应展示失败原因并提供重试与回滚入口', async () => {
     mocks.progress.mockResolvedValue(buildProgress({ message: '2 个实例健康检查未通过', status: 'failed' }));
     mocks.latest.mockResolvedValue({
       deployID: 'deploy-1',
@@ -652,16 +661,21 @@ describe('实例列表分批发布控制：横幅与操作', () => {
 
     expect(banner).toHaveAttribute('data-kind', 'failed');
     expect(within(banner).getByText('2 个实例健康检查未通过')).toBeInTheDocument();
-    // 设计稿：失败态无「重试」，回退上一批收进「更多」，回滚平铺
-    expect(within(banner).queryByRole('button', { name: '重试' })).toBeNull();
-    expect(buttonLabelsOf(banner)).toEqual(['查看发布进度', '更多', '回滚']);
+    // 设计稿：失败态主入口「重试」+ 回滚平铺，回退上一批收进「更多」
+    expect(within(banner).getByRole('button', { name: '重试' })).toBeEnabled();
+    expect(buttonLabelsOf(banner)).toEqual(['查看发布详情', '重试', '更多', '回滚']);
     // 失败后仍需先收尾，顶部部署入口保持禁用
     expect(screen.getByRole('button', { name: '部署' })).toBeDisabled();
+
+    await userEvent.click(within(banner).getByRole('button', { name: '重试' }));
+    await waitFor(() => expectOperateCalledWith('continue'));
+    await waitFor(() =>
+      expect(mocks.message).toHaveBeenCalledWith({ theme: 'success', message: '已重试，开始执行第 3 批' }),
+    );
 
     await userEvent.click(within(banner).getByText('回退上一批'));
     await waitFor(() => expect(mocks.infoBox).toHaveBeenCalledTimes(1));
     expect(mocks.infoBox.mock.calls[0][0].title).toBe('确认回退到上一批？');
-    expect(mocks.operate).not.toHaveBeenCalled();
     mocks.infoBox.mock.calls[0][0].onConfirm();
     await waitFor(() => expectOperateCalledWith('backward'));
     await waitFor(() => expect(mocks.message).toHaveBeenCalledWith({ theme: 'success', message: '已回退到上一批' }));
@@ -682,7 +696,7 @@ describe('实例列表分批发布控制：横幅与操作', () => {
     expect(banner).toHaveAttribute('data-kind', 'rolledBack');
     expect(within(banner).getByText('已回滚')).toBeInTheDocument();
     // 回滚完成没有任何批次操作，只剩关闭入口（bk-alert 内置 .bk-alert-close）
-    expect(buttonLabelsOf(banner).filter(Boolean)).toEqual(['查看发布进度']);
+    expect(buttonLabelsOf(banner).filter(Boolean)).toEqual(['查看发布详情']);
     expect(banner.querySelector('.bk-alert-close')).not.toBeNull();
     // 已回滚为终态，环境已恢复旧版本，不再阻塞部署入口
     expect(screen.getByRole('button', { name: '部署' })).toBeEnabled();
@@ -766,14 +780,14 @@ describe('实例列表分批发布控制：横幅与操作', () => {
 });
 
 describe('实例列表分批发布控制：灰度发布进度视图', () => {
-  /** 点击横幅「查看发布进度」并等待进度面板出现，返回面板节点。 */
+  /** 点击横幅「查看发布详情」并等待进度面板出现，返回面板节点。 */
   async function openProgressPanel() {
     const banner = await findBanner();
-    await userEvent.click(within(banner).getByRole('button', { name: '查看发布进度' }));
+    await userEvent.click(within(banner).getByRole('button', { name: '查看发布详情' }));
     return await screen.findByTestId('batch-release-progress-panel');
   }
 
-  it('当点击「查看发布进度」时，应隐藏横幅并展示进度视图，点返回后复原横幅态', async () => {
+  it('当点击「查看发布详情」时，应隐藏横幅并展示精简进度视图，点返回后复原横幅态', async () => {
     mountPage();
     const panel = await openProgressPanel();
 
@@ -783,14 +797,20 @@ describe('实例列表分批发布控制：灰度发布进度视图', () => {
     expect(within(panel).getByText('灰度发布中')).toBeInTheDocument();
     // 标题 Tag：更新中为「正在更新实例」
     expect(within(panel).getByText('正在更新实例')).toBeInTheDocument();
-    // 元信息行：策略快照缺失时只展示有数据的字段
-    expect(within(panel).getByText('共 3 批')).toBeInTheDocument();
-    expect(within(panel).getByText('当前第 3 批')).toBeInTheDocument();
-    expect(within(panel).getByText('已更新 8/20 个实例')).toBeInTheDocument();
-    expect(within(panel).getByText('v1.8.2 → v1.8.3')).toBeInTheDocument();
-    // 步骤条渲染批次节点（含状态 Tag）
+    // 标题行策略段：状态 Tag 右侧展示「发布策略：<策略名>」（ⓘ 浮层明细由纯函数与交互单测覆盖）
+    expect(within(panel).getByTestId('batch-release-progress-strategy')).toHaveTextContent('发布策略：分四批灰度');
+    // 步骤条渲染批次节点（含状态 Tag），标题直接带换算后的累计实例数
     expect(within(progressBanner).getAllByText('已完成').length).toBeGreaterThanOrEqual(2);
     expect(within(progressBanner).getByText('正在更新')).toBeInTheDocument();
+    // 标题参数（批次号 / 实例数）加粗为独立节点，按整块用户可见文本断言
+    expect(progressBanner.textContent).toContain('第 1 批 · 1 个实例');
+    expect(progressBanner.textContent).toContain('第 2 批 · 50%（10 个）');
+    expect(progressBanner.textContent).toContain('第 3 批 · 20 个实例');
+    // 元信息行已精简：共 X 批 / 当前第 X 批 / 已更新 X/Y / 镜像不再展示（步骤条与实例表筛选胶囊承载）
+    expect(within(panel).queryByText('共 3 批')).toBeNull();
+    expect(within(panel).queryByText('当前第 3 批')).toBeNull();
+    expect(within(panel).queryByText('已更新 8/20 个实例')).toBeNull();
+    expect(within(panel).queryByText('v1.8.2 → v1.8.3')).toBeNull();
 
     // 返回实例列表：进度视图隐藏，横幅恢复
     await userEvent.click(within(panel).getByRole('button', { name: '返回实例列表' }));

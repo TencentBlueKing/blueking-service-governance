@@ -17,7 +17,7 @@
 -->
 
 <template>
-  <div class="flex w-[280px] shrink-0 flex-col gap-[16px]">
+  <div class="flex w-[280px] shrink-0 flex-col gap-[8px]">
     <div class="flex max-h-[320px] flex-1 flex-col gap-[8px] overflow-y-auto">
       <div
         v-for="(batch, index) in batches"
@@ -37,6 +37,14 @@
           <span class="truncate text-[12px] font-700 leading-[20px] text-[#313238]">
             {{ formatBatchCardTitle(batch, index, t) }}
           </span>
+          <Tag
+            v-if="isFullPercentBatch(batch)"
+            class="shrink-0 !bg-[#e1ecff] !text-[#1768ef]"
+            data-testid="batch-full-tag"
+            size="small"
+          >
+            {{ t('全量') }}
+          </Tag>
         </span>
         <!-- 第二行：有校验错误时用红色错误文案替换暂停说明，未修正前不可提交 -->
         <span
@@ -54,37 +62,57 @@
         </span>
 
         <!-- 删除入口：仅 hover 时出现，默认与选中态均隐藏；至少保留一个批次 -->
-        <button
+        <Button
           v-if="!readonly && batches.length > 1"
           :aria-label="t('删除')"
           class="pointer-events-none absolute right-[12px] top-[18px] flex h-[20px] w-[20px] items-center justify-center rounded-[2px] text-[14px] text-[#979ba5] opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 hover:bg-[#f0f1f5] hover:text-[#ea3636]"
           data-testid="batch-remove"
+          text
           :title="t('删除')"
           type="button"
           @click.stop="emit('remove', batch.key)"
         >
           <Del />
-        </button>
+        </Button>
       </div>
     </div>
 
-    <button
+    <Button
       v-if="!readonly"
-      class="flex h-[32px] shrink-0 items-center justify-center rounded-[2px] border border-dashed border-[#c4c6cc] bg-white text-[14px] leading-[20px] text-[#3a84ff] transition-colors hover:border-[#3a84ff] hover:bg-[#f0f5ff]"
-      type="button"
+      v-bk-tooltips="{
+        content: t('已达 100%，不能添加后续批次'),
+        disabled: !hasFullPercentBatch,
+      }"
+      class="flex h-[32px] w-full shrink-0 items-center justify-center rounded-[2px] border border-dashed text-[14px] leading-[20px] transition-colors"
+      :class="
+        hasFullPercentBatch
+          ? 'border-[#dcdee5] bg-[#fafbfd] text-[#c4c6cc]'
+          : 'border-[#c4c6cc] bg-white text-[#3a84ff] hover:border-[#3a84ff] hover:bg-[#f0f5ff]'
+      "
+      :disabled="hasFullPercentBatch"
       @click="emit('add')"
     >
       <i class="bkms-icon bkms-icon-jiahao mr-[2px] text-[16px]"></i>
       {{ t('发布批次') }}
-    </button>
+    </Button>
+    <div
+      v-if="!readonly && !hasFullPercentBatch"
+      class="text-[12px] leading-[20px] text-[#979ba5]"
+      data-testid="full-percent-tip"
+    >
+      {{ t('未设置 100% 批次时，最后一批完成后将自动全量更新剩余实例。') }}
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
+  import { computed } from 'vue';
+
+  import { Button, Tag } from 'bkui-vue';
   import { Del } from 'bkui-vue/lib/icon';
   import { useI18n } from 'vue-i18n';
 
-  import { formatBatchCardTitle, formatBatchPauseText } from '../utils';
+  import { formatBatchCardTitle, formatBatchPauseText, PERCENT_TARGET_MAX } from '../utils';
 
   import type { StrategyBatchForm } from '../utils';
 
@@ -110,6 +138,11 @@
 
   const { t } = useI18n();
 
+  /** 是否存在累计 100% 的批次；没有则提示最后一批完成后自动全量更新剩余实例 */
+  const hasFullPercentBatch = computed(() =>
+    props.batches.some(batch => batch.targetUnit === 'percent' && batch.targetValue === PERCENT_TARGET_MAX),
+  );
+
   /** 卡片三态样式：默认白底、悬停浅灰底、选中浅蓝底带左侧竖条；校验失败统一红框（选中态左侧竖条保持主蓝） */
   function cardClass(batch: StrategyBatchForm): string[] {
     const isActive = batch.key === props.activeKey;
@@ -118,5 +151,10 @@
       return ['bg-[#f0f5ff]', isError ? 'border-[#ea3636]' : 'border-[#a3c5fd]', 'shadow-[inset_3px_0_0_0_#3a84ff]'];
     }
     return ['bg-white hover:border-[#dcdee5] hover:bg-[#f5f7fa]', isError ? 'border-[#ea3636]' : 'border-[#eaebf0]'];
+  }
+
+  /** 单个批次是否为累计 100% 的全量批次 */
+  function isFullPercentBatch(batch: StrategyBatchForm): boolean {
+    return batch.targetUnit === 'percent' && batch.targetValue === PERCENT_TARGET_MAX;
   }
 </script>

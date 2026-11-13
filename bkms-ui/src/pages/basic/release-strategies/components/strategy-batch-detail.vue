@@ -45,6 +45,7 @@
             :class="{ 'border-[#EA3636] z-10': Boolean(error) }"
             data-testid="target-value"
             :disabled="readonly"
+            :max="targetValueMax"
             :min="1"
             :model-value="batch.targetValue"
             type="number"
@@ -68,7 +69,11 @@
         </div>
       </div>
       <div class="text-[12px] leading-[20px] text-[#979ba5]">
-        {{ t('填到本批结束时应更新的总量（按累计值推进），不是本批新增数。新实例上线时北极星权重为 1。') }}
+        <i18n-t keypath="填到本批结束时应更新的{total}（按累计值推进），不是本批新增数。新实例上线时北极星权重为 1。">
+          <template #total>
+            <span class="font-bold">{{ t('总量') }}</span>
+          </template>
+        </i18n-t>
       </div>
     </div>
 
@@ -76,29 +81,36 @@
       <div class="text-[12px] font-700 leading-[20px] text-[#313238]">{{ t('暂停') }}</div>
       <Radio.Group
         class="flex flex-wrap"
-        :disabled="readonly"
+        :disabled="readonly || isFullPercent"
         :model-value="batch.pauseMode"
         @update:model-value="handlePauseModeChange"
       >
         <Radio
-          :disabled="readonly"
+          :disabled="readonly || isFullPercent"
           label="none"
         >
           {{ t('不停') }}
         </Radio>
         <Radio
-          :disabled="readonly"
+          :disabled="readonly || isFullPercent"
           label="duration"
         >
           {{ t('暂停指定时长') }}
         </Radio>
         <Radio
-          :disabled="readonly"
+          :disabled="readonly || isFullPercent"
           label="permanent"
         >
           {{ t('永久暂停，手动继续') }}
         </Radio>
       </Radio.Group>
+      <div
+        v-if="isFullPercent"
+        class="text-[12px] leading-[20px] text-[#979ba5]"
+        data-testid="full-percent-pause-tip"
+      >
+        {{ t('达到 100% 后全部实例已更新完毕，发布将直接结束，无需暂停。') }}
+      </div>
       <div
         v-if="batch.pauseMode === 'duration'"
         class="mt-[4px]"
@@ -120,10 +132,18 @@
 </template>
 
 <script setup lang="ts">
+  import { computed } from 'vue';
+
   import { Input, Radio, Select } from 'bkui-vue';
   import { useI18n } from 'vue-i18n';
 
-  import { DEFAULT_PAUSE_SECONDS, formatBatchCardTitle, PAUSE_SECONDS_MAX, PAUSE_SECONDS_MIN } from '../utils';
+  import {
+    DEFAULT_PAUSE_SECONDS,
+    formatBatchCardTitle,
+    PAUSE_SECONDS_MAX,
+    PAUSE_SECONDS_MIN,
+    PERCENT_TARGET_MAX,
+  } from '../utils';
 
   import type { PauseMode, StrategyBatchForm, TargetUnit } from '../utils';
 
@@ -150,6 +170,14 @@
     { label: t('%'), value: 'percent' },
   ];
 
+  // 百分比单位时目标值上限为 100
+  const targetValueMax = computed(() => (batch.value.targetUnit === 'percent' ? PERCENT_TARGET_MAX : undefined));
+
+  /** 目标为 100% 的批次：发布到此批即全部完成，暂停选项锁定为「不停」 */
+  const isFullPercent = computed(
+    () => batch.value.targetUnit === 'percent' && batch.value.targetValue === PERCENT_TARGET_MAX,
+  );
+
   function handlePauseModeChange(value: PauseMode) {
     batch.value.pauseMode = value;
     // 切到定时暂停时给出合法默认值，避免用户一进入即看到校验错误
@@ -164,10 +192,23 @@
 
   function handleTargetChange(value: number | string) {
     batch.value.targetValue = toNumberOrUndefined(value);
+    syncPauseModeForFullPercent();
   }
 
   function handleUnitChange(value: TargetUnit) {
     batch.value.targetUnit = value;
+    // 切到百分比时，若目标值超出上限则收敛到 100，避免带着非法值提交
+    if (value === 'percent' && (batch.value.targetValue ?? 0) > PERCENT_TARGET_MAX) {
+      batch.value.targetValue = PERCENT_TARGET_MAX;
+    }
+    syncPauseModeForFullPercent();
+  }
+
+  /** 目标达到 100% 时发布直接结束，暂停强制锁定为「不停」；改回 < 100% 时恢复可选 */
+  function syncPauseModeForFullPercent() {
+    if (isFullPercent.value) {
+      batch.value.pauseMode = 'none';
+    }
   }
 
   function toNumberOrUndefined(value: number | string | undefined): number | undefined {

@@ -27,18 +27,23 @@
  *   6. 实例灰度归属判定（resolveInstanceCanaryState，与进度视图灰度列表筛选同口径）
  *   7. 终态关闭记忆是「多条记录」：多个环境各自关闭互不覆盖，追加时去重并限制条数
  */
+import dayjs from 'dayjs';
 import { describe, expect, it } from 'vitest';
 import {
   type BatchReleaseBannerView,
   appendBatchReleaseDismissKey,
   buildBatchReleaseDismissKey,
   buildBatchReleaseSteps,
+  formatBatchReleaseDuration,
+  formatBatchReleaseStartedAt,
   hasCanaryDeployRecord,
   isBatchReleaseBannerDismissed,
   isBatchReleaseBusy,
   resolveBatchReleaseBanner,
+  resolveBatchReleaseDurationSeconds,
   resolveBatchReleaseSuccessMessage,
   resolveInstanceCanaryState,
+  resolvePercentAccumulatedCount,
   shouldFetchBatchReleaseProgress,
 } from '~/pages/application/detail/deploy/instance-list/batch-release';
 
@@ -101,6 +106,7 @@ describe('resolveBatchReleaseBanner：可见状态', () => {
     const view = resolveBatchReleaseBanner(buildProgress({ batchPhase: 'completed', status: 'deployed' }));
     expect(view?.kind).toBe('completed');
     expect(view?.closable).toBe(true);
+    expect(view?.iconKind).toBe('check');
     expect(actionsOf(view)).toEqual([]);
     expect(overflowOf(view)).toEqual([]);
     expect(view?.statusTag).toEqual({ key: '已完成', theme: 'success' });
@@ -110,19 +116,22 @@ describe('resolveBatchReleaseBanner：可见状态', () => {
     const view = resolveBatchReleaseBanner(buildProgress({ status: 'rolled-back' }));
     expect(view?.kind).toBe('rolledBack');
     expect(view?.closable).toBe(true);
+    expect(view?.iconKind).toBe('info');
     expect(actionsOf(view)).toEqual([]);
     expect(overflowOf(view)).toEqual([]);
     // 回滚态设计稿未覆盖，不展示标题 Tag
     expect(view?.statusTag).toBeNull();
   });
 
-  it('失败（status=failed）展示失败原因并提供回退上一批与回滚，且不可关闭', () => {
+  it('失败（status=failed）展示失败原因并提供重试与回滚，且不可关闭', () => {
     const view = resolveBatchReleaseBanner(buildProgress({ message: '2 个实例健康检查未通过', status: 'failed' }));
     expect(view?.kind).toBe('failed');
     expect(view?.closable).toBe(false);
     expect(view?.message).toBe('2 个实例健康检查未通过');
-    // 设计稿：失败态无「重试」，回退上一批收进更多，回滚平铺
-    expect(actionsOf(view)).toEqual(['rollback']);
+    // 设计稿：失败态主入口「重试」（复用 continue 动作），回退上一批收进更多，回滚平铺
+    expect(actionsOf(view)).toEqual(['continue', 'rollback']);
+    expect(view?.actions[0].labelKey).toBe('重试');
+    expect(view?.iconKind).toBe('warning');
     expect(view?.statusTag).toEqual({ key: '失败', theme: 'danger' });
     expect(overflowOf(view)).toEqual(['backward']);
   });
@@ -140,6 +149,7 @@ describe('resolveBatchReleaseBanner：可见状态', () => {
     expect(view).toMatchObject({
       batchIndex: 3,
       closable: false,
+      iconKind: 'loading',
       kind: 'updating',
       newImageTag: 'v1.8.3',
       oldImageTag: 'v1.8.2',
@@ -154,6 +164,7 @@ describe('resolveBatchReleaseBanner：按 batchPhase 决定按钮', () => {
   it('manual-paused：继续发布可用、暂停不可用，回退/跳过在更多里', () => {
     const view = resolveBatchReleaseBanner(buildProgress({ batchPhase: 'manual-paused' }));
     expect(view?.kind).toBe('paused');
+    expect(view?.iconKind).toBe('pause');
     expect(actionsOf(view)).toEqual(['continue', 'rollback']);
     // 暂停态下没有暂停入口
     expect(actionsOf(view)).not.toContain('pause');
@@ -164,6 +175,8 @@ describe('resolveBatchReleaseBanner：按 batchPhase 决定按钮', () => {
   it('timed-paused 已到期（或无倒计时数据）：按钮与人工暂停一致，Tag 为已暂停', () => {
     const view = resolveBatchReleaseBanner(buildProgress({ batchPhase: 'timed-paused' }));
     expect(view?.kind).toBe('paused');
+    // 图标按暂停方式区分：定时暂停用时钟，人工/永久暂停用暂停符号
+    expect(view?.iconKind).toBe('time');
     expect(actionsOf(view)).toEqual(['continue', 'rollback']);
     expect(overflowOf(view)).toEqual(['backward', 'skip']);
     expect(view?.statusTag).toEqual({ key: '已暂停', theme: 'warning' });
@@ -243,6 +256,7 @@ describe('resolveBatchReleaseBanner：按 batchPhase 决定按钮', () => {
   it('回滚中（currentBatchIndex=-1）：展示且没有可执行操作，标题 Tag 为正在清理灰度资源', () => {
     const view = resolveBatchReleaseBanner(buildProgress({ currentBatchIndex: -1 }));
     expect(view?.kind).toBe('rollingBack');
+    expect(view?.iconKind).toBe('loading');
     expect(view?.batchIndex).toBeNull();
     expect(actionsOf(view)).toEqual([]);
     expect(overflowOf(view)).toEqual([]);
@@ -589,14 +603,14 @@ describe('buildBatchReleaseSteps：批次步骤视图模型', () => {
     expect(updating[2]).toMatchObject({ stepStatus: 'loading', tagKey: '正在更新' });
   });
 
-  it('标题口径：百分比部分批「累计更新至 X%」，数量批按实例总数换算', () => {
+  it('标题口径：个数批直接带实例数，百分比批带百分比与换算后的累计实例数', () => {
     const steps = buildBatchReleaseSteps(buildProgress({ batchPhase: 'updating' }));
-    // 第 1 批 target='1' → 累计更新 1 个实例
-    expect(steps[0].title).toEqual({ key: '累计更新 {0} 个实例', params: [1] });
-    // 第 2 批 target='50%' → 累计更新至 50%
-    expect(steps[1].title).toEqual({ key: '累计更新至 {0}', params: ['50%'] });
-    // 第 3 批 target='100%' 全量 → 累计更新 20 个实例
-    expect(steps[2].title).toEqual({ key: '累计更新 {0} 个实例', params: [20] });
+    // 第 1 批 target='1' → 1 个实例
+    expect(steps[0].title).toEqual({ key: '{0} 个实例', params: [1] });
+    // 第 2 批 target='50%' → 50%（10 个），20 × 50% = 10
+    expect(steps[1].title).toEqual({ key: '{0}（{1} 个）', params: ['50%', 10] });
+    // 第 3 批 target='100%' 全量 → 20 个实例
+    expect(steps[2].title).toEqual({ key: '{0} 个实例', params: [20] });
   });
 
   it('副文本按批次暂停方式区分：永久 / 定时 / 不停', () => {
@@ -612,6 +626,82 @@ describe('buildBatchReleaseSteps：批次步骤视图模型', () => {
 
   it('无进度时返回空数组', () => {
     expect(buildBatchReleaseSteps(null)).toEqual([]);
+  });
+});
+
+describe('resolvePercentAccumulatedCount：百分比批步骤条标题的累计实例数（Math.round 口径）', () => {
+  it('按 Math.round 换算：20 × 25% = 5，20 × 33% = 6.6 → 7', () => {
+    expect(resolvePercentAccumulatedCount(25, 20)).toBe(5);
+    expect(resolvePercentAccumulatedCount(33, 20)).toBe(7);
+    expect(resolvePercentAccumulatedCount(50, 20)).toBe(10);
+    expect(resolvePercentAccumulatedCount(100, 20)).toBe(20);
+  });
+
+  it('至少 1 个、不超过实例总数', () => {
+    // 1% 向下舍入为 0 时收敛为 1
+    expect(resolvePercentAccumulatedCount(1, 20)).toBe(1);
+    // 超过 100% 或实例总数封顶
+    expect(resolvePercentAccumulatedCount(120, 20)).toBe(20);
+  });
+
+  it('参数缺失或非法时返回 0（组件按空值兜底）', () => {
+    expect(resolvePercentAccumulatedCount(undefined, 20)).toBe(0);
+    expect(resolvePercentAccumulatedCount(Number.NaN, 20)).toBe(0);
+    expect(resolvePercentAccumulatedCount(50, 0)).toBe(0);
+  });
+});
+
+describe('formatBatchReleaseStartedAt：浮层开始时间（MM-DD HH:mm）', () => {
+  it('按本地时区格式化为 MM-DD HH:mm', () => {
+    const iso = '2026-11-13T10:19:05.826Z';
+    expect(formatBatchReleaseStartedAt(iso)).toBe(dayjs(iso).format('MM-DD HH:mm'));
+  });
+
+  it('空值 / 非法值 / Go 零值时间展示 --', () => {
+    expect(formatBatchReleaseStartedAt(undefined)).toBe('--');
+    expect(formatBatchReleaseStartedAt('')).toBe('--');
+    expect(formatBatchReleaseStartedAt('not-a-time')).toBe('--');
+    expect(formatBatchReleaseStartedAt('0001-01-01T00:00:00Z')).toBe('--');
+  });
+});
+
+describe('resolveBatchReleaseDurationSeconds：浮层耗时秒数', () => {
+  const startedAt = '2026-11-13T10:00:00Z';
+
+  it('进行中按 now - startedAt 换算（192 秒）', () => {
+    const now = dayjs(startedAt).add(192, 'second').valueOf();
+    expect(resolveBatchReleaseDurationSeconds({ endedAt: '', isTerminal: false, now, startedAt })).toBe(192);
+    // 终态但 endedAt 缺失 / 零值时退化为 now 口径
+    expect(resolveBatchReleaseDurationSeconds({ isTerminal: true, now, startedAt })).toBe(192);
+    expect(
+      resolveBatchReleaseDurationSeconds({ endedAt: '0001-01-01T00:00:00Z', isTerminal: true, now, startedAt }),
+    ).toBe(192);
+  });
+
+  it('终态按 endedAt - startedAt 换算，now 不参与', () => {
+    const now = dayjs(startedAt).add(999, 'second').valueOf();
+    const endedAt = dayjs(startedAt).add(65, 'second').toISOString();
+    expect(resolveBatchReleaseDurationSeconds({ endedAt, isTerminal: true, now, startedAt })).toBe(65);
+  });
+
+  it('结束早于开始（时钟偏移）收敛为 0；startedAt 无效返回 0', () => {
+    const now = dayjs(startedAt).valueOf();
+    const endedAt = dayjs(startedAt).subtract(10, 'second').toISOString();
+    expect(resolveBatchReleaseDurationSeconds({ endedAt, isTerminal: true, now, startedAt })).toBe(0);
+    expect(resolveBatchReleaseDurationSeconds({ isTerminal: false, now, startedAt: '' })).toBe(0);
+  });
+});
+
+describe('formatBatchReleaseDuration：秒数 → 时长文案', () => {
+  it('按时分秒逐级降位', () => {
+    expect(formatBatchReleaseDuration(3672)).toEqual({ key: '{0} 时 {1} 分 {2} 秒', params: [1, 1, 12] });
+    expect(formatBatchReleaseDuration(192)).toEqual({ key: '{0} 分 {1} 秒', params: [3, 12] });
+    expect(formatBatchReleaseDuration(45)).toEqual({ key: '{0} 秒', params: [45] });
+  });
+
+  it('负数与 0 收敛为「0 秒」', () => {
+    expect(formatBatchReleaseDuration(-5)).toEqual({ key: '{0} 秒', params: [0] });
+    expect(formatBatchReleaseDuration(0)).toEqual({ key: '{0} 秒', params: [0] });
   });
 });
 

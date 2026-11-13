@@ -83,6 +83,9 @@ url("fonts/iconcool.eot?#iefix") format("embedded-opentype");
 .bkms-icon-auto-refresh-line:before {
 	content: "\e16d";
 }
+.bkms-icon-plus-circle:before {
+	content: "\e1d0";
+}
 .bkms-icon-un-full-screen-2:before {
 	content: "\e113";
 }
@@ -406,4 +409,31 @@ url("fonts/iconcool.eot?#iefix") format("embedded-opentype");
 }
 .bkms-icon-js:before {
 	content: "\e1c8";
+}
+.bkms-icon-workspace:before {
+	content: "\e1cc";
+}
+.bkms-icon-app:before {
+	content: "\e1ce";
+}
+.bkms-icon-env:before {
+	content: "\e1c9";
+}
+.bkms-icon-cluster:before {
+	content: "\e1cd";
+}
+.bkms-icon-cpu:before {
+	content: "\e1ca";
+}
+.bkms-icon-memory:before {
+	content: "\e1cb";
+}
+.bkms-icon-user-fill:before {
+	content: "\e1cf";
+}
+.bkms-icon-pause:before {
+	content: "\e1d1";
+}
+.bkms-icon-success-2:before {
+	content: "\e1d2";
 }

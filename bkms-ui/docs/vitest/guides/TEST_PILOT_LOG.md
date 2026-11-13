@@ -30,6 +30,7 @@
 | 模板用 `v-bk-tooltips` 时报「Failed to resolve directive」 | bkui-vue 插件 install 只注册组件（preset.js），指令须显式注册 | render 时 `global.directives: { 'bk-tooltips': bkTooltips }`（对齐 src/modules/global.ts） | quickly-deploy-release-strategy.test.ts |
 | bkui Input type=number 填值：clear 触发「不能为空」校验 Message、tripleClick 全选失效、逐字输入会拼成「120」 | 组件库 number 输入交互与 jsdom 选择行为不一致 | 直接 `fireEvent.update(input, '20')` 赋值 | quickly-deploy-release-strategy.test.ts |
 | `i18n-t` 插槽文案（`共 {0} 批`）用 `getByText('共 3 批')` 查不到 | 共享 I18nTStub 只直译 keypath；且真实插值下子节点是元素时文本被嵌套 span 打散，默认 matcher 只匹配元素直接文本节点 | 需断言插值文案时在文件内定义插值 stub：按 `{0}/{1}` 把默认插槽子节点提取为纯文本后整体渲染（参考 batch-release-control.test.ts 的 I18nTInterp） | batch-release-control.test.ts |
+| 组件内 `h()` 拼接的多段标题（参数加粗为独立 span）`getByText` 查不到 | TL 默认 matcher 只取元素直接文本节点，参数被嵌套加粗 span 隔开 | 断言整块用户可见文案用容器 `textContent.toContain(...)`，别拆节点匹配 | batch-release-control.test.ts（进度面板步骤条标题） |
 
 ## 环境事实（前置）
 

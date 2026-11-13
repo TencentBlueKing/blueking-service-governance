@@ -148,6 +148,8 @@ export const NAME_MAX_LENGTH = 32;
 export const DESCRIPTION_MAX_LENGTH = 100;
 export const PAUSE_SECONDS_MIN = 30;
 export const PAUSE_SECONDS_MAX = 86_400;
+/** 目标资源单位为百分比时的上限 */
+export const PERCENT_TARGET_MAX = 100;
 
 /**
  * 后端「策略名称冲突」错误文案匹配（bkms-server ErrStrategyNameConflict：

@@ -16,6 +16,7 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
+import dayjs, { type Dayjs } from 'dayjs';
 import { APP_DEPLOY_STATUS } from '~/common/enums/deploy';
 
 import {
@@ -69,6 +70,8 @@ export interface BatchReleaseBannerView {
   batchIndex: null | number;
   /** 仅完成态可关闭：关闭后按 deployID 记住，下一次发布重新出现 */
   closable: boolean;
+  /** 左侧图标语义：loading=过程态（更新中/回滚中），time=定时暂停，pause=手动/永久暂停，check=发布成功，warning=失败，info=已回滚 */
+  iconKind: BatchReleaseIconKind;
   kind: BatchReleaseKind;
   /** 失败原因/批次提示，可能为空，由组件兜底文案 */
   message: string;
@@ -81,6 +84,9 @@ export interface BatchReleaseBannerView {
   statusTag: BatchReleaseStatusTag | null;
   updatedReplicas: number;
 }
+
+/** 横幅左侧图标语义（设计稿图标规范），组件层映射为具体 bkms-icon 类名。 */
+export type BatchReleaseIconKind = 'check' | 'info' | 'loading' | 'pause' | 'time' | 'warning';
 
 /**
  * 横幅可见状态。
@@ -232,8 +238,8 @@ export function buildBatchReleaseSteps(
     const parsed = parseBatchTarget(batch.target);
     const isPercentPartial = parsed.unit === 'percent' && !isFullTarget(batch.target);
     const title: BatchReleaseMessageDescriptor = isPercentPartial
-      ? { key: '累计更新至 {0}', params: [parsed.text] }
-      : { key: '累计更新 {0} 个实例', params: [resolveBatchUpdatedCount(batch.target, replicas)] };
+      ? { key: '{0}（{1} 个）', params: [parsed.text, resolvePercentAccumulatedCount(parsed.value, replicas)] }
+      : { key: '{0} 个实例', params: [resolveBatchUpdatedCount(batch.target, replicas)] };
 
     let tagKey = '未开始';
     let tagParams: (number | string)[] | undefined;
@@ -337,6 +343,34 @@ export function appendBatchReleaseDismissKey(dismissedKeys: readonly string[], k
   return key ? [...rest, key].slice(-MAX_DISMISSED_KEYS) : rest;
 }
 
+/** 秒数 → 时长文案：按时分秒逐级降位，0 秒展示「0 秒」。 */
+export function formatBatchReleaseDuration(seconds: number): BatchReleaseMessageDescriptor {
+  const total = Math.max(0, Math.floor(seconds));
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const secs = total % 60;
+  if (hours > 0) return { key: '{0} 时 {1} 分 {2} 秒', params: [hours, minutes, secs] };
+  if (minutes > 0) return { key: '{0} 分 {1} 秒', params: [minutes, secs] };
+  return { key: '{0} 秒', params: [secs] };
+}
+
+/**
+ * 浮层「开始时间」：MM-DD HH:mm（当年发布场景下省略年份，与设计稿一致）。
+ * 无数据 / 非法值展示 '--'。
+ */
+export function formatBatchReleaseStartedAt(startedAt?: string): string {
+  const time = parseServerTime(startedAt);
+  return time ? time.format('MM-DD HH:mm') : '--';
+}
+
+/** 剩余秒 → mm:ss（超过 1 小时分钟位自然进位，如 75:00）。 */
+export function formatPauseCountdown(seconds: number): string {
+  const total = Math.max(0, Math.floor(seconds));
+  const mm = Math.floor(total / 60);
+  const ss = total % 60;
+  return `${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}`;
+}
+
 /**
  * 仅完成 / 已回滚这两个终态可关闭；关闭记忆命中同一发布记录时隐藏横幅。
  *
@@ -371,7 +405,7 @@ export function isTerminalBatchReleaseStatus(status?: string): boolean {
  *
  * - `status=deploying`：展示批次控制横幅（按钮集合见下方规则）；`currentBatchIndex=-1` 时为回滚中
  * - `status=deployed`：展示「灰度发布已完成」成功提示，可关闭
- * - `status=failed`：展示失败原因，提供回退上一批 / 回滚入口
+ * - `status=failed`：展示失败原因，提供重试（主入口）/ 回滚入口，回退上一批收进「更多」
  * - `status=rolled-back`：展示「已回滚」提示（非错误态），可关闭
  * - 其余状态（卸载相关 / 取消 / 轮询异常 / 未知）：不展示横幅，结果由部署状态列与实例列表呈现
  */
@@ -397,6 +431,7 @@ export function resolveBatchReleaseBanner(
       ...base,
       actions: [],
       closable: true,
+      iconKind: 'check',
       kind: 'completed',
       overflowActions: [],
       statusTag: { key: '已完成', theme: 'success' },
@@ -409,17 +444,22 @@ export function resolveBatchReleaseBanner(
       ...base,
       actions: [],
       closable: true,
+      iconKind: 'info',
       kind: 'rolledBack',
       overflowActions: [],
       statusTag: null,
     };
   }
 
-  // 当前批次失败：回退上一批 + 回滚（设计稿无「重试」入口），需用户收尾后才能重新部署。
+  // 当前批次失败：主入口「重试」（复用 continue 动作）+ 回滚，回退上一批收进「更多」。
   if (progress.status === APP_DEPLOY_STATUS.FAILED) {
     return {
       ...base,
-      actions: [createAction('rollback', 'danger', { confirm: ROLLBACK_CONFIRM })],
+      actions: [
+        createAction('continue', 'primary', { labelKey: '重试' }),
+        createAction('rollback', 'danger', { confirm: ROLLBACK_CONFIRM }),
+      ],
+      iconKind: 'warning',
       kind: 'failed',
       overflowActions: [buildBackwardAction(progress)],
       statusTag: { key: '失败', theme: 'danger' },
@@ -433,6 +473,7 @@ export function resolveBatchReleaseBanner(
     return {
       ...base,
       actions: [],
+      iconKind: 'loading',
       kind: 'rollingBack',
       overflowActions: [],
       statusTag: { key: '正在清理灰度资源', theme: 'info' },
@@ -456,6 +497,7 @@ export function resolveBatchReleaseBanner(
     return {
       ...base,
       actions: [],
+      iconKind: 'loading',
       kind: 'updating',
       overflowActions: [],
       statusTag: { key: '正在全量更新', theme: 'info' },
@@ -468,6 +510,7 @@ export function resolveBatchReleaseBanner(
     return {
       ...base,
       actions: [],
+      iconKind: 'loading',
       kind: 'updating',
       overflowActions: [],
       statusTag: { key: '正在更新实例', theme: 'info' },
@@ -495,6 +538,8 @@ export function resolveBatchReleaseBanner(
         ...(isTimedPaused && remaining > 0 ? [createAction('pause', 'default')] : []),
         rollbackAction,
       ],
+      // 图标区分暂停方式：定时暂停用时钟，人工/永久暂停用暂停符号。
+      iconKind: isTimedPaused ? 'time' : 'pause',
       kind: 'paused',
       overflowActions,
       statusTag: resolvePausedStatusTag(progress, remaining),
@@ -505,10 +550,30 @@ export function resolveBatchReleaseBanner(
   return {
     ...base,
     actions: [createAction('pause', 'default'), rollbackAction],
+    iconKind: 'loading',
     kind: 'updating',
     overflowActions,
     statusTag: { key: '正在更新实例', theme: 'info' },
   };
+}
+
+/**
+ * 浮层「已耗时 / 总耗时」的秒数换算。
+ * - 进行中（非终态）：now - startedAt，随轮询 / 逐秒时间源刷新；
+ * - 终态（已完成 / 失败 / 已回滚）：endedAt - startedAt；endedAt 缺失或零值时退化为 now 口径。
+ * startedAt 无效时返回 0（调用方按无数据隐藏该行）。
+ */
+export function resolveBatchReleaseDurationSeconds(options: {
+  endedAt?: string;
+  isTerminal: boolean;
+  now?: number;
+  startedAt?: string;
+}): number {
+  const start = parseServerTime(options.startedAt);
+  if (!start) return 0;
+  const end = options.isTerminal ? parseServerTime(options.endedAt) : null;
+  const endTime = end ?? dayjs(options.now ?? Date.now());
+  return Math.max(0, endTime.diff(start, 'second'));
 }
 
 /** 操作成功后的提示文案（继续发布需带批次号，回滚需带目标版本）。 */
@@ -572,6 +637,17 @@ export function resolvePausedStatusTag(
     params: [formatPauseCountdown(remainingSeconds)],
     theme: 'warning',
   };
+}
+
+/**
+ * 百分比批步骤条标题的累计实例数：Math.round 口径，至少 1、不超过实例总数。
+ *
+ * 仅用于进度面板步骤条标题展示（设计稿「25%（3 个）」），数字递增天然表达累计含义；
+ * 发布预览沿用 release-preview.resolveBatchUpdatedCount 的 ceil 口径，两者互不影响。
+ */
+export function resolvePercentAccumulatedCount(pct: number | undefined, replicas: number): number {
+  if (!pct || !Number.isFinite(pct) || replicas <= 0) return 0;
+  return Math.min(replicas, Math.max(1, Math.round((replicas * pct) / 100)));
 }
 
 /**
@@ -648,19 +724,21 @@ function createAction(
   };
 }
 
-/** 剩余秒 → mm:ss（超过 1 小时分钟位自然进位，如 75:00）。 */
-function formatPauseCountdown(seconds: number): string {
-  const total = Math.max(0, Math.floor(seconds));
-  const mm = Math.floor(total / 60);
-  const ss = total % 60;
-  return `${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}`;
-}
-
 /** 分批发布是否已完成全量更新：终态 deployed 且已更新实例数覆盖总实例数。 */
 function isCanaryReleaseFullyUpdated(progress: CanaryStateProgress | null | undefined): boolean {
   if (progress?.status !== APP_DEPLOY_STATUS.DEPLOYED) return false;
   const replicas = progress.replicas ?? 0;
   return replicas > 0 && (progress.updatedReplicas ?? 0) >= replicas;
+}
+
+/**
+ * 解析服务端时间：空值、非法值或 Go 零值时间（0001-01-01T00:00:00Z，表示字段未设置）
+ * 统一收敛为 null，调用方按「无数据」兜底。
+ */
+function parseServerTime(value?: string): Dayjs | null {
+  if (!value) return null;
+  const time = dayjs(value);
+  return time.isValid() && time.year() >= 2000 ? time : null;
 }
 
 /** 批次暂停方式的副文本描述。 */

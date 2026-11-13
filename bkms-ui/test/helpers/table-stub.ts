@@ -16,7 +16,7 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
-import { defineComponent, h } from 'vue';
+import { defineComponent, h, ref } from 'vue';
 
 /** Table/Column 插槽 vnode 的最小结构（stub 只消费 default/header 插槽与 field/label props） */
 interface SlotColumn {
@@ -41,8 +41,20 @@ export const TableStub = defineComponent({
     settings: { type: Object, default: null },
   },
   setup(props, { slots, expose }) {
-    // 契约：页面可能经 ref 调用 getVxeTableInstance().scrollTo()（如 env.vue:545 恢复滚动位置）
-    expose({ getVxeTableInstance: () => ({ scrollTo: () => Promise.resolve() }) });
+    /** 当前高亮行（模拟 vxe row-config.isCurrent + setCurrentRow） */
+    const currentRow = ref<null | Record<string, unknown>>(null);
+    // 契约：页面可能经 ref 调用 getVxeTableInstance() 上的方法
+    //  - scrollTo()：如 env.vue:545 恢复滚动位置
+    //  - setCurrentRow(row)：保存后高亮定位到刚保存的行，对应行渲染 data-current="true"
+    expose({
+      getVxeTableInstance: () => ({
+        scrollTo: () => Promise.resolve(),
+        setCurrentRow: (row: Record<string, unknown>) => {
+          currentRow.value = row;
+          return Promise.resolve();
+        },
+      }),
+    });
     return () => {
       const columns = (slots.default?.() ?? []).filter(Boolean) as SlotColumn[];
       const rows = props.data as Record<string, unknown>[];
@@ -66,7 +78,12 @@ export const TableStub = defineComponent({
         ? rows.map((row, rowIndex) =>
             h(
               'div',
-              { key: rowIndex, 'data-testid': 'table-row' },
+              {
+                key: rowIndex,
+                'data-testid': 'table-row',
+                // 高亮行标记：供「保存后选中该行」类断言使用
+                'data-current': row === currentRow.value ? 'true' : undefined,
+              },
               columns.map((col: SlotColumn, i: number) =>
                 h('span', { key: i }, [
                   col.children?.default

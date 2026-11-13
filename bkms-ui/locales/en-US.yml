@@ -1524,7 +1524,7 @@ CLB 区域: CLB Region
 操作失败，请稍后重试: 'Operation failed, please try again later'
 分批发布进行中，请先完成、跳过或回滚: 'A batch release is in progress. Please finish, skip or roll it back first'
 '已克隆为空间策略「{0}」': 'Cloned as workspace strategy "{0}"'
-查看发布进度: View Release Progress
+查看发布详情: View Release Details
 返回实例列表: 'Back to Instance List'
 灰度发布进度: 'Grayscale Release Progress'
 '环境：': 'Environment: '
@@ -1532,11 +1532,7 @@ CLB 区域: CLB Region
 正在更新: Updating
 暂停中: Paused
 未开始: 'Not Started'
-'共 {0} 批': '{0} batches in total'
-'当前第 {0} 批': 'Batch {0} in progress'
-'已更新 {0}/{1} 个实例': '{0}/{1} instances updated'
-'累计更新 {0} 个实例': 'Cumulative to {0} instances'
-'累计更新至 {0}': 'Cumulative to {0}'
+'{0}（{1} 个）': '{0} ({1} instances)'
 全量更新剩余实例: 'Update remaining instances to full'
 '暂停 {0} 秒 · 自动继续': 'Pause for {0}s · auto-resume'
 '不停 · 自动继续': 'No pause · auto-resume'
@@ -1548,6 +1544,9 @@ CLB 区域: CLB Region
 '正在清理灰度资源': 'Cleaning up canary resources'
 '{0} 秒后自动继续': 'Auto-resume in {0}s'
 '定时暂停中 · {0} 后自动继续': 'Timed pause · auto-continue in {0}'
+'第 {0} 批已完成': 'Batch {0} completed'
+' · 等待手动继续（{version}）': ' · Waiting for manual resume ({version})'
+' · 定时暂停中，{time} 后自动继续（{version}）': ' · Timed pause, resuming in {time} ({version})'
 '正在更新实例': 'Updating instances'
 灰度新起: 'New Canary'
 灰度前: 'Pre-Canary'
@@ -2294,7 +2293,7 @@ HostPort 目前仅对绑定联邦集群的环境生效: HostPort currently only 
 '请输入 0-50 的数字': 'Enter 0–50'
 '汇聚方法': 'Aggregation method'
 'COUNT 下使用率指标的分子、分母分别计数，结果恒为 100%': 'COUNT counts the numerator and denominator of usage ratios separately, so the result is always 100%'
-发布策略在空间内共享，应用部署时可选用。平台内置策略只读，可克隆后按需调整。: Release strategies are shared within the workspace and can be selected during application deployment. Built-in strategies are read-only and can be cloned for customization.
+发布策略用于应用的分批灰度发布，在空间内共享。仅适用于 tRPC、TAF 等平台托管应用（联邦集群除外）。: Release strategies are used for batched grayscale release of applications and are shared within the workspace. They apply only to platform-hosted applications such as tRPC and TAF (federated clusters excluded).
 发布策略加载失败，请稍后重试: Failed to load release strategies. Please try again later.
 查看策略: View Strategy
 克隆策略: Clone Strategy
@@ -2302,6 +2301,11 @@ HostPort 目前仅对绑定联邦集群的环境生效: HostPort currently only 
 策略说明: Description
 批次: Batches
 失败策略: Failure Strategy
+镜像变更: Image Change
+已耗时: Elapsed
+总耗时: Total Duration
+'{0} 时 {1} 分 {2} 秒': '{0}h {1}m {2}s'
+'{0} 分 {1} 秒': '{0}m {1}s'
 暂停方式: Pause Mode
 累计数: Accumulated Count
 批次配置: Batch Configuration
@@ -2329,12 +2333,14 @@ HostPort 目前仅对绑定联邦集群的环境生效: HostPort currently only 
 百分比需为 1% ~ 100% 的整数: Percentage must be an integer between 1% and 100%
 请输入大于 0 的正整数: Enter a positive integer greater than 0
 暂停时长需为 30 ~ 86400 秒之间的整数: Pause duration must be an integer between 30 and 86400 seconds
-策略保存在当前空间，空间下所有应用都可以选用: Strategies are saved in the current workspace and available to all applications in it
+策略在空间内共享，供 tRPC、TAF 等平台托管应用分批灰度发布时选用；保存后仅对后续新部署生效。: Strategies are shared within the workspace and can be selected for batched grayscale release of platform-hosted applications such as tRPC and TAF. Changes take effect only for subsequent new deployments.
+平台内置策略不可编辑。如需调整，请克隆为空间策略后修改。: Built-in strategies cannot be edited. To make adjustments, clone them as workspace strategies and then modify the clone.
 发布批次: Release Batches
 更新实例会换镜像；调整流量只改已更新实例的北极星权重: Updating instances replaces images; traffic adjustments only change the Polaris weight of updated instances
 目标资源: Target Resources
 累计更新副本数: Accumulated updated replicas
-填到本批结束时应更新的总量（按累计值推进），不是本批新增数。新实例上线时北极星权重为 1。: Enter the total to be updated by the end of this batch (accumulated), not the increment of this batch. New instances start with Polaris weight 1.
+'填到本批结束时应更新的{total}（按累计值推进），不是本批新增数。新实例上线时北极星权重为 1。': Enter the {total} to be updated by the end of this batch (accumulated), not the increment of this batch. New instances start with Polaris weight 1.
+总量: Total amount
 暂停: Pause
 不停: No pause
 永久暂停，手动继续: Pause permanently, resume manually
@@ -2347,6 +2353,9 @@ HostPort 目前仅对绑定联邦集群的环境生效: HostPort currently only 
 '按 {0} 个实例换算': 'Calculated based on {0} instances'
 累计更新数需大于上一批: Accumulated updated replicas must be greater than the previous batch
 '累计更新数需大于上一批（{0}）': 'Accumulated updated replicas must be greater than the previous batch ({0})'
+'未设置 100% 批次时，最后一批完成后将自动全量更新剩余实例。': If no 100% batch is set, the remaining instances will be updated automatically in full after the last batch completes.
+'达到 100% 后全部实例已更新完毕，发布将直接结束，无需暂停。': After reaching 100%, all instances are updated and the release ends directly; no pause is needed.
+'已达 100%，不能添加后续批次': Already reached 100%; no more batches can be added
 请输入累计更新副本数: Enter the accumulated updated replicas
 请输入策略名称，1 ~ 32 个字符: Enter a strategy name (1-32 characters)
 例如：生产环境先放 1 个实例观察，再按 25% / 50% / 全量放量: e.g. Update 1 instance in production first, then roll out by 25% / 50% / all

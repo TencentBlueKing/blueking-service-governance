@@ -107,6 +107,8 @@ export default function useReleaseStrategies() {
     pagination,
     /** 全量策略（未经搜索过滤与分页切片），供克隆命名等需要全局信息的场景使用 */
     allStrategies: rawStrategies,
+    /** 过滤 + 排序后的完整列表（未分页），供保存后定位目标行使用 */
+    filteredStrategies,
     strategies,
     fetchList,
     handlePageLimitChange,
