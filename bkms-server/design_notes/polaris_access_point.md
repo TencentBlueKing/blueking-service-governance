@@ -114,7 +114,7 @@ OpenAPI 只用第一个地址（`http://{clientHosts[0]}:8090`），SDK 使用�
 
 ## 5. 数据模型
 
-三个集合都是租户集合（`TenantScoped: true`），索引见迁移 `000026_polaris_access_points_idx`。组件安装任务见 5.1。
+三个集合都是租户集合（`TenantScoped: true`），索引见迁移 `000028_polaris_access_points_idx`。组件安装任务见 5.1。
 该迁移还给 `polaris_configs` 新增了 `accessPointID` 索引，供删除接入点前查询（见 4.3）。
 
 | 集合 | 模型 | 索引 |
