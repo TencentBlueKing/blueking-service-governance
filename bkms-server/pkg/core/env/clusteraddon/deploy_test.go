@@ -49,7 +49,7 @@ var _ = Describe("InstallOrUpgradeClusterAddon", func() {
 			defer pullMock.UnPatch()
 			def := &clusteraddon.ClusterAddonDef{Name: "test-addon", UnsupportedOnFederation: unsupported}
 			err := clusteraddon.InstallOrUpgradeClusterAddon(
-				context.Background(), def, addonEnvironment("cluster", isFederation), "namespace", "1.0.0", nil,
+				context.Background(), def, addonTarget("cluster", isFederation), "namespace", "1.0.0", nil,
 			)
 			if rejected {
 				Expect(errors.Is(err, clusteraddon.ErrAddonNotApplicable)).To(BeTrue())
@@ -82,7 +82,7 @@ var _ = Describe("InstallOrUpgradeClusterAddon", func() {
 					}).
 					Build()
 				Expect(clusteraddon.InstallOrUpgradeClusterAddon(context.Background(), def,
-					addonEnvironment("cluster", false), "bcs-system", "1.0.0", nil)).To(Succeed())
+					addonTarget("cluster", false), "bcs-system", "1.0.0", nil)).To(Succeed())
 			})
 		},
 		Entry("upgrade the discovered release", &helm.Release{Name: "hook-operator"}, nil, "hook-operator"),
@@ -101,7 +101,7 @@ var _ = Describe("InstallOrUpgradeClusterAddon", func() {
 			}).Build()
 			deploy := mockey.Mock(helmdeploy.RunHelmRelease).Return(&helmrelease.Release{}, nil).Build()
 			err := clusteraddon.InstallOrUpgradeClusterAddon(context.Background(), def,
-				addonEnvironment("cluster", false), "bcs-system", "1.0.0", nil)
+				addonTarget("cluster", false), "bcs-system", "1.0.0", nil)
 			Expect(err).To(MatchError(ContainSubstring("is already used by chart another-chart")))
 			Expect(deploy.Times()).To(BeZero())
 		})
@@ -207,7 +207,7 @@ var _ = Describe("Deploy", func() {
 			addons := clusteraddon.BuildAddonInfoList(
 				ctx,
 				[]*clusteraddon.ClusterAddonDef{addonDef},
-				addonEnvironment(clusterID, false),
+				addonTarget(clusterID, false),
 				namespace,
 				repoIndex,
 			)
@@ -227,7 +227,7 @@ var _ = Describe("Deploy", func() {
 
 			By("2. 安装 addon")
 			err := clusteraddon.InstallOrUpgradeClusterAddon(
-				ctx, addonDef, addonEnvironment(clusterID, false), namespace, chartVersion,
+				ctx, addonDef, addonTarget(clusterID, false), namespace, chartVersion,
 				map[string]any{"initialKey": "initialValue"},
 			)
 			Expect(err).NotTo(HaveOccurred())
@@ -242,7 +242,7 @@ var _ = Describe("Deploy", func() {
 
 			By("4. 更新 addon（变更 values）")
 			err = clusteraddon.InstallOrUpgradeClusterAddon(
-				ctx, addonDef, addonEnvironment(clusterID, false), namespace, chartVersion,
+				ctx, addonDef, addonTarget(clusterID, false), namespace, chartVersion,
 				map[string]any{"updatedKey": "updatedValue"},
 			)
 			Expect(err).NotTo(HaveOccurred())

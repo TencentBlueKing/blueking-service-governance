@@ -27,7 +27,6 @@ import (
 	"helm.sh/helm/v3/pkg/action"
 	"helm.sh/helm/v3/pkg/storage/driver"
 
-	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	helmdeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/helm"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/helm"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/metrics"
@@ -49,15 +48,15 @@ var ErrAddonNotApplicable = errors.New("cluster addon is not applicable to the t
 func InstallOrUpgradeClusterAddon(
 	ctx context.Context,
 	addonDef *ClusterAddonDef,
-	env *envmodel.Environment,
+	target ClusterTarget,
 	namespace, chartVersion string,
 	valuesMap map[string]any,
 ) (retErr error) {
 	startedAt := time.Now()
 	defer metrics.ClusterAddonOperationFinished(metrics.ClusterAddonOperationDeploy, startedAt, &retErr)
 
-	clusterID := env.Cluster.ClusterID
-	if !addonDef.IsApplicableToEnv(env) {
+	clusterID := target.ClusterID
+	if !addonDef.IsApplicableTo(target) {
 		return errors.Wrapf(
 			ErrAddonNotApplicable,
 			"install or upgrade addon %s in cluster %s",

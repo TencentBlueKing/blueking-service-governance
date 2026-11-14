@@ -30,6 +30,7 @@ import (
 	helmrelease "helm.sh/helm/v3/pkg/release"
 
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/cluster"
 )
 
 // ClusterAddonDef 集群 Addon 定义
@@ -63,9 +64,31 @@ type ClusterAddonDef struct {
 // DefaultNamespaceValue 默认命名空间
 const DefaultNamespaceValue = "bcs-system"
 
-// IsApplicableToEnv 判断组件是否适用于目标环境，供列表、预检和安装共用。
-func (d *ClusterAddonDef) IsApplicableToEnv(env *envmodel.Environment) bool {
-	unsupported := d.UnsupportedOnFederation && env.Cluster.IsFederation
+// ClusterTarget Addon 所在的目标集群。环境维度与集群维度的接口分别由 TargetOfEnv、TargetOfCluster 构造，
+// 之后的查询、安装逻辑共用
+type ClusterTarget struct {
+	// ClusterID BCS 集群 ID
+	ClusterID string
+	// IsFederation 是否为联邦集群
+	IsFederation bool
+}
+
+// TargetOfEnv 返回环境所在的集群
+func TargetOfEnv(env *envmodel.Environment) ClusterTarget {
+	return ClusterTarget{ClusterID: env.Cluster.ClusterID, IsFederation: env.Cluster.IsFederation}
+}
+
+// TargetOfCluster 返回指定的集群，是否为联邦集群按配置的联邦 Host 集群 ID 列表判断，与创建环境时一致
+func TargetOfCluster(clusterID string) ClusterTarget {
+	return ClusterTarget{
+		ClusterID:    clusterID,
+		IsFederation: (&cluster.Config{ClusterID: clusterID}).IsFederation(),
+	}
+}
+
+// IsApplicableTo 判断组件是否适用于目标集群，供列表、预检和安装共用。
+func (d *ClusterAddonDef) IsApplicableTo(target ClusterTarget) bool {
+	unsupported := d.UnsupportedOnFederation && target.IsFederation
 	return !unsupported
 }
 
@@ -123,7 +146,7 @@ type ClusterInstallInfo struct {
 	Message string
 	// CurrentChartVersion 当前已安装的 Chart 版本
 	CurrentChartVersion string
-	// CurrentValues 当前已安装的 values 参数（JSON 字符串，未安装时为空）
+	// CurrentValues 当前已安装的 values 参数（YAML 字符串，未安装时为空）
 	CurrentValues string
 	// Namespace 插件安装的命名空间
 	Namespace string

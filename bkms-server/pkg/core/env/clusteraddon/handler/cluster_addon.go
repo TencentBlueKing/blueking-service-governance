@@ -20,6 +20,8 @@
 package handler
 
 import (
+	"context"
+
 	"github.com/gin-gonic/gin"
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
@@ -78,12 +80,18 @@ func (h *Handler) ListClusterAddons(c *gin.Context) {
 		return
 	}
 
-	clusterID := env.Cluster.ClusterID
-	if clusterID == "" {
+	if env.Cluster.ClusterID == "" {
 		bkerrs.AbortWithErr(c, bkerrs.Errorf(bkerrs.ErrCodeInvalidArgument,
 			"environment %s has no cluster configured", uriInput.EnvID))
 		return
 	}
+
+	h.respondAddonList(c, clusteraddon.TargetOfEnv(env), queryInput.Namespace)
+}
+
+// respondAddonList 查询目标集群上的插件列表并写入响应，环境维度与集群维度的列表接口共用
+func (h *Handler) respondAddonList(c *gin.Context, target clusteraddon.ClusterTarget, namespace string) {
+	ctx := c.Request.Context()
 
 	addonDefs, err := clusteraddon.ListDefs(ctx, h.addonDefs())
 	if err != nil {
@@ -97,13 +105,7 @@ func (h *Handler) ListClusterAddons(c *gin.Context) {
 		return
 	}
 
-	addons := clusteraddon.BuildAddonInfoList(
-		ctx,
-		addonDefs,
-		env,
-		queryInput.Namespace,
-		repoIndex,
-	)
+	addons := clusteraddon.BuildAddonInfoList(ctx, addonDefs, target, namespace, repoIndex)
 
 	ginutils.OK(c, &serializer.ListClusterAddonsOutput{
 		Addons: lo.Map(addons, func(addon *clusteraddon.ClusterAddonInfo, _ int) *serializer.ClusterAddonInfoOutput {
@@ -143,47 +145,14 @@ func (h *Handler) UpsertClusterAddon(c *gin.Context) {
 		return
 	}
 
-	clusterID := env.Cluster.ClusterID
-	if clusterID == "" {
+	if env.Cluster.ClusterID == "" {
 		bkerrs.AbortWithErr(c, bkerrs.Errorf(bkerrs.ErrCodeInvalidArgument,
 			"environment %s has no cluster configured", uriInput.EnvID))
 		return
 	}
 
-	addonDef, err := h.addonDefs().Get(
-		ctx, clusteraddon.ByName(uriInput.AddonName),
-	)
-	if err != nil {
-		if errors.Is(err, clusteraddon.ErrClusterAddonDefNotFound) {
-			bkerrs.AbortWithErr(
-				c,
-				bkerrs.Errorf(bkerrs.ErrCodeNotFound, "cluster addon %s not found", uriInput.AddonName),
-			)
-			return
-		}
-		bkerrs.AbortWithErr(c, bkerrs.Wrapf(err, bkerrs.ErrCodeInternalServerError,
-			"get cluster addon def %s", uriInput.AddonName))
-		return
-	}
-
-	namespace := addonDef.GetNamespace(jsonInput.Namespace)
-
-	installLock := clusteraddon.NewInstallLock(clusterID, namespace, uriInput.AddonName)
-	if ok := installLock.Acquire(ctx); !ok {
-		bkerrs.AbortWithErr(c, bkerrs.New(bkerrs.ErrCodeAborted, "concurrent install/update conflict occurred"))
-		return
-	}
-	defer installLock.Release(ctx)
-
-	if err = clusteraddon.InstallOrUpgradeClusterAddon(
-		ctx, addonDef, env, namespace, jsonInput.ChartVersion, jsonInput.Values,
-	); err != nil {
-		if errors.Is(err, clusteraddon.ErrAddonNotApplicable) {
-			bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, "deploy cluster addon"))
-			return
-		}
-		bkerrs.AbortWithErr(c, bkerrs.Wrapf(err, bkerrs.ErrCodeInternalServerError,
-			"deploy cluster addon %s", uriInput.AddonName))
+	if err = h.upsertAddon(ctx, clusteraddon.TargetOfEnv(env), uriInput.AddonName, jsonInput); err != nil {
+		bkerrs.AbortWithErr(c, err)
 		return
 	}
 
@@ -201,6 +170,40 @@ func (h *Handler) UpsertClusterAddon(c *gin.Context) {
 	)
 
 	ginutils.JSON(c, 201, nil)
+}
+
+// upsertAddon 在目标集群上加锁安装或更新插件，环境维度与集群维度的安装接口共用，返回的错误已包装为 API 错误
+func (h *Handler) upsertAddon(
+	ctx context.Context,
+	target clusteraddon.ClusterTarget,
+	addonName string,
+	input serializer.UpsertClusterAddonInput,
+) error {
+	addonDef, err := h.addonDefs().Get(ctx, clusteraddon.ByName(addonName))
+	if err != nil {
+		if errors.Is(err, clusteraddon.ErrClusterAddonDefNotFound) {
+			return bkerrs.Errorf(bkerrs.ErrCodeNotFound, "cluster addon %s not found", addonName)
+		}
+		return bkerrs.Wrapf(err, bkerrs.ErrCodeInternalServerError, "get cluster addon def %s", addonName)
+	}
+
+	namespace := addonDef.GetNamespace(input.Namespace)
+
+	installLock := clusteraddon.NewInstallLock(target.ClusterID, namespace, addonName)
+	if ok := installLock.Acquire(ctx); !ok {
+		return bkerrs.New(bkerrs.ErrCodeAborted, "concurrent install/update conflict occurred")
+	}
+	defer installLock.Release(ctx)
+
+	if err = clusteraddon.InstallOrUpgradeClusterAddon(
+		ctx, addonDef, target, namespace, input.ChartVersion, input.Values,
+	); err != nil {
+		if errors.Is(err, clusteraddon.ErrAddonNotApplicable) {
+			return bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, "deploy cluster addon")
+		}
+		return bkerrs.Wrapf(err, bkerrs.ErrCodeInternalServerError, "deploy cluster addon %s", addonName)
+	}
+	return nil
 }
 
 // DeleteClusterAddon 卸载集群插件。

@@ -1,0 +1,36 @@
+[
+  {
+    "createIndexes": "cluster_addon_install_tasks",
+    "indexes": [
+      {
+        "key": {
+          "clusterID": 1,
+          "namespace": 1,
+          "addonName": 1,
+          "createdAt": -1
+        },
+        "name": "idx_clusterID_namespace_addonName_createdAt"
+      },
+      {
+        "key": {
+          "clusterID": 1,
+          "namespace": 1,
+          "addonName": 1
+        },
+        "name": "idx_clusterID_namespace_addonName_running",
+        "unique": true,
+        "partialFilterExpression": {
+          "status": {
+            "$eq": "running"
+          }
+        }
+      },
+      {
+        "key": {
+          "tenantID": 1
+        },
+        "name": "tenantID_1"
+      }
+    ]
+  }
+]

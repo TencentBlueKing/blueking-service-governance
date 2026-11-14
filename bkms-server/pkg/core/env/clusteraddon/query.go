@@ -88,12 +88,12 @@ func (info *ClusterAddonInfo) FillClusterStatus(releases []*helm.Release) {
 func BuildAddonInfoList(
 	ctx context.Context,
 	addonDefs []*ClusterAddonDef,
-	env *envmodel.Environment,
+	target ClusterTarget,
 	namespace string,
 	repoIndex *RepoIndex,
 ) []*ClusterAddonInfo {
 	var addons []*ClusterAddonInfo
-	for _, addonDef := range ApplicableAddonDefs(addonDefs, env) {
+	for _, addonDef := range ApplicableAddonDefs(addonDefs, target) {
 		ns := addonDef.GetNamespace(namespace)
 		info := NewAddonInfoFromDef(addonDef, ns)
 		info.ChartInfo.FillAvailableVersions(repoIndex)
@@ -102,7 +102,7 @@ func BuildAddonInfoList(
 	// 每个 namespace 只查询一次；填充原列表中的对象，保持组件定义的顺序。
 	addonsByNamespace := lo.GroupBy(addons, func(info *ClusterAddonInfo) string { return info.InstallInfo.Namespace })
 	for ns, infos := range addonsByNamespace {
-		releases, err := queryAddonReleases(ctx, env.Cluster.ClusterID, ns)
+		releases, err := queryAddonReleases(ctx, target.ClusterID, ns)
 		if err != nil {
 			log.Warnf(ctx, "query addon status: %v", err)
 			for _, info := range infos {
@@ -119,10 +119,10 @@ func BuildAddonInfoList(
 	return addons
 }
 
-// ApplicableAddonDefs 返回适用于环境集群的组件定义，供列表展示和部署检查共用。
-func ApplicableAddonDefs(defs []*ClusterAddonDef, env *envmodel.Environment) []*ClusterAddonDef {
+// ApplicableAddonDefs 返回适用于目标集群的组件定义，供列表展示和部署检查共用。
+func ApplicableAddonDefs(defs []*ClusterAddonDef, target ClusterTarget) []*ClusterAddonDef {
 	return lo.Filter(defs, func(def *ClusterAddonDef, _ int) bool {
-		return def.IsApplicableToEnv(env)
+		return def.IsApplicableTo(target)
 	})
 }
 
@@ -155,7 +155,7 @@ func InspectRequiredAddons(
 	// 同一 namespace 的 Release 列表在本次检查中只读取一次，包括空列表。
 	releasesByNamespace := make(map[string][]*helm.Release)
 	// 只检查适用于目标环境、且当前应用必选的组件。
-	for _, def := range ApplicableAddonDefs(defs, env) {
+	for _, def := range ApplicableAddonDefs(defs, TargetOfEnv(env)) {
 		if !lo.Some(def.RequiredForAppTypes, addonAppTypes) {
 			continue
 		}

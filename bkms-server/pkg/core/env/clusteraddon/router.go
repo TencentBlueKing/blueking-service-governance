@@ -25,6 +25,9 @@ type ClusterAddonHandler interface {
 	ListClusterAddons(c *gin.Context)
 	UpsertClusterAddon(c *gin.Context)
 	DeleteClusterAddon(c *gin.Context)
+
+	ListWorkspaceClusterAddons(c *gin.Context)
+	UpsertWorkspaceClusterAddon(c *gin.Context)
 }
 
 // Register registers Gin cluster-addon routes.
@@ -35,4 +38,9 @@ func Register(rg *gin.RouterGroup, h ClusterAddonHandler) {
 	rg.POST("/envs/:envID/cluster-addons/:addonName", h.UpsertClusterAddon)
 	// 卸载集群插件
 	rg.DELETE("/envs/:envID/cluster-addons/:addonName", h.DeleteClusterAddon)
+
+	// 查询空间集群的集群插件及安装状态，集群可以没有环境
+	rg.GET("/workspaces/:workspaceID/clusters/:clusterID/cluster-addons", h.ListWorkspaceClusterAddons)
+	// 在空间集群上部署/更新集群插件
+	rg.POST("/workspaces/:workspaceID/clusters/:clusterID/cluster-addons/:addonName", h.UpsertWorkspaceClusterAddon)
 }
