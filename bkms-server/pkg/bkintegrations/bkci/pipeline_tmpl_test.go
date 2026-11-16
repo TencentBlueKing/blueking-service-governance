@@ -50,6 +50,17 @@ func findDispatchType(rendered map[string]any) map[string]any {
 	return found
 }
 
+// findElementByName 按步骤名查找 element，未命中返回 nil，插入新步骤不影响定位
+func findElementByName(elements []any, name string) map[string]any {
+	element, ok := lo.Find(elements, func(item any) bool {
+		return item.(map[string]any)["name"] == name
+	})
+	if !ok {
+		return nil
+	}
+	return element.(map[string]any)
+}
+
 var _ = Describe("PipelineTemplatesReloader", func() {
 	Describe("buildRenderContext", func() {
 		It("should build context with configured builder image", func() {
@@ -134,12 +145,11 @@ var _ = Describe("PipelineTemplatesReloader", func() {
 			Expect(string(renderedData)).NotTo(ContainSubstring("PUBLIC_DEVCLOUD"))
 			Expect(dispatchType).NotTo(HaveKey("dockerBuildVersion"))
 			elements := buildContainer["elements"].([]any)
-			Expect(elements).To(HaveLen(3))
 			for _, element := range elements {
 				Expect(element.(map[string]any)["atomCode"]).NotTo(Equal("DockerBuildAndPushImage"))
 			}
-			scriptElement := elements[1].(map[string]any)
-			Expect(scriptElement["name"]).To(Equal("生成 Dockerfile"))
+			scriptElement := findElementByName(elements, "生成 Dockerfile")
+			Expect(scriptElement).NotTo(BeNil())
 			Expect(scriptElement["@type"]).To(Equal("linuxScript"))
 			Expect(scriptElement["classType"]).To(Equal("linuxScript"))
 			Expect(scriptElement["scriptType"]).To(Equal("SHELL"))
@@ -207,9 +217,8 @@ var _ = Describe("PipelineTemplatesReloader", func() {
 				},
 			))
 
-			elements := buildContainer["elements"].([]any)
-			buildElement := elements[len(elements)-1].(map[string]any)
-			Expect(buildElement["name"]).To(Equal("构建并推送 Docker 镜像"))
+			buildElement := findElementByName(buildContainer["elements"].([]any), "构建并推送 Docker 镜像")
+			Expect(buildElement).NotTo(BeNil())
 			Expect(buildElement["atomCode"]).To(Equal("linuxScript"))
 			Expect(buildElement["@type"]).To(Equal("linuxScript"))
 			Expect(buildElement["classType"]).To(Equal("linuxScript"))

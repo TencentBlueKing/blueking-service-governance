@@ -19,7 +19,12 @@
 package build
 
 import (
+	"maps"
+	"slices"
+	"strings"
 	"time"
+
+	"github.com/pkg/errors"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/utils/credentials"
 )
@@ -150,6 +155,27 @@ func (c *RepositoryConfig) EffectiveImageBuildMode() ImageBuildMode {
 		return ImageBuildModePlatform
 	}
 	return ImageBuildModeRepositoryDockerfile
+}
+
+// ValidateDockerBuildArgs 校验构建参数能按行安全传给流水线
+//
+// 流水线参数把 KEY=VALUE 按换行拼接，构建脚本再逐行拆回 --build-arg：键或值含换行会拆错参数，
+// 还会提前闭合脚本中承接参数的 heredoc，让后续内容被当作命令执行；键为空或含 = 时无法区分键值
+func (c *RepositoryConfig) ValidateDockerBuildArgs() error {
+	if c == nil {
+		return nil
+	}
+
+	// 按键排序遍历，同一份配置总是报同一个错误
+	for _, key := range slices.Sorted(maps.Keys(c.DockerBuildArgs)) {
+		if key == "" || strings.ContainsAny(key, "=\r\n") {
+			return errors.Errorf("key %q must be non-empty and must not contain '=' or line breaks", key)
+		}
+		if strings.ContainsAny(c.DockerBuildArgs[key], "\r\n") {
+			return errors.Errorf("value of %s must not contain line breaks", key)
+		}
+	}
+	return nil
 }
 
 // PlatformBuildConfig 平台通用构建配置。

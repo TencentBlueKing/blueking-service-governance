@@ -37,6 +37,8 @@ const (
 	platformBuildArtifactDirField  = platformBuildConfigField + ".artifactDir"
 	repoBuildConfigDockerfileField = "buildConfig.repoBuildConfig.dockerfile"
 	repoBuildConfigSourceDirField  = "buildConfig.repoBuildConfig.sourceDir"
+	// 前端字段名仍是 dockerBuildArgs
+	repoBuildConfigBuildArgsField = "buildConfig.repoBuildConfig.dockerBuildArgs"
 )
 
 // AppURIInput is the path input for APIs scoped by application.
@@ -145,7 +147,7 @@ func (r *RepositoryBuildConfigInput) ToModel() (*imagebuild.RepositoryConfig, er
 	if r.PlatformBuildConfig != nil {
 		platformBuildConfig = r.PlatformBuildConfig.ToModel()
 	}
-	return &imagebuild.RepositoryConfig{
+	cfg := &imagebuild.RepositoryConfig{
 		Type:                imagebuild.RepositoryType(r.Type),
 		RepoAlias:           r.RepoAlias,
 		RepoURL:             r.RepoURL,
@@ -155,7 +157,11 @@ func (r *RepositoryBuildConfigInput) ToModel() (*imagebuild.RepositoryConfig, er
 		DefaultBranch:       r.DefaultBranch,
 		ImageBuildMode:      imageBuildMode,
 		PlatformBuildConfig: platformBuildConfig,
-	}, nil
+	}
+	if err := cfg.ValidateDockerBuildArgs(); err != nil {
+		return nil, errors.Wrap(err, repoBuildConfigBuildArgsField)
+	}
+	return cfg, nil
 }
 
 // ValidateRepositorySourceDir 校验代码仓库构建目录必须位于仓库内部
