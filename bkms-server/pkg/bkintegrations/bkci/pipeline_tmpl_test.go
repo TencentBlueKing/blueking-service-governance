@@ -35,6 +35,21 @@ const (
 	testBuilderImageVersion = "3.*"
 )
 
+// findDispatchType 返回渲染后模板中的构建机 dispatchType，一份模板只有一个
+func findDispatchType(rendered map[string]any) map[string]any {
+	var found map[string]any
+	for _, stage := range rendered["stages"].([]any) {
+		for _, container := range stage.(map[string]any)["containers"].([]any) {
+			dispatchType, ok := container.(map[string]any)["dispatchType"].(map[string]any)
+			if !ok {
+				continue
+			}
+			found = dispatchType
+		}
+	}
+	return found
+}
+
 var _ = Describe("PipelineTemplatesReloader", func() {
 	Describe("buildRenderContext", func() {
 		It("should build context with configured builder image", func() {
@@ -80,7 +95,7 @@ var _ = Describe("PipelineTemplatesReloader", func() {
 			var rendered map[string]any
 			Expect(json.Unmarshal(renderedData, &rendered)).To(Succeed())
 			Expect(rendered["version"]).To(Equal("1.6.0"))
-			// 社区版没有构建并推送镜像插件，渲染结果中不得再出现
+			// 渲染结果中不得再出现构建并推送镜像插件
 			Expect(string(renderedData)).NotTo(ContainSubstring("DockerBuildAndPushImage"))
 
 			stages := rendered["stages"].([]any)
@@ -108,6 +123,16 @@ var _ = Describe("PipelineTemplatesReloader", func() {
 			Expect(artifactDirParam["valueNotEmpty"]).To(BeFalse())
 
 			buildContainer := stages[1].(map[string]any)["containers"].([]any)[0].(map[string]any)
+			// 配置的构建镜像要写进 DOCKER 类型构建机，不再走 PUBLIC_DEVCLOUD
+			dispatchType := buildContainer["dispatchType"].(map[string]any)
+			Expect(dispatchType["buildType"]).To(Equal("DOCKER"))
+			Expect(dispatchType["imageCode"]).To(Equal(testBuilderImageCode))
+			Expect(dispatchType["imageName"]).To(Equal(testBuilderImageCode))
+			Expect(dispatchType["imageVersion"]).To(Equal(testBuilderImageVersion))
+			Expect(dispatchType["value"]).To(Equal(testBuilderImageCode))
+			Expect(dispatchType["performanceConfigId"]).To(BeNumerically("==", 0))
+			Expect(string(renderedData)).NotTo(ContainSubstring("PUBLIC_DEVCLOUD"))
+			Expect(dispatchType).NotTo(HaveKey("dockerBuildVersion"))
 			elements := buildContainer["elements"].([]any)
 			Expect(elements).To(HaveLen(3))
 			for _, element := range elements {
@@ -272,7 +297,7 @@ var _ = Describe("PipelineTemplatesReloader", func() {
 
 			var rendered map[string]any
 			Expect(json.Unmarshal(renderedData, &rendered)).To(Succeed())
-			Expect(rendered["version"]).To(Equal("1.0.0"))
+			Expect(rendered["version"]).To(Equal("1.0.1"))
 			Expect(rendered["name"]).To(Equal("[bkms] 自动构建触发（[[ .appID ]]）"))
 			// 自逃逸经 Reload 后留下二次渲染占位；全局镜像已落地
 			Expect(string(renderedData)).To(ContainSubstring("[[ .callbackURL ]]"))
@@ -280,6 +305,35 @@ var _ = Describe("PipelineTemplatesReloader", func() {
 			Expect(string(renderedData)).NotTo(ContainSubstring("[[ `[[ .callbackURL ]]` ]]"))
 			Expect(string(renderedData)).To(ContainSubstring(defaultPipelineBuilderImageCode))
 			Expect(string(renderedData)).NotTo(ContainSubstring("[[ .builderImageCode ]]"))
+			Expect(string(renderedData)).NotTo(ContainSubstring("PUBLIC_DEVCLOUD"))
+			dispatchType := findDispatchType(rendered)
+			Expect(dispatchType["buildType"]).To(Equal("DOCKER"))
+			Expect(dispatchType["imageCode"]).To(Equal(defaultPipelineBuilderImageCode))
+			Expect(dispatchType["imageVersion"]).To(Equal(defaultPipelineBuilderImageVersion))
+		})
+
+		It("should render helm template with docker dispatch type", func() {
+			templatePath := filepath.Join("assets", "pipeline_templates", "helm_git_build.json")
+			rawData, err := os.ReadFile(templatePath)
+			Expect(err).NotTo(HaveOccurred())
+
+			reloader := newPipelineTemplatesReloader(nil, nil)
+			renderedData, err := renderPipelineTemplate(
+				"helm_git_build.json", rawData, reloader.buildRenderContext(),
+			)
+			Expect(err).NotTo(HaveOccurred())
+
+			var rendered map[string]any
+			Expect(json.Unmarshal(renderedData, &rendered)).To(Succeed())
+			Expect(rendered["version"]).To(Equal("1.0.1"))
+			Expect(string(renderedData)).NotTo(ContainSubstring("PUBLIC_DEVCLOUD"))
+			dispatchType := findDispatchType(rendered)
+			Expect(dispatchType["buildType"]).To(Equal("DOCKER"))
+			Expect(dispatchType["imageType"]).To(Equal("BKSTORE"))
+			Expect(dispatchType["imageCode"]).To(Equal(defaultPipelineBuilderImageCode))
+			Expect(dispatchType["imageVersion"]).To(Equal(defaultPipelineBuilderImageVersion))
+			Expect(dispatchType["imageRepositoryUserName"]).To(Equal(""))
+			Expect(dispatchType["imageRepositoryPassword"]).To(Equal(""))
 		})
 	})
 
