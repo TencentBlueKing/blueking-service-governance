@@ -113,21 +113,35 @@
               </div>
             </div>
 
-            <!-- 暂停标签：位于时间线轴上，紧跟所属批次 -->
+            <!-- 暂停标签：位于时间线轴上，紧跟所属批次；永久暂停告警橙、定时暂停主蓝 -->
             <div
               v-if="row.hasPause"
               class="flex w-full items-center overflow-hidden py-[6px] pl-[32px]"
               data-testid="preview-row-pause"
             >
-              <span
-                class="flex h-[18px] items-center rounded-[2px] px-[8px] text-[12px] leading-[20px]"
-                :class="pauseTagClassMap[row.pauseTheme]"
-              >
+              <Tag :theme="row.pauseTheme === 'warn' ? 'warning' : 'info'">
                 {{ formatPauseTagText(row, t) }}
-              </span>
+              </Tag>
+            </div>
+            <!-- 无暂停配置的批次补充「不停」标签；末批之后无下一批，不展示 -->
+            <div
+              v-else-if="index < rows.length - 1"
+              class="flex w-full items-center overflow-hidden py-[6px] pl-[32px]"
+              data-testid="preview-row-next"
+            >
+              <Tag class="!text-[#4D4F56]">{{ t('不停，直接进入下一批') }}</Tag>
             </div>
           </template>
         </div>
+
+        <!-- 末批未配置 100%：不补齐全量批，改为底部提示剩余实例自动更新 -->
+        <p
+          v-if="showRemainingAutoUpdateTip"
+          class="pl-[36px] text-[12px] leading-[20px] text-[#979ba5]"
+          data-testid="preview-remaining-tip"
+        >
+          {{ t('最后一批完成后，剩余未更新的实例将自动更新。') }}
+        </p>
       </div>
     </div>
 
@@ -147,10 +161,15 @@
 <script setup lang="ts">
   import { computed } from 'vue';
 
-  import { Button, Dialog } from 'bkui-vue';
+  import { Button, Dialog, Tag } from 'bkui-vue';
   import { useI18n } from 'vue-i18n';
 
-  import { buildPreviewSquares, buildStrategyPreviewRows, buildStrategyPreviewSummary } from '../utils';
+  import {
+    buildPreviewSquares,
+    buildStrategyPreviewRows,
+    buildStrategyPreviewSummary,
+    shouldShowRemainingAutoUpdateTip,
+  } from '../utils';
 
   import type { StrategyBatchForm, StrategyPreviewRow } from '../utils';
 
@@ -173,6 +192,9 @@
 
   const rows = computed(() => buildStrategyPreviewRows(props.batches, t));
 
+  /** 末批未配置 100% 时，剩余实例由系统在最后一批完成后自动更新：底部提示，不补齐全量批 */
+  const showRemainingAutoUpdateTip = computed(() => shouldShowRemainingAutoUpdateTip(props.batches));
+
   const summaryItems = computed(() => {
     const summary = buildStrategyPreviewSummary(props.batches);
     return [
@@ -194,12 +216,6 @@
     prev: 'bg-[#3a84ff]',
     new: 'bg-[#a3c5fd]',
     pending: 'bg-[#dcdee5]',
-  };
-
-  // 暂停标签配色：永久暂停用告警橙，定时暂停用主蓝
-  const pauseTagClassMap: Record<StrategyPreviewRow['pauseTheme'], string> = {
-    warn: 'bg-[#fdeed8] text-[#e38b02]',
-    brand: 'bg-[#e1ecff] text-[#1768ef]',
   };
 </script>
 

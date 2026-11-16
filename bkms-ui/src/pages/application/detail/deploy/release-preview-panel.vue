@@ -112,6 +112,14 @@
         </Tag>
       </div>
     </div>
+    <!-- 末批未配置 100%：不再补齐全量批，改为底部提示剩余实例自动更新 -->
+    <p
+      v-if="preview.remainingAutoUpdate"
+      class="mt-[12px] pl-[30px] text-[12px] leading-[20px] text-[#979BA5]"
+      data-testid="release-remaining-tip"
+    >
+      {{ $t('最后一批完成后，剩余未更新的实例将自动更新。') }}
+    </p>
   </div>
 </template>
 

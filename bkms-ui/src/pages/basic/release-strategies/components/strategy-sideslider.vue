@@ -116,7 +116,7 @@
           <div class="flex items-center gap-[4px] text-[12px] leading-[20px] mt-[24px]">
             <span class="font-700 text-[#313238]">{{ t('发布批次') }}</span>
             <span class="text-[#ea3636]">*</span>
-            <span class="text-[#979ba5]"> （{{ t('更新实例会换镜像；调整流量只改已更新实例的北极星权重') }}） </span>
+            <!-- <span class="text-[#979ba5]"> （{{ t('更新实例会换镜像；调整流量只改已更新实例的北极星权重') }}） </span> -->
           </div>
 
           <div class="flex items-start gap-[16px] max-lg:flex-col">
@@ -131,6 +131,7 @@
             />
             <StrategyBatchDetail
               v-if="activeBatch"
+              ref="batchDetailRef"
               v-model="activeBatchModel"
               :error="batchErrorDetails[activeBatch.key] ?? batchErrors[activeBatch.key]"
               :index="activeBatchIndex"
@@ -215,6 +216,7 @@
   import StrategyPreviewDialog from './strategy-preview-dialog.vue';
 
   import type {
+    BatchErrorDetail,
     StrategyBatchForm,
     StrategyFormData,
     StrategyFormValidateOptions,
@@ -261,7 +263,14 @@
   const batchErrors = ref<Record<string, string>>({});
   /** 批次行级错误详情（详情面板文案，可携带上一批累计值） */
   const batchErrorDetails = ref<Record<string, string>>({});
+  /**
+   * 批次暂停时长错误：只用于定位（提交后选中出错批次并触发详情面板校验），
+   * 不参与批次卡片渲染——卡片宽度有限，长文案会挤压左侧列表。
+   */
+  const batchPauseErrors = ref<Record<string, string>>({});
   const activeBatchKey = ref('');
+  /** 详情面板实例：暂停时长错误由面板内的 Form 渲染，需要在提交校验后主动触发一次 */
+  const batchDetailRef = ref<InstanceType<typeof StrategyBatchDetail> | null>(null);
   /** 抽屉内容容器：定位错误时在其内部按批次 key 查找卡片 */
   const contentRef = ref<HTMLElement | null>(null);
   const basicFormRef = ref<InstanceType<typeof Form> | null>(null);
@@ -381,6 +390,7 @@
     batchesEmptyError.value = '';
     batchErrors.value = {};
     batchErrorDetails.value = {};
+    batchPauseErrors.value = {};
     // 后端名称错误只针对本次提交的策略，回填另一条策略时必须清掉，否则合法名称也会被旧错误挡住
     apiNameError.value = '';
     basicCollapsed.value = false;
@@ -436,6 +446,7 @@
   function handleClosed() {
     batchErrors.value = {};
     batchErrorDetails.value = {};
+    batchPauseErrors.value = {};
     // 抽屉跨策略复用，关闭时清掉后端名称错误，避免残留到下一次打开
     apiNameError.value = '';
     batchesEmptyError.value = '';
@@ -515,7 +526,10 @@
    * 字段级错误优先聚焦输入框；批次错误则选中该批次，由详情面板展示具体错误。
    */
   async function locateFirstError(validation: StrategyFormValidation, hasBasicError: boolean) {
-    const firstErrorBatchKey = formModel.batches.find(batch => validation.batchErrors[batch.key])?.key;
+    // 暂停时长错误不渲染在批次卡片上，但同样要定位到出错批次，由详情面板的 Form 展示
+    const firstErrorBatchKey = formModel.batches.find(
+      batch => validation.batchErrors[batch.key] || validation.batchPauseErrors[batch.key],
+    )?.key;
 
     if (hasBasicError && validation.nameError) {
       basicCollapsed.value = false;
@@ -557,6 +571,7 @@
     formModel.batches.splice(index, 1);
     delete batchErrors.value[target.key];
     delete batchErrorDetails.value[target.key];
+    delete batchPauseErrors.value[target.key];
     if (activeBatchKey.value !== key) return;
 
     const next = formModel.batches[index] ?? formModel.batches[index - 1];
@@ -570,6 +585,13 @@
     }
   }
 
+  /** 批次错误的「i18n 模板 + 插值参数」→ 可直接渲染的文案（卡片与详情面板共用） */
+  function translateBatchErrors(errors: Record<string, BatchErrorDetail>): Record<string, string> {
+    return Object.fromEntries(
+      Object.entries(errors).map(([key, { key: text, params }]) => [key, translate(t, text, params)]),
+    );
+  }
+
   /**
    * 提交与预览共用的唯一校验入口：
    * 基本信息走 Form 校验（错误展示在 FormItem 下）→ 批次错误回填 → 展开分组 → 定位到第一个错误。
@@ -578,15 +600,9 @@
     // 统一从 utils 取一次结果：批次错误仍由抽屉内联展示，字段错误交给 Form 渲染
     const validation = validateStrategyForm(formModel, nameValidateOptions.value);
     batchesEmptyError.value = validation.batchesEmptyError ? t(validation.batchesEmptyError) : '';
-    batchErrors.value = Object.fromEntries(
-      Object.entries(validation.batchErrors).map(([key, value]) => [key, t(value)]),
-    );
-    batchErrorDetails.value = Object.fromEntries(
-      Object.entries(validation.batchErrorDetails).map(([key, { key: text, params }]) => [
-        key,
-        translate(t, text, params),
-      ]),
-    );
+    batchErrors.value = translateBatchErrors(validation.batchErrors);
+    batchErrorDetails.value = translateBatchErrors(validation.batchErrorDetails);
+    batchPauseErrors.value = translateBatchErrors(validation.batchPauseErrors);
 
     // Form 校验会同步渲染字段错误，用 try/catch 兜住 reject，避免未捕获的 Promise
     let basicValid = true;
@@ -599,7 +615,14 @@
     if (basicValid && validation.valid) return true;
 
     await nextTick();
-    locateFirstError(validation, !basicValid);
+    await locateFirstError(validation, !basicValid);
+
+    // 暂停时长错误由详情面板内的 Form 渲染：定位到出错批次后主动触发校验，等它完成再返回，
+    // 保证调用方拿到 false 时错误文案已经渲染出来
+    if (validation.batchPauseErrors[activeBatchKey.value]) {
+      await nextTick();
+      await batchDetailRef.value?.validatePause();
+    }
     return false;
   }
 

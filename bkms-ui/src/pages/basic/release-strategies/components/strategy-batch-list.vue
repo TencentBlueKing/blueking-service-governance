@@ -100,7 +100,7 @@
       class="text-[12px] leading-[20px] text-[#979ba5]"
       data-testid="full-percent-tip"
     >
-      {{ t('未设置 100% 批次时，最后一批完成后将自动全量更新剩余实例。') }}
+      {{ t('最后一批完成后，剩余未更新的实例将自动更新。') }}
     </div>
   </div>
 </template>

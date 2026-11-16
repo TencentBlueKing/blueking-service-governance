@@ -32,7 +32,7 @@
  *   11. 主工作负载为 GameDeployment：分批发布可用
  *   12. 点下拉内「新建策略」：叠加新建策略抽屉；保存后抽屉关闭、自动选中新策略并刷新发布预览
  *   13. 点「查看」：打开已选策略查看抽屉；未选策略时置灰不可点
- *   14. 策略末批未到全量：提示收尾为「最后自动全量」，预览追加系统补齐的全量批
+ *   14. 策略末批未到全量：提示收尾为「最后自动全量」，预览不补齐全量批、底部提示剩余实例自动更新
  *   15. 两批策略（25% → 100%）：提示保留首批灰度阶段，不误判为单批全量
  *   16. 主工作负载资格检查完成前：分批发布禁用；返回 Deployment 后仍禁用
  *
@@ -414,6 +414,8 @@ describe('部署表单：发布策略选择', () => {
     expect(screen.getByText('第 3 批 · 累计 10 个（50%）')).toBeInTheDocument();
     expect(screen.getByText('第 4 批 · 累计 20 个（100%）')).toBeInTheDocument();
     expect(screen.getByText('全量')).toBeInTheDocument();
+    // 末批已是全量，底部不展示「剩余实例自动更新」提示
+    expect(screen.queryByTestId('release-remaining-tip')).not.toBeInTheDocument();
     // 右侧实例分数：每批一行「新版本 X · 旧版本 Y」（发布预览面板改版后的口径）
     expect(screen.getByText('新版本 1 · 旧版本 19')).toBeInTheDocument();
     expect(screen.getByText('新版本 5 · 旧版本 15')).toBeInTheDocument();
@@ -435,7 +437,7 @@ describe('部署表单：发布策略选择', () => {
     expect(screen.getByText('永久暂停 · 手动继续')).toBeInTheDocument();
   });
 
-  it('当策略末批未到全量时，提示与预览应体现系统补齐的全量批', async () => {
+  it('当策略末批未到全量时，预览不补齐全量批而在底部提示剩余实例自动更新', async () => {
     await renderForm();
     await fillBaseForm();
     await enableCanaryMode();
@@ -443,11 +445,15 @@ describe('部署表单：发布策略选择', () => {
 
     // 提示收尾统一为「最后自动全量」：末批 50% 归入累计段，不再出现「最后累计到 50%」
     expect(await screen.findByText('先 1 个实例，确认后累计到 25%、50%，最后自动全量')).toBeInTheDocument();
-    // 配置的 3 批之后追加第 4 批系统补齐的全量批（与策略预览弹窗一致）
+    // 只展示用户配置的 3 批，不再追加第 4 批系统补齐的全量批（与策略预览弹窗一致）
     expect(screen.getByText('第 3 批 · 累计 10 个（50%）')).toBeInTheDocument();
-    expect(screen.getByText('第 4 批 · 累计 20 个（100%）')).toBeInTheDocument();
-    expect(screen.getAllByTestId('batch-squares')).toHaveLength(4);
-    // 摘要批次数仍按用户配置的 3 批统计，与策略预览摘要口径一致
+    expect(screen.queryByText('第 4 批 · 累计 20 个（100%）')).not.toBeInTheDocument();
+    expect(screen.getAllByTestId('batch-squares')).toHaveLength(3);
+    // 底部提示剩余实例在最后一批完成后自动更新
+    expect(screen.getByTestId('release-remaining-tip')).toHaveTextContent(
+      '最后一批完成后，剩余未更新的实例将自动更新。',
+    );
+    // 摘要批次数按用户配置的 3 批统计，与策略预览摘要口径一致
     const summaryCard = screen.getByTestId('release-summary');
     expect(within(summaryCard).getByText('批次数')).toBeInTheDocument();
     expect(within(summaryCard).getByText('3')).toBeInTheDocument();

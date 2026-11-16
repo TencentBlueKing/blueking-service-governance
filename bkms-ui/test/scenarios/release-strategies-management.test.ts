@@ -18,10 +18,11 @@
 /**
  * 场景级测试：发布策略管理页（ROUTES 未收录，本头即场景说明）
  *
- * V = 19（判定节点：列表加载成功 / 加载失败 / 搜索过滤空态 / 名称点击打开抽屉 / 新建提交 /
+ * V = 20（判定节点：列表加载成功 / 加载失败 / 搜索过滤空态 / 名称点击打开抽屉 / 新建提交 /
  *          新建校验拦截 / 新增批次追加到末尾 / 仅剩一批时不可删除 / 累计值递增校验提示 /
- *          预览前置校验拦截 / 预览弹窗换算 / 编辑提交 / 查看只读 / 查看态克隆为空间策略 /
- *          克隆取消不创建 / 删除确认 / 删除取消 / 新建后回到首页并选中 / 克隆后回到首页并选中）
+ *          暂停时长越界校验 / 预览前置校验拦截 / 预览弹窗换算 / 编辑提交 / 查看只读 /
+ *          查看态克隆为空间策略 / 克隆取消不创建 / 删除确认 / 删除取消 / 新建后回到首页并选中 /
+ *          克隆后回到首页并选中）
  * 路径：
  *   1. 列表加载成功：空间策略在前、内置策略带「平台内置」标签、批次摘要渲染
  *   2. 列表加载失败：顶部展示错误提示（保留旧数据）
@@ -32,8 +33,10 @@
  *   6. 新增批次：追加到批次列表末尾并自动选中（全量批由系统隐含补齐，不需要用户配置）
  *   7. 最少一批：仅剩一个批次时不提供删除入口
  *   8. 累计值递增校验：不大于上一批时卡片红字 + 输入框红框，未修正不提交
+ *   8.1 暂停时长校验：越界值原样保留（不静默收敛到 30），右侧常驻范围提示，失焦后报错且不提交
  *   9. 预览前置校验：表单未通过校验时点击「预览策略」不打开弹窗
- *   10. 预览弹窗：校验通过后打开，按实例数换算批次时间线（仅确认，无提交入口）
+ *   10. 预览弹窗：校验通过后打开，按配置比例示意批次时间线（仅确认，无提交入口）；
+ *       无暂停配置的中间批次补「不停，直接进入下一批」标签，末批未到全量时底部提示剩余实例自动更新
  *   11. 编辑策略：抽屉回显名称 → 提交调用 update
  *   12. 查看策略：抽屉只读，提供「克隆为空间策略 / 预览策略 / 关闭」
  *   13. 查看态克隆：切到克隆表单、预填「原名_克隆01」与全部批次，提交走 create
@@ -456,23 +459,75 @@ describe('发布策略管理：新建 / 编辑 / 查看', () => {
     expect(within(restCards[0]).queryByTestId('batch-remove')).not.toBeInTheDocument();
   });
 
-  it('当批次累计值不大于上一批时，批次卡片与目标资源输入框应同时标红提示', async () => {
+  it('当批次累计值不大于前面批次时，批次卡片与目标资源输入框应同时标红提示并指明批次序号', async () => {
     await openCreateDrawer();
     await userEvent.type(screen.getByPlaceholderText('请输入策略名称，1 ~ 32 个字符'), '灰度放量');
     // 第 1 批累计 10 个
     await fireEvent.update(screen.getByTestId('target-value'), '10');
-    // 新增第 2 批并填写 5 个，小于上一批，触发「需大于上一批」
+    // 新增第 2 批并填写 5 个，小于第 1 批，触发「需大于第 1 批」
     await userEvent.click(screen.getByRole('button', { name: '发布批次' }));
     await fireEvent.update(screen.getByTestId('target-value'), '5');
 
     await userEvent.click(screen.getByRole('button', { name: '提交' }));
 
-    // 卡片第二行用简短文案替换暂停说明
-    expect(await screen.findByTestId('batch-card-error')).toHaveTextContent('累计更新数需大于上一批');
+    // 卡片第二行用简短文案替换暂停说明（明确到被比较的批次序号）
+    expect(await screen.findByTestId('batch-card-error')).toHaveTextContent('累计更新数需大于第 1 批');
     // 校验失败定位到第一个错误批次：详情面板切到出错的第 2 批
     expect(within(screen.getByTestId('batch-detail')).getByText('第 2 批 · 累计 5 个')).toBeInTheDocument();
-    // 详情面板补上上一批累计值
-    expect(screen.getByTestId('target-error')).toHaveTextContent('累计更新数需大于上一批（10 个）');
+    // 详情面板补上被比较批次的累计值
+    expect(screen.getByTestId('target-error')).toHaveTextContent('累计更新数需大于第 1 批（10 个）');
+    expect(harness.createReleaseStrategy).not.toHaveBeenCalled();
+  });
+
+  it('当暂停时长越界时，应保留用户输入并在暂停项下报错，不再静默收敛到 30', async () => {
+    await openCreateDrawer();
+    await fillCreateForm('灰度放量', '3');
+
+    // 切到定时暂停：默认 30 秒，输入框下方展示取值说明
+    await userEvent.click(screen.getByRole('radio', { name: '暂停指定时长' }));
+    const pauseInput = await screen.findByTestId('pause-seconds');
+    expect(pauseInput).toHaveValue(30);
+    expect(screen.getByTestId('pause-hint')).toHaveTextContent('可填 30 ~ 86400 秒的整数（最长 24 小时）。');
+    expect(screen.queryByTestId('pause-error')).not.toBeInTheDocument();
+
+    // 填写 5 秒：组件库 change 时不再按 min 收敛为 30
+    await fireEvent.update(pauseInput, '5');
+    await fireEvent.change(pauseInput);
+    expect(pauseInput).toHaveValue(5);
+    // 输入过程不打扰，失焦后才提示；说明文案让位给错误文案
+    expect(screen.queryByTestId('pause-error')).not.toBeInTheDocument();
+    expect(screen.getByTestId('pause-hint')).toBeInTheDocument();
+    await fireEvent.blur(pauseInput);
+    expect(await screen.findByTestId('pause-error')).toHaveTextContent('暂停时长需为 30 ~ 86400 秒之间的整数');
+    await waitFor(() => expect(screen.queryByTestId('pause-hint')).not.toBeInTheDocument());
+
+    await userEvent.click(screen.getByRole('button', { name: '提交' }));
+    expect(harness.createReleaseStrategy).not.toHaveBeenCalled();
+    // 错误只在详情面板内联展示：左侧卡片保持原暂停说明，不被长文案挤压
+    expect(screen.getByTestId('pause-error')).toHaveTextContent('暂停时长需为 30 ~ 86400 秒之间的整数');
+    expect(within(screen.getByTestId('batch-card')).queryByTestId('batch-card-error')).not.toBeInTheDocument();
+
+    // 改回合法值：错误消失，说明文案回到同一位置
+    await fireEvent.update(pauseInput, '60');
+    await waitFor(() => expect(screen.queryByTestId('pause-error')).not.toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByTestId('pause-hint')).toHaveTextContent('可填 30 ~ 86400 秒的整数（最长 24 小时）。'),
+    );
+  });
+
+  it('当暂停时长未失焦直接提交时，应由提交校验在暂停项下展示错误', async () => {
+    await openCreateDrawer();
+    await fillCreateForm('灰度放量', '3');
+    await userEvent.click(screen.getByRole('radio', { name: '暂停指定时长' }));
+    const pauseInput = await screen.findByTestId('pause-seconds');
+    await fireEvent.update(pauseInput, '5');
+
+    // 未失焦：输入过程不提示
+    expect(screen.queryByTestId('pause-error')).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: '提交' }));
+
+    expect(await screen.findByTestId('pause-error')).toHaveTextContent('暂停时长需为 30 ~ 86400 秒之间的整数');
     expect(harness.createReleaseStrategy).not.toHaveBeenCalled();
   });
 
@@ -492,13 +547,16 @@ describe('发布策略管理：新建 / 编辑 / 查看', () => {
     await userEvent.click(screen.getByRole('button', { name: '预览策略' }));
 
     const rows = await screen.findAllByTestId('preview-row');
-    // 用户只配了 1 批（累计 3 个），末批未到全量，系统补齐一个全量批 → 2 行
-    expect(rows).toHaveLength(2);
+    // 用户只配了 1 批（累计 3 个）：不再补齐全量批，只展示配置的批次
+    expect(rows).toHaveLength(1);
     // 首批展示配置的目标值 + 「首批」说明
     expect(within(rows[0]).getByText('3 个')).toBeInTheDocument();
     expect(within(rows[0]).getByText('首批')).toBeInTheDocument();
-    // 系统补齐的全量批带「全量」标签
-    expect(within(rows[1]).getByTestId('preview-row-full')).toBeInTheDocument();
+    // 末批未到全量：底部提示剩余实例自动更新，不再出现「全量」标签
+    expect(screen.getByTestId('preview-remaining-tip')).toHaveTextContent(
+      '最后一批完成后，剩余未更新的实例将自动更新。',
+    );
+    expect(screen.queryByTestId('preview-row-full')).not.toBeInTheDocument();
     // 摘要栏三项指标：批次数 / 暂停次数 / 首批数量（流量批次暂不展示）
     expect(screen.getByText('首批数量')).toBeInTheDocument();
     expect(screen.queryByText('流量批次')).not.toBeInTheDocument();
@@ -506,6 +564,22 @@ describe('发布策略管理：新建 / 编辑 / 查看', () => {
     expect(screen.queryByText('失败策略：暂停当前批次')).not.toBeInTheDocument();
     expect(screen.queryByText('实例总数')).not.toBeInTheDocument();
     expect(harness.createReleaseStrategy).not.toHaveBeenCalled();
+  });
+
+  it('预览弹窗应为无暂停配置的中间批次补充「不停，直接进入下一批」标签', async () => {
+    await renderPage();
+    // 内置策略「分三批灰度」三批均为不暂停
+    await userEvent.click(await screen.findByRole('button', { name: '分三批灰度' }));
+    await screen.findByTestId('strategy-sideslider-header');
+    await userEvent.click(screen.getByRole('button', { name: '预览策略' }));
+
+    const rows = await screen.findAllByTestId('preview-row');
+    expect(rows).toHaveLength(3);
+    // 前两批无暂停配置 → 「不停，直接进入下一批」；末批之后无下一批，不展示
+    expect(screen.getAllByTestId('preview-row-next')).toHaveLength(2);
+    expect(screen.queryAllByTestId('preview-row-pause')).toHaveLength(0);
+    // 末批已配置 100%：不出现剩余实例自动更新提示
+    expect(screen.queryByTestId('preview-remaining-tip')).not.toBeInTheDocument();
   });
 
   it('预览弹窗只做确认，不提供提交入口，关闭后需回到抽屉提交', async () => {

@@ -49,6 +49,11 @@ export interface ReleasePreviewPause {
 }
 
 export interface ReleasePreviewResult {
+  /**
+   * 末批未达全量：剩余实例会在最后一批完成后由系统自动更新。
+   * 预览时间线不再补齐全量批，改为在底部展示提示文案。
+   */
+  remainingAutoUpdate: boolean;
   rows: ReleasePreviewRow[];
   summary: ReleasePreviewSummary;
 }
@@ -57,8 +62,6 @@ export interface ReleasePreviewResult {
 export interface ReleasePreviewRow {
   /** 第 N 批，从 1 开始 */
   batchIndex: number;
-  /** 是否为系统补齐的全量批（末批非 100% 时后端自动补齐剩余实例） */
-  isAutoFull: boolean;
   /** 本批是否为全量（target 为 100%） */
   isFull: boolean;
   /** target 是否为百分比 */
@@ -130,7 +133,8 @@ export function buildBatchSquares(
 /**
  * 根据策略批次列表与实例总数构建发布预览数据。
  * 复杂度 O(batches)，纯函数无副作用，便于单测与复用。
- * 末批非全量时追加「系统补齐的全量批」，与策略预览及后端实际行为对齐。
+ * 末批非全量时不追加全量批，仅通过 remainingAutoUpdate 标记「剩余实例由系统自动更新」，
+ * 由视图在时间线底部展示提示，与策略预览口径一致。
  */
 export function buildReleasePreview(batches: BatchOutputObj[] | undefined, replicas: number): ReleasePreviewResult {
   const list = batches ?? [];
@@ -148,7 +152,6 @@ export function buildReleasePreview(batches: BatchOutputObj[] | undefined, repli
       targetText,
       isPercent: parsed.unit === 'percent',
       isFull: isFullTarget(batch.target),
-      isAutoFull: false,
     };
     prevCount = row.updatedCount;
     if (pauseMode === 'permanent' || pauseMode === 'duration') {
@@ -160,18 +163,6 @@ export function buildReleasePreview(batches: BatchOutputObj[] | undefined, repli
     return row;
   });
 
-  if (shouldAppendAutoFullBatch(list.map(batch => batch.target))) {
-    rows.push({
-      batchIndex: list.length + 1,
-      prevCount,
-      updatedCount: total,
-      targetText: '100%',
-      isPercent: true,
-      isFull: true,
-      isAutoFull: true,
-    });
-  }
-
   return {
     summary: {
       batchCount: list.length,
@@ -180,6 +171,7 @@ export function buildReleasePreview(batches: BatchOutputObj[] | undefined, repli
       trafficBatchCount: 0,
     },
     rows,
+    remainingAutoUpdate: shouldAppendAutoFullBatch(list.map(batch => batch.target)),
   };
 }
 
@@ -267,8 +259,10 @@ export function resolveBatchUpdatedCount(target: string | undefined, replicas: n
 
 /**
  * 末批未达全量时，后端会在所有批次步骤完成后进入 UpdatingPrimary 阶段，把剩余实例补齐到全量
- * （见 bkms-server/pkg/deploy/batchrelease/status.go），即系统自动追加一个全量批。
- * 策略预览与部署预览/提示必须共用该判断，避免同一策略在两侧给出不同的收尾语义。
+ * （见 bkms-server/pkg/deploy/batchrelease/status.go），即系统自动更新剩余实例。
+ * - 运行时的批次进度（batch-release.ts）仍会追加「全量更新剩余实例」步骤；
+ * - 策略预览 / 发布预览不追加批次行，改为底部提示 remainingAutoUpdate。
+ * 两侧必须共用该判断，避免同一策略给出不同的收尾语义。
  */
 export function shouldAppendAutoFullBatch(targets: Array<string | undefined>): boolean {
   if (!targets.length) return false;

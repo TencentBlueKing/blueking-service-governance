@@ -34,6 +34,7 @@ import {
   isFullBatch,
   NAME_MAX_LENGTH,
   parseTarget,
+  shouldShowRemainingAutoUpdateTip,
   sortStrategies,
   toBatchForms,
   toBatchInputs,
@@ -200,7 +201,7 @@ describe('发布策略纯函数：表单整体校验', () => {
       ],
     });
     expect(result.valid).toBe(false);
-    expect(result.batchErrors.bad).toBe('请输入累计更新副本数');
+    expect(result.batchErrors.bad).toEqual({ key: '请输入累计更新副本数', params: [] });
   });
 
   it('定时暂停未填合法秒数应定位到对应批次', () => {
@@ -212,7 +213,11 @@ describe('发布策略纯函数：表单整体校验', () => {
       ],
     });
     expect(result.valid).toBe(false);
-    expect(result.batchErrors.paused).toContain('30 ~ 86400');
+    // 暂停时长错误单列：只由详情面板的 Form 在输入下方展示，不进批次卡片文案
+    expect(result.batchPauseErrors.paused).toEqual({ key: '暂停时长需为 30 ~ 86400 秒之间的整数', params: [] });
+    expect(result.batchPauseErrors.full).toBeUndefined();
+    expect(result.batchErrors.paused).toBeUndefined();
+    expect(result.batchErrorDetails.paused).toBeUndefined();
   });
 
   it('末批不是 100% 时应通过：全量由系统在末批之后隐含补齐', () => {
@@ -244,9 +249,9 @@ describe('发布策略纯函数：表单整体校验', () => {
         batch({ key: 'c', targetUnit: 'percent', targetValue: 100 }),
       ],
     });
-    // 卡片用简短文案，详情面板补上上一批累计值
-    expect(decreasing.batchErrors.b).toBe('累计更新数需大于上一批');
-    expect(decreasing.batchErrorDetails.b).toEqual({ key: '累计更新数需大于上一批（{0}）', params: ['10 个'] });
+    // 卡片用简短文案（只带批次序号），详情面板再补上被比较批次的累计值
+    expect(decreasing.batchErrors.b).toEqual({ key: '累计更新数需大于第 {0} 批', params: ['1'] });
+    expect(decreasing.batchErrorDetails.b).toEqual({ key: '累计更新数需大于第 {0} 批（{1}）', params: ['1', '10 个'] });
     expect(decreasing.batchErrorDetails.a).toBeUndefined();
 
     const mixedUnits = validateStrategyForm({
@@ -271,9 +276,9 @@ describe('发布策略纯函数：表单整体校验', () => {
       ],
     });
     expect(result.valid).toBe(false);
-    expect(result.batchErrors.c).toBe('累计更新数需大于上一批');
-    // 详情指向「上一个同单位批次」（第 1 批）的累计值
-    expect(result.batchErrorDetails.c).toEqual({ key: '累计更新数需大于上一批（{0}）', params: ['5 个'] });
+    expect(result.batchErrors.c).toEqual({ key: '累计更新数需大于第 {0} 批', params: ['1'] });
+    // 详情明确指向「上一个同单位批次」（第 1 批）的累计值，而不是第 2 批
+    expect(result.batchErrorDetails.c).toEqual({ key: '累计更新数需大于第 {0} 批（{1}）', params: ['1', '5 个'] });
 
     // 同单位递增（3 个 > 5 个不成立时才报错；6 个 > 5 个应通过）
     const increasing = validateStrategyForm({
@@ -333,9 +338,9 @@ describe('发布策略纯函数：预览数据', () => {
       ],
       t,
     );
-    // 末批 70% 未到全量，系统补齐第 4 批（100%）
-    expect(rows.map(row => row.accumulatedRatio)).toEqual([0.1, 0.25, 0.7, 1]);
-    expect(rows.map(row => row.countValue)).toEqual(['10%', '25%', '70%', '100%']);
+    // 末批 70% 未到全量：不再补齐第 4 批，仅按配置值示意
+    expect(rows.map(row => row.accumulatedRatio)).toEqual([0.1, 0.25, 0.7]);
+    expect(rows.map(row => row.countValue)).toEqual(['10%', '25%', '70%']);
   });
 
   it('预览行应标记全量批与暂停信息', () => {
@@ -353,22 +358,24 @@ describe('发布策略纯函数：预览数据', () => {
     expect(rows.map(row => row.countValue)).toEqual(['1 个', '25%', '100%']);
   });
 
-  it('末批未配置全量时应由系统补齐一个全量批', () => {
-    const rows = buildStrategyPreviewRows(
-      [
-        batch({ key: 'a', targetUnit: 'count', targetValue: 1 }),
-        batch({ key: 'b', targetUnit: 'percent', targetValue: 50 }),
-      ],
-      t,
-    );
-    expect(rows).toHaveLength(3);
-    expect(rows[2]).toMatchObject({
-      label: '第 3 批',
-      isFull: true,
-      accumulatedRatio: 1,
-      prevRatio: 0.5,
-      hasPause: false,
-    });
+  it('末批未配置全量时不再补齐全量批，只保留配置的批次', () => {
+    const partialBatches = [
+      batch({ key: 'a', targetUnit: 'count', targetValue: 1 }),
+      batch({ key: 'b', targetUnit: 'percent', targetValue: 50 }),
+    ];
+    const rows = buildStrategyPreviewRows(partialBatches, t);
+    expect(rows).toHaveLength(2);
+    expect(rows.map(row => row.label)).toEqual(['第 1 批', '第 2 批']);
+    expect(rows.map(row => row.isFull)).toEqual([false, false]);
+    // 剩余实例由系统自动更新，改由弹窗底部提示承载
+    expect(shouldShowRemainingAutoUpdateTip(partialBatches)).toBe(true);
+    // 末批已配置 100% 时无需提示
+    expect(
+      shouldShowRemainingAutoUpdateTip([
+        batch({ key: 'a', targetUnit: 'percent', targetValue: 50 }),
+        batch({ key: 'b', targetUnit: 'percent', targetValue: 100 }),
+      ]),
+    ).toBe(false);
   });
 
   it('进度方块应按累计占比着色', () => {

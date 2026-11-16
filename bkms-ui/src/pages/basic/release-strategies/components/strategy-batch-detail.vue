@@ -69,7 +69,7 @@
         </div>
       </div>
       <div class="text-[12px] leading-[20px] text-[#979ba5]">
-        <i18n-t keypath="填到本批结束时应更新的{total}（按累计值推进），不是本批新增数。新实例上线时北极星权重为 1。">
+        <i18n-t keypath="填到本批结束时应更新的{total}（按累计值推进），不是本批新增数。">
           <template #total>
             <span class="font-bold">{{ t('总量') }}</span>
           </template>
@@ -115,35 +115,50 @@
         v-if="batch.pauseMode === 'duration'"
         class="mt-[4px]"
       >
-        <Input
-          class="w-[160px]"
-          :disabled="readonly"
-          :max="PAUSE_SECONDS_MAX"
-          :min="PAUSE_SECONDS_MIN"
-          :model-value="batch.pauseSeconds"
-          :placeholder="t('30 ~ 86400 秒')"
-          :suffix="t('秒')"
-          type="number"
-          @update:model-value="handlePauseSecondsChange"
-        />
+        <Form
+          ref="pauseFormRef"
+          class="pause-form"
+          form-type="vertical"
+          :model="pauseFormModel"
+          :rules="pauseRules"
+        >
+          <Form.FormItem property="pauseSeconds">
+            <!-- 不传 min / max：组件库会在 change 时把越界值静默收敛到边界，用户看不到原因 -->
+            <Input
+              class="pause-seconds w-[160px]"
+              data-testid="pause-seconds"
+              :disabled="readonly"
+              :model-value="batch.pauseSeconds"
+              :suffix="t('秒')"
+              type="number"
+              @blur="handlePauseBlur"
+              @update:model-value="handlePauseSecondsChange"
+            />
+            <!-- 与错误文案同一位置：校验通过时展示取值说明，失败时由 error 插槽替换 -->
+            <div
+              v-if="!pauseInvalid"
+              class="pt-[2px] text-[12px] leading-[20px] text-[#979ba5]"
+              data-testid="pause-hint"
+            >
+              {{ t('可填 30 ~ 86400 秒的整数（最长 24 小时）。') }}
+            </div>
+            <template #error="message">
+              <span data-testid="pause-error">{{ message }}</span>
+            </template>
+          </Form.FormItem>
+        </Form>
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-  import { computed } from 'vue';
+  import { computed, reactive, ref, watch } from 'vue';
 
-  import { Input, Radio, Select } from 'bkui-vue';
+  import { Form, Input, Radio, Select } from 'bkui-vue';
   import { useI18n } from 'vue-i18n';
 
-  import {
-    DEFAULT_PAUSE_SECONDS,
-    formatBatchCardTitle,
-    PAUSE_SECONDS_MAX,
-    PAUSE_SECONDS_MIN,
-    PERCENT_TARGET_MAX,
-  } from '../utils';
+  import { DEFAULT_PAUSE_SECONDS, formatBatchCardTitle, PERCENT_TARGET_MAX, validatePauseSeconds } from '../utils';
 
   import type { PauseMode, StrategyBatchForm, TargetUnit } from '../utils';
 
@@ -177,6 +192,63 @@
   const isFullPercent = computed(
     () => batch.value.targetUnit === 'percent' && batch.value.targetValue === PERCENT_TARGET_MAX,
   );
+
+  /** 暂停时长的 Form 实例：失焦 / 提交时由它做校验并内联展示错误 */
+  const pauseFormRef = ref<InstanceType<typeof Form> | null>(null);
+
+  /**
+   * 暂停时长的表单模型：只承载这一项，交给 Form 统一校验（不传 min/max，避免值被静默收敛）。
+   * 必须是稳定引用并被就地更新——Form 校验从 model 取值，若每次渲染换新对象，
+   * 校验触发时读到的还是上一次渲染的旧值，会出现「已经改成 60 却报 5 的错误」。
+   */
+  const pauseFormModel = reactive<{ pauseSeconds: number | undefined }>({
+    pauseSeconds: batch.value.pauseSeconds,
+  });
+
+  /** 是否已进入校验态（失焦过，或提交/预览时由抽屉触发过）：之后值变化实时重算 */
+  const pauseValidated = ref(false);
+
+  /**
+   * 暂停项当前是否校验不通过：直接取 Form 校验的结果，保证与 FormItem 的错误渲染始终一致。
+   * 不能用「值 + 已校验」自己推算——校验是异步的，自己推算会先隐藏说明文案、错误却还没渲染出来。
+   */
+  const pauseInvalid = ref(false);
+
+  const pauseRules = computed(() => ({
+    pauseSeconds: [
+      {
+        trigger: 'blur',
+        validator: (value: number | undefined) => {
+          const error = validatePauseSeconds(value);
+          return error ? t(error) : true;
+        },
+      },
+    ],
+  }));
+
+  // 切换批次或暂停方式：回到「先不报错」的初始态，并清掉上一个批次的错误文案
+  watch(
+    () => [batch.value.key, batch.value.pauseMode],
+    () => {
+      pauseValidated.value = false;
+      pauseInvalid.value = false;
+      pauseFormModel.pauseSeconds = batch.value.pauseSeconds;
+      pauseFormRef.value?.clearValidate();
+    },
+  );
+
+  // 值改动：先把新值同步给 Form 模型，再按需重算；改回合法值即刻恢复，不必等再次失焦
+  watch(
+    () => batch.value.pauseSeconds,
+    value => {
+      pauseFormModel.pauseSeconds = value;
+      if (pauseValidated.value) void validatePause();
+    },
+  );
+
+  function handlePauseBlur() {
+    void validatePause();
+  }
 
   function handlePauseModeChange(value: PauseMode) {
     batch.value.pauseMode = value;
@@ -216,9 +288,39 @@
     const num = Number(value);
     return Number.isNaN(num) ? undefined : num;
   }
+
+  /**
+   * 主动校验暂停时长（失焦 / 提交 / 预览时调用）。
+   * Form.validate() 通过时 resolve、失败时 reject：用 try/catch 承接并驱动 pauseInvalid，
+   * 让「取值说明」与「错误文案」严格互斥；异常已消化，调用方不必再处理 rejection。
+   */
+  async function validatePause() {
+    pauseValidated.value = true;
+    try {
+      await pauseFormRef.value?.validate('pauseSeconds');
+      pauseInvalid.value = false;
+    } catch {
+      pauseInvalid.value = true;
+    }
+  }
+
+  defineExpose({ validatePause });
 </script>
 
 <style lang="postcss" scoped>
+  /* 暂停时长：FormItem 只承担校验，标签与间距都不需要 */
+  .pause-form :deep(.bk-form-item) {
+    margin-bottom: 0;
+  }
+
+  /* 错误文案改为文档流内展示，默认绝对定位会浮在下一项上方 */
+  .pause-form :deep(.bk-form-error) {
+    position: static;
+    padding-top: 2px;
+    font-size: 12px;
+    line-height: 20px;
+  }
+
   /* 三段拼接的输入组：靠深层选择器抹平组件库圆角，原子类无法穿透子组件根节点 */
   .target-value {
     width: 120px;

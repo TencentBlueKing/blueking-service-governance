@@ -134,12 +134,12 @@ describe('buildReleasePreview', () => {
     expect(rows[1]).toMatchObject({ prevCount: 1, targetText: '25%', isPercent: true, isFull: false });
     expect(rows[2]).toMatchObject({ prevCount: 5, targetText: '50%', isPercent: true, isFull: false });
     expect(rows[3]).toMatchObject({ prevCount: 10, targetText: '100%', isPercent: true, isFull: true });
-    // 末批已是全量，无需系统补齐
-    expect(rows.every(row => !row.isAutoFull)).toBeTruthy();
+    // 末批已是全量，底部不出现「剩余实例自动更新」提示
+    expect(buildReleasePreview(batches, 20).remainingAutoUpdate).toBe(false);
   });
 });
 
-describe('末批全量补齐语义（策略预览 / 部署预览共用）', () => {
+describe('剩余实例自动更新语义（策略预览 / 部署预览共用）', () => {
   it('isFullTarget：100% 及以上与空值视为全量，其余视为部分', () => {
     expect(isFullTarget('100%')).toBe(true);
     expect(isFullTarget('120%')).toBe(true);
@@ -150,34 +150,25 @@ describe('末批全量补齐语义（策略预览 / 部署预览共用）', () =
     expect(isFullTarget('3')).toBe(false);
   });
 
-  it('shouldAppendAutoFullBatch：仅当末批非全量时补齐', () => {
+  it('shouldAppendAutoFullBatch：仅当末批非全量时为 true', () => {
     expect(shouldAppendAutoFullBatch(['1', '50%'])).toBe(true);
     expect(shouldAppendAutoFullBatch(['1', '100%'])).toBe(false);
     expect(shouldAppendAutoFullBatch([])).toBe(false);
   });
 
-  it('末批非全量时追加「系统补齐的全量批」，与策略预览一致', () => {
-    const { rows, summary } = buildReleasePreview(
+  it('末批非全量时不再追加全量批，改为标记剩余实例自动更新', () => {
+    const { rows, summary, remainingAutoUpdate } = buildReleasePreview(
       [
         { target: '1', pauseMode: 'none' },
         { target: '50%', pauseMode: 'permanent' },
       ],
       20,
     );
-    expect(rows.map(row => row.batchIndex)).toEqual([1, 2, 3]);
-    // 补齐批：接在末批之后、累计到实例总数、带全量标记、无暂停
-    expect(rows[2]).toMatchObject({
-      isAutoFull: true,
-      isFull: true,
-      isPercent: true,
-      prevCount: 10,
-      targetText: '100%',
-      updatedCount: 20,
-    });
-    expect(rows[2].pause).toBeUndefined();
-    // 用户配置的批次不被标记为补齐
-    expect(rows.filter(row => row.isAutoFull)).toHaveLength(1);
-    // 摘要批次数按用户配置的策略批次统计，与策略预览摘要口径一致
+    // 只展示用户配置的批次，不再补齐全量批
+    expect(rows.map(row => row.batchIndex)).toEqual([1, 2]);
+    expect(rows[1]).toMatchObject({ prevCount: 1, targetText: '50%', isFull: false, updatedCount: 10 });
+    // 视图据此在时间线底部提示「最后一批完成后，剩余未更新的实例将自动更新。」
+    expect(remainingAutoUpdate).toBe(true);
     expect(summary.batchCount).toBe(2);
   });
 });

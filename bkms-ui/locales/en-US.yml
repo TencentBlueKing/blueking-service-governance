@@ -2384,13 +2384,14 @@ BSCP: BSCP
 百分比需为 1% ~ 100% 的整数: Percentage must be an integer between 1% and 100%
 请输入大于 0 的正整数: Enter a positive integer greater than 0
 暂停时长需为 30 ~ 86400 秒之间的整数: Pause duration must be an integer between 30 and 86400 seconds
+可填 30 ~ 86400 秒的整数（最长 24 小时）。: Enter an integer between 30 and 86400 seconds (24 hours at most).
 策略在空间内共享，供 tRPC、TAF 等平台托管应用分批灰度发布时选用；保存后仅对后续新部署生效。: Strategies are shared within the workspace and can be selected for batched grayscale release of platform-hosted applications such as tRPC and TAF. Changes take effect only for subsequent new deployments.
 平台内置策略不可编辑。如需调整，请克隆为空间策略后修改。: Built-in strategies cannot be edited. To make adjustments, clone them as workspace strategies and then modify the clone.
 发布批次: Release Batches
 更新实例会换镜像；调整流量只改已更新实例的北极星权重: Updating instances replaces images; traffic adjustments only change the Polaris weight of updated instances
 目标资源: Target Resources
 累计更新副本数: Accumulated updated replicas
-'填到本批结束时应更新的{total}（按累计值推进），不是本批新增数。新实例上线时北极星权重为 1。': Enter the {total} to be updated by the end of this batch (accumulated), not the increment of this batch. New instances start with Polaris weight 1.
+'填到本批结束时应更新的{total}（按累计值推进），不是本批新增数。': Enter the {total} to be updated by the end of this batch (accumulated), not the increment of this batch.
 总量: Total amount
 暂停: Pause
 不停: No pause
@@ -2402,9 +2403,9 @@ BSCP: BSCP
 修改后点「预览策略」可查看整体效果: Click "Preview Strategy" after modification to see the overall effect
 预览策略: Preview Strategy
 '按 {0} 个实例换算': 'Calculated based on {0} instances'
-累计更新数需大于上一批: Accumulated updated replicas must be greater than the previous batch
-'累计更新数需大于上一批（{0}）': 'Accumulated updated replicas must be greater than the previous batch ({0})'
-'未设置 100% 批次时，最后一批完成后将自动全量更新剩余实例。': If no 100% batch is set, the remaining instances will be updated automatically in full after the last batch completes.
+'累计更新数需大于第 {0} 批': 'Accumulated updated replicas must be greater than batch {0}'
+'累计更新数需大于第 {0} 批（{1}）': 'Accumulated updated replicas must be greater than batch {0} ({1})'
+'最后一批完成后，剩余未更新的实例将自动更新。': Once the last batch is completed, the remaining un-updated instances will be automatically updated.
 '达到 100% 后全部实例已更新完毕，发布将直接结束，无需暂停。': After reaching 100%, all instances are updated and the release ends directly; no pause is needed.
 '已达 100%，不能添加后续批次': Already reached 100%; no more batches can be added
 请输入累计更新副本数: Enter the accumulated updated replicas

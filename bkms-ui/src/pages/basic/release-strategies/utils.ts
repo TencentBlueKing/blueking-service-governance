@@ -74,17 +74,23 @@ export interface StrategyFormValidateOptions {
   selfName?: string;
 }
 
-/** 表单校验结果：错误值为 i18n key（项目约定中文 key 直译） */
+/** 表单校验结果：错误值为 i18n 模板 + 插值参数（项目约定中文 key 直译） */
 export interface StrategyFormValidation {
-  /** 批次行级错误的详情文案（如带上上一批累计值），缺省时回落到 batchErrors */
+  /** 批次行级错误的详情文案（额外带上被比较批次的累计值），缺省时回落到 batchErrors */
   batchErrorDetails: Record<string, BatchErrorDetail>;
   /**
    * 批次行级错误（简短文案），key 为批次的稳定标识。
-   * 批次卡片第二行直接展示，宽度有限不携带参数。
+   * 批次卡片第二行直接展示，宽度有限，只带批次序号不带累计值。
    */
-  batchErrors: Record<string, string>;
+  batchErrors: Record<string, BatchErrorDetail>;
   /** 表单级错误：批次列表为空 */
   batchesEmptyError?: string;
+  /**
+   * 批次暂停时长错误（仅 duration 模式），key 为批次的稳定标识。
+   * 详情面板据此把文案内联到「暂停」输入下方，而不是挂在「目标资源」行上；
+   * 卡片仍从 batchErrors 取合并后的错误展示。
+   */
+  batchPauseErrors: Record<string, BatchErrorDetail>;
   descriptionError?: string;
   nameError?: string;
   valid: boolean;
@@ -206,23 +212,20 @@ export function buildPreviewSquares(
 /**
  * 已校验的表单批次 → 预览弹窗时间线行。
  *
- * 全量由系统补齐：用户把末批配置到 100% 时即视为全量批；
- * 未配置到 100%（如配置 25% / 70%）时，系统会在末批确认后自动补一个全量批
- * （后端 UpdatingPrimary 阶段），因此追加一行系统补齐的全量批。
- * 「是否需要补齐」由 release-preview 的 shouldAppendAutoFullBatch 统一判断，
- * 与部署侧发布预览/提示共用同一语义。
+ * 只展示用户配置的批次：末批未配置到 100% 时系统仍会在其完成后自动更新剩余实例
+ * （后端 UpdatingPrimary 阶段），但预览不再补齐全量批，改为弹窗底部提示
+ * （见 shouldShowRemainingAutoUpdateTip）。
  */
 export function buildStrategyPreviewRows(batches: StrategyBatchForm[], t: TranslateFn): StrategyPreviewRow[] {
   const ratios = resolvePreviewRatios(batches);
   let prevRatio = 0;
 
-  const rows = batches.map((batch, index) => {
-    const targetText = formatTargetValue(batch);
+  return batches.map((batch, index) => {
     const accumulatedRatio = ratios[index] ?? 1;
     const row: StrategyPreviewRow = {
       key: batch.key,
       label: translate(t, '第 {0} 批', [index + 1]),
-      targetText,
+      targetText: formatTargetValue(batch),
       countValue: formatBatchTargetText(batch, t),
       countLabel: index === 0 ? t('首批') : t('累计'),
       prevRatio,
@@ -235,26 +238,6 @@ export function buildStrategyPreviewRows(batches: StrategyBatchForm[], t: Transl
     prevRatio = accumulatedRatio;
     return row;
   });
-
-  // 末批已全量则无需补齐；否则系统在末批确认后自动补齐剩余实例
-  const lastBatch = batches[batches.length - 1];
-  if (shouldAppendAutoFullBatch(batches.map(formatTargetValue))) {
-    rows.push({
-      key: `${lastBatch.key}-auto-full`,
-      label: translate(t, '第 {0} 批', [batches.length + 1]),
-      targetText: '100%',
-      countValue: '100%',
-      countLabel: t('累计'),
-      prevRatio,
-      accumulatedRatio: 1,
-      isFull: true,
-      hasPause: false,
-      pauseText: '',
-      pauseTheme: 'brand',
-    });
-  }
-
-  return rows;
 }
 
 /** 预览摘要：批次数 / 暂停次数 / 首批数量 / 流量批次（本期无流量批次，固定 0） */
@@ -443,6 +426,14 @@ export function parseTarget(target: string | undefined): { unit: TargetUnit; val
 }
 
 /**
+ * 是否需要展示「剩余实例自动更新」提示：末批未配置到 100% 时，
+ * 系统会在最后一批完成后自动更新剩余实例（与部署侧发布预览共用同一判断）。
+ */
+export function shouldShowRemainingAutoUpdateTip(batches: StrategyBatchForm[]): boolean {
+  return shouldAppendAutoFullBatch(batches.map(formatTargetValue));
+}
+
+/**
  * 列表排序：空间策略在前（updatedAt 倒序，新建策略自然排到首行），
  * 平台内置策略固定底部（保持接口返回顺序）。
  */
@@ -497,8 +488,9 @@ export function validateStrategyForm(
   form: StrategyFormData,
   options: StrategyFormValidateOptions = {},
 ): StrategyFormValidation {
-  const batchErrors: Record<string, string> = {};
+  const batchErrors: Record<string, BatchErrorDetail> = {};
   const batchErrorDetails: Record<string, BatchErrorDetail> = {};
+  const batchPauseErrors: Record<string, BatchErrorDetail> = {};
 
   const nameError = validateStrategyName(form.name, options);
 
@@ -509,44 +501,54 @@ export function validateStrategyForm(
   form.batches.forEach(batch => {
     const targetError = validateTargetValue(batch.targetValue, batch.targetUnit);
     if (targetError) {
-      batchErrors[batch.key] = targetError;
+      batchErrors[batch.key] = { key: targetError, params: [] };
       return;
     }
     if (batch.pauseMode === 'duration') {
       const pauseError = validatePauseSeconds(batch.pauseSeconds);
-      if (pauseError) batchErrors[batch.key] = pauseError;
+      // 暂停时长错误只进 batchPauseErrors：卡片宽度有限，长文案会挤压左侧批次列表，
+      // 文案统一由详情面板的 FormItem 在输入下方内联展示。
+      if (pauseError) batchPauseErrors[batch.key] = { key: pauseError, params: [] };
     }
   });
 
-  // 同单位累计值需严格递增：按单位分别记录「上一次出现的同单位值」再比较。
+  // 同单位累计值需严格递增：按单位分别记录「上一次出现的同单位值与批次序号」再比较。
   // 只比较相邻同单位对会漏判混合单位配置（如 [5 个, 50%, 3 个]）；
   // 跨单位比较跳过——「个」与「%」是两种量纲，无可比性，绝对关系由后端 target 校验兜底。
-  const lastSameUnit: Partial<Record<TargetUnit, { text: string; value: number }>> = {};
-  form.batches.forEach(current => {
+  const lastSameUnit: Partial<Record<TargetUnit, { index: number; text: string; value: number }>> = {};
+  form.batches.forEach((current, index) => {
     if (batchErrors[current.key]) return;
     const value = Number(current.targetValue);
     const last = lastSameUnit[current.targetUnit];
     if (last && value <= last.value) {
-      // 卡片文案受宽度限制不带参数；详情面板补上「上一批累计值」，与设计稿一致
-      batchErrors[current.key] = '累计更新数需大于上一批';
+      // 被比较的批次不一定是「上一批」（混合单位时会跨批比较），文案用批次序号指明，避免误导。
+      // 卡片受宽度限制只带序号；详情面板再补上被比较批次的累计值，与设计稿一致。
+      const batchLabel = String(last.index + 1);
+      batchErrors[current.key] = { key: '累计更新数需大于第 {0} 批', params: [batchLabel] };
       batchErrorDetails[current.key] = {
-        key: '累计更新数需大于上一批（{0}）',
-        params: [last.text],
+        key: '累计更新数需大于第 {0} 批（{1}）',
+        params: [batchLabel, last.text],
       };
       return;
     }
     if (Number.isFinite(value)) {
-      lastSameUnit[current.targetUnit] = { text: formatBatchTargetText(current, key => key), value };
+      lastSameUnit[current.targetUnit] = { index, text: formatBatchTargetText(current, key => key), value };
     }
   });
 
   return {
-    valid: !nameError && !descriptionError && !batchesEmptyError && Object.keys(batchErrors).length === 0,
+    valid:
+      !nameError &&
+      !descriptionError &&
+      !batchesEmptyError &&
+      Object.keys(batchErrors).length === 0 &&
+      Object.keys(batchPauseErrors).length === 0,
     nameError: nameError || undefined,
     descriptionError: descriptionError || undefined,
     batchesEmptyError: batchesEmptyError || undefined,
     batchErrors,
     batchErrorDetails,
+    batchPauseErrors,
   };
 }
 

@@ -508,8 +508,8 @@
 
   /**
    * 策略说明文案：先 1 个实例，确认后累计到 25%、50%，最后自动全量。
-   * 末批非全量时后端仍会补齐剩余实例（UpdatingPrimary 阶段），因此收尾固定为「最后自动全量」，
-   * 与策略预览、发布预览中的「系统补齐全量批」保持一致。
+   * 末批非全量时后端仍会自动更新剩余实例（UpdatingPrimary 阶段），因此收尾固定为「最后自动全量」；
+   * 预览时间线不再补齐该全量批，改为底部「剩余未更新的实例将自动更新」提示。
    */
   const strategyHintText = computed(() => {
     const hint = buildStrategyHint(selectedStrategy.value?.batches);
