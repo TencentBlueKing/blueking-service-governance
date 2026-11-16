@@ -237,19 +237,19 @@
 
   import { formatPauseCountdown, resolveTimedPauseRemainingSeconds } from '../batch-release';
 
-  import type { BatchReleaseProgressOutputObj } from '~/@types/v1/deploy';
   import type {
     BatchReleaseAction,
     BatchReleaseBannerAction,
     BatchReleaseBannerView,
     BatchReleaseIconKind,
   } from '../batch-release';
+  import type { BatchReleaseProgressOutputObj } from '~/@types/v1/deploy';
 
   const props = defineProps<{
-    /** 原始进度快照：定时暂停倒计时按逐秒时间源实时换算（statusTag.params 仅随轮询刷新） */
-    progress?: BatchReleaseProgressOutputObj | null;
     /** 正在执行的操作，对应按钮展示 loading */
     pendingAction?: BatchReleaseAction | null;
+    /** 原始进度快照：定时暂停倒计时按逐秒时间源实时换算（statusTag.params 仅随轮询刷新） */
+    progress?: BatchReleaseProgressOutputObj | null;
     /** 由 resolveBatchReleaseBanner 收敛出的展示模型 */
     view: BatchReleaseBannerView;
   }>();

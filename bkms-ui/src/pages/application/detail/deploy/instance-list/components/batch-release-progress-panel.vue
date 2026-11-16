@@ -540,24 +540,27 @@
       display: none;
     }
   }
+
+  .batch-release-progress-banner :deep(.bk-button-default) {
+    background-color: #fff;
+  }
 </style>
 
 <!-- Popover 内容会 Teleport 到 body，样式需写在非 scoped 中 -->
 <style lang="postcss">
+  /* 容器统一 grid：标签列取全局最宽行，各行取值列左对齐到同一竖线（行本身 display: contents） */
   .release-detail-popover {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
+    display: grid;
+    grid-template-columns: max-content max-content;
+    gap: 8px 24px;
+    align-items: baseline;
     padding: 4px;
+    font-size: 12px;
+    line-height: 20px;
   }
 
   .release-detail-popover__row {
-    display: grid;
-    grid-template-columns: max-content max-content;
-    align-items: baseline;
-    column-gap: 24px;
-    font-size: 12px;
-    line-height: 20px;
+    display: contents;
   }
 
   .release-detail-popover__label {
