@@ -125,6 +125,7 @@ describe('monitor instance ranking', () => {
       rankType: 'top',
       method: 'sum',
     });
+    expect(requestRanking.mock.calls[0]?.[0]).not.toHaveProperty('instances');
     expect(requestMetric).not.toHaveBeenCalled();
   });
 
@@ -172,6 +173,72 @@ describe('monitor instance ranking', () => {
         method: 'max',
       })),
     );
+  });
+
+  it('ranks selected Pods within each environment and applies one global limit', async () => {
+    requestRanking
+      .mockResolvedValue([])
+      .mockResolvedValueOnce([
+        { instance: 'same-pod', unit: 'percent', value: 0.3 },
+        { instance: 'prod-b', unit: 'percent', value: 0.2 },
+      ])
+      .mockResolvedValueOnce([{ instance: 'same-pod', unit: 'percent', value: 0.5 }]);
+
+    const ranked = await fetchRankedMonitorInstances({
+      ...rankingQuery,
+      envNames: ['prod', 'test', 'without-selection', 'prod'],
+      instances: [
+        selected('same-pod', 'test'),
+        selected(' same-pod '),
+        selected('same-pod'),
+        selected('prod-b'),
+        selected(' ', 'without-selection'),
+        selected('out-of-scope', 'dev'),
+      ],
+      limit: 2,
+    });
+
+    expect(requestRanking.mock.calls.map(([params]) => [params.envName, params.instances, params.limit])).toEqual([
+      ['prod', ['same-pod', 'prod-b'], 2],
+      ['test', ['same-pod'], 2],
+    ]);
+    expect(ranked).toEqual([
+      { ...selected('same-pod', 'test'), unit: 'percent', value: 0.5 },
+      { ...selected('same-pod'), unit: 'percent', value: 0.3 },
+    ]);
+  });
+
+  it('preserves the API order when only one environment has selected Pods', async () => {
+    requestRanking.mockResolvedValue([
+      { instance: 'pod-a', unit: 'percent', value: 0.1 },
+      { instance: 'pod-b', unit: 'percent', value: 0.2 },
+    ]);
+
+    expect(
+      await fetchRankedMonitorInstances({
+        ...rankingQuery,
+        envNames: ['prod', 'test'],
+        instances: [selected('pod-a'), selected('pod-b')],
+      }),
+    ).toEqual([
+      { ...selected('pod-a'), unit: 'percent', value: 0.1 },
+      { ...selected('pod-b'), unit: 'percent', value: 0.2 },
+    ]);
+    expect(requestRanking).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ envName: 'prod', instances: ['pod-a', 'pod-b'] }),
+    );
+  });
+
+  it('skips ranking when an explicit selection has no eligible Pods', async () => {
+    requestRanking.mockResolvedValue([]);
+    expect(await fetchRankedMonitorInstances({ ...rankingQuery, instances: [] })).toEqual([]);
+    expect(
+      await fetchRankedMonitorInstances({
+        ...rankingQuery,
+        instances: [selected(' '), selected('outside', 'test'), selected('no-environment', '')],
+      }),
+    ).toEqual([]);
+    expect(requestRanking).not.toHaveBeenCalled();
   });
 
   it('keeps successful environments when a ranking request fails and returns no selection for empty rankings', async () => {

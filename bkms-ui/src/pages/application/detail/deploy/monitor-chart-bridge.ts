@@ -85,6 +85,7 @@ interface MonitorQueryTime {
 
 interface MonitorRankingQuery extends MonitorQueryTime {
   envNames: string[];
+  instances?: MonitorInstance[];
   limit?: number;
   rankBy: MonitorRankBy;
   rankType?: MonitorRankType;
@@ -134,15 +135,7 @@ const COMPARE_PALETTE: string[] = [
 /** 按环境查指标时序，只传已解析的实例名单。 */
 export async function fetchMonitorMetric(query: MonitorMetricQuery): Promise<MonitorMetricTimeSeries | undefined> {
   const { appID, metricKey, startTime, endTime, interval } = query;
-  const envToInstances = new Map<string, string[]>();
-  // 同名 Pod 可以属于不同环境，按环境分组后再传原始实例名。
-  for (const { envName, instance } of query.instances) {
-    const name = instance.trim();
-    if (!envName || !name) continue;
-    const names = envToInstances.get(envName) ?? [];
-    if (!names.includes(name)) names.push(name);
-    envToInstances.set(envName, names);
-  }
+  const envToInstances = groupMonitorInstances(query.instances);
   if (!appID || !metricKey || !envToInstances.size) return undefined;
 
   const results = await Promise.all(
@@ -170,12 +163,18 @@ export async function fetchMonitorMetric(query: MonitorMetricQuery): Promise<Mon
 export async function fetchRankedMonitorInstances(query: MonitorRankingQuery): Promise<RankedMonitorInstance[]> {
   const { appID, startTime, endTime, interval, limit = 10, rankBy, rankType = 'top', method = 'sum' } = query;
   if (!appID) return [];
-  const envNames = [...new Set(query.envNames.filter(Boolean))];
+  const selectedByEnv = query.instances === undefined ? undefined : groupMonitorInstances(query.instances);
+  // 手选时跳过无候选实例的环境，空候选会触发该环境的全量排名。
+  const envNames = [...new Set(query.envNames)].filter(
+    envName => envName && (!selectedByEnv || selectedByEnv.has(envName)),
+  );
   const results = await Promise.all(
     envNames.map(async envName => {
+      const instances = selectedByEnv?.get(envName);
       const ranked = await BkintegrationsBkmonitorService.rankInstances({
         appID,
         envName,
+        ...(instances ? { instances } : {}),
         startTime,
         endTime,
         interval,
@@ -340,6 +339,19 @@ async function getInstanceTimeSeries(params: MonitorChartApiParams): Promise<Mon
   })().finally(() => inFlightRequests.delete(dedupKey));
   inFlightRequests.set(dedupKey, request);
   return request;
+}
+
+/** 同名 Pod 可以属于不同环境，按环境分组后再传原始实例名。 */
+function groupMonitorInstances(instances: MonitorInstance[]): Map<string, string[]> {
+  const envToInstances = new Map<string, string[]>();
+  for (const { envName, instance } of instances) {
+    const name = instance.trim();
+    if (!envName || !name) continue;
+    const names = envToInstances.get(envName) ?? [];
+    if (!names.includes(name)) names.push(name);
+    envToInstances.set(envName, names);
+  }
+  return envToInstances;
 }
 
 /**

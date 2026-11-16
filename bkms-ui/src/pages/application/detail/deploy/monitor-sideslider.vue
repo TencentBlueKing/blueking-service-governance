@@ -141,7 +141,6 @@
               v-model="rankBy"
               class="monitor-ranking-metric flex-shrink-0"
               :clearable="false"
-              :disabled="isRankingDisabled"
             >
               <Select.Option
                 v-for="column in rankColumns"
@@ -155,7 +154,6 @@
             v-model="rankType"
             class="monitor-ranking-direction flex-shrink-0"
             :clearable="false"
-            :disabled="isRankingDisabled"
           >
             <Select.Option
               id="top"
@@ -172,7 +170,6 @@
             <Input
               v-model="limitDraft"
               class="monitor-ranking-limit focus-within:z-1"
-              :disabled="isRankingDisabled"
               :max="50"
               :min="1"
               placeholder="1–50"
@@ -330,15 +327,10 @@
         >
           <template #header>
             <button
-              :aria-label="
-                !isRankingDisabled && rankBy === column.key
-                  ? `${t(column.tableLabel)} (${rankDirectionLabel})`
-                  : undefined
-              "
-              :aria-pressed="!isRankingDisabled && rankBy === column.key"
+              :aria-label="rankBy === column.key ? `${t(column.tableLabel)} (${rankDirectionLabel})` : undefined"
+              :aria-pressed="rankBy === column.key"
               class="monitor-rank-header"
-              :disabled="isRankingDisabled"
-              :title="!isRankingDisabled && rankBy === column.key ? rankingColumnTooltip : undefined"
+              :title="rankBy === column.key ? rankingColumnTooltip : undefined"
               type="button"
               @click.stop="sortByColumn(column.key)"
             >
@@ -347,8 +339,8 @@
                 aria-hidden="true"
                 class="monitor-rank-arrows"
               >
-                <span :class="{ active: !isRankingDisabled && rankBy === column.key && rankType === 'bottom' }" />
-                <span :class="{ active: !isRankingDisabled && rankBy === column.key && rankType === 'top' }" />
+                <span :class="{ active: rankBy === column.key && rankType === 'bottom' }" />
+                <span :class="{ active: rankBy === column.key && rankType === 'top' }" />
               </span>
             </button>
           </template>
@@ -578,7 +570,6 @@
 
   const selectedInstance = ref<string[]>([]);
   const committedInstances = ref<string[]>([]);
-  const isRankingDisabled = computed(() => selectedInstance.value.length > 0);
   const searchText = ref('');
   const treeRef = ref<InstanceType<typeof Tree>>();
   const selectRef = ref<InstanceType<typeof Select>>();
@@ -595,7 +586,7 @@
     limitDraft.value = committedLimit.value;
   }
 
-  const cpuUsageFormatter = new Intl.NumberFormat('en-US', {
+  const decimalFormatter = new Intl.NumberFormat('en-US', {
     maximumFractionDigits: 2,
     minimumFractionDigits: 2,
     useGrouping: false,
@@ -623,7 +614,7 @@
       metricLabel: 'CPU 用量',
       tableLabel: 'CPU 用量（cores）',
       width: 120,
-      format: formatCpuUsage,
+      format: formatDecimal,
     },
     {
       key: 'memory_usage',
@@ -641,7 +632,6 @@
   const rankDirectionLabel = computed(() => t(rankType.value === 'top' ? '降序' : '升序'));
   const rankingColumnTooltip = computed(() => t('排名值为所选时段内 {0} 汇聚结果的均值', [method.value.toUpperCase()]));
   const rankingTooltip = computed(() => {
-    if (isRankingDisabled.value) return t('选择实例后展示全部已选实例');
     const metric = rankColumns.find(column => column.key === rankBy.value);
     return t('所有图表按「{0}」的 {1} 汇聚结果在所选时段内的均值{2}，取前 {3} 个实例', [
       t(metric?.metricLabel ?? 'CPU 使用率'),
@@ -658,7 +648,6 @@
   }
 
   function sortByColumn(key: MonitorRankBy) {
-    if (isRankingDisabled.value) return;
     rankType.value = rankBy.value === key && rankType.value === 'top' ? 'bottom' : 'top';
     rankBy.value = key;
   }
@@ -920,26 +909,25 @@
       interval: effectiveInterval.value,
     };
     committedInstances.value = [...selectedInstance.value];
+    const candidates = committedInstances.value.length
+      ? committedInstances.value.flatMap(id => {
+          const instance = selectedInstanceDetails.value[id];
+          return instance ? [instance] : [];
+        })
+      : undefined;
     invalidateMonitorChartQueries();
     queryReady.value = false;
     // 排名只在当前期做一次。收到名单后再用同一份查询快照挂载所有图表。
     const currentRankBy = rankBy.value;
-    const ranked = committedInstances.value.length
-      ? undefined
-      : await fetchRankedMonitorInstances({
-          ...params,
-          appID: appDetailStore.appID,
-          limit: committedLimit.value,
-          rankBy: currentRankBy,
-          rankType: rankType.value,
-        });
+    const ranked = await fetchRankedMonitorInstances({
+      ...params,
+      appID: appDetailStore.appID,
+      instances: candidates,
+      limit: committedLimit.value,
+      rankBy: currentRankBy,
+      rankType: rankType.value,
+    });
     if (!isShow.value || generation !== queryGeneration) return;
-    const instances = ranked
-      ? ranked.map(({ envName, instance }) => ({ envName, instance }))
-      : committedInstances.value.flatMap(id => {
-          const instance = selectedInstanceDetails.value[id];
-          return instance && params.envNames.includes(instance.envName) ? [instance] : [];
-        });
     metricData.value = {};
     timeRangeRef.value = [
       dayjs.unix(params.startTime).format(dateFormat),
@@ -947,10 +935,10 @@
     ];
     chartParams.value = {
       ...params,
-      instances,
+      instances: ranked.map(({ envName, instance }) => ({ envName, instance })),
       compareOffsets: effectiveCompareOffsets.value,
       queryId: generation,
-      ranking: ranked && {
+      ranking: {
         by: currentRankBy,
         instances: new Map(ranked.map(item => [getMonitorInstanceKey(item), item])),
       },
@@ -1078,24 +1066,15 @@
     if (value === undefined || !Number.isFinite(value) || value < 0) return '-';
     return formatDecimal(value / 1024 / 1024);
   }
-  function formatCpuUsage(value: number | undefined): string {
+  /** 向上进位到百分位，并固定显示两位小数。 */
+  function formatDecimal(value: number | undefined): string {
     if (value === undefined || !Number.isFinite(value)) return '-';
     const roundedUp = Number.isInteger(value) ? value : ceil(value, 2);
-    return roundedUp === 0 ? '0.00' : cpuUsageFormatter.format(roundedUp);
-  }
-  /** 常规值截断至两位小数，极小的非零值用科学计数法。 */
-  function formatDecimal(value: number | undefined): string {
-    if (value === null || value === undefined || !Number.isFinite(value)) return '-';
-    const abs = Math.abs(value);
-    if (abs > 0 && abs < 0.01) return value.toExponential();
-    const decimal = value.toString();
-    if (decimal.includes('e')) return decimal;
-    const [intPart, decPart = ''] = decimal.split('.');
-    const trimmed = decPart.slice(0, 2);
-    return trimmed ? `${intPart}.${trimmed}` : intPart;
+    return roundedUp === 0 ? '0.00' : decimalFormatter.format(roundedUp);
   }
   function formatPercent(value: number | undefined): string {
-    return value === undefined ? '-' : `${formatDecimal(value)}%`;
+    const formatted = formatDecimal(value);
+    return formatted === '-' ? formatted : `${formatted}%`;
   }
 
   function getRankValue(item: RankedMonitorInstance | undefined): number | undefined {
@@ -1215,10 +1194,6 @@
 
     &[aria-pressed='true'] {
       color: #3a84ff;
-    }
-
-    &:disabled {
-      cursor: default;
     }
   }
 
