@@ -386,7 +386,7 @@ describe('部署表单：发布策略选择', () => {
     expect(harness.buildAndCreateDeploy).not.toHaveBeenCalled();
   });
 
-  it('当用户选中策略时，应展示发布预览（策略说明 + 摘要四项 + 批次时间线 + 进度方块 + 暂停标签）', async () => {
+  it('当用户选中策略时，应展示发布预览（策略说明 + 摘要三项 + 批次时间线 + 进度方块 + 暂停标签）', async () => {
     await renderForm();
     await fillBaseForm();
     await enableCanaryMode();
@@ -397,18 +397,17 @@ describe('部署表单：发布策略选择', () => {
     expect(screen.getByText('按所选环境的 20 个实例换算')).toBeInTheDocument();
     // 策略下拉下方说明文案（设计稿：先 1 个实例，确认后累计到 25%、50%，最后自动全量）
     expect(screen.getByText('先 1 个实例，确认后累计到 25%、50%，最后自动全量')).toBeInTheDocument();
-    // 摘要栏四项（label 上、数值+单位下）：4 批 / 2 次 / 20 个 / 0 个
+    // 摘要栏三项（label 上、数值+单位下）：4 批 / 2 次 / 20 个（流量批次暂不展示）
     const summaryCard = screen.getByTestId('release-summary');
     expect(within(summaryCard).getByText('批次数')).toBeInTheDocument();
     expect(within(summaryCard).getByText('暂停次数')).toBeInTheDocument();
     expect(within(summaryCard).getByText('实例总数')).toBeInTheDocument();
-    expect(within(summaryCard).getByText('流量批次')).toBeInTheDocument();
+    expect(within(summaryCard).queryByText('流量批次')).not.toBeInTheDocument();
     expect(within(summaryCard).getByText('4')).toBeInTheDocument();
     expect(within(summaryCard).getByText('批')).toBeInTheDocument();
     expect(within(summaryCard).getByText('2')).toBeInTheDocument();
     expect(within(summaryCard).getByText('次')).toBeInTheDocument();
     expect(within(summaryCard).getByText('20')).toBeInTheDocument();
-    expect(within(summaryCard).getByText('0')).toBeInTheDocument();
     // 批次时间线：首批数值 target 展示「N 个实例」，其余展示「累计 N 个（P%）」，末批带全量标签
     expect(screen.getByText('第 1 批 · 1 个实例')).toBeInTheDocument();
     expect(screen.getByText('第 2 批 · 累计 5 个（25%）')).toBeInTheDocument();

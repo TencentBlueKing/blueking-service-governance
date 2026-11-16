@@ -179,7 +179,8 @@
       { label: t('批次数'), value: summary.batchCount, unit: t('批') },
       { label: t('暂停次数'), value: summary.pauseCount, unit: t('次') },
       { label: t('首批数量'), value: summary.firstCountValue, unit: summary.firstCountUnit },
-      { label: t('流量批次'), value: summary.trafficBatchCount, unit: t('个') },
+      // 流量批次暂不展示，后续需要时恢复
+      // { label: t('流量批次'), value: summary.trafficBatchCount, unit: t('个') },
     ];
   });
 

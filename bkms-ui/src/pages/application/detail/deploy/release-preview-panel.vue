@@ -134,7 +134,8 @@
     { label: t('批次数'), value: props.preview.summary.batchCount, unit: t('批') },
     { label: t('暂停次数'), value: props.preview.summary.pauseCount, unit: t('次') },
     { label: t('实例总数'), value: props.preview.summary.totalReplicas, unit: t('个') },
-    { label: t('流量批次'), value: props.preview.summary.trafficBatchCount, unit: t('个') },
+    // 流量批次暂不展示，后续需要时恢复
+    // { label: t('流量批次'), value: props.preview.summary.trafficBatchCount, unit: t('个') },
   ]);
 
   /** 批次标题：首批数值 target 为「N 个实例」，其余为「累计 N 个（P%）」 */

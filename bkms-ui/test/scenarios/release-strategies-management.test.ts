@@ -499,9 +499,9 @@ describe('发布策略管理：新建 / 编辑 / 查看', () => {
     expect(within(rows[0]).getByText('首批')).toBeInTheDocument();
     // 系统补齐的全量批带「全量」标签
     expect(within(rows[1]).getByTestId('preview-row-full')).toBeInTheDocument();
-    // 摘要栏四项指标：批次数 / 暂停次数 / 首批数量 / 流量批次
+    // 摘要栏三项指标：批次数 / 暂停次数 / 首批数量（流量批次暂不展示）
     expect(screen.getByText('首批数量')).toBeInTheDocument();
-    expect(screen.getByText('流量批次')).toBeInTheDocument();
+    expect(screen.queryByText('流量批次')).not.toBeInTheDocument();
     // 本期无失败策略、无实例总数换算，改为按配置比例示意
     expect(screen.queryByText('失败策略：暂停当前批次')).not.toBeInTheDocument();
     expect(screen.queryByText('实例总数')).not.toBeInTheDocument();
