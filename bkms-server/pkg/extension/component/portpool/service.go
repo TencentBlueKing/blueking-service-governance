@@ -28,6 +28,7 @@ import (
 	"github.com/samber/lo"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	k8sclient "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/client"
@@ -54,9 +55,25 @@ const (
 // 错误定义
 var (
 	// ErrConfigNotFound 端口池配置不存在
-	ErrConfigNotFound = errors.New("portpool config not found")
+	ErrConfigNotFound = bkerrs.Define(
+		bkerrs.ErrCodeNotFound, "PORTPOOL_NOT_FOUND", "portpool config not found",
+	)
 	// ErrConfigNameExists 端口池配置名称已存在
 	ErrConfigNameExists = errors.New("portpool config name already exists")
+	// ErrItemNameDuplicated 端口池条目名称重复
+	ErrItemNameDuplicated = bkerrs.Define(
+		bkerrs.ErrCodeInvalidArgument, "PORTPOOL_ITEM_NAME_DUPLICATED", "portpool item name duplicated",
+	)
+	// ErrItemEndPortDecreased 端口池条目的结束端口不能小于当前值
+	ErrItemEndPortDecreased = bkerrs.Define(
+		bkerrs.ErrCodeInvalidArgument, "PORTPOOL_ITEM_END_PORT_DECREASED",
+		"portpool item endPort must not be less than current endPort",
+	)
+	// ErrItemStartPortChanged 端口池条目的起始端口不能修改
+	ErrItemStartPortChanged = bkerrs.Define(
+		bkerrs.ErrCodeInvalidArgument, "PORTPOOL_ITEM_START_PORT_CHANGED",
+		"portpool item startPort must not be changed",
+	)
 )
 
 // PortPoolService 端口池服务，直接操作 K8s ApiServer
@@ -97,7 +114,7 @@ func (s *PortPoolService) Get(ctx context.Context, env *bkmsenv.Environment, nam
 	obj, err := k8sClient.Get(ctx, env.Cluster.Namespace, name, metav1.GetOptions{})
 	if err != nil {
 		if errors.Is(err, k8sclient.ErrResourceNotFound) {
-			return nil, ErrConfigNotFound
+			return nil, ErrConfigNotFound.With("name", name)
 		}
 		return nil, errors.Wrap(err, "get portpool CR from k8s")
 	}
@@ -192,7 +209,7 @@ func (s *PortPoolService) Delete(ctx context.Context, env *bkmsenv.Environment, 
 
 	if err = k8sClient.Delete(ctx, env.Cluster.Namespace, name, metav1.DeleteOptions{}); err != nil {
 		if errors.Is(err, k8sclient.ErrResourceNotFound) {
-			return ErrConfigNotFound
+			return ErrConfigNotFound.With("name", name)
 		}
 		return errors.Wrap(err, "delete portpool CR from k8s")
 	}
@@ -217,7 +234,7 @@ func validateItemNamesUnique(items []PoolItem) error {
 	seen := make(map[string]struct{}, len(items))
 	for _, item := range items {
 		if _, exists := seen[item.ItemName]; exists {
-			return errors.Errorf("poolItem itemName %s already exists", item.ItemName)
+			return ErrItemNameDuplicated.With("itemName", item.ItemName)
 		}
 		seen[item.ItemName] = struct{}{}
 	}
@@ -232,13 +249,17 @@ func validateItemUpdate(oldItems, newItems []PoolItem) error {
 	for _, newItem := range newItems {
 		if oldItem, found := oldMap[newItem.ItemName]; found {
 			if newItem.EndPort < oldItem.EndPort {
-				return errors.Errorf("endPort %d of poolItem %s must not be less than current endPort %d",
-					newItem.EndPort, newItem.ItemName, oldItem.EndPort)
+				return ErrItemEndPortDecreased.
+					With("itemName", newItem.ItemName).
+					With("endPort", strconv.Itoa(int(newItem.EndPort))).
+					With("currentEndPort", strconv.Itoa(int(oldItem.EndPort)))
 			}
 
 			if newItem.StartPort != oldItem.StartPort {
-				return errors.Errorf("startPort %d of poolItem %s must not be changed",
-					newItem.StartPort, newItem.ItemName)
+				return ErrItemStartPortChanged.
+					With("itemName", newItem.ItemName).
+					With("startPort", strconv.Itoa(int(newItem.StartPort))).
+					With("currentStartPort", strconv.Itoa(int(oldItem.StartPort)))
 			}
 		}
 	}

@@ -20,10 +20,28 @@ package model
 
 import (
 	"cmp"
+	"context"
 	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
+
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/i18n"
 )
+
+// defaultEnvDisplayNameKeys 映射系统默认环境名到对应的 i18n key
+var defaultEnvDisplayNameKeys = map[string]string{
+	"test":       "core_env.defaultEnv.test",
+	"staging":    "core_env.defaultEnv.staging",
+	"production": "core_env.defaultEnv.production",
+}
+
+// LocalizeEnvDisplayName 按环境名翻译系统创建的默认环境展示名称；用户自定义修改过时保持原样
+func LocalizeEnvDisplayName(ctx context.Context, name, displayName string) string {
+	if key, ok := defaultEnvDisplayNameKeys[name]; ok {
+		return i18n.LocalizeStored(ctx, key, nil, displayName)
+	}
+	return displayName
+}
 
 // EnvStatus 环境状态
 type EnvStatus string
@@ -98,6 +116,11 @@ func (e Environment) GetKind() EnvironmentKind {
 // IsFeatureEnv 判断是否为特性环境。
 func (e Environment) IsFeatureEnv() bool {
 	return e.GetKind() == EnvironmentKindFeature
+}
+
+// LocalizedDisplayName 返回本地化后的环境展示名称
+func (e Environment) LocalizedDisplayName(ctx context.Context) string {
+	return LocalizeEnvDisplayName(ctx, e.Name, e.DisplayName)
 }
 
 // BizCluster 业务集群信息

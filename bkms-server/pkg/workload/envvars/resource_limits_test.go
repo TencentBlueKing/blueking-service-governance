@@ -19,15 +19,19 @@
 package envvars
 
 import (
+	"context"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/i18n"
 	envvartypes "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars/types"
 )
 
 var _ = Describe("resourceLimitBuiltinVars", func() {
 	It("should inject the limit text as builtin env vars", func() {
-		Expect(resourceLimitBuiltinVars(map[string]string{
+		enCtx := i18n.WithLang(context.Background(), i18n.LangEN)
+		Expect(resourceLimitBuiltinVars(enCtx, map[string]string{
 			"cpu":    "100m-200m",
 			"memory": "2048Mi",
 		})).To(Equal(envvartypes.EnvVariableList{
@@ -44,11 +48,30 @@ var _ = Describe("resourceLimitBuiltinVars", func() {
 				IsBuiltin:   true,
 			},
 		}))
+
+		Expect(resourceLimitBuiltinVars(context.Background(), map[string]string{
+			"cpu":    "100m-200m",
+			"memory": "2048Mi",
+		})).To(Equal(envvartypes.EnvVariableList{
+			{
+				Key:         EnvVarNameCPULimit,
+				Value:       "200m",
+				Description: "工作负载配置的 CPU 上限",
+				IsBuiltin:   true,
+			},
+			{
+				Key:         EnvVarNameMemoryLimit,
+				Value:       "2048Mi",
+				Description: "工作负载配置的内存上限",
+				IsBuiltin:   true,
+			},
+		}))
 	})
 
 	It("should omit a resource that is absent or cannot be parsed", func() {
-		Expect(resourceLimitBuiltinVars(nil)).To(BeNil())
-		Expect(resourceLimitBuiltinVars(map[string]string{
+		enCtx := i18n.WithLang(context.Background(), i18n.LangEN)
+		Expect(resourceLimitBuiltinVars(enCtx, nil)).To(BeNil())
+		Expect(resourceLimitBuiltinVars(enCtx, map[string]string{
 			"memory": "2Gi",
 		})).To(Equal(envvartypes.EnvVariableList{{
 			Key:         EnvVarNameMemoryLimit,
@@ -56,7 +79,7 @@ var _ = Describe("resourceLimitBuiltinVars", func() {
 			Description: "The memory limit configured for the workload",
 			IsBuiltin:   true,
 		}}))
-		Expect(resourceLimitBuiltinVars(map[string]string{
+		Expect(resourceLimitBuiltinVars(enCtx, map[string]string{
 			"cpu":    "100m-bad",
 			"memory": "2Gi",
 		})).To(Equal(envvartypes.EnvVariableList{{

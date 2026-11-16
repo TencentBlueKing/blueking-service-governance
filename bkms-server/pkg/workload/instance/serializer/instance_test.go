@@ -50,7 +50,7 @@ var _ = Describe("Instance serializer", func() {
 			var bkErr *bkerrs.Error
 			Expect(errors.As(err, &bkErr)).To(BeTrue())
 			Expect(bkErr.Code()).To(Equal(bkerrs.ErrCodeInvalidArgument))
-			Expect(err.Error()).To(ContainSubstring("cannot be used together with page or pageSize"))
+			Expect(bkErr.DetailCode()).To(Equal(bkerrs.ErrDetailCode("WORKLOAD_INSTANCE_ALL_WITH_PAGINATION")))
 		})
 
 		It("accepts pagination mode with a legal pageSize", func() {
@@ -67,7 +67,7 @@ var _ = Describe("Instance serializer", func() {
 			var bkErr *bkerrs.Error
 			Expect(errors.As(err, &bkErr)).To(BeTrue())
 			Expect(bkErr.Code()).To(Equal(bkerrs.ErrCodeInvalidArgument))
-			Expect(err.Error()).To(ContainSubstring("page must be between"))
+			Expect(bkErr.DetailCode()).To(Equal(bkerrs.ErrDetailCode("WORKLOAD_INSTANCE_PAGE_OUT_OF_RANGE")))
 		})
 
 		It("accepts IP filters together with all=true", func() {
@@ -79,23 +79,25 @@ var _ = Describe("Instance serializer", func() {
 
 		// IP 过滤先于模式分支校验，分页参数缺失时也优先报 IP 非法
 		DescribeTable("rejects an invalid IP filter",
-			func(query serializer.ListAppInstancesQueryInput, wantMsg string) {
+			func(query serializer.ListAppInstancesQueryInput, wantField, wantIP string) {
 				err := query.Validate()
 				Expect(err).To(HaveOccurred())
 				var bkErr *bkerrs.Error
 				Expect(errors.As(err, &bkErr)).To(BeTrue())
 				Expect(bkErr.Code()).To(Equal(bkerrs.ErrCodeInvalidArgument))
-				Expect(err.Error()).To(ContainSubstring(wantMsg))
+				Expect(bkErr.DetailCode()).To(Equal(bkerrs.ErrDetailCode("WORKLOAD_INSTANCE_INVALID_IP")))
+				Expect(bkErr.Params()).To(HaveKeyWithValue("field", wantField))
+				Expect(bkErr.Params()).To(HaveKeyWithValue("ip", wantIP))
 			},
 			Entry("invalid podIP",
 				serializer.ListAppInstancesQueryInput{All: true, PodIPs: []string{"10.0.0.1", "10.0.0"}},
-				`podIP "10.0.0" is not a valid IP address`),
+				"podIP", "10.0.0"),
 			Entry("empty podIP",
 				serializer.ListAppInstancesQueryInput{All: true, PodIPs: []string{""}},
-				`podIP "" is not a valid IP address`),
+				"podIP", ""),
 			Entry("invalid nodeIP",
 				serializer.ListAppInstancesQueryInput{NodeIPs: []string{"node-1"}},
-				`nodeIP "node-1" is not a valid IP address`),
+				"nodeIP", "node-1"),
 		)
 	})
 
@@ -159,7 +161,7 @@ var _ = Describe("Instance serializer", func() {
 			var bkErr *bkerrs.Error
 			Expect(errors.As(err, &bkErr)).To(BeTrue())
 			Expect(bkErr.Code()).To(Equal(bkerrs.ErrCodeInvalidArgument))
-			Expect(err.Error()).To(ContainSubstring("resourceVersion is required"))
+			Expect(bkErr.DetailCode()).To(Equal(bkerrs.ErrDetailCode("WORKLOAD_INSTANCE_RESOURCE_VERSION_REQUIRED")))
 		})
 	})
 

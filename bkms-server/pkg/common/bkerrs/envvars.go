@@ -18,9 +18,13 @@
 
 package bkerrs
 
+var errScopedEnvVarKeyConflict = Define(
+	ErrCodeAlreadyExists, ErrDetailCodeScopedEnvVarKeyConflict, "scoped env var key conflict",
+)
+
 // WrapScopedEnvVarKeyConflict 包装同一作用域内环境变量 Key 重复的错误。
 func WrapScopedEnvVarKeyConflict(err error, workspaceID, scopeType, scopeValue, key string) error {
-	return Wrap(err, ErrCodeAlreadyExists, "scoped env var key conflict").SetDetails(
+	return errScopedEnvVarKeyConflict.With("key", key).WithCause(err).SetDetails(
 		NewDetail(
 			ErrDetailCodeScopedEnvVarKeyConflict,
 			"an env var with the same key already exists in this scope",

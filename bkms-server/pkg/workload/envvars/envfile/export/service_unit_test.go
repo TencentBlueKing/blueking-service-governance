@@ -19,6 +19,7 @@
 package export
 
 import (
+	"context"
 	"strings"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -91,7 +92,7 @@ var _ = Describe("ExportUnitHelpers", func() {
 	})
 
 	It("renders scoped import template with multiple examples", func() {
-		content := RenderScopedImportTemplate()
+		content := RenderScopedImportTemplate(context.Background())
 		expectedLines := []string{
 			"# scopeType: workspace",
 			"BKMS_SHARED_NAMESPACE=bk-shared",
@@ -106,7 +107,7 @@ var _ = Describe("ExportUnitHelpers", func() {
 	})
 
 	It("renders env and app import template with multiple examples", func() {
-		content := RenderEnvAppImportTemplate()
+		content := RenderEnvAppImportTemplate(context.Background())
 		expectedLines := []string{
 			"APP_NAME=demo-service",
 			"FEATURE_FLAG=true",

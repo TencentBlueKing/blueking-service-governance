@@ -147,16 +147,28 @@ func (h *Handler) workspaceAdminService() *workspaceadmin.Service {
 	return workspaceadmin.NewService(h.registry.DB, perm.NewManager())
 }
 
+var (
+	errWorkspaceAdminAlreadyExists = bkerrs.Define(
+		bkerrs.ErrCodeInvalidRequest, "PLATMGT_WORKSPACE_ADMIN_ALREADY_EXISTS", "workspace admin already exists",
+	)
+	errWorkspaceAdminNotFound = bkerrs.Define(
+		bkerrs.ErrCodeNotFound, "PLATMGT_WORKSPACE_ADMIN_NOT_FOUND", "workspace admin not found",
+	)
+	errTempAdminAlreadyExists = bkerrs.Define(
+		bkerrs.ErrCodeAlreadyExists, "PLATMGT_TEMP_ADMIN_ALREADY_EXISTS", "temporary admin already exists",
+	)
+)
+
 func toAPIError(err error, internalMessage string) error {
 	switch {
 	case errors.Is(err, bkmsworkspace.ErrWorkspaceNotFound):
-		return bkerrs.Wrap(err, bkerrs.ErrCodeNotFound, "platform workspace not found")
+		return bkmsworkspace.ErrWorkspaceNotFound.WithCause(err)
 	case errors.Is(err, workspaceadmin.ErrWorkspaceAdminAlreadyExists):
-		return bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, "workspace admin already exists")
+		return errWorkspaceAdminAlreadyExists.WithCause(err)
 	case errors.Is(err, workspaceadmin.ErrWorkspaceAdminNotFound):
-		return bkerrs.Wrap(err, bkerrs.ErrCodeNotFound, "workspace admin not found")
+		return errWorkspaceAdminNotFound.WithCause(err)
 	case errors.Is(err, workspaceadmin.ErrTempAdminAlreadyExists):
-		return bkerrs.Wrap(err, bkerrs.ErrCodeAlreadyExists, "temporary admin already exists")
+		return errTempAdminAlreadyExists.WithCause(err)
 	default:
 		return bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, internalMessage)
 	}

@@ -60,8 +60,8 @@ var _ = Describe("Application.CheckVisibleEnv", func() {
 			var bkErr *bkerrs.Error
 			Expect(errors.As(err, &bkErr)).To(BeTrue())
 			Expect(bkErr.Code()).To(Equal(bkerrs.ErrCodeInvalidRequest))
-			Expect(err.Error()).To(ContainSubstring(env.Name))
-			Expect(err.Error()).To(ContainSubstring("visible environment"))
+			Expect(bkErr.DetailCode()).To(Equal(bkerrs.ErrDetailCode("CORE_APP_ENV_NOT_VISIBLE")))
+			Expect(bkErr.Params()).To(Equal(map[string]string{"envName": env.Name}))
 		},
 		Entry("configured app may not deploy to an unlisted standard env", []string{"test"}, stdEnv("prod")),
 		Entry("configured app may not deploy to another app's feature env",

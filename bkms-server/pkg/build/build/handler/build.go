@@ -48,6 +48,89 @@ import (
 
 var _ build.Handler = (*Handler)(nil)
 
+var (
+	errInvalidCodeRevision = bkerrs.Define(
+		bkerrs.ErrCodeInvalidArgument,
+		"BUILD_BUILD_INVALID_CODE_REVISION",
+		"invalid code revision",
+	)
+	errBuildConfigNotFound = bkerrs.Define(
+		bkerrs.ErrCodeNotFound,
+		"BUILD_BUILD_CONFIG_NOT_FOUND",
+		"build config not found",
+	)
+	errImageReferenceInvalid = bkerrs.Define(
+		bkerrs.ErrCodeInvalidArgument,
+		"BUILD_BUILD_INVALID_IMAGE_REFERENCE",
+		"invalid platform build image reference",
+	)
+	errPlatformBuildImagesInvalid = bkerrs.Define(
+		bkerrs.ErrCodeInvalidArgument,
+		"BUILD_BUILD_PLATFORM_IMAGES_INVALID",
+		"invalid platform build image configuration",
+	)
+	errWorkspaceImageCredentialMissing = bkerrs.Define(
+		bkerrs.ErrCodeInvalidArgument,
+		"BUILD_BUILD_IMAGE_CREDENTIAL_MISSING",
+		"workspace image registry credential is missing",
+	)
+	errCodeRevisionRequired = bkerrs.Define(
+		bkerrs.ErrCodeInvalidRequest,
+		"BUILD_BUILD_CODE_REVISION_REQUIRED",
+		"code revision is required",
+	)
+	errCustomTagPrefixTooLong = bkerrs.Define(
+		bkerrs.ErrCodeInvalidArgument,
+		"BUILD_BUILD_CUSTOM_TAG_PREFIX_TOO_LONG",
+		"custom tag prefix is too long",
+	)
+	errCustomTagEmpty = bkerrs.Define(
+		bkerrs.ErrCodeInvalidArgument,
+		"BUILD_BUILD_CUSTOM_TAG_EMPTY",
+		"custom tag must have at least one of: prefix, withRevision, withBuildTime",
+	)
+	errImageFieldRequired = bkerrs.Define(
+		bkerrs.ErrCodeInvalidArgument,
+		"BUILD_BUILD_IMAGE_FIELD_REQUIRED",
+		"image field is required",
+	)
+	errInvalidImageCredentials = bkerrs.Define(
+		bkerrs.ErrCodeInvalidArgument,
+		"BUILD_BUILD_INVALID_IMAGE_CREDENTIALS",
+		"username and password must both be empty or both have values",
+	)
+	errCodeRepoFieldRequired = bkerrs.Define(
+		bkerrs.ErrCodeInvalidArgument,
+		"BUILD_BUILD_CODE_REPO_FIELD_REQUIRED",
+		"code repo field is required",
+	)
+	errInvalidCodeRepoConfig = bkerrs.Define(
+		bkerrs.ErrCodeInvalidArgument,
+		"BUILD_BUILD_INVALID_CODE_REPO_CONFIG",
+		"invalid code repo build config",
+	)
+	errPipelineFieldRequired = bkerrs.Define(
+		bkerrs.ErrCodeInvalidArgument,
+		"BUILD_BUILD_PIPELINE_FIELD_REQUIRED",
+		"pipeline field is required",
+	)
+	errInvalidSourceType = bkerrs.Define(
+		bkerrs.ErrCodeInvalidArgument,
+		"BUILD_BUILD_INVALID_SOURCE_TYPE",
+		"invalid source type",
+	)
+	errBuildRecordNotFound = bkerrs.Define(
+		bkerrs.ErrCodeNotFound,
+		"BUILD_BUILD_RECORD_NOT_FOUND",
+		"build record not found",
+	)
+	errBKCIProjectNotFound = bkerrs.Define(
+		bkerrs.ErrCodeNotFound,
+		"BUILD_BUILD_BKCI_PROJECT_NOT_FOUND",
+		"bkci project not found",
+	)
+)
+
 // Handler handles Gin build API requests.
 type Handler struct {
 	registry   *storereg.Registry
@@ -157,11 +240,13 @@ func (h *Handler) validatePlatformBuildImages(
 		return nil
 	}
 
-	errCode := bkerrs.ErrCodeInvalidArgument
 	if build.IsImageRegistryFailure(err) {
-		errCode = bkerrs.ErrCodeInternalServerError
+		return pkgerrors.Wrap(err, "validate platform build images")
 	}
-	return bkerrs.New(errCode, err.Error())
+	if build.IsImageReferenceInvalid(err) {
+		return errImageReferenceInvalid.WithCause(err)
+	}
+	return errPlatformBuildImagesInvalid.WithCause(err)
 }
 
 // ensureCodeRepositoryRegistered 把代码库来源的构建配置登记到蓝盾，登记幂等，其余来源直接跳过
@@ -299,7 +384,7 @@ func (h *Handler) CreateBuild(c *gin.Context) {
 	}
 	rev, err := revision.Resolve(input.RevisionType, input.Revision, input.Branch)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "resolve code revision"))
+		bkerrs.AbortWithErr(c, errInvalidCodeRevision.WithCause(err))
 		return
 	}
 
@@ -327,14 +412,16 @@ func (h *Handler) CreateBuild(c *gin.Context) {
 	if err != nil {
 		// StartAndScheduleBuild 内部会跑构建前置校验，镜像引用填错或缺凭证属参数问题，
 		// 与保存构建配置时的错误码保持一致；其余失败仍按内部错误上报
-		errCode := bkerrs.ErrCodeInternalServerError
 		switch {
-		case build.IsImageReferenceInvalid(err) || pkgerrors.Is(err, build.ErrWorkspaceImageCredentialMissing):
-			errCode = bkerrs.ErrCodeInvalidArgument
+		case build.IsImageReferenceInvalid(err):
+			bkerrs.AbortWithErr(c, errImageReferenceInvalid.WithCause(err))
+		case pkgerrors.Is(err, build.ErrWorkspaceImageCredentialMissing):
+			bkerrs.AbortWithErr(c, errWorkspaceImageCredentialMissing.WithCause(err))
 		case pkgerrors.Is(err, revision.ErrRequired):
-			errCode = bkerrs.ErrCodeInvalidRequest
+			bkerrs.AbortWithErr(c, errCodeRevisionRequired.WithCause(err))
+		default:
+			bkerrs.AbortWithErr(c, pkgerrors.Wrap(err, "start and schedule build"))
 		}
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, errCode, "start and schedule build"))
 		return
 	}
 
@@ -377,7 +464,11 @@ func (h *Handler) GetRecommendedImageTag(c *gin.Context) {
 
 	cfg, err := h.buildConfigs().Get(ctx, imagebuild.ByApp(app.ID))
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrapf(err, bkerrs.ErrCodeNotFound, "get app %s build config", app.ID))
+		if pkgerrors.Is(err, imagebuild.ErrConfigNotFound) {
+			bkerrs.AbortWithErr(c, errBuildConfigNotFound.With("appID", app.ID).WithCause(err))
+			return
+		}
+		bkerrs.AbortWithErr(c, pkgerrors.Wrapf(err, "get app %s build config", app.ID))
 		return
 	}
 

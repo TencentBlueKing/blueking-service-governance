@@ -22,10 +22,12 @@
 package envvars
 
 import (
+	"context"
 	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/i18n"
 	envvartypes "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars/types"
 )
 
@@ -63,4 +65,12 @@ type ScopedEnvVar struct {
 	CreatedAt time.Time `bson:"createdAt"`
 	// UpdatedAt 更新时间
 	UpdatedAt time.Time `bson:"updatedAt"`
+}
+
+// LocalizedDescription 返回按 ctx 语言翻译的描述，仅翻译系统写入的内置变量描述，翻译 key 以变量名为标识
+func (v ScopedEnvVar) LocalizedDescription(ctx context.Context) string {
+	if !v.IsBuiltin {
+		return v.Description
+	}
+	return i18n.LocalizeStored(ctx, "workload.envvars.scopedBuiltin."+v.Key+".description", nil, v.Description)
 }

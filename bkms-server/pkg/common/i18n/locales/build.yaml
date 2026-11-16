@@ -1,0 +1,96 @@
+# 构建（pkg/build）
+
+# 镜像构建（build/build）
+BUILD_BUILD_INVALID_CODE_REVISION:
+  zh: "代码修订参数不合法（Commit ID 须为 7~40 位十六进制字符）"
+  en: "Invalid code revision (Commit ID must be 7-40 hexadecimal characters)"
+BUILD_BUILD_CONFIG_NOT_FOUND:
+  zh: "应用 {{.appID}} 尚未配置构建信息"
+  en: "Build config not found for app {{.appID}}"
+BUILD_BUILD_INVALID_IMAGE_REFERENCE:
+  zh: "平台构建基础镜像引用无效或镜像版本不存在"
+  en: "Platform build base image reference is invalid or image tag does not exist"
+BUILD_BUILD_PLATFORM_IMAGES_INVALID:
+  zh: "平台构建镜像配置不合法"
+  en: "Platform build image configuration is invalid"
+BUILD_BUILD_IMAGE_CREDENTIAL_MISSING:
+  zh: "工作空间镜像仓库凭证缺失，请先完善镜像源配置"
+  en: "Workspace image registry credential is missing, please configure it first"
+BUILD_BUILD_CODE_REVISION_REQUIRED:
+  zh: "请指定代码修订版本（分支、Tag 或 Commit ID）"
+  en: "Code revision (branch, tag, or commit ID) is required"
+BUILD_BUILD_CUSTOM_TAG_PREFIX_TOO_LONG:
+  zh: "自定义 Tag 前缀长度不能超过 {{.max}} 个字符"
+  en: "Custom tag prefix must be at most {{.max}} characters"
+BUILD_BUILD_CUSTOM_TAG_EMPTY:
+  zh: "自定义 Tag 至少需要包含前缀、代码版本或构建时间中的一项"
+  en: "Custom tag must have at least one of: prefix, withRevision, withBuildTime"
+BUILD_BUILD_IMAGE_FIELD_REQUIRED:
+  zh: "镜像配置不能为空"
+  en: "Image field is required"
+BUILD_BUILD_INVALID_IMAGE_CREDENTIALS:
+  zh: "镜像仓库用户名和密码必须同时为空或同时填写"
+  en: "Username and password must both be empty or both have values"
+BUILD_BUILD_CODE_REPO_FIELD_REQUIRED:
+  zh: "代码仓库配置不能为空"
+  en: "Code repository field is required"
+BUILD_BUILD_INVALID_CODE_REPO_CONFIG:
+  zh: "代码仓库构建配置不合法"
+  en: "Invalid code repository build config"
+BUILD_BUILD_PIPELINE_FIELD_REQUIRED:
+  zh: "流水线配置不能为空"
+  en: "Pipeline field is required"
+BUILD_BUILD_INVALID_SOURCE_TYPE:
+  zh: "不支持的构建来源类型"
+  en: "Invalid build source type"
+BUILD_BUILD_RECORD_NOT_FOUND:
+  zh: "未找到构建记录"
+  en: "Build record not found"
+BUILD_BUILD_BKCI_PROJECT_NOT_FOUND:
+  zh: "未找到工作空间对应的蓝盾项目"
+  en: "BKCI project not found for workspace"
+
+# Helm Chart 构建（build/chart）
+BUILD_CHART_INVALID_CODE_REVISION:
+  zh: "代码修订参数不合法（Commit ID 须为 7~40 位十六进制字符）"
+  en: "Invalid code revision (Commit ID must be 7-40 hexadecimal characters)"
+BUILD_CHART_CODE_REVISION_REQUIRED:
+  zh: "请指定代码修订版本（分支、Tag 或 Commit ID）"
+  en: "Code revision (branch, tag, or commit ID) is required"
+BUILD_CHART_APP_NOT_HELM_BASED:
+  zh: "应用类型 {{.appType}} 不是 Helm 类型，不支持 Chart 构建"
+  en: "Application type {{.appType}} is not Helm-based"
+BUILD_CHART_INVALID_LOG_URI_PARAMS:
+  zh: "构建日志请求路径参数不合法"
+  en: "Invalid build log URI parameters"
+BUILD_CHART_RECORD_NOT_FOUND:
+  zh: "未找到 Helm Chart 构建记录"
+  en: "Chart build record not found"
+BUILD_CHART_BKCI_PROJECT_NOT_FOUND:
+  zh: "未找到工作空间对应的蓝盾项目"
+  en: "BKCI project not found for workspace"
+
+# 构建自动部署（build/autodeploy）
+BUILD_AUTODEPLOY_INVALID_CODE_REVISION:
+  zh: "代码修订参数不合法（Commit ID 须为 7~40 位十六进制字符）"
+  en: "Invalid code revision (Commit ID must be 7-40 hexadecimal characters)"
+BUILD_AUTODEPLOY_INVALID_APP_TYPE:
+  zh: "应用类型 {{.appType}} 不支持构建自动部署"
+  en: "Application type {{.appType}} does not support build auto-deploy"
+BUILD_AUTODEPLOY_NON_PROD_ENV_REQUIRED:
+  zh: "构建自动部署仅支持非生产环境，生产环境请先晋级再单独部署"
+  en: "Build auto deploy only supports non-production environments; please promote and deploy separately"
+BUILD_AUTODEPLOY_INVALID_IMAGE_REFERENCE:
+  zh: "平台构建基础镜像引用无效或镜像版本不存在"
+  en: "Platform build base image reference is invalid or image tag does not exist"
+BUILD_AUTODEPLOY_IMAGE_CREDENTIAL_MISSING:
+  zh: "工作空间镜像仓库凭证缺失，请先完善镜像源配置"
+  en: "Workspace image registry credential is missing, please configure it first"
+BUILD_AUTODEPLOY_CODE_REVISION_REQUIRED:
+  zh: "请指定代码修订版本（分支、Tag 或 Commit ID）"
+  en: "Code revision (branch, tag, or commit ID) is required"
+
+# 构建触发器（build/trigger）
+BUILD_TRIGGER_CALLBACK_CREDENTIAL_REQUIRED:
+  zh: "缺少构建触发回调凭证"
+  en: "Build trigger callback credential is required"

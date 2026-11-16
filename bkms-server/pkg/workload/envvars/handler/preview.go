@@ -32,6 +32,10 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars/serializer"
 )
 
+var errEnvFileContentInvalid = bkerrs.Define(
+	bkerrs.ErrCodeInvalidArgument, "WORKLOAD_ENVVARS_ENV_FILE_CONTENT_INVALID", "env file content validation failed",
+)
+
 func (h *Handler) newImportPreviewService() *previewsvc.ImportPreviewService {
 	return previewsvc.NewPreviewService(
 		h.registry.DB,
@@ -181,7 +185,7 @@ func (h *Handler) PreviewAppDefinedEnvVar(c *gin.Context) {
 // 内容校验错误（parser.ErrInvalidEnvFileContent）返回 HTTP 400，其他错误返回 HTTP 500。
 func wrapPreviewError(err error) error {
 	if errors.Is(err, parserpkg.ErrInvalidEnvFileContent) {
-		return bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "env file content validation failed")
+		return errEnvFileContentInvalid.WithCause(err)
 	}
 	return bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "env var import preview")
 }

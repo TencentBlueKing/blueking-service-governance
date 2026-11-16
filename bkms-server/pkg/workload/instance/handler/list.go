@@ -24,6 +24,7 @@ import (
 
 	"github.com/TencentBlueKing/gopkg/mapx"
 	"github.com/gin-gonic/gin"
+	"github.com/pkg/errors"
 	"github.com/samber/lo"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -34,6 +35,7 @@ import (
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime"
 	appmodeldeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/appmodel"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/status"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component/devmode"
 	k8sclient "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/client"
@@ -81,13 +83,17 @@ func (h *Handler) validateAppAndGetDeployRecord(
 
 	// 目前只支持查看 AppModel 类型应用实例
 	if !appruntime.IsAppModelType(app.Type) {
-		return nil, nil, bkerrs.Errorf(bkerrs.ErrCodeInvalidArgument, "invalid app type: %s", app.Type)
+		return nil, nil, errInvalidAppType.With("appType", app.Type)
 	}
 
 	// 按环境 + 泳道取最新部署记录；未命中与 List 一样 404，Watch 也建不成连接
 	record, err := appmodeldeploy.GetLatest(ctx, h.registry.DB, app.ID, uriInput.EnvName, trafficLaneName)
 	if err != nil {
-		return nil, nil, bkerrs.Wrap(err, bkerrs.ErrCodeNotFound, "deploy record not found")
+		if errors.Is(err, appmodeldeploy.ErrDeployRecordNotFound) {
+			return nil, nil, status.ErrDeployRecordNotFound.With("appID", app.ID).
+				With("envName", uriInput.EnvName).WithCause(err)
+		}
+		return nil, nil, errors.Wrap(err, "get latest deploy record")
 	}
 
 	return app, record, nil

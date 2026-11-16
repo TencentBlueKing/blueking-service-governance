@@ -21,6 +21,7 @@ package admin
 import (
 	"github.com/pkg/errors"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
@@ -30,7 +31,9 @@ var (
 	// ErrRoleBindingAlreadyExists indicates the target platform administrator role binding already exists.
 	ErrRoleBindingAlreadyExists = errors.New("platform administrator role binding already exists")
 	// ErrPermissionDenied indicates the current user is not a platform administrator.
-	ErrPermissionDenied = errors.New("platform administrator permission denied")
+	ErrPermissionDenied = bkerrs.Define(
+		bkerrs.ErrCodeNoPermission, "PLATMGT_ADMIN_PERMISSION_REQUIRED", "platform administrator permission required",
+	)
 )
 
 // Store persists platform administrator role bindings.

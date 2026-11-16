@@ -25,6 +25,7 @@ import (
 	"github.com/pkg/errors"
 	"gopkg.in/yaml.v3"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/i18n"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/render"
@@ -107,32 +108,49 @@ type PlaceholderVar struct {
 }
 
 // ListPlaceholderVars returns the placeholder variables exposed by the public API.
-func ListPlaceholderVars() []PlaceholderVar {
-	// TODO: Description 字段国际化
+func ListPlaceholderVars(ctx context.Context) []PlaceholderVar {
 	return []PlaceholderVar{
 		{
-			Key:         BkmsArtifactImage,
-			Description: "镜像地址，如：mirrors.tencent.com/bk/myapp:1.0.0",
+			Key: BkmsArtifactImage,
+			Description: i18n.LocalizeOr(
+				ctx, "workload.helm.placeholderVar."+BkmsArtifactImage, nil,
+				"镜像地址，如：mirrors.tencent.com/bk/myapp:1.0.0",
+			),
 		},
 		{
-			Key:         BkmsArtifactImageName,
-			Description: "镜像名，如：mirrors.tencent.com/bk/myapp",
+			Key: BkmsArtifactImageName,
+			Description: i18n.LocalizeOr(
+				ctx, "workload.helm.placeholderVar."+BkmsArtifactImageName, nil,
+				"镜像名，如：mirrors.tencent.com/bk/myapp",
+			),
 		},
 		{
-			Key:         BkmsArtifactImageTag,
-			Description: "镜像 Tag，如：1.0.0",
+			Key: BkmsArtifactImageTag,
+			Description: i18n.LocalizeOr(
+				ctx, "workload.helm.placeholderVar."+BkmsArtifactImageTag, nil,
+				"镜像 Tag，如：1.0.0",
+			),
 		},
 		{
-			Key:         BkmsArtifactImageRegistry,
-			Description: "镜像仓库，如：mirrors.tencent.com",
+			Key: BkmsArtifactImageRegistry,
+			Description: i18n.LocalizeOr(
+				ctx, "workload.helm.placeholderVar."+BkmsArtifactImageRegistry, nil,
+				"镜像仓库，如：mirrors.tencent.com",
+			),
 		},
 		{
-			Key:         BkmsArtifactImageRepository,
-			Description: "镜像库，如：bk/myapp",
+			Key: BkmsArtifactImageRepository,
+			Description: i18n.LocalizeOr(
+				ctx, "workload.helm.placeholderVar."+BkmsArtifactImageRepository, nil,
+				"镜像库，如：bk/myapp",
+			),
 		},
 		{
-			Key:         BkmsAppImagePullSecret,
-			Description: "镜像拉取密钥，如：myapp-pull-secret",
+			Key: BkmsAppImagePullSecret,
+			Description: i18n.LocalizeOr(
+				ctx, "workload.helm.placeholderVar."+BkmsAppImagePullSecret, nil,
+				"镜像拉取密钥，如：myapp-pull-secret",
+			),
 		},
 	}
 }
@@ -177,7 +195,7 @@ func (arrg *AppArranger) ValidateFileContent(
 	case appcfg.FileFormatTAF:
 		return validateTAFFile(content)
 	case appcfg.FileFormatYAML:
-		return validateYamlFile(content)
+		return validateYamlFile(ctx, content)
 	default:
 		return ArrgResult{}, errors.New("invalid file format")
 	}
@@ -186,7 +204,7 @@ func (arrg *AppArranger) ValidateFileContent(
 // validateYamlFile validates YAML format file content.
 // yaml.Unmarshal only checks syntax; variable extraction uses render.ExtractVars
 // directly on raw content so both validators share one parse result.
-func validateYamlFile(content []byte) (ArrgResult, error) {
+func validateYamlFile(ctx context.Context, content []byte) (ArrgResult, error) {
 	var dummy map[string]any
 	if err := yaml.Unmarshal(content, &dummy); err != nil {
 		return ArrgResult{}, errors.Wrap(err, "parsing values.yaml")
@@ -201,16 +219,19 @@ func validateYamlFile(content []byte) (ArrgResult, error) {
 	// FIXME: 目前该占位符没有实际作用，考虑去掉检查
 	errIngressDomain := validateValuesYamlIngressDomain(vars)
 
-	errToItem := func(err error) ArrgResultItem {
+	errToItem := func(err error, key string) ArrgResultItem {
 		if err != nil {
-			return ArrgResultItem{Status: ArrgStatusSkipped, SkippedReason: err.Error()}
+			return ArrgResultItem{
+				Status:        ArrgStatusSkipped,
+				SkippedReason: i18n.LocalizeOr(ctx, key, nil, err.Error()),
+			}
 		}
 		return ArrgResultItem{Status: ArrgStatusConfigured, SkippedReason: ""}
 	}
 
 	return ArrgResult{
-		WorkloadImage: errToItem(errWorkloadImage),
-		IngressDomain: errToItem(errIngressDomain),
+		WorkloadImage: errToItem(errWorkloadImage, "workload.helm.arrangement.missingImagePlaceholders"),
+		IngressDomain: errToItem(errIngressDomain, "workload.helm.arrangement.missingIngressDomainPlaceholder"),
 	}, nil
 }
 

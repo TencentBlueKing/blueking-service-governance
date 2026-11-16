@@ -20,6 +20,7 @@
 package serializer
 
 import (
+	"context"
 	"time"
 
 	"github.com/samber/lo"
@@ -110,7 +111,7 @@ type ScopedEnvVarOutputObj struct {
 }
 
 // FromModel fills output fields from a scoped env var model.
-func (o *ScopedEnvVarOutputObj) FromModel(obj envvars.ScopedEnvVar) *ScopedEnvVarOutputObj {
+func (o *ScopedEnvVarOutputObj) FromModel(ctx context.Context, obj envvars.ScopedEnvVar) *ScopedEnvVarOutputObj {
 	value := obj.Value
 	if obj.IsSensitive {
 		value = envvartypes.SensitiveValueMask
@@ -123,7 +124,7 @@ func (o *ScopedEnvVarOutputObj) FromModel(obj envvars.ScopedEnvVar) *ScopedEnvVa
 		ScopeValue:  obj.ScopeValue,
 		Key:         obj.Key,
 		Value:       value,
-		Description: obj.Description,
+		Description: obj.LocalizedDescription(ctx),
 		IsSensitive: obj.IsSensitive,
 		CreatedAt:   obj.CreatedAt,
 		UpdatedAt:   obj.UpdatedAt,
@@ -254,11 +255,12 @@ type ScopedEnvVarDetailedOutputObj struct {
 
 // FromModel fills output fields from a scoped env var and its conflict info.
 func (o *ScopedEnvVarDetailedOutputObj) FromModel(
+	ctx context.Context,
 	obj envvars.ScopedEnvVar,
 	conflictedInfo envvartypes.EnvVarConflictedInfo,
 ) *ScopedEnvVarDetailedOutputObj {
 	*o = ScopedEnvVarDetailedOutputObj{
-		ScopedEnvVar:   new(ScopedEnvVarOutputObj).FromModel(obj),
+		ScopedEnvVar:   new(ScopedEnvVarOutputObj).FromModel(ctx, obj),
 		ConflictedInfo: NewEnvVarConflictedInfoOutputObj(conflictedInfo),
 	}
 	return o

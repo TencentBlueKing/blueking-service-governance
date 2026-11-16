@@ -1,0 +1,87 @@
+# bkerrs 包的错误文案：错误码通用文案、出口按类别定码的通用错误、bkerrs 包装函数定义的错误
+# 各模块的文案放在 locales/<模块>.yaml 中；key 为错误详情码（大写下划线）或展示文本 key（小写点分）
+# 模板使用 text/template 语法，参数来自 bkerrs.Error.With，缺少参数时回退到错误码通用文案
+
+# 错误码通用文案
+INVALID_ARGUMENT:
+  zh: "参数错误"
+  en: "Invalid argument"
+INVALID_REQUEST:
+  zh: "请求不符合业务规则"
+  en: "Invalid request"
+UNAUTHENTICATED:
+  zh: "用户未登录或登录已失效"
+  en: "Unauthenticated"
+IAM_NO_PERMISSION:
+  zh: "无权限，请到权限中心申请"
+  en: "No permission, please apply in IAM"
+NO_PERMISSION:
+  zh: "无权限"
+  en: "Permission denied"
+NOT_FOUND:
+  zh: "资源不存在"
+  en: "Resource not found"
+ALREADY_EXISTS:
+  zh: "资源已存在"
+  en: "Resource already exists"
+ABORTED:
+  zh: "操作冲突，请刷新后重试"
+  en: "Operation conflicted, please refresh and retry"
+RATE_LIMIT_EXCEEDED:
+  zh: "请求过于频繁，请稍后重试"
+  en: "Too many requests, please retry later"
+RESOURCE_EXHAUSTED:
+  zh: "资源配额不足"
+  en: "Resource quota exhausted"
+INTERNAL_ERROR:
+  zh: "服务内部错误"
+  en: "Internal server error"
+INTERNAL_SERVER_ERROR:
+  zh: "服务内部错误"
+  en: "Internal server error"
+NOT_IMPLEMENTED:
+  zh: "功能未实现"
+  en: "Not implemented"
+
+# 通用组件声明的错误类别（见 gin.go declaredCategories）
+RESOURCE_NOT_FOUND:
+  zh: "资源不存在"
+  en: "Resource not found"
+RESOURCE_ALREADY_EXISTS:
+  zh: "资源已存在"
+  en: "Resource already exists"
+
+# bkerrs 包装函数
+APM_CONFIG_MISSING:
+  zh: "应用 {{.appID}} 在环境 {{.envName}} 下未开启 APM 配置，请先在配置文件中开启"
+  en: "APM config is missing for app {{.appID}} in environment {{.envName}}, please enable it in the config file"
+TRPC_ADMIN_PRECHECK_FAILED:
+  zh: "应用 {{.appID}} 在环境 {{.envName}} 下的 tRPC admin 配置有误，请确认 admin IP 为 0.0.0.0 或 127.0.0.1 且端口有效"
+  en: "tRPC admin configuration of app {{.appID}} in environment {{.envName}} is incorrect, please make sure the admin IP is 0.0.0.0 or 127.0.0.1 and the port is valid"
+APP_CONFIG_FILE_MOUNT_IDENTITY_CONFLICT:
+  zh: "已存在同名配置文件 {{.name}}（挂载目录：{{.mountDir}}）"
+  en: "Config file {{.name}} already exists (mount dir: {{.mountDir}})"
+APP_CONFIG_FILE_VERSION_CONFLICT:
+  zh: "配置文件已被其他用户修改，请刷新后重试"
+  en: "The config file has been modified by another user, please refresh and retry"
+BSCP_NO_PERMISSION:
+  zh: "无 BSCP 服务权限"
+  en: "No permission for the BSCP service"
+BSCP_DISABLED:
+  zh: "当前环境未启用 BSCP 配置服务"
+  en: "BSCP is disabled in the current environment"
+BSCP_NOT_FULLY_RELEASED:
+  zh: "BSCP 服务 {{.serviceID}} 在业务 {{.bizID}} 下没有全量发布的版本"
+  en: "BSCP service {{.serviceID}} has no fully released version in business {{.bizID}}"
+COMPONENT_NOT_INSTALLED:
+  zh: "集群 {{.clusterID}} 未安装组件 {{.components}}，请先安装后再使用该功能"
+  en: "Component {{.components}} is not installed in cluster {{.clusterID}}, please install it before using this feature"
+BUILD_LOG_UNAVAILABLE:
+  zh: "构建日志已过期或已被清理"
+  en: "The build log has expired or been cleaned up"
+ENV_CLUSTER_NAMESPACE_OCCUPIED:
+  zh: "集群 {{.clusterID}} 的命名空间 {{.namespace}} 已被工作空间 {{.occupiedByWorkspaceID}} 的环境 {{.occupiedByEnvName}} 占用"
+  en: "Namespace {{.namespace}} of cluster {{.clusterID}} is already bound to environment {{.occupiedByEnvName}} in workspace {{.occupiedByWorkspaceID}}"
+SCOPED_ENV_VAR_KEY_CONFLICT:
+  zh: "当前作用域下已存在 Key 为 {{.key}} 的环境变量"
+  en: "An env var with key {{.key}} already exists in this scope"

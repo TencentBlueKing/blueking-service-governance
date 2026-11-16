@@ -20,17 +20,13 @@ package bkerrs
 
 import "fmt"
 
+var errTrpcAdminPrecheckFailed = Define(
+	ErrCodeNotFound, ErrDetailCodeTrpcAdminPrecheckFailed, "trpc admin configuration is incorrect",
+)
+
 // WrapTrpcAdminPrecheckFailed 包装为 trpc admin 配置预检查失败错误
 func WrapTrpcAdminPrecheckFailed(err error, appID, envName string) error {
-	wrappedErr := Wrapf(
-		err,
-		ErrCodeNotFound,
-		"trpc admin configuration is incorrect, appID: %s, env: %s",
-		appID,
-		envName,
-	)
-
-	return wrappedErr.SetDetails(
+	return errTrpcAdminPrecheckFailed.With("appID", appID).With("envName", envName).WithCause(err).SetDetails(
 		NewDetail(
 			ErrDetailCodeTrpcAdminPrecheckFailed,
 			fmt.Sprintf("should ensure trpc admin ip is configured as 0.0.0.0 or 127.0.0.1"+

@@ -27,7 +27,7 @@ tests {
     // 该应用从未部署，没有进行中的分批发布
     expect(res.body.error).to.be.an("object");
     expect(res.body.error.code).to.equal("INVALID_REQUEST");
-    expect(res.body.error.message).to.include("no batch release is in progress");
+    expect(res.body.error.details[0].code).to.equal("DEPLOY_BATCH_RELEASE_NOT_IN_PROGRESS");
   });
 }
 

@@ -21,11 +21,25 @@ package tenant
 import (
 	"context"
 	"errors"
-	"net/http"
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
+)
+
+var (
+	errTenantIDRequired   = bkerrs.Define(bkerrs.ErrCodeInvalidArgument, "TENANT_ID_REQUIRED", "tenant id is required")
+	errTenantIDInvalid    = bkerrs.Define(bkerrs.ErrCodeInvalidArgument, "TENANT_ID_INVALID", "tenant id is invalid")
+	errTenantUserRequired = bkerrs.Define(
+		bkerrs.ErrCodeUnauthenticated, "TENANT_USER_REQUIRED", "authenticated user is required",
+	)
+	errTenantAccessDenied = bkerrs.Define(bkerrs.ErrCodeNoPermission, "TENANT_ACCESS_DENIED", "tenant access denied")
+	errTenantUserDisabled = bkerrs.Define(
+		bkerrs.ErrCodeNoPermission,
+		"TENANT_USER_DISABLED",
+		"tenant user is disabled",
+	)
 )
 
 // Required resolves the tenant for every authenticated business request.
@@ -44,7 +58,8 @@ func Required(enableMultiTenantMode bool, verifier Verifier) gin.HandlerFunc {
 		// 先按模式规范化：单租只接受空/default，多租必须能确定租户。
 		tenantID, err := ValidateTenantMode(requested, enableMultiTenantMode)
 		if err != nil {
-			abortWithStatus(c, tenantStatusCode(err), err.Error())
+			bkerrs.WriteError(c, toAPIError(err))
+			c.Abort()
 			return
 		}
 
@@ -52,11 +67,13 @@ func Required(enableMultiTenantMode bool, verifier Verifier) gin.HandlerFunc {
 		if enableMultiTenantMode {
 			user, userErr := auth.GetUser(c.Request.Context())
 			if userErr != nil || user.ID == "" {
-				abortWithStatus(c, http.StatusUnauthorized, "authenticated user is required")
+				bkerrs.WriteError(c, errTenantUserRequired.WithCause(userErr))
+				c.Abort()
 				return
 			}
 			if err := verifyTenantAccess(c.Request.Context(), user, tenantID, verifier); err != nil {
-				abortWithStatus(c, tenantStatusCode(err), err.Error())
+				bkerrs.WriteError(c, toAPIError(err))
+				c.Abort()
 				return
 			}
 		}
@@ -85,21 +102,18 @@ func verifyTenantAccess(ctx context.Context, user auth.User, tenantID string, ve
 	return verifier.Verify(ctx, user.ID, tenantID)
 }
 
-func tenantStatusCode(err error) int {
+// toAPIError 将租户校验的哨兵错误改判为对外的 API 错误，其他错误按内部错误处理
+func toAPIError(err error) error {
 	switch {
-	case errors.Is(err, ErrTenantIDRequired), errors.Is(err, ErrTenantIDInvalid):
-		return http.StatusBadRequest
-	case errors.Is(err, ErrTenantAccessDenied), errors.Is(err, ErrTenantUserDisabled):
-		return http.StatusForbidden
+	case errors.Is(err, ErrTenantIDRequired):
+		return errTenantIDRequired.WithCause(err)
+	case errors.Is(err, ErrTenantIDInvalid):
+		return errTenantIDInvalid.WithCause(err)
+	case errors.Is(err, ErrTenantAccessDenied):
+		return errTenantAccessDenied.WithCause(err)
+	case errors.Is(err, ErrTenantUserDisabled):
+		return errTenantUserDisabled.WithCause(err)
 	default:
-		return http.StatusInternalServerError
+		return err
 	}
-}
-
-func abortWithStatus(c *gin.Context, status int, message string) {
-	c.AbortWithStatusJSON(status, gin.H{
-		"error": gin.H{
-			"message": message,
-		},
-	})
 }

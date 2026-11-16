@@ -30,6 +30,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/pkg/errors"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/ctxkey"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth/backends"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/usertoken"
@@ -76,6 +77,9 @@ type Result struct {
 	// ErrorMsg 是认证过程中发生的错误信息，认证成功时为空。
 	ErrorMsg string
 }
+
+// ErrUnauthenticated 用户未登录或登录态已失效
+var ErrUnauthenticated = bkerrs.Define(bkerrs.ErrCodeUnauthenticated, "USER_UNAUTHENTICATED", "user unauthenticated")
 
 type resultContextKey struct{}
 
@@ -132,15 +136,8 @@ func middleware(
 		c.Request = c.Request.WithContext(ctx)
 
 		if abortWhenUnauthorized && !result.RequestUser.IsAuthenticated() {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
-				"error": gin.H{
-					"code":    "UNAUTHENTICATED",
-					"message": "unauthorized",
-					"system":  "bkms",
-					"module":  "bkms-server",
-					"details": []map[string]any{},
-				},
-			})
+			bkerrs.WriteError(c, ErrUnauthenticated.WithCause(errors.New(result.ErrorMsg)))
+			c.Abort()
 			return
 		}
 		c.Next()

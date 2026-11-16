@@ -25,11 +25,12 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 // ErrWorkspaceNotFound 工作空间未找到时, 返回固定错误
-var ErrWorkspaceNotFound = errors.New("workspace not found")
+var ErrWorkspaceNotFound = bkerrs.Define(bkerrs.ErrCodeNotFound, "WORKSPACE_NOT_FOUND", "workspace not found")
 
 // ErrWorkspaceAlreadyExists 工作空间 ID 已被占用
 var ErrWorkspaceAlreadyExists = errors.New("workspace already exists")

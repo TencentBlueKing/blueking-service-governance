@@ -46,6 +46,39 @@ import (
 	helmrepo "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/helmcore/source"
 )
 
+var (
+	errInvalidCodeRevision = bkerrs.Define(
+		bkerrs.ErrCodeInvalidArgument,
+		"BUILD_CHART_INVALID_CODE_REVISION",
+		"invalid code revision",
+	)
+	errCodeRevisionRequired = bkerrs.Define(
+		bkerrs.ErrCodeInvalidRequest,
+		"BUILD_CHART_CODE_REVISION_REQUIRED",
+		"code revision is required",
+	)
+	errAppNotHelmBased = bkerrs.Define(
+		bkerrs.ErrCodeInvalidArgument,
+		"BUILD_CHART_APP_NOT_HELM_BASED",
+		"app type is not helm based",
+	)
+	errInvalidBuildLogURIParams = bkerrs.Define(
+		bkerrs.ErrCodeInvalidArgument,
+		"BUILD_CHART_INVALID_LOG_URI_PARAMS",
+		"invalid build log uri parameters",
+	)
+	errChartBuildRecordNotFound = bkerrs.Define(
+		bkerrs.ErrCodeNotFound,
+		"BUILD_CHART_RECORD_NOT_FOUND",
+		"chart build record not found",
+	)
+	errBKCIProjectNotFound = bkerrs.Define(
+		bkerrs.ErrCodeNotFound,
+		"BUILD_CHART_BKCI_PROJECT_NOT_FOUND",
+		"bkci project not found",
+	)
+)
+
 // Handler 处理 Helm Chart Gin API 请求。
 type Handler struct {
 	registry *storereg.Registry
@@ -80,7 +113,7 @@ func (h *Handler) CreateHelmChartBuild(c *gin.Context) {
 	// 在调用构建服务前校验格式：服务内会消耗语义化版本号，参数错误时不应浪费版本号
 	rev, err := revision.Resolve(input.RevisionType, input.Revision, input.Branch)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "resolve code revision"))
+		bkerrs.AbortWithErr(c, errInvalidCodeRevision.WithCause(err))
 		return
 	}
 
@@ -94,12 +127,11 @@ func (h *Handler) CreateHelmChartBuild(c *gin.Context) {
 	buildSvc := helmchartbuild.NewChartBuildService(h.registry.DB)
 	result, err := buildSvc.ExecuteChartBuild(ctx, app, input.BumpType, rev)
 	if err != nil {
-		errCode := lo.Ternary(
-			errors.Is(err, revision.ErrRequired),
-			bkerrs.ErrCodeInvalidRequest,
-			bkerrs.ErrCodeInternalServerError,
-		)
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, errCode, "trigger helm chart build"))
+		if errors.Is(err, revision.ErrRequired) {
+			bkerrs.AbortWithErr(c, errCodeRevisionRequired.WithCause(err))
+			return
+		}
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "trigger helm chart build"))
 		return
 	}
 
@@ -465,7 +497,7 @@ func (h *Handler) validateHelmApp(
 		return nil, err
 	}
 	if !appruntime.IsHelmBasedType(app.Type) {
-		return nil, bkerrs.Errorf(bkerrs.ErrCodeInvalidArgument, "app type is not helm based, but %s", app.Type)
+		return nil, errAppNotHelmBased.With("appType", app.Type)
 	}
 	return app, nil
 }

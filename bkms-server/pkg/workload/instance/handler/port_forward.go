@@ -40,6 +40,21 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/misc/portforward"
 )
 
+var (
+	errPortForwardProdForbidden = bkerrs.Define(
+		bkerrs.ErrCodeInvalidRequest, "WORKLOAD_INSTANCE_PORT_FORWARD_PROD_FORBIDDEN",
+		"port-forward is not allowed in production environment",
+	)
+	errPortForwardPermissionDenied = bkerrs.Define(
+		bkerrs.ErrCodeNoPermission, "WORKLOAD_INSTANCE_PORT_FORWARD_NO_PERMISSION",
+		"port-forward permission denied",
+	)
+	errPortForwardWebsocketUpgradeFailed = bkerrs.Define(
+		bkerrs.ErrCodeInvalidArgument, "WORKLOAD_INSTANCE_PORT_FORWARD_WS_UPGRADE_FAILED",
+		"upgrade port-forward websocket failed",
+	)
+)
+
 // 注意：websocket.Accept 与 Gin 中间件的兼容性要求：
 //   - 不要在 Upgrade 前由中间件写响应头或响应体
 //   - 不要对该路由启用强制压缩中间件
@@ -73,7 +88,7 @@ func (h *Handler) PortForward(c *gin.Context) {
 		return
 	}
 	if err = perm.NewManager().HasDeployEnvPerm(ctx, app.WorkspaceID, uriInput.EnvName); err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeNoPermission, "check deploy env perm"))
+		bkerrs.AbortWithErr(c, errDeployEnvNoPermission.With("envName", uriInput.EnvName).WithCause(err))
 		return
 	}
 
@@ -84,19 +99,14 @@ func (h *Handler) PortForward(c *gin.Context) {
 		return
 	}
 	if bkmsenv.IsProductionType(bkmsenv.Type(envInfo.Type)) {
-		bkerrs.AbortWithErr(c, bkerrs.New(
-			bkerrs.ErrCodeInvalidRequest,
-			"port-forward is not allowed in production environment",
-		))
+		bkerrs.AbortWithErr(c, errPortForwardProdForbidden)
 		return
 	}
 
 	// 校验 port-forward 白名单权限
 	pfService := pfwhitelist.NewService(h.registry.DB)
 	if err = pfService.CheckPermission(ctx, envInfo.ID.Hex()); err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.New(
-			bkerrs.ErrCodeNoPermission, pfwhitelist.ErrPermissionDenied.Error(),
-		))
+		bkerrs.AbortWithErr(c, errPortForwardPermissionDenied.With("envName", envInfo.Name).WithCause(err))
 		return
 	}
 
@@ -122,7 +132,7 @@ func (h *Handler) PortForward(c *gin.Context) {
 		InsecureSkipVerify: true,
 	})
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "upgrade port-forward websocket"))
+		bkerrs.AbortWithErr(c, errPortForwardWebsocketUpgradeFailed.WithCause(err))
 		return
 	}
 

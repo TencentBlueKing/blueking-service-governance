@@ -20,6 +20,7 @@
 package serializer
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -153,6 +154,7 @@ type OperationRecordOutputObj struct {
 // FromModel fills output fields from an operation record model.
 // env 为记录分组中 envName 对应的环境，可为 nil
 func (o *OperationRecordOutputObj) FromModel(
+	ctx context.Context,
 	record audit.OperationRecord,
 	env *envmodel.Environment,
 ) *OperationRecordOutputObj {
@@ -160,12 +162,12 @@ func (o *OperationRecordOutputObj) FromModel(
 		Username:                 record.Username,
 		AccessType:               string(record.AccessType),
 		OperationType:            string(record.OperationType),
-		OperationTypeDisplayName: record.OperationType.DisplayName(),
+		OperationTypeDisplayName: record.OperationType.DisplayName(ctx),
 		ResourceType:             string(record.ResourceType),
-		ResourceTypeDisplayName:  record.ResourceType.DisplayName(),
+		ResourceTypeDisplayName:  record.ResourceType.DisplayName(ctx),
 		ResourceID:               record.ResourceID,
 		Attribute:                string(record.Attribute),
-		AttributeDisplayName:     record.Attribute.DisplayName(),
+		AttributeDisplayName:     record.Attribute.DisplayName(ctx),
 		Result:                   string(record.Result),
 		Data: &OperationDataOutputObj{
 			Before: string(record.Data.Before),
@@ -179,7 +181,7 @@ func (o *OperationRecordOutputObj) FromModel(
 		CreatedAt: record.CreatedAt,
 	}
 	if env != nil {
-		o.Group.EnvDisplayName = env.DisplayName
+		o.Group.EnvDisplayName = env.LocalizedDisplayName(ctx)
 		o.Group.EnvKind = string(env.GetKind())
 	}
 	return o

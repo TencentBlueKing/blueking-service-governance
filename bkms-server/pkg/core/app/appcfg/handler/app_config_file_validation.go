@@ -48,7 +48,7 @@ func (h *Handler) validateAndGetAppConfigFile(
 
 	oid, err := bson.ObjectIDFromHex(id)
 	if err != nil {
-		return nil, nil, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "parsing ID")
+		return nil, nil, errInvalidAppConfigFileID.WithCause(err)
 	}
 	acf, err := h.configFiles().GetByID(ctx, oid)
 	if err != nil {

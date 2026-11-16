@@ -72,7 +72,7 @@ func (h *Handler) ListPortPools(c *gin.Context) {
 
 	configs, err := portpool.NewPortPoolService().ListByEnv(ctx, env)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list portpool configs"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "list portpool configs"))
 		return
 	}
 
@@ -126,7 +126,7 @@ func (h *Handler) CreatePortPool(c *gin.Context) {
 	}
 
 	if err = portpool.NewPortPoolService().Create(ctx, config, env); err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "create portpool config"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "create portpool config"))
 		return
 	}
 
@@ -180,15 +180,7 @@ func (h *Handler) UpdatePortPool(c *gin.Context) {
 
 	result, err := portpool.NewPortPoolService().Update(ctx, env, uriInput.Name, poolItems)
 	if err != nil {
-		if errors.Is(err, portpool.ErrConfigNotFound) {
-			bkerrs.AbortWithErr(c, bkerrs.Errorf(
-				bkerrs.ErrCodeNotFound,
-				"portpool config(%s) not found in env(%s)",
-				uriInput.Name, uriInput.EnvID,
-			))
-			return
-		}
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "update portpool config"))
+		bkerrs.AbortWithErr(c, errors.Wrapf(err, "update portpool config %s in env %s", uriInput.Name, uriInput.EnvID))
 		return
 	}
 
@@ -237,20 +229,12 @@ func (h *Handler) DeletePortPool(c *gin.Context) {
 	ppSvc := portpool.NewPortPoolService()
 	existingConfig, err := ppSvc.Get(ctx, env, uriInput.Name)
 	if err != nil {
-		if errors.Is(err, portpool.ErrConfigNotFound) {
-			bkerrs.AbortWithErr(c, bkerrs.Errorf(
-				bkerrs.ErrCodeNotFound,
-				"portpool config(%s) not found in env(%s)",
-				uriInput.Name, uriInput.EnvID,
-			))
-			return
-		}
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get portpool config"))
+		bkerrs.AbortWithErr(c, errors.Wrapf(err, "get portpool config %s in env %s", uriInput.Name, uriInput.EnvID))
 		return
 	}
 
 	if err = ppSvc.Delete(ctx, env, uriInput.Name); err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "delete portpool config"))
+		bkerrs.AbortWithErr(c, errors.Wrapf(err, "delete portpool config %s in env %s", uriInput.Name, uriInput.EnvID))
 		return
 	}
 

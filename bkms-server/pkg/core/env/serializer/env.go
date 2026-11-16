@@ -20,6 +20,7 @@
 package serializer
 
 import (
+	"context"
 	"regexp"
 	"time"
 
@@ -197,13 +198,13 @@ type EnvOutput struct {
 }
 
 // FromModel fills output fields from an environment model.
-func (o *EnvOutput) FromModel(env envmodel.Environment) *EnvOutput {
+func (o *EnvOutput) FromModel(ctx context.Context, env envmodel.Environment) *EnvOutput {
 	sourceEnvID := lo.Ternary(env.SourceEnvID.IsZero(), "", env.SourceEnvID.Hex())
 
 	*o = EnvOutput{
 		ID:          env.ID.Hex(),
 		Name:        env.Name,
-		DisplayName: env.DisplayName,
+		DisplayName: env.LocalizedDisplayName(ctx),
 		Type:        env.Type,
 		CreatedAt:   env.CreatedAt,
 		UpdatedAt:   env.UpdatedAt,
@@ -297,6 +298,7 @@ type FeatureEnvDeployStatusOutput struct {
 // A nil deployStatuses means the caller did not request deployment statuses and leaves the JSON field null;
 // a non-nil slice means the caller requested them and produces an array, including [] when it is empty.
 func (o *FeatureEnvOutput) FromModel(
+	ctx context.Context,
 	env envmodel.Environment,
 	sourceEnv *envmodel.Environment,
 	deployStatuses []status.AppDeployStatus,
@@ -307,13 +309,13 @@ func (o *FeatureEnvOutput) FromModel(
 	}
 	if sourceEnv != nil {
 		source.Name = sourceEnv.Name
-		source.DisplayName = sourceEnv.DisplayName
+		source.DisplayName = sourceEnv.LocalizedDisplayName(ctx)
 	}
 
 	*o = FeatureEnvOutput{
 		ID:          env.ID.Hex(),
 		Name:        env.Name,
-		DisplayName: env.DisplayName,
+		DisplayName: env.LocalizedDisplayName(ctx),
 		Type:        env.Type,
 		SourceEnv:   source,
 		Cluster: &FeatureEnvClusterOutput{
@@ -348,6 +350,7 @@ type ListFeatureEnvsOutput struct {
 // means deployment statuses were not requested; a non-nil map means they were
 // requested, so missing or nil values are represented as empty arrays.
 func NewListFeatureEnvsOutput(
+	ctx context.Context,
 	featureEnvs []envmodel.Environment,
 	sourceEnvByFeatEnvName map[string]*envmodel.Environment,
 	deployStatusByFeatEnvName map[string][]status.AppDeployStatus,
@@ -359,6 +362,7 @@ func NewListFeatureEnvsOutput(
 			deployStatuses = lo.CoalesceSliceOrEmpty(deployStatusByFeatEnvName[env.Name])
 		}
 		data = append(data, new(FeatureEnvOutput).FromModel(
+			ctx,
 			env,
 			sourceEnvByFeatEnvName[env.Name],
 			deployStatuses,
@@ -416,13 +420,14 @@ type EnvDetailOutput struct {
 
 // FromModel fills output fields from an environment model and its deploy statuses.
 func (o *EnvDetailOutput) FromModel(
+	ctx context.Context,
 	env envmodel.Environment,
 	deployStatuses []status.AppDeployStatus,
 ) *EnvDetailOutput {
 	*o = EnvDetailOutput{
 		ID:          env.ID.Hex(),
 		Name:        env.Name,
-		DisplayName: env.DisplayName,
+		DisplayName: env.LocalizedDisplayName(ctx),
 		Type:        env.Type,
 		Creator:     env.Creator,
 		CreatedAt:   env.CreatedAt,

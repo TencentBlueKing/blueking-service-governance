@@ -19,12 +19,14 @@
 package serializer
 
 import (
+	"context"
 	"reflect"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"go.mongodb.org/mongo-driver/v2/bson"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/i18n"
 	bkmapi "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bkmonitor"
 	alertstrategy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/bkmonitor/alert/strategy"
 )
@@ -66,7 +68,7 @@ var _ = Describe("Alert serializer", func() {
 	Describe("AlertStrategyOutput", func() {
 		It("keeps app fields from model", func() {
 			envID := bson.NewObjectID()
-			output := new(AlertStrategyOutput).FromModel(alertstrategy.AlertStrategy{
+			output := new(AlertStrategyOutput).FromModel(context.Background(), alertstrategy.AlertStrategy{
 				ID:           bson.NewObjectID(),
 				WorkspaceID:  "ws-1",
 				AppID:        "app-1",
@@ -97,6 +99,24 @@ var _ = Describe("Alert serializer", func() {
 			Expect(output.RemoteRefs).To(HaveLen(1))
 			Expect(output.RemoteRefs[0].TrafficLaneName).To(Equal("feature-a"))
 			Expect(output.RemoteRefs[0].RemoteStrategyName).To(Equal("demo"))
+		})
+
+		It("localizes unmodified default strategy displayName and keeps user-modified displayName", func() {
+			enCtx := i18n.WithLang(context.Background(), i18n.LangEN)
+
+			defaultOut := new(AlertStrategyOutput).FromModel(enCtx, alertstrategy.AlertStrategy{
+				ID:           bson.NewObjectID(),
+				StrategyCode: "cpu_limit_usage_high",
+				DisplayName:  "CPU 使用率过高",
+			})
+			Expect(defaultOut.DisplayName).To(Equal("High CPU Usage"))
+
+			customOut := new(AlertStrategyOutput).FromModel(enCtx, alertstrategy.AlertStrategy{
+				ID:           bson.NewObjectID(),
+				StrategyCode: "cpu_limit_usage_high",
+				DisplayName:  "自定义告警名称",
+			})
+			Expect(customOut.DisplayName).To(Equal("自定义告警名称"))
 		})
 	})
 

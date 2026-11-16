@@ -24,6 +24,7 @@ import (
 
 	"github.com/samber/lo"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/i18n"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
 	polariscap "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime/capability/polaris"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime/runtimemod"
@@ -71,18 +72,48 @@ func checkServiceNameInEnv(
 	serviceNames, err := getTrpcServiceNames(ctx, provider, target.AppID, envName)
 	if err != nil {
 		if envName == "" {
-			return fmt.Sprintf("[%s] 读取 tRPC 配置文件失败: %v", target.ConfigName, err)
+			return i18n.LocalizeOr(
+				ctx,
+				"extension.polaris.serviceCheck.readConfigFailed",
+				map[string]string{"configName": target.ConfigName, "err": err.Error()},
+				fmt.Sprintf("[%s] 读取 tRPC 配置文件失败: %v", target.ConfigName, err),
+			)
 		}
-		return fmt.Sprintf("[%s] 环境 '%s': 读取 tRPC 配置文件失败: %v", target.ConfigName, envName, err)
+		return i18n.LocalizeOr(
+			ctx,
+			"extension.polaris.serviceCheck.readConfigFailedInEnv",
+			map[string]string{"configName": target.ConfigName, "envName": envName, "err": err.Error()},
+			fmt.Sprintf("[%s] 环境 '%s': 读取 tRPC 配置文件失败: %v", target.ConfigName, envName, err),
+		)
 	}
 
 	if !lo.Contains(serviceNames, target.PolarisName) {
+		serviceNamesStr := fmt.Sprintf("%v", serviceNames)
 		if envName == "" {
-			return fmt.Sprintf("[%s] 北极星服务名 '%s' 推荐与 tRPC 配置中的服务名 %v 一致",
-				target.ConfigName, target.PolarisName, serviceNames)
+			return i18n.LocalizeOr(
+				ctx,
+				"extension.polaris.serviceCheck.serviceNameMismatch",
+				map[string]string{
+					"configName":   target.ConfigName,
+					"polarisName":  target.PolarisName,
+					"serviceNames": serviceNamesStr,
+				},
+				fmt.Sprintf("[%s] 北极星服务名 '%s' 推荐与 tRPC 配置中的服务名 %v 一致",
+					target.ConfigName, target.PolarisName, serviceNames),
+			)
 		}
-		return fmt.Sprintf("[%s] 环境 '%s': 北极星服务名 '%s' 推荐与 tRPC 配置中的服务名 %v 一致",
-			target.ConfigName, envName, target.PolarisName, serviceNames)
+		return i18n.LocalizeOr(
+			ctx,
+			"extension.polaris.serviceCheck.serviceNameMismatchInEnv",
+			map[string]string{
+				"configName":   target.ConfigName,
+				"envName":      envName,
+				"polarisName":  target.PolarisName,
+				"serviceNames": serviceNamesStr,
+			},
+			fmt.Sprintf("[%s] 环境 '%s': 北极星服务名 '%s' 推荐与 tRPC 配置中的服务名 %v 一致",
+				target.ConfigName, envName, target.PolarisName, serviceNames),
+		)
 	}
 	return ""
 }

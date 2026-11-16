@@ -18,6 +18,22 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appdefaults/serializer"
 )
 
+var (
+	errInvalidRuleID = bkerrs.Define(
+		bkerrs.ErrCodeInvalidArgument, "WORKLOAD_APPDEFAULTS_INVALID_RULE_ID", "invalid rule ID",
+	)
+	errRuleNotFound = bkerrs.Define(
+		bkerrs.ErrCodeNotFound, "WORKLOAD_APPDEFAULTS_RULE_NOT_FOUND", "application default rule not found",
+	)
+	errInvalidRule = bkerrs.Define(
+		bkerrs.ErrCodeInvalidRequest, "WORKLOAD_APPDEFAULTS_INVALID_RULE", "invalid application default rule",
+	)
+	errRuleConflict = bkerrs.Define(
+		bkerrs.ErrCodeInvalidRequest, "WORKLOAD_APPDEFAULTS_RULE_CONFLICT",
+		"application default rule already exists for this environment type",
+	)
+)
+
 // Handler handles workspace application-default APIs.
 type Handler struct {
 	registry *storereg.Registry
@@ -133,7 +149,7 @@ func updateRule[Input, Output any](
 	}
 	ruleID, err := bson.ObjectIDFromHex(uri.RuleID)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "invalid rule ID"))
+		bkerrs.AbortWithErr(c, errInvalidRuleID.With("ruleID", uri.RuleID).WithCause(err))
 		return
 	}
 
@@ -180,7 +196,7 @@ func deleteRule(
 	}
 	ruleID, err := bson.ObjectIDFromHex(uri.RuleID)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "invalid rule ID"))
+		bkerrs.AbortWithErr(c, errInvalidRuleID.With("ruleID", uri.RuleID).WithCause(err))
 		return
 	}
 
@@ -196,10 +212,11 @@ func deleteRule(
 func apiError(err error, operation string) error {
 	switch {
 	case errors.Is(err, appdefaults.ErrRuleNotFound):
-		return bkerrs.Wrap(err, bkerrs.ErrCodeNotFound, operation)
-	case errors.Is(err, appdefaults.ErrInvalidRule),
-		errors.Is(err, appdefaults.ErrRuleConflict):
-		return bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, operation)
+		return errRuleNotFound.With("operation", operation).WithCause(err)
+	case errors.Is(err, appdefaults.ErrInvalidRule):
+		return errInvalidRule.With("operation", operation).WithCause(err)
+	case errors.Is(err, appdefaults.ErrRuleConflict):
+		return errRuleConflict.With("operation", operation).WithCause(err)
 	default:
 		return bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, operation)
 	}

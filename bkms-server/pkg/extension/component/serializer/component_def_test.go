@@ -19,12 +19,14 @@
 package serializer_test
 
 import (
+	"context"
 	"time"
 
 	"github.com/gin-gonic/gin/binding"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/i18n"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component/serializer"
 )
@@ -130,7 +132,7 @@ var _ = Describe("Component definition serializers", func() {
 		}
 		count := component.InstanceCount{AppCompInstanceCount: 1, WorkspaceCompInstanceCount: 2}
 
-		output := new(serializer.ComponentDefOutputObj).FromModel(model, count)
+		output := new(serializer.ComponentDefOutputObj).FromModel(context.Background(), model, count)
 
 		Expect(output.Name).To(Equal("custom-comp"))
 		Expect(output.Properties).To(Equal([]serializer.PropertyDefOutputObj{{
@@ -146,6 +148,7 @@ var _ = Describe("Component definition serializers", func() {
 
 	It("maps output template builtin vars from models", func() {
 		output := new(serializer.ListBuiltinVarsOutput).FromModels(
+			context.Background(),
 			component.BuiltinVars,
 		)
 
@@ -157,6 +160,29 @@ var _ = Describe("Component definition serializers", func() {
 				return item.Key
 			}, Equal(component.PropNameName)),
 		))
+
+		enCtx := i18n.WithLang(context.Background(), i18n.LangEN)
+		enOutput := new(serializer.ListBuiltinVarsOutput).FromModels(enCtx, component.BuiltinVars)
+		Expect(enOutput.Data[0].Description).To(Equal("Name of the application the component instance belongs to"))
+	})
+
+	It("localizes builtin component definition descriptions by name and property", func() {
+		builtin := &component.ComponentDef{
+			Name:        "VolumeConfigMap",
+			Version:     "v1.0.0",
+			Description: "fallback desc",
+			IsBuiltin:   true,
+			Properties: []component.Property{
+				{Name: "configName", Type: component.PropTypeString, Description: "fallback prop"},
+				{Name: "unknownProp", Type: component.PropTypeString, Description: "keep fallback"},
+			},
+		}
+
+		enCtx := i18n.WithLang(context.Background(), i18n.LangEN)
+		enOutput := new(serializer.ComponentDefOutputObj).FromModel(enCtx, builtin, component.InstanceCount{})
+		Expect(enOutput.Description).To(Equal("Mount the data content into the application as a ConfigMap"))
+		Expect(enOutput.Properties[0].Description).To(Equal("ConfigMap name"))
+		Expect(enOutput.Properties[1].Description).To(Equal("keep fallback"))
 	})
 
 	It("normalizes empty slices in component definition outputs", func() {
@@ -170,7 +196,9 @@ var _ = Describe("Component definition serializers", func() {
 			ScopeType: component.ScopeTypeGlobal,
 		}
 
-		output := new(serializer.ComponentDefOutputObj).FromModel(model, component.InstanceCount{})
+		output := new(serializer.ComponentDefOutputObj).FromModel(
+			context.Background(), model, component.InstanceCount{},
+		)
 
 		Expect(output.Properties).To(Equal([]serializer.PropertyDefOutputObj{{
 			Name:    "replicas",

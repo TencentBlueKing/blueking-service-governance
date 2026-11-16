@@ -20,11 +20,13 @@
 package handler
 
 import (
+	"errors"
 	"net/http"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/hibiken/asynq"
+	pkgerrors "github.com/pkg/errors"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
@@ -33,6 +35,7 @@ import (
 	deploypkg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy"
 	helmdeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/helm"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/serializer"
+	deploystatus "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/status"
 	deploytypes "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/types"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/helm"
@@ -46,6 +49,40 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/topology"
 )
+
+var (
+	errConcurrencyDeployConflict = bkerrs.Define(
+		bkerrs.ErrCodeAborted,
+		"DEPLOY_CONCURRENCY_CONFLICT",
+		"concurrency deploy conflict occurred",
+	)
+	errHelmRollbackRecordNotFound = bkerrs.Define(
+		bkerrs.ErrCodeInvalidArgument,
+		"DEPLOY_HELM_ROLLBACK_RECORD_NOT_FOUND",
+		"deploy record for rollback not found",
+	)
+	errHelmRollbackTargetNotDeployed = bkerrs.Define(
+		bkerrs.ErrCodeInvalidArgument,
+		"DEPLOY_HELM_ROLLBACK_STATUS_INVALID",
+		"target revision for rollback is not in deployed status",
+	)
+	errMustProvideLatestDeployID = bkerrs.Define(
+		bkerrs.ErrCodeInvalidArgument,
+		"DEPLOY_HELM_LATEST_RECORD_REQUIRED",
+		"must provide latest deploy record id",
+	)
+)
+
+func wrapRollbackRecordErr(err error) error {
+	switch {
+	case errors.Is(err, helmdeploy.ErrRecordNotFound):
+		return errHelmRollbackRecordNotFound.WithCause(err)
+	case errors.Is(err, errRollbackTargetNotDeployed):
+		return errHelmRollbackTargetNotDeployed.WithCause(err)
+	default:
+		return pkgerrors.Wrap(err, "get deploy record")
+	}
+}
 
 // ListHelmDeployRecords 获取 Helm 应用部署记录列表。
 //
@@ -217,7 +254,7 @@ func (h *Handler) CreateHelmDeploy(c *gin.Context) {
 		return
 	}
 	if ok := deployLock.Acquire(ctx); !ok {
-		bkerrs.AbortWithErr(c, bkerrs.New(bkerrs.ErrCodeAborted, "concurrency deploy conflict occurred"))
+		bkerrs.AbortWithErr(c, errConcurrencyDeployConflict)
 		return
 	}
 
@@ -288,7 +325,7 @@ func (h *Handler) PreviewRollbackHelmDeploy(c *gin.Context) {
 	// 获取回滚目标部署记录
 	record, err := h.getDeployRecordForRollback(ctx, app.ID, uriInput.DeployID)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "get deploy record"))
+		bkerrs.AbortWithErr(c, wrapRollbackRecordErr(err))
 		return
 	}
 
@@ -343,7 +380,7 @@ func (h *Handler) RollbackHelmDeploy(c *gin.Context) {
 	// 获取回滚目标部署记录
 	record, err := h.getDeployRecordForRollback(ctx, app.ID, uriInput.DeployID)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "get deploy record"))
+		bkerrs.AbortWithErr(c, wrapRollbackRecordErr(err))
 		return
 	}
 
@@ -354,7 +391,7 @@ func (h *Handler) RollbackHelmDeploy(c *gin.Context) {
 		return
 	}
 	if ok := deployLock.Acquire(ctx); !ok {
-		bkerrs.AbortWithErr(c, bkerrs.New(bkerrs.ErrCodeAborted, "concurrency deploy conflict occurred"))
+		bkerrs.AbortWithErr(c, errConcurrencyDeployConflict)
 		return
 	}
 
@@ -430,13 +467,23 @@ func (h *Handler) DeleteHelmDeploy(c *gin.Context) {
 	)
 	if err != nil {
 		metricStatus = metrics.StatusErr
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeNotFound, "get latest deploy record"))
+		if errors.Is(err, helmdeploy.ErrLatestDeployRecordNotFound) {
+			bkerrs.AbortWithErr(
+				c,
+				deploystatus.ErrDeployRecordNotFound.
+					With("appID", app.ID).
+					With("envName", uriInput.EnvName).
+					WithCause(err),
+			)
+			return
+		}
+		bkerrs.AbortWithErr(c, pkgerrors.Wrap(err, "get latest deploy record"))
 		return
 	}
 	// 检查提供的部署记录 ID 是否与最新一次的一致
 	if record.ID.Hex() != uriInput.DeployID {
 		metricStatus = metrics.StatusErr
-		bkerrs.AbortWithErr(c, bkerrs.New(bkerrs.ErrCodeInvalidArgument, "must provide latest deploy record id"))
+		bkerrs.AbortWithErr(c, errMustProvideLatestDeployID)
 		return
 	}
 

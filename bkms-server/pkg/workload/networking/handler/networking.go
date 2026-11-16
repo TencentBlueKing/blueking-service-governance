@@ -21,6 +21,7 @@ package handler
 
 import (
 	"github.com/gin-gonic/gin"
+	"github.com/go-playground/validator/v10"
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
 
@@ -32,6 +33,18 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/networking"
 	slz "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/networking/serializer"
+)
+
+var (
+	errServiceAlreadyExists = bkerrs.Define(
+		bkerrs.ErrCodeInvalidRequest, "WORKLOAD_NETWORKING_SERVICE_ALREADY_EXISTS", "app service already exists",
+	)
+	errInvalidService = bkerrs.Define(
+		bkerrs.ErrCodeInvalidRequest, "WORKLOAD_NETWORKING_INVALID_SERVICE", "invalid app service",
+	)
+	errServiceNotFound = bkerrs.Define(
+		bkerrs.ErrCodeInvalidRequest, "WORKLOAD_NETWORKING_SERVICE_NOT_FOUND", "app service not found",
+	)
 )
 
 // Handler handles Gin networking API requests.
@@ -97,7 +110,16 @@ func (h *Handler) CreateAppService(c *gin.Context) {
 	}
 
 	if err = h.services().Create(ctx, svc); err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, "create app service"))
+		if errors.Is(err, networking.ErrServiceAlreadyExists) {
+			bkerrs.AbortWithErr(c, errServiceAlreadyExists.With("name", input.Name).WithCause(err))
+			return
+		}
+		var valErr validator.ValidationErrors
+		if errors.As(err, &valErr) {
+			bkerrs.AbortWithErr(c, errInvalidService.With("name", input.Name).WithCause(err))
+			return
+		}
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "create app service"))
 		return
 	}
 
@@ -198,7 +220,11 @@ func (h *Handler) UpdateAppService(c *gin.Context) {
 	)
 	// 更新内容全为空时不做任何修改
 	if err != nil && !errors.Is(err, store.ErrNoFieldsToUpdate) {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, "update app service"))
+		if errors.Is(err, networking.ErrServiceNotFound) {
+			bkerrs.AbortWithErr(c, errServiceNotFound.With("name", uriInput.Name).WithCause(err))
+			return
+		}
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "update app service"))
 		return
 	}
 
@@ -237,7 +263,7 @@ func (h *Handler) DeleteAppService(c *gin.Context) {
 		ctx, networking.ByAppAndName(appObj.ID, uriInput.Name),
 	)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, "delete app service"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "delete app service"))
 		return
 	}
 

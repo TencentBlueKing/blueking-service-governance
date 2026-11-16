@@ -34,6 +34,12 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
 )
 
+var errBCSNoActiveAuthInfo = bkerrs.Define(
+	bkerrs.ErrCodeNotFound,
+	"BKINTEGRATIONS_BCS_NO_ACTIVE_AUTH_INFO",
+	"no active bcs auth info",
+)
+
 // ListBCSAuthorizedProjects 获取有权限的 BCS 项目列表
 //
 //	@ID			ListBCSAuthorizedProjects
@@ -265,11 +271,7 @@ func (h *Handler) GetBCSUserToken(c *gin.Context) {
 	token, err := bcstoken.GetActiveUserToken(ctx)
 	if err != nil {
 		if errors.Is(err, bcstoken.ErrNoActiveUserToken) {
-			bkerrs.AbortWithErr(c, bkerrs.Wrap(
-				errors.New("no active bcs auth info found, please create one in BCS platform"),
-				bkerrs.ErrCodeNotFound,
-				"no active bcs auth info",
-			))
+			bkerrs.AbortWithErr(c, errBCSNoActiveAuthInfo.WithCause(err))
 			return
 		}
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get bcs auth info"))

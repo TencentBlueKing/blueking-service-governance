@@ -19,11 +19,10 @@
 package handler
 
 import (
-	"errors"
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/samber/lo"
+	"github.com/pkg/errors"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
@@ -80,7 +79,7 @@ func (h *Handler) CreateBKMSApp(c *gin.Context) {
 	params := input.ToCreateParams()
 	// 写入构建配置前先校验，参数不合法时不留下任何数据
 	if err := lifecycle.ValidateCreate(app, params); err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, "validate bkmsApp"))
+		bkerrs.AbortWithErr(c, errInvalidBKMSAppParams.WithCause(err))
 		return
 	}
 
@@ -90,11 +89,11 @@ func (h *Handler) CreateBKMSApp(c *gin.Context) {
 		return
 	}
 	if err = lifecycle.NewService(h.registry.DB).Create(ctx, app, params); err != nil {
-		code := bkerrs.ErrCodeInternalServerError
 		if errors.Is(err, lifecycle.ErrInvalidParams) || errors.Is(err, appcfg.ErrInvalidConfigSpec) {
-			code = bkerrs.ErrCodeInvalidRequest
+			bkerrs.AbortWithErr(c, errInvalidBKMSAppParams.WithCause(err))
+			return
 		}
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, code, "create bkmsApp"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "create bkmsApp"))
 		return
 	}
 
@@ -134,21 +133,22 @@ func (h *Handler) UpdateAppStartupConfig(c *gin.Context) {
 		return
 	}
 	if app.Type != bkmsapp.AppTypeBKMSApp {
-		bkerrs.AbortWithErr(c, bkerrs.Errorf(bkerrs.ErrCodeInvalidRequest,
-			"app type %s does not support startup-config, use trpc-spec or taf-spec", app.Type))
+		bkerrs.AbortWithErr(c, errStartupConfigUnsupportedType.With("appType", app.Type))
 		return
 	}
 	params, err := input.ToUpdateStartupConfigParams()
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, "parse startup config"))
+		bkerrs.AbortWithErr(c, errInvalidStartupConfig.WithCause(err))
 		return
 	}
 
 	oldModel, newModel, err := lifecycle.NewService(h.registry.DB).UpdateStartupConfig(ctx, app, params)
 	if err != nil {
-		code := lo.Ternary(errors.Is(err, lifecycle.ErrInvalidParams),
-			bkerrs.ErrCodeInvalidRequest, bkerrs.ErrCodeInternalServerError)
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, code, "update startup config"))
+		if errors.Is(err, lifecycle.ErrInvalidParams) {
+			bkerrs.AbortWithErr(c, errInvalidStartupConfig.WithCause(err))
+			return
+		}
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "update startup config"))
 		return
 	}
 

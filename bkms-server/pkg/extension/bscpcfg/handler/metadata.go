@@ -36,6 +36,21 @@ import (
 )
 
 // InitMetadata 初始化配置管理（幂等）。
+var (
+	errWorkspaceBizIDMissing = bkerrs.Define(
+		bkerrs.ErrCodeNotFound, "EXTENSION_BSCPCFG_WORKSPACE_BIZ_ID_MISSING", "workspace missing bizID",
+	)
+	errWorkspaceBscpProjectMissing = bkerrs.Define(
+		bkerrs.ErrCodeNotFound,
+		"EXTENSION_BSCPCFG_WORKSPACE_PROJECT_MISSING",
+		"workspace missing bscp project",
+	)
+	errMetadataNotFound = bkerrs.Define(
+		bkerrs.ErrCodeNotFound, "EXTENSION_BSCPCFG_METADATA_NOT_FOUND", "bscpcfg metadata not found",
+	)
+)
+
+// InitMetadata 初始化配置管理（幂等）。
 //
 //	@ID			InitBscpCfgMetadata
 //	@Summary	初始化配置管理
@@ -68,14 +83,11 @@ func (h *Handler) InitMetadata(c *gin.Context) {
 		return
 	}
 	if ws.BkSystems.BkCCBizID == "" {
-		bkerrs.AbortWithErr(c, bkerrs.New(bkerrs.ErrCodeNotFound, "workspace missing bizID"))
+		bkerrs.AbortWithErr(c, errWorkspaceBizIDMissing)
 		return
 	}
 	if ws.BkSystems.BkBSCPProjectID == "" {
-		bkerrs.AbortWithErr(
-			c,
-			bkerrs.New(bkerrs.ErrCodeNotFound, "workspace missing bscp project, run bind-bscp-project first"),
-		)
+		bkerrs.AbortWithErr(c, errWorkspaceBscpProjectMissing)
 		return
 	}
 
@@ -154,9 +166,7 @@ func (h *Handler) PatchMetadata(c *gin.Context) {
 
 	if err = mgr.PatchMetadata(ctx, app.ID, fields); err != nil {
 		if errors.Is(err, cfgmodel.ErrMetadataNotFound) {
-			bkerrs.AbortWithErr(
-				c, bkerrs.New(bkerrs.ErrCodeNotFound, "bscpcfg metadata not found, please init first"),
-			)
+			bkerrs.AbortWithErr(c, errMetadataNotFound.With("appID", app.ID).WithCause(err))
 			return
 		}
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "update metadata"))
@@ -242,9 +252,7 @@ func (h *Handler) GetMetadata(c *gin.Context) {
 	appConfig, err := store.Of(h.registry.DB, cfgmodel.MetadataMeta).Get(ctx, cfgmodel.ByApp(app.ID))
 	if err != nil {
 		if errors.Is(err, cfgmodel.ErrMetadataNotFound) {
-			bkerrs.AbortWithErr(
-				c, bkerrs.New(bkerrs.ErrCodeNotFound, "bscpcfg metadata not found, please init first"),
-			)
+			bkerrs.AbortWithErr(c, errMetadataNotFound.With("appID", app.ID).WithCause(err))
 			return
 		}
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get bscpcfg metadata"))

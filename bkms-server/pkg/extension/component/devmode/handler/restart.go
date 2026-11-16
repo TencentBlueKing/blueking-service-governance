@@ -29,6 +29,7 @@ import (
 	"github.com/samber/lo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/i18n"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	devmode "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component/devmode"
@@ -40,6 +41,19 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appspec"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/workload/defaults"
+)
+
+var (
+	errRestartTargetRequired = bkerrs.Define(
+		bkerrs.ErrCodeInvalidArgument,
+		"EXTENSION_DEVMODE_RESTART_TARGET_REQUIRED",
+		"no restart target specified",
+	)
+	errMountPathEmpty = bkerrs.Define(
+		bkerrs.ErrCodeInvalidRequest,
+		"EXTENSION_DEVMODE_MOUNT_PATH_EMPTY",
+		"devmode mount path is empty",
+	)
 )
 
 // restartEnvTarget 单个环境解析后的重启目标
@@ -177,7 +191,7 @@ func (h *Handler) resolveRestartTargets(
 		return h.resolveRestartTargetsByEnvTypes(ctx, app, input.EnvTypes.Types)
 
 	default:
-		return nil, nil, bkerrs.New(bkerrs.ErrCodeInvalidArgument, "no restart target specified")
+		return nil, nil, errRestartTargetRequired
 	}
 }
 
@@ -205,13 +219,23 @@ func (h *Handler) resolveRestartTargetsByEnvTypes(
 			}
 			skipped = append(
 				skipped,
-				&slz.RestartSkippedEnv{EnvName: env.Name, EnvType: env.Type, Reason: err.Error()},
+				&slz.RestartSkippedEnv{EnvName: env.Name, EnvType: env.Type, Reason: localizeSkipReason(ctx, err)},
 			)
 			continue
 		}
 		targets = append(targets, target)
 	}
 	return targets, skipped, nil
+}
+
+// localizeSkipReason 将被跳过环境的错误渲染为可读的本地化原因，无 detail code 或翻译失败时回退原文
+func localizeSkipReason(ctx context.Context, err error) string {
+	if bkErr := bkerrs.FromError(err); bkErr != nil && bkErr.DetailCode() != "" {
+		if msg, ok := i18n.Localize(ctx, string(bkErr.DetailCode()), bkErr.Params()); ok {
+			return msg
+		}
+	}
+	return err.Error()
 }
 
 // isSkippableRestartErr 判断错误是否只是环境不适用；系统错误需直接返回
@@ -236,7 +260,7 @@ func (h *Handler) resolveRestartTargetByEnvName(
 		Get(ctx, envmodel.AppEnvByName(app.WorkspaceID, app.ID, envName))
 	if err != nil {
 		if errors.Is(err, envmodel.ErrEnvNotFound) {
-			return nil, bkerrs.Errorf(bkerrs.ErrCodeNotFound, "environment %s not found", envName)
+			return nil, envmodel.ErrEnvNotFound.With("envName", envName).WithCause(err)
 		}
 		return nil, bkerrs.Wrapf(err, bkerrs.ErrCodeInternalServerError, "get env %s by name", envName)
 	}
@@ -255,9 +279,7 @@ func (h *Handler) resolveRestartTarget(
 		return nil, err
 	}
 	if lo.FromPtr(devModeSpec.MountPath) == "" {
-		return nil, bkerrs.Errorf(
-			bkerrs.ErrCodeInvalidRequest, "devmode mount path is empty for app %s in environment %s", app.ID, env.Name,
-		)
+		return nil, errMountPathEmpty.With("appID", app.ID).With("envName", env.Name)
 	}
 	ids, err := h.resolveInstanceIDs(ctx, app.ID, env.Name, instanceIDs, len(instanceIDs) == 0)
 	if err != nil {

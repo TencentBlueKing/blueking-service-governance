@@ -16,25 +16,35 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
-package bkerrs
+package perm
 
 import (
 	"context"
 
+	"github.com/pkg/errors"
 	"github.com/spf13/cast"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/perm"
 )
 
-// WrapIAMNoPermission 包装为 IAM 无权限错误
-func WrapIAMNoPermission(err error, workspaceID, msg string) error {
-	wrappedErr := Wrap(err, ErrCodeIAMNoPermission, msg)
+var errIAMNoPermission = bkerrs.Define(
+	bkerrs.ErrCodeIAMNoPermission,
+	bkerrs.ErrDetailCodeIAMNoPermission,
+	"no iam permission",
+)
 
-	// 尝试获取工作空间对应的用户组信息
+// WrapIAMNoPermission 包装为 IAM 无权限错误，详情中附带工作空间各角色对应的权限中心用户组 ID，便于用户自助申请
+func WrapIAMNoPermission(err error, workspaceID, msg string) error {
+	cause := errors.New(msg)
+	if err != nil {
+		cause = errors.Wrap(err, msg)
+	}
+	wrappedErr := errIAMNoPermission.WithCause(cause)
+
 	ctx := context.Background()
-	roles, err := perm.NewManager().ListRoles(ctx, workspaceID)
-	// 若获取角色失败，则不会追加用户组信息，直接返回包装好的错误即可
+	roles, err := NewManager().ListRoles(ctx, workspaceID)
+	// 获取角色失败时不追加用户组信息
 	if err != nil {
 		log.Errorf(ctx, "failed to list roles for workspace %s: %v", workspaceID, err)
 		return wrappedErr
@@ -46,10 +56,10 @@ func WrapIAMNoPermission(err error, workspaceID, msg string) error {
 		roleCodeToUserGroupIDMap[role.RoleCode] = cast.ToString(role.UserGroupID)
 	}
 	return wrappedErr.SetDetails(
-		NewDetail(
-			ErrDetailCodeIAMNoPermission,
+		bkerrs.NewDetail(
+			bkerrs.ErrDetailCodeIAMNoPermission,
 			"should apply iam user group for permissions",
-			WithExtras(roleCodeToUserGroupIDMap),
+			bkerrs.WithExtras(roleCodeToUserGroupIDMap),
 		),
 	)
 }

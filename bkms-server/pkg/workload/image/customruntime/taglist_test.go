@@ -30,6 +30,7 @@ import (
 	"github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/i18n"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	infrasreg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/registry"
@@ -215,7 +216,7 @@ var _ = Describe("TagQueryManager", func() {
 		// 仓库侧失败折成 failed；seedPersisted 顺带把状态复位以便重新抢到刷新权
 		remoteTags, remoteErr = nil, &transport.Error{StatusCode: http.StatusUnauthorized}
 		seedPersisted("v1.0")
-		result, err = manager.RefreshTags(ctx, workspaceID, imageName)
+		result, err = manager.RefreshTags(i18n.WithLang(ctx, i18n.LangEN), workspaceID, imageName)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(result.Status).To(Equal(snapshot.RefreshResultFailed))
 		Expect(result.Message).To(Equal(registryAuthFailedMessage))
@@ -235,7 +236,7 @@ var _ = Describe("TagQueryManager", func() {
 			Errors:     []transport.Diagnostic{{Code: transport.NameUnknownErrorCode}},
 		}
 		seedPersisted("v1.0")
-		result, err = manager.RefreshTags(ctx, workspaceID, imageName)
+		result, err = manager.RefreshTags(i18n.WithLang(ctx, i18n.LangEN), workspaceID, imageName)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(result.Status).To(Equal(snapshot.RefreshResultFailed))
 		Expect(result.Message).To(Equal(registryImageMissedMessage))

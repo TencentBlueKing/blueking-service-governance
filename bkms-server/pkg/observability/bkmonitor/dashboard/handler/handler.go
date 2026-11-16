@@ -29,6 +29,29 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
+var (
+	errDashboardNotExist = bkerrs.Define(
+		bkerrs.ErrCodeInvalidRequest,
+		"OBSERVABILITY_BKMONITOR_DASHBOARD_NOT_EXIST",
+		"specified dashboard does not exist in bkmonitor",
+	)
+	errDashboardDuplicate = bkerrs.Define(
+		bkerrs.ErrCodeAlreadyExists,
+		"OBSERVABILITY_BKMONITOR_DASHBOARD_DUPLICATE",
+		"dashboard is already bound to app",
+	)
+	errDashboardBindingNotFound = bkerrs.Define(
+		bkerrs.ErrCodeNotFound,
+		"OBSERVABILITY_BKMONITOR_DASHBOARD_NOT_FOUND",
+		"app dashboard binding not found",
+	)
+	errDashboardUIDRequired = bkerrs.Define(
+		bkerrs.ErrCodeInvalidRequest,
+		"OBSERVABILITY_BKMONITOR_DASHBOARD_UID_REQUIRED",
+		"dashboard uid is required",
+	)
+)
+
 // Handler handles app dashboard binding HTTP requests.
 type Handler struct {
 	registry *storereg.Registry
@@ -48,11 +71,11 @@ func (h *Handler) workspaces() *workspace.WorkspaceStore {
 func (h *Handler) wrapError(err error, action string) error {
 	switch {
 	case errors.Is(err, bkmdashboard.ErrDashboardNotExist):
-		return bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, action)
+		return errDashboardNotExist.WithCause(err)
 	case errors.Is(err, bkmdashboard.ErrDuplicate):
-		return bkerrs.Wrap(err, bkerrs.ErrCodeAlreadyExists, action)
+		return errDashboardDuplicate.WithCause(err)
 	case errors.Is(err, bkmdashboard.ErrNotFound):
-		return bkerrs.Wrap(err, bkerrs.ErrCodeNotFound, action)
+		return errDashboardBindingNotFound.WithCause(err)
 	default:
 		return bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, action)
 	}

@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"net"
 	"slices"
+	"strconv"
 	"time"
 
 	"github.com/TencentBlueKing/gopkg/mapx"
@@ -42,6 +43,32 @@ import (
 
 // -----------------------------------------------------------------------------
 // 通用输入
+
+var (
+	errAllConflictWithPagination = bkerrs.Define(
+		bkerrs.ErrCodeInvalidArgument, "WORKLOAD_INSTANCE_ALL_WITH_PAGINATION",
+		"all=true cannot be used together with page or pageSize",
+	)
+	errPageRequired = bkerrs.Define(
+		bkerrs.ErrCodeInvalidArgument, "WORKLOAD_INSTANCE_PAGE_REQUIRED", "page is required",
+	)
+	errPageSizeRequired = bkerrs.Define(
+		bkerrs.ErrCodeInvalidArgument, "WORKLOAD_INSTANCE_PAGE_SIZE_REQUIRED", "pageSize is required",
+	)
+	errPageOutOfRange = bkerrs.Define(
+		bkerrs.ErrCodeInvalidArgument, "WORKLOAD_INSTANCE_PAGE_OUT_OF_RANGE", "page out of range",
+	)
+	errInvalidPageSize = bkerrs.Define(
+		bkerrs.ErrCodeInvalidArgument, "WORKLOAD_INSTANCE_INVALID_PAGE_SIZE",
+		"pageSize must be one of 5, 10, 20, 50, 100",
+	)
+	errInvalidIPAddress = bkerrs.Define(
+		bkerrs.ErrCodeInvalidArgument, "WORKLOAD_INSTANCE_INVALID_IP", "invalid IP address",
+	)
+	errResourceVersionRequired = bkerrs.Define(
+		bkerrs.ErrCodeInvalidArgument, "WORKLOAD_INSTANCE_RESOURCE_VERSION_REQUIRED", "resourceVersion is required",
+	)
+)
 
 // EmptyOutput 空响应，用于无返回内容的接口。
 type EmptyOutput struct{}
@@ -111,27 +138,23 @@ func (q *ListAppInstancesQueryInput) Validate() error {
 
 	if q.All {
 		if q.Page != nil || q.PageSize != nil {
-			return bkerrs.New(
-				bkerrs.ErrCodeInvalidArgument,
-				"all=true cannot be used together with page or pageSize",
-			)
+			return errAllConflictWithPagination
 		}
 		return nil
 	}
 	if q.Page == nil {
-		return bkerrs.New(bkerrs.ErrCodeInvalidArgument, "page is required")
+		return errPageRequired
 	}
 	if q.PageSize == nil {
-		return bkerrs.New(bkerrs.ErrCodeInvalidArgument, "pageSize is required")
+		return errPageSizeRequired
 	}
 	if *q.Page < minListAppInstancesPage || *q.Page > maxListAppInstancesPage {
-		return bkerrs.Errorf(
-			bkerrs.ErrCodeInvalidArgument,
-			"page must be between %d and %d", minListAppInstancesPage, maxListAppInstancesPage,
-		)
+		return errPageOutOfRange.
+			With("min", strconv.FormatInt(minListAppInstancesPage, 10)).
+			With("max", strconv.FormatInt(maxListAppInstancesPage, 10))
 	}
 	if !slices.Contains(allowedListAppInstancesPageSizes, *q.PageSize) {
-		return bkerrs.New(bkerrs.ErrCodeInvalidArgument, "pageSize must be one of 5, 10, 20, 50, 100")
+		return errInvalidPageSize
 	}
 	return nil
 }
@@ -140,7 +163,7 @@ func (q *ListAppInstancesQueryInput) Validate() error {
 func validateIPs(field string, ips []string) error {
 	for _, ip := range ips {
 		if net.ParseIP(ip) == nil {
-			return bkerrs.Errorf(bkerrs.ErrCodeInvalidArgument, "%s %q is not a valid IP address", field, ip)
+			return errInvalidIPAddress.With("field", field).With("ip", ip)
 		}
 	}
 	return nil
@@ -197,7 +220,7 @@ type WatchAppInstancesQueryInput struct {
 // Validate 校验 Watch 续传位点必填；缺省时建不成连接，不用 binding 以免错误信息不明确
 func (q *WatchAppInstancesQueryInput) Validate() error {
 	if q.ResourceVersion == "" {
-		return bkerrs.New(bkerrs.ErrCodeInvalidArgument, "resourceVersion is required")
+		return errResourceVersionRequired
 	}
 
 	return nil

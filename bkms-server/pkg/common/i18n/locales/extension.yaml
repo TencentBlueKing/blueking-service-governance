@@ -1,0 +1,372 @@
+# 扩展（pkg/extension）
+
+# 端口池
+PORTPOOL_NOT_FOUND:
+  zh: "端口池 {{.name}} 不存在"
+  en: "Port pool {{.name}} not found"
+PORTPOOL_ITEM_NAME_DUPLICATED:
+  zh: "端口池条目名称 {{.itemName}} 重复"
+  en: "Port pool item name {{.itemName}} is duplicated"
+PORTPOOL_ITEM_END_PORT_DECREASED:
+  zh: "端口池条目 {{.itemName}} 的结束端口不能小于当前值 {{.currentEndPort}}（提交值 {{.endPort}}）"
+  en: "End port of port pool item {{.itemName}} must not be less than {{.currentEndPort}} (got {{.endPort}})"
+PORTPOOL_ITEM_START_PORT_CHANGED:
+  zh: "端口池条目 {{.itemName}} 的起始端口不能修改（当前值 {{.currentStartPort}}，提交值 {{.startPort}}）"
+  en: "Start port of port pool item {{.itemName}} must not be changed (current {{.currentStartPort}}, got {{.startPort}})"
+
+# BSCP 配置管理（bscpcfg）
+EXTENSION_BSCPCFG_WORKSPACE_BIZ_ID_MISSING:
+  zh: "工作空间未配置业务 ID"
+  en: "Workspace is missing business ID"
+EXTENSION_BSCPCFG_WORKSPACE_PROJECT_MISSING:
+  zh: "工作空间未绑定 BSCP 项目，请先执行绑定操作"
+  en: "Workspace is missing BSCP project, please bind a BSCP project first"
+EXTENSION_BSCPCFG_METADATA_NOT_FOUND:
+  zh: "尚未初始化 BSCP 配置管理，请先初始化"
+  en: "BSCP config metadata not found, please initialize first"
+EXTENSION_BSCPCFG_ENV_BINDING_ALREADY_EXISTS:
+  zh: "应用 {{.appID}} 在环境 {{.envName}} 下已存在 BSCP 配置绑定"
+  en: "BSCP config env binding already exists for app {{.appID}} in environment {{.envName}}"
+EXTENSION_BSCPCFG_ENV_BINDING_NOT_FOUND:
+  zh: "环境 {{.envName}} 的 BSCP 配置绑定不存在"
+  en: "BSCP config env binding not found for environment {{.envName}}"
+EXTENSION_BSCPCFG_FIELD_BLANK:
+  zh: "字段 {{.field}} 不能为空"
+  en: "{{.field}} must not be blank"
+EXTENSION_BSCPCFG_NO_UPDATE_FIELD:
+  zh: "至少需要提供一个更新字段"
+  en: "At least one field must be provided"
+
+# 组件定义与预览（component）
+EXTENSION_COMPONENT_DEF_ALREADY_EXISTS:
+  zh: "组件定义 {{.name}}:{{.version}} 已存在"
+  en: "Component definition {{.name}}:{{.version}} already exists"
+EXTENSION_COMPONENT_DEF_NOT_FOUND:
+  zh: "组件定义 {{.name}} 不存在"
+  en: "Component definition {{.name}} not found"
+EXTENSION_COMPONENT_BUILTIN_UPDATE_FORBIDDEN:
+  zh: "内置组件定义 {{.name}} 不允许修改"
+  en: "Built-in component definition {{.name}} cannot be updated"
+EXTENSION_COMPONENT_DEF_INVALID:
+  zh: "组件定义校验未通过"
+  en: "Component definition validation failed"
+EXTENSION_COMPONENT_BUILTIN_DELETE_FORBIDDEN:
+  zh: "内置组件定义 {{.name}} 不允许删除"
+  en: "Built-in component definition {{.name}} cannot be deleted"
+EXTENSION_COMPONENT_DEF_IN_USE:
+  zh: "组件定义 {{.name}} 仍被 {{.appCount}} 个应用组件和 {{.workspaceCount}} 个工作空间组件引用，无法删除"
+  en: "Component definition {{.name}} is still referenced by {{.appCount}} app component(s) and {{.workspaceCount}} workspace component(s), cannot be deleted"
+EXTENSION_COMPONENT_DEF_PREVIEW_FAILED:
+  zh: "组件定义预览失败，请检查属性与模板配置"
+  en: "Failed to preview component definition, please check properties and templates"
+EXTENSION_COMPONENT_INST_PREVIEW_FAILED:
+  zh: "组件实例预览失败，请检查属性与模板配置"
+  en: "Failed to preview component instance, please check properties and templates"
+
+# 开发模式（component/devmode）
+EXTENSION_DEVMODE_CLUSTER_API_NOT_CONFIGURED:
+  zh: "集群 API 地址未配置，不支持开发模式操作"
+  en: "Cluster API base URL is not configured"
+EXTENSION_DEVMODE_PRODUCTION_FORBIDDEN:
+  zh: "环境 {{.envName}} 为生产环境，不允许使用开发模式"
+  en: "Environment {{.envName}} is a production environment, devmode is not allowed"
+EXTENSION_DEVMODE_CLUSTER_CONFIG_INCOMPLETE:
+  zh: "环境集群配置不完整（缺少集群 ID 或命名空间），不支持开发模式"
+  en: "Cluster configuration is incomplete (clusterID or namespace is empty)"
+EXTENSION_DEVMODE_NOT_ENABLED:
+  zh: "应用 {{.appID}} 在环境 {{.envName}} 下未开启开发模式"
+  en: "Devmode is not enabled for app {{.appID}} in environment {{.envName}}"
+EXTENSION_DEVMODE_APP_TYPE_UNSUPPORTED:
+  zh: "当前应用类型不支持开发模式"
+  en: "Current application type does not support devmode"
+EXTENSION_DEVMODE_BCS_TOKEN_NOT_FOUND:
+  zh: "未找到有效的 BCS 用户访问令牌，请先创建或刷新令牌"
+  en: "No active BCS user token found"
+EXTENSION_DEVMODE_NO_RUNNING_INSTANCES:
+  zh: "当前环境没有运行中的实例"
+  en: "No running instances found"
+EXTENSION_DEVMODE_INSTANCE_IDS_REQUIRED:
+  zh: "未选择全量发布时，必须指定实例 ID 列表"
+  en: "instanceIDs is required when not targeting all instances"
+EXTENSION_DEVMODE_INSTANCES_NOT_FOUND:
+  zh: "未找到指定实例：{{.instances}}"
+  en: "Instances not found: {{.instances}}"
+EXTENSION_DEVMODE_RESTART_TARGET_REQUIRED:
+  zh: "请指定需要重启的目标"
+  en: "No restart target specified"
+EXTENSION_DEVMODE_MOUNT_PATH_EMPTY:
+  zh: "应用 {{.appID}} 在环境 {{.envName}} 下的开发模式挂载路径为空"
+  en: "Devmode mount path is empty for app {{.appID}} in environment {{.envName}}"
+EXTENSION_DEVMODE_INVALID_RECORD_ID:
+  zh: "无效的发布记录 ID：{{.recordID}}"
+  en: "Invalid publish record ID: {{.recordID}}"
+EXTENSION_DEVMODE_ENVS_NOT_FOUND:
+  zh: "以下环境不存在：{{.envs}}"
+  en: "Environments not found: {{.envs}}"
+EXTENSION_DEVMODE_INVALID_SINCE_TIME:
+  zh: "时间参数 since 格式不合法（{{.since}}），请使用 RFC3339 格式"
+  en: "Invalid since parameter ({{.since}}), expect RFC3339 format"
+EXTENSION_DEVMODE_RESTART_SCOPE_CONFLICT:
+  zh: "envs、envTypes 和 instances 必须且只能指定其中一项"
+  en: "Exactly one of envs, envTypes or instances is required"
+EXTENSION_DEVMODE_RECORD_QUERY_SCOPE_CONFLICT:
+  zh: "envNames、envTypes 和 recordIDs 必须且只能指定其中一项"
+  en: "Exactly one of envNames, envTypes or recordIDs is required"
+
+# GPA 自动扩缩容（addon/gpa）
+EXTENSION_GPA_FEDERATION_NOT_SUPPORTED:
+  zh: "联邦环境暂不支持 GPA 自动扩缩容"
+  en: "GPA autoscaling is not supported in federation environment"
+EXTENSION_GPA_CONFIG_NOT_FOUND:
+  zh: "应用 {{.appID}} 在环境 {{.envName}} 下的 GPA 配置不存在"
+  en: "GPA config not found for app {{.appID}} in environment {{.envName}}"
+
+# 北极星配置（addon/polaris）
+EXTENSION_POLARIS_TOKEN_REQUIRED:
+  zh: "引入已有北极星服务时必须提供 polarisToken"
+  en: "polarisToken is required when importing an existing Polaris service"
+EXTENSION_POLARIS_CONFIG_NAME_EXISTS:
+  zh: "应用 {{.appID}} 中已存在同名的北极星配置"
+  en: "Polaris config name already exists in app {{.appID}}"
+EXTENSION_POLARIS_CONFIG_NOT_FOUND:
+  zh: "应用 {{.appID}} 下不存在北极星配置 {{.configName}}"
+  en: "Polaris config {{.configName}} not found in app {{.appID}}"
+EXTENSION_POLARIS_INSTANCES_EXIST:
+  zh: "北极星服务下仍存在实例，请先删除实例后再删除配置"
+  en: "Some instances still exist in the Polaris service, please delete them first"
+EXTENSION_POLARIS_ENV_OUT_OF_SCOPE:
+  zh: "环境 {{.envName}} 不在北极星配置 {{.configName}} 的生效范围内且尚未部署"
+  en: "Environment {{.envName}} is not in scope of Polaris config {{.configName}} and has not been deployed"
+EXTENSION_POLARIS_TOKEN_UNAUTHORIZED:
+  zh: "北极星 Token 无效或没有写权限"
+  en: "Polaris token is invalid or has no write permission"
+EXTENSION_POLARIS_SERVICE_NOT_FOUND:
+  zh: "北极星中不存在对应的服务"
+  en: "Polaris service not found"
+EXTENSION_POLARIS_OPERATOR_EMPTY:
+  zh: "北极星负责人不能为空"
+  en: "Operator cannot be empty"
+EXTENSION_POLARIS_NOT_MANAGED:
+  zh: "该字段仅允许平台创建的北极星服务修改"
+  en: "This field can only be modified for platform-created Polaris services"
+EXTENSION_POLARIS_INVALID_REQUEST:
+  zh: "北极星请求参数不符合业务规则"
+  en: "Invalid Polaris request"
+
+# 依赖服务（depservice）
+EXTENSION_DEPSERVICE_REDIS_PARAMS_INVALID:
+  zh: "Redis 实例创建参数校验失败"
+  en: "Invalid Redis instance creation parameters"
+EXTENSION_DEPSERVICE_INVALID_INSTANCE_ID:
+  zh: "无效的实例 ID：{{.instanceID}}"
+  en: "Invalid instance ID: {{.instanceID}}"
+EXTENSION_DEPSERVICE_REDIS_INSTANCE_NOT_FOUND:
+  zh: "Redis 实例 {{.instanceID}} 不存在"
+  en: "Redis instance {{.instanceID}} not found"
+EXTENSION_DEPSERVICE_SERVICE_NOT_FOUND:
+  zh: "依赖服务不存在"
+  en: "Dependency service not found"
+EXTENSION_DEPSERVICE_INSTANCE_NOT_FOUND:
+  zh: "依赖服务实例不存在"
+  en: "Service instance not found"
+EXTENSION_DEPSERVICE_BINDING_NOT_FOUND:
+  zh: "依赖服务绑定不存在"
+  en: "Service binding not found"
+EXTENSION_DEPSERVICE_PLAN_NOT_FOUND:
+  zh: "依赖服务套餐不存在"
+  en: "Service plan not found"
+EXTENSION_DEPSERVICE_NOT_FOUND:
+  zh: "依赖服务资源不存在"
+  en: "Dependency service resource not found"
+EXTENSION_DEPSERVICE_BINDING_ALREADY_EXISTS:
+  zh: "依赖服务绑定名称已存在"
+  en: "Service binding name already exists"
+EXTENSION_DEPSERVICE_INSTANCE_ALREADY_EXISTS:
+  zh: "依赖服务实例名称已存在"
+  en: "Service instance name already exists"
+EXTENSION_DEPSERVICE_INVALID_ARGUMENT:
+  zh: "依赖服务参数校验失败"
+  en: "Invalid dependency service argument"
+EXTENSION_DEPSERVICE_ENV_INSTANCE_MAP_INVALID:
+  zh: "环境实例映射配置格式不合法"
+  en: "Invalid environment-to-instance mapping"
+EXTENSION_DEPSERVICE_ENV_VARS_INVALID:
+  zh: "环境变量命名不合法"
+  en: "Invalid environment variable names"
+EXTENSION_DEPSERVICE_INSTANCE_IN_USE:
+  zh: "依赖服务实例正被绑定（{{.bindings}}）引用，无法删除"
+  en: "Service instance is used by bindings ({{.bindings}}) and cannot be deleted"
+EXTENSION_DEPSERVICE_INSTANCE_PROVISIONING:
+  zh: "依赖服务实例正在创建中，无法删除"
+  en: "Service instance is provisioning and cannot be deleted"
+EXTENSION_DEPSERVICE_INSTANCE_DELETING:
+  zh: "依赖服务实例正在删除中，请勿重复操作"
+  en: "Service instance is deleting and cannot be deleted"
+EXTENSION_DEPSERVICE_INSTANCE_STATUS_NOT_DELETABLE:
+  zh: "依赖服务实例当前状态（{{.status}}）不允许删除，请等待其进入可用、不可用、创建失败或删除失败状态"
+  en: "Service instance status {{.status}} does not allow deletion, please wait until it becomes available/unavailable/createFailed/deleteFailed"
+EXTENSION_DEPSERVICE_BINDING_ENV_NAME_EMPTY:
+  zh: "环境实例映射中的环境名称不能为空"
+  en: "Environment name in envInstanceMap must not be empty"
+EXTENSION_DEPSERVICE_BINDING_INSTANCE_ID_EMPTY:
+  zh: "环境 {{.envName}} 对应的依赖服务实例 ID 不能为空"
+  en: "Instance ID for environment {{.envName}} must not be empty"
+EXTENSION_DEPSERVICE_BINDING_ENV_NOT_FOUND:
+  zh: "工作空间中不存在环境 {{.envName}}"
+  en: "Environment {{.envName}} not found"
+EXTENSION_DEPSERVICE_BINDING_INSTANCE_NOT_FOUND:
+  zh: "依赖服务实例 {{.instanceID}} 不存在"
+  en: "Service instance {{.instanceID}} not found"
+EXTENSION_DEPSERVICE_BINDING_INSTANCE_WORKSPACE_MISMATCH:
+  zh: "依赖服务实例 {{.instanceID}} 不属于工作空间 {{.workspaceID}}"
+  en: "Instance {{.instanceID}} does not belong to workspace {{.workspaceID}}"
+EXTENSION_DEPSERVICE_BINDING_INSTANCE_SERVICE_MISMATCH:
+  zh: "依赖服务实例 {{.instanceID}} 不是 {{.serviceName}} 实例"
+  en: "Instance {{.instanceID}} is not a {{.serviceName}} instance"
+EXTENSION_DEPSERVICE_BINDING_INSTANCE_ENV_UNAVAILABLE:
+  zh: "依赖服务实例 {{.instanceID}} 在环境 {{.envName}} 下不可用"
+  en: "Instance {{.instanceID}} is not available in environment {{.envName}}"
+
+# 展示文本：北极星服务名校验告警
+extension.polaris.serviceCheck.readConfigFailed:
+  zh: "[{{.configName}}] 读取 tRPC 配置文件失败: {{.err}}"
+  en: "[{{.configName}}] Failed to read tRPC config file: {{.err}}"
+extension.polaris.serviceCheck.readConfigFailedInEnv:
+  zh: "[{{.configName}}] 环境 '{{.envName}}': 读取 tRPC 配置文件失败: {{.err}}"
+  en: "[{{.configName}}] Environment '{{.envName}}': failed to read tRPC config file: {{.err}}"
+extension.polaris.serviceCheck.serviceNameMismatch:
+  zh: "[{{.configName}}] 北极星服务名 '{{.polarisName}}' 推荐与 tRPC 配置中的服务名 {{.serviceNames}} 一致"
+  en: "[{{.configName}}] Polaris service name '{{.polarisName}}' is recommended to match service names {{.serviceNames}} in tRPC config"
+extension.polaris.serviceCheck.serviceNameMismatchInEnv:
+  zh: "[{{.configName}}] 环境 '{{.envName}}': 北极星服务名 '{{.polarisName}}' 推荐与 tRPC 配置中的服务名 {{.serviceNames}} 一致"
+  en: "[{{.configName}}] Environment '{{.envName}}': Polaris service name '{{.polarisName}}' is recommended to match service names {{.serviceNames}} in tRPC config"
+
+# 展示文本：组件模板内置变量说明
+extension.component.builtinVar.bkmsAppName.description:
+  zh: "组件实例所在的应用名称"
+  en: "Name of the application the component instance belongs to"
+extension.component.builtinVar.bkmsContainerName.description:
+  zh: "主容器名称（目前固定为 main）"
+  en: "Name of the main container (currently fixed to main)"
+extension.component.builtinVar.bkmsEnvName.description:
+  zh: "组件实例所在的环境名称"
+  en: "Name of the environment the component instance belongs to"
+extension.component.builtinVar.bkmsEnvNamespace.description:
+  zh: "环境绑定集群中的命名空间; 未绑定集群时为空"
+  en: "Kubernetes namespace of the environment's bound cluster; empty if unbound"
+extension.component.builtinVar.bkmsEnvCluster.description:
+  zh: "环境绑定的集群 ID; 未绑定集群时为空"
+  en: "Cluster ID bound to the environment; empty if unbound"
+extension.component.builtinVar.name.description:
+  zh: "组件实例生成资源时使用的默认名称，格式为 `应用名称-组件实例名称的小写形式`"
+  en: "Default resource name generated for the component instance, formatted as `<appName>-<componentInstanceName>` in lowercase"
+
+# 嵌入资源：内置组件定义（component/assets/comps/*.yaml）
+extension.component.builtin.VolumeConfigMap.description:
+  zh: "将 data 内容以 configmap 的形式挂载到应用中"
+  en: "Mount the data content into the application as a ConfigMap"
+extension.component.builtin.VolumeConfigMap.prop.configName.description:
+  zh: "configmap名称"
+  en: "ConfigMap name"
+extension.component.builtin.VolumeConfigMap.prop.data.description:
+  zh: "configmap内容"
+  en: "ConfigMap content"
+extension.component.builtin.VolumeConfigMap.prop.path.description:
+  zh: "挂载路径"
+  en: "Mount path"
+
+extension.component.builtin.VolumeHostPath.description:
+  zh: "将节点的本地路径挂载到应用中"
+  en: "Mount a local host path on the node into the application"
+extension.component.builtin.VolumeHostPath.prop.hostPath.description:
+  zh: "节点目录"
+  en: "Host path on the node"
+extension.component.builtin.VolumeHostPath.prop.mountPath.description:
+  zh: "容器挂载路径"
+  en: "Container mount path"
+extension.component.builtin.VolumeHostPath.prop.type.description:
+  zh: "挂载类型"
+  en: "Mount type"
+
+extension.component.builtin.ImportPolaris.description:
+  zh: "绑定应用到已有的北极星服务，并在应用中注入相关环境变量。"
+  en: "Bind the application to an existing Polaris service and inject related environment variables."
+extension.component.builtin.ImportPolaris.prop.instanceKey.description:
+  zh: "组件实例标识，会用于环境变量拼接，只能包含字母、数字、下划线。如果一个应用有多个实例，需要指定不同的 instanceKey"
+  en: "Component instance key used for composing environment variable names (letters, digits, and underscores only). Specify distinct keys if an app has multiple instances."
+extension.component.builtin.ImportPolaris.prop.polarisName.description:
+  zh: "北极星实例名称"
+  en: "Polaris service name"
+extension.component.builtin.ImportPolaris.prop.polarisNamespace.description:
+  zh: "北极星环境，可选值(Test\\Production\\Development)"
+  en: "Polaris namespace, options: (Test\\Production\\Development)"
+extension.component.builtin.ImportPolaris.prop.polarisToken.description:
+  zh: "北极星Token"
+  en: "Polaris token"
+extension.component.builtin.ImportPolaris.prop.servicePort.description:
+  zh: "服务端口"
+  en: "Service port"
+extension.component.builtin.ImportPolaris.prop.direct.description:
+  zh: "是否为直连(注册PodIP到北极星)"
+  en: "Whether to use direct connection (register Pod IP to Polaris)"
+extension.component.builtin.ImportPolaris.prop.keepNotReadyPod.description:
+  zh: "是否保留未就绪的Pod在北极星"
+  en: "Whether to keep unready Pods in Polaris"
+extension.component.builtin.ImportPolaris.prop.enableHealthCheck.description:
+  zh: "是否启用健康检查"
+  en: "Whether to enable health check"
+extension.component.builtin.ImportPolaris.prop.weight.description:
+  zh: "服务权重"
+  en: "Service weight"
+extension.component.builtin.ImportPolaris.prop.serviceLabels.description:
+  zh: "服务标签"
+  en: "Service labels"
+
+extension.component.builtin.VolumeSecret.description:
+  zh: "将 K8S 集群中的 Secret 资源挂载到应用中"
+  en: "Mount a Kubernetes Secret resource from the cluster into the application"
+extension.component.builtin.VolumeSecret.prop.path.description:
+  zh: "挂载路径"
+  en: "Mount path"
+extension.component.builtin.VolumeSecret.prop.secretName.description:
+  zh: "secret名称"
+  en: "Secret name"
+
+extension.component.builtin.NodePortService.description:
+  zh: "使用 NodePort 的形式暴露应用服务"
+  en: "Expose the application service via NodePort"
+extension.component.builtin.NodePortService.prop.port.description:
+  zh: "service端口"
+  en: "Service port"
+extension.component.builtin.NodePortService.prop.protocol.description:
+  zh: "协议"
+  en: "Protocol"
+extension.component.builtin.NodePortService.prop.targetPort.description:
+  zh: "目标端口"
+  en: "Target port"
+
+# 嵌入资源：依赖服务初始化定义（depservice/model/initdata/service-general.json）
+extension.depservice.service.mysql.displayName:
+  zh: "MySQL 数据库"
+  en: "MySQL Database"
+extension.depservice.service.mysql.description:
+  zh: "MySQL 数据库"
+  en: "MySQL Database"
+extension.depservice.service.polaris.displayName:
+  zh: "北极星"
+  en: "Polaris"
+extension.depservice.service.polaris.description:
+  zh: "北极星服务"
+  en: "Polaris Service"
+extension.depservice.service.fake.displayName:
+  zh: "Fake 服务（仅测试）"
+  en: "Fake Service (Test Only)"
+extension.depservice.service.fake.description:
+  zh: "仅用于测试的 fake 服务，不应在生产流量中使用"
+  en: "Fake service for testing only; should not be used in production traffic"
+extension.depservice.service.redis.displayName:
+  zh: "Redis"
+  en: "Redis"
+extension.depservice.service.redis.description:
+  zh: "Redis"
+  en: "Redis"

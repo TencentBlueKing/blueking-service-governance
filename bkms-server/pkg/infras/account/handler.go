@@ -26,12 +26,38 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/pkg/errors"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/usertoken"
 )
 
 const tokenRequestTimeout = 10 * time.Second
+
+var (
+	errLoginCredentialsMissing = bkerrs.Define(
+		bkerrs.ErrCodeInvalidRequest, "ACCOUNT_LOGIN_CREDENTIALS_MISSING", "no user credentials found in cookie",
+	)
+	errTokenParamRequired = bkerrs.Define(
+		bkerrs.ErrCodeInvalidArgument,
+		"ACCOUNT_TOKEN_PARAM_REQUIRED",
+		"token param is required",
+	)
+	errCreateTokenFailed = bkerrs.Define(
+		bkerrs.ErrCodeInvalidRequest,
+		"ACCOUNT_CREATE_TOKEN_FAILED",
+		"create token failed",
+	)
+	errRefreshTokenFailed = bkerrs.Define(
+		bkerrs.ErrCodeInvalidRequest,
+		"ACCOUNT_REFRESH_TOKEN_FAILED",
+		"refresh token failed",
+	)
+	errValidateTokenFailed = bkerrs.Define(
+		bkerrs.ErrCodeInvalidRequest, "ACCOUNT_VALIDATE_TOKEN_FAILED", "validate token failed",
+	)
+)
 
 // Config contains account API runtime configuration.
 type Config struct {
@@ -64,11 +90,11 @@ func (h *APIHandler) CreateToken(c *gin.Context) {
 	ticket, _ := c.Cookie("bk_ticket")
 	if username == "" || ticket == "" {
 		if c.Query("redirect_login") != "true" {
-			writeLegacyError(c, "no user credentials found in cookie, please login first.")
+			bkerrs.WriteError(c, errLoginCredentialsMissing)
 			return
 		}
 		if h.cfg.LoginURL == "" {
-			writeLegacyError(c, `plugin config "bk_login_url" is required when redirect_login is true.`)
+			bkerrs.WriteError(c, errors.New(`config "bk_login_url" is required when redirect_login is true`))
 			return
 		}
 		c.Redirect(http.StatusFound, h.cfg.LoginURL+"/plain/?c_url="+url.QueryEscape(c.Request.URL.String()))
@@ -85,7 +111,7 @@ func (h *APIHandler) CreateToken(c *gin.Context) {
 		parseNeedNewToken(c.Query("need_new_token")),
 	)
 	if err != nil {
-		writeLegacyError(c, "get token error: "+err.Error())
+		bkerrs.WriteError(c, errCreateTokenFailed.WithCause(err))
 		return
 	}
 	c.JSON(http.StatusOK, token)
@@ -101,7 +127,7 @@ func (h *APIHandler) CreateToken(c *gin.Context) {
 func (h *APIHandler) RefreshToken(c *gin.Context) {
 	refreshToken := c.Query("refresh_token")
 	if refreshToken == "" {
-		writeLegacyError(c, "refresh_token is required.")
+		bkerrs.WriteError(c, errTokenParamRequired.With("param", "refresh_token"))
 		return
 	}
 	ctx, cancel := context.WithTimeout(c.Request.Context(), tokenRequestTimeout)
@@ -110,7 +136,7 @@ func (h *APIHandler) RefreshToken(c *gin.Context) {
 		ctx, refreshToken, h.cfg.AuthEnvName, parseNeedNewToken(c.Query("need_new_token")),
 	)
 	if err != nil {
-		writeLegacyError(c, "refresh token error: "+err.Error())
+		bkerrs.WriteError(c, errRefreshTokenFailed.WithCause(err))
 		return
 	}
 	c.JSON(http.StatusOK, token)
@@ -126,14 +152,14 @@ func (h *APIHandler) RefreshToken(c *gin.Context) {
 func (h *APIHandler) ValidateToken(c *gin.Context) {
 	accessToken := c.Query("access_token")
 	if accessToken == "" {
-		writeLegacyError(c, "access_token is required.")
+		bkerrs.WriteError(c, errTokenParamRequired.With("param", "access_token"))
 		return
 	}
 	ctx, cancel := context.WithTimeout(c.Request.Context(), tokenRequestTimeout)
 	defer cancel()
 	username, err := h.tokenClient.GetUserInfo(ctx, accessToken)
 	if err != nil {
-		writeLegacyError(c, "validate token error: "+err.Error())
+		bkerrs.WriteError(c, errValidateTokenFailed.WithCause(err))
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"username": username})
@@ -150,12 +176,11 @@ func (h *APIHandler) GetCurrentUser(c *gin.Context) {
 	// 直接从上下文中获取用户信息，信息由中间件注入
 	result, ok := auth.GetResult(c.Request.Context())
 	if !ok {
-		writeLegacyError(c, "failed to get the authenticated user info, check the middleware config")
+		bkerrs.WriteError(c, errors.New("failed to get the authenticated user info, check the middleware config"))
 		return
 	}
 	if !result.RequestUser.IsAuthenticated() {
-		// This response intentionally preserves the historical response contract during migration.
-		c.JSON(http.StatusUnauthorized, gin.H{"login_url": result.LoginURL, "code": "1000"})
+		bkerrs.WriteError(c, auth.ErrUnauthenticated.WithCause(errors.New(result.ErrorMsg)))
 		return
 	}
 	// tenant_id 为空表示认证上游未返回租户（如单租户环境的 bk-login）
@@ -168,9 +193,4 @@ func (h *APIHandler) GetCurrentUser(c *gin.Context) {
 func parseNeedNewToken(raw string) bool {
 	value, err := strconv.ParseBool(raw)
 	return err == nil && value
-}
-
-func writeLegacyError(c *gin.Context, message string) {
-	// Account endpoints retain the legacy error shape for compatibility and may adopt bkms errors later.
-	c.JSON(http.StatusBadRequest, gin.H{"message": message, "code": "1000"})
 }

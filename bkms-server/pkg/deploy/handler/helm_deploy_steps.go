@@ -41,6 +41,8 @@ import (
 	appnetworking "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/networking"
 )
 
+var errRollbackTargetNotDeployed = errors.New("target revision for rollback not in deployed status")
+
 // attachHelmDeployRecordsValues 给部署记录添加 Values 相关信息。
 //
 // 通过 Helm SDK History action 获取 Release 历史，受 Helm 存储限制，历史久远的数据不支持。
@@ -185,7 +187,7 @@ func (h *Handler) getDeployRecordForRollback(ctx context.Context, appID, deployI
 
 	// 检查指定回滚到的版本必须是成功部署的
 	if record.Status != helm.StatusDeployed {
-		return nil, errors.New("target revision for rollback not in deployed status")
+		return nil, errRollbackTargetNotDeployed
 	}
 	return record, nil
 }

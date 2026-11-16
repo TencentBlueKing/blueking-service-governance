@@ -146,7 +146,7 @@ func (h *Handler) UpdateAppDashboard(c *gin.Context) {
 	}
 
 	if bodyInput.UID == nil {
-		bkerrs.AbortWithErr(c, bkerrs.New(bkerrs.ErrCodeInvalidRequest, "uid must be provided"))
+		bkerrs.AbortWithErr(c, errDashboardUIDRequired)
 		return
 	}
 

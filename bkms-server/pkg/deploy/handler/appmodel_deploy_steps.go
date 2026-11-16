@@ -22,7 +22,6 @@ package handler
 import (
 	"context"
 	"errors"
-	"fmt"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -57,6 +56,24 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/workload"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/snapshot"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/topology"
+)
+
+var (
+	errUnexpectedAppType = bkerrs.Define(
+		bkerrs.ErrCodeInvalidRequest,
+		"DEPLOY_UNEXPECTED_APP_TYPE",
+		"unexpected app type",
+	)
+	errInvalidAppType = bkerrs.Define(
+		bkerrs.ErrCodeInvalidArgument,
+		"DEPLOY_INVALID_APP_TYPE",
+		"invalid app type",
+	)
+	errResourceSnapshotNotFound = bkerrs.Define(
+		bkerrs.ErrCodeNotFound,
+		"DEPLOY_RESOURCE_SNAPSHOT_NOT_FOUND",
+		"resource snapshot not found",
+	)
 )
 
 // listAppModelDeployRecords 获取 AppModel 应用部署记录列表
@@ -94,7 +111,7 @@ func (h *Handler) listAppModelDeployRecords(c *gin.Context) {
 	// 转换成输出格式；构建+部署触发的补充字段直接从部署记录 Extras 中读取
 	outputRecords := make([]*serializer.AppModelDeployRecordOutputObj, 0, len(recordPage.Items))
 	for _, record := range recordPage.Items {
-		outputRecords = append(outputRecords, new(serializer.AppModelDeployRecordOutputObj).FromModel(record))
+		outputRecords = append(outputRecords, new(serializer.AppModelDeployRecordOutputObj).FromModel(ctx, record))
 	}
 	ginutils.OK(c, serializer.ListAppModelDeployRecordsOutput{
 		Data: serializer.PaginatedAppModelDeployRecordsOutputObjs{Count: recordPage.Total, Results: outputRecords},
@@ -119,10 +136,10 @@ func (h *Handler) preCheckDeploy(c *gin.Context, expectedFramework string) {
 		return
 	}
 	if !appMatchesFramework(app, expectedFramework) {
-		bkerrs.AbortWithErr(c, bkerrs.New(
-			bkerrs.ErrCodeInvalidRequest,
-			fmt.Sprintf("invalid app type: expected %s, got %s", expectedFramework, app.Type),
-		))
+		bkerrs.AbortWithErr(
+			c,
+			errUnexpectedAppType.With("expected", expectedFramework).With("actual", app.Type),
+		)
 		return
 	}
 	// 可见环境校验排在存在性、权限、应用类型校验之后，避免掩盖更具体的错误
@@ -378,7 +395,7 @@ func (h *Handler) getAppModelResourceSnapshot(c *gin.Context) {
 	row, err := appmodeldeploy.GetSnapshot(ctx, snapshots, app.ID, uriInput.DeployID, uriInput.SnapshotID)
 	if err != nil {
 		if errors.Is(err, appmodeldeploy.ErrResourceSnapshotRowNotFound) {
-			bkerrs.AbortWithErr(c, bkerrs.New(bkerrs.ErrCodeNotFound, "resource snapshot not found"))
+			bkerrs.AbortWithErr(c, errResourceSnapshotNotFound.WithCause(err))
 			return
 		}
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(
@@ -408,7 +425,7 @@ func (h *Handler) getLatestAppModelDeployStatus(c *gin.Context, expectedFramewor
 		return
 	}
 	if !appMatchesFramework(app, expectedFramework) {
-		bkerrs.AbortWithErr(c, bkerrs.Errorf(bkerrs.ErrCodeInvalidArgument, "invalid app type: %s", app.Type))
+		bkerrs.AbortWithErr(c, errInvalidAppType.With("appType", app.Type))
 		return
 	}
 

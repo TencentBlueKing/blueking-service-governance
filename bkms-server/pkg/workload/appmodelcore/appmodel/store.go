@@ -28,6 +28,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/utils/crypto"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component"
@@ -38,7 +39,7 @@ import (
 const CollectionName = "app_models"
 
 // ErrAppModelNotFound is returned when a app model is not found in the store.
-var ErrAppModelNotFound = errors.New("app model not found")
+var ErrAppModelNotFound = bkerrs.Define(bkerrs.ErrCodeNotFound, "APP_MODEL_NOT_FOUND", "app model not found")
 
 // ErrAppModelAlreadyExists is returned when creating an app model for an app that already has one.
 var ErrAppModelAlreadyExists = errors.New("app model with the same appID already exists")

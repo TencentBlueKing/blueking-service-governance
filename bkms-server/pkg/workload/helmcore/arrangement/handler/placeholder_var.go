@@ -49,5 +49,8 @@ func New(registry *storereg.Registry) *Handler {
 //	@Success	200	{object}	serializer.ListPlaceholderVarsOutput
 //	@Router		/placeholder-vars [get]
 func (h *Handler) ListPlaceholderVars(c *gin.Context) {
-	ginutils.OK(c, new(serializer.ListPlaceholderVarsOutput).FromModels(arrangement.ListPlaceholderVars()))
+	ginutils.OK(
+		c,
+		new(serializer.ListPlaceholderVarsOutput).FromModels(arrangement.ListPlaceholderVars(c.Request.Context())),
+	)
 }

@@ -113,37 +113,63 @@ func (h *Handler) manager() *imageregistry.Manager {
 	return imageregistry.NewManager(h.registry.DB)
 }
 
-// toAPIError 把 Manager 的错误映射为接口错误。文案使用英文，由前端拦截器直接展示
+var (
+	errInvalidRegistryAddress = bkerrs.Define(
+		bkerrs.ErrCodeInvalidArgument,
+		"PLATMGT_IMAGE_REGISTRY_INVALID_ADDRESS",
+		"invalid image registry address, expected host/namespace without a protocol prefix",
+	)
+	errRegistryPasswordRequired = bkerrs.Define(
+		bkerrs.ErrCodeInvalidArgument,
+		"PLATMGT_IMAGE_REGISTRY_PASSWORD_REQUIRED",
+		"image registry password is required",
+	)
+	errBuiltinRegistryNotFound = bkerrs.Define(
+		bkerrs.ErrCodeInvalidRequest,
+		"PLATMGT_BUILTIN_IMAGE_REGISTRY_NOT_FOUND",
+		"builtin image registry not found",
+	)
+	errRegistryAuthFailed = bkerrs.Define(
+		bkerrs.ErrCodeInvalidRequest,
+		"PLATMGT_IMAGE_REGISTRY_AUTH_FAILED",
+		"image registry authentication failed or push permission denied",
+	)
+	errRegistryNamespaceInaccessible = bkerrs.Define(
+		bkerrs.ErrCodeInvalidRequest,
+		"PLATMGT_IMAGE_REGISTRY_NAMESPACE_INACCESSIBLE",
+		"image registry namespace does not exist or is inaccessible",
+	)
+	errRegistryUnreachable = bkerrs.Define(
+		bkerrs.ErrCodeInvalidRequest,
+		"PLATMGT_IMAGE_REGISTRY_UNREACHABLE",
+		"image registry is unreachable",
+	)
+	errBkCICredentialCreateFailed = bkerrs.Define(
+		bkerrs.ErrCodeInvalidRequest,
+		"PLATMGT_IMAGE_REGISTRY_CREDENTIAL_CREATE_FAILED",
+		"failed to create bkci image credential",
+	)
+)
+
+// toAPIError 把 Manager 的错误映射为接口错误。
 func toAPIError(err error, internalMessage string) error {
 	switch {
 	case errors.Is(err, bkmsworkspace.ErrWorkspaceNotFound):
-		return bkerrs.Wrap(err, bkerrs.ErrCodeNotFound, "platform workspace not found")
+		return bkmsworkspace.ErrWorkspaceNotFound.WithCause(err)
 	case errors.Is(err, imageregistry.ErrInvalidRegistryAddress):
-		return bkerrs.Wrap(
-			err,
-			bkerrs.ErrCodeInvalidArgument,
-			"invalid image registry address, expected host/namespace without a protocol prefix",
-		)
+		return errInvalidRegistryAddress.WithCause(err)
 	case errors.Is(err, imageregistry.ErrPasswordRequired):
-		return bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "image registry password is required")
+		return errRegistryPasswordRequired.WithCause(err)
 	case errors.Is(err, imageregistry.ErrBuiltinRegistryNotFound):
-		return bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, "builtin image registry not found")
+		return errBuiltinRegistryNotFound.WithCause(err)
 	case errors.Is(err, imageregistry.ErrRegistryAuthFailed):
-		return bkerrs.Wrap(
-			err,
-			bkerrs.ErrCodeInvalidRequest,
-			"image registry authentication failed or push permission denied",
-		)
+		return errRegistryAuthFailed.WithCause(err)
 	case errors.Is(err, imageregistry.ErrRegistryNamespaceInaccessible):
-		return bkerrs.Wrap(
-			err,
-			bkerrs.ErrCodeInvalidRequest,
-			"image registry namespace does not exist or is inaccessible",
-		)
+		return errRegistryNamespaceInaccessible.WithCause(err)
 	case errors.Is(err, imageregistry.ErrRegistryUnreachable):
-		return bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, "image registry is unreachable")
+		return errRegistryUnreachable.WithCause(err)
 	case errors.Is(err, imageregistry.ErrBkCICredentialCreateFailed):
-		return bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, "failed to create bkci image credential")
+		return errBkCICredentialCreateFailed.WithCause(err)
 	default:
 		return bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, internalMessage)
 	}

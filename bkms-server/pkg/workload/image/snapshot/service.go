@@ -29,6 +29,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	build "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/i18n"
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
@@ -332,8 +333,11 @@ func (s *Service) refreshSnapshotsByRepoInfo(
 	if !acquired {
 		log.Infof(ctx, "snapshot refresh for %s is already in progress", info.RepoKey)
 		return &RefreshResult{
-			Status:  RefreshResultRefreshing,
-			Message: "Snapshot refresh for this repository is already in progress",
+			Status: RefreshResultRefreshing,
+			Message: i18n.LocalizeOr(
+				ctx, "workload.image.snapshot.refreshInProgress", nil,
+				"Snapshot refresh for this repository is already in progress",
+			),
 		}, nil
 	}
 
@@ -433,7 +437,10 @@ func (s *Service) doRefresh(ctx context.Context, info *RepoKeyInfo) (*RefreshRes
 	}
 
 	// 状态重置为 idle 后，判断是否需要异步触发详情同步
-	resultMsg := "Snapshot refresh completed, no tags need detail sync"
+	resultMsg := i18n.LocalizeOr(
+		persistCtx, "workload.image.snapshot.refreshCompletedNoDetailSync", nil,
+		"Snapshot refresh completed, no tags need detail sync",
+	)
 	unsyncedDetailTags, err := ListUnsyncedDetailTags(persistCtx, s.db, info.RepoKey)
 	if err != nil {
 		return nil, errors.Wrapf(err, "list unsynced detail tags for %s", info.RepoKey)
@@ -446,14 +453,20 @@ func (s *Service) doRefresh(ctx context.Context, info *RepoKeyInfo) (*RefreshRes
 		)
 		if encryptErr != nil {
 			log.Errorf(persistCtx, "encrypt credentials for detail sync task %s failed: %v", info.RepoKey, encryptErr)
-			resultMsg = "Snapshot refresh completed, but the detail sync task was not submitted"
+			resultMsg = i18n.LocalizeOr(
+				persistCtx, "workload.image.snapshot.refreshCompletedDetailSyncNotSubmitted", nil,
+				"Snapshot refresh completed, but the detail sync task was not submitted",
+			)
 		} else {
 			detailSyncArgs.SuppressedTags = recheckTags
 			if enqueueErr := taskq.Enqueue(persistCtx, DetailSyncTask.NewTask(*detailSyncArgs)); enqueueErr != nil {
 				log.Errorf(persistCtx, "enqueue image detail sync task for %s failed: %v", info.RepoKey, enqueueErr)
 				return nil, errors.Wrap(enqueueErr, "enqueue image detail sync task")
 			}
-			resultMsg = "Snapshot refresh completed, and the detail sync task has started asynchronously"
+			resultMsg = i18n.LocalizeOr(
+				persistCtx, "workload.image.snapshot.refreshCompletedDetailSyncStarted", nil,
+				"Snapshot refresh completed, and the detail sync task has started asynchronously",
+			)
 		}
 	}
 

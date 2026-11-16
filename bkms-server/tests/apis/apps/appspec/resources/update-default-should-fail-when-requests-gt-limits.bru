@@ -29,7 +29,7 @@ assert {
 
 tests {
   test("should return error when requests is larger than limits", () => {
-    expect(res.body.error.message).to.contains("resource_request_lte_limit");
+    expect(res.body.error.details[0].message).to.contains("resource_request_lte_limit");
   });
 }
 

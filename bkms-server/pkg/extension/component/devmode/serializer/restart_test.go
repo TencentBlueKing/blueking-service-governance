@@ -23,6 +23,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	slz "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component/devmode/serializer"
 )
 
@@ -49,34 +50,41 @@ var _ = Describe("RestartInput", func() {
 	)
 
 	DescribeTable("rejects invalid input",
-		func(input slz.RestartInput, msg string) {
+		func(input slz.RestartInput, expectedDetail, msg string) {
 			err := validate(input)
 			Expect(err).To(HaveOccurred())
+			if expectedDetail != "" {
+				bkErr := bkerrs.FromError(err)
+				Expect(bkErr).NotTo(BeNil())
+				Expect(bkErr.Code()).To(Equal(bkerrs.ErrCodeInvalidArgument))
+				Expect(bkErr.DetailCode()).To(Equal(bkerrs.ErrDetailCode(expectedDetail)))
+				return
+			}
 			Expect(err.Error()).To(ContainSubstring(msg))
 		},
-		Entry("no target", slz.RestartInput{}, "exactly one of envs, envTypes or instances is required"),
+		Entry("no target", slz.RestartInput{}, "EXTENSION_DEVMODE_RESTART_SCOPE_CONFLICT", ""),
 		Entry("multiple targets", slz.RestartInput{
 			Envs:      &slz.RestartEnvsTarget{Names: []string{"stag"}},
 			Instances: &slz.RestartInstancesTarget{EnvName: "stag", InstanceIDs: []string{"pod-1"}},
-		}, "exactly one of envs, envTypes or instances is required"),
-		Entry("empty env names", slz.RestartInput{Envs: &slz.RestartEnvsTarget{}}, "'required' tag"),
+		}, "EXTENSION_DEVMODE_RESTART_SCOPE_CONFLICT", ""),
+		Entry("empty env names", slz.RestartInput{Envs: &slz.RestartEnvsTarget{}}, "", "'required' tag"),
 		Entry("duplicated env names", slz.RestartInput{
 			Envs: &slz.RestartEnvsTarget{Names: []string{"stag", "stag"}},
-		}, "'unique' tag"),
+		}, "", "'unique' tag"),
 		Entry("invalid env name", slz.RestartInput{
 			Envs: &slz.RestartEnvsTarget{Names: []string{"stag/1"}},
-		}, "'uri_slug' tag"),
+		}, "", "'uri_slug' tag"),
 		Entry("production env type", slz.RestartInput{
 			EnvTypes: &slz.RestartEnvTypesTarget{Types: []string{"production"}},
-		}, "'oneof' tag"),
+		}, "", "'oneof' tag"),
 		Entry("unknown env type", slz.RestartInput{
 			EnvTypes: &slz.RestartEnvTypesTarget{Types: []string{"dev"}},
-		}, "'oneof' tag"),
+		}, "", "'oneof' tag"),
 		Entry("instances without env name", slz.RestartInput{
 			Instances: &slz.RestartInstancesTarget{InstanceIDs: []string{"pod-1"}},
-		}, "'required' tag"),
+		}, "", "'required' tag"),
 		Entry("instances with empty instance id", slz.RestartInput{
 			Instances: &slz.RestartInstancesTarget{EnvName: "stag", InstanceIDs: []string{""}},
-		}, "'required' tag"),
+		}, "", "'required' tag"),
 	)
 })

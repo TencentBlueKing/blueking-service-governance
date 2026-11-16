@@ -97,7 +97,7 @@ func (h *Handler) CreateAppConfigFile(c *gin.Context) {
 
 	baseID, err := h.validateBaseAppConfigFileID(ctx, app.ID, input.Type, input.BaseAppConfigFileID)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "validate baseAppConfigFileID"))
+		bkerrs.AbortWithErr(c, errInvalidBaseAppConfigFile.WithCause(err))
 		return
 	}
 
@@ -105,7 +105,7 @@ func (h *Handler) CreateAppConfigFile(c *gin.Context) {
 	sourceType := appcfg.ContentSourceType(input.ContentSourceType)
 	bscpCfg, err := h.validateBSCPConfig(ctx, sourceType, input.BscpConfig, fileFormat)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "validate BSCP config"))
+		bkerrs.AbortWithErr(c, errInvalidBSCPConfig.WithCause(err))
 		return
 	}
 
@@ -137,10 +137,7 @@ func (h *Handler) CreateAppConfigFile(c *gin.Context) {
 	if appcfg.IsFrameworkEnvOverlayCreate(params) {
 		attached, attachErr := acfService.AttachFrameworkEnvOverlay(ctx, params)
 		if attachErr != nil {
-			bkerrs.AbortWithErr(
-				c,
-				bkerrs.Wrap(attachErr, bkerrs.ErrCodeInvalidArgument, "attaching framework env overlay"),
-			)
+			bkerrs.AbortWithErr(c, errAttachFrameworkEnvOverlay.WithCause(attachErr))
 			return
 		}
 		obj = &attached.AppConfigFile
@@ -202,7 +199,7 @@ func (h *Handler) UpdateAppConfigFile(c *gin.Context) {
 	if input.BaseAppConfigFileID != "" {
 		baseID, vErr := h.validateBaseAppConfigFileID(ctx, app.ID, string(acf.Type), input.BaseAppConfigFileID)
 		if vErr != nil {
-			bkerrs.AbortWithErr(c, bkerrs.Wrap(vErr, bkerrs.ErrCodeInvalidArgument, "validate baseAppConfigFileID"))
+			bkerrs.AbortWithErr(c, errInvalidBaseAppConfigFile.WithCause(vErr))
 			return
 		}
 		acf.BaseAppConfigFileID = baseID
@@ -211,7 +208,7 @@ func (h *Handler) UpdateAppConfigFile(c *gin.Context) {
 	if input.BscpConfig != nil {
 		bscpCfg, vErr := h.validateBSCPConfig(ctx, acf.ContentSourceType, input.BscpConfig, acf.GetConfigFormat())
 		if vErr != nil {
-			bkerrs.AbortWithErr(c, bkerrs.Wrap(vErr, bkerrs.ErrCodeInvalidArgument, "validate BSCP config"))
+			bkerrs.AbortWithErr(c, errInvalidBSCPConfig.WithCause(vErr))
 			return
 		}
 		acf.BSCPConfig = bscpCfg
@@ -378,7 +375,7 @@ func (h *Handler) DeleteAppConfigFile(c *gin.Context) {
 
 	id, err := uriInput.AppConfigFileObjectID()
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "parse app config file ID"))
+		bkerrs.AbortWithErr(c, errInvalidAppConfigFileID.WithCause(err))
 		return
 	}
 
@@ -389,11 +386,10 @@ func (h *Handler) DeleteAppConfigFile(c *gin.Context) {
 			defName = def.Name
 			// 禁止通过旧接口删除 plain 环境实例
 			if def.ConfigKind == appcfg.ConfigKindPlain && acf.EnvName != appcfg.EnvNameDefault {
-				bkerrs.AbortWithErr(c, bkerrs.Wrap(
-					appcfg.ErrPlainEnvInstanceDeleteNotAllowed,
-					bkerrs.ErrCodeInvalidArgument,
-					"plain env instance cannot be deleted via legacy API",
-				))
+				bkerrs.AbortWithErr(
+					c,
+					errPlainEnvInstanceDeleteNotAllowed.WithCause(appcfg.ErrPlainEnvInstanceDeleteNotAllowed),
+				)
 				return
 			}
 		}
@@ -605,7 +601,7 @@ func (h *Handler) PreviewOverlayMerge(c *gin.Context) {
 
 	baseID, err := uriInput.AppConfigFileObjectID()
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "parse app config file ID"))
+		bkerrs.AbortWithErr(c, errInvalidAppConfigFileID.WithCause(err))
 		return
 	}
 	baseFile, err := h.configFiles().GetByID(ctx, baseID)
@@ -625,7 +621,7 @@ func (h *Handler) PreviewOverlayMerge(c *gin.Context) {
 		},
 	}
 	if validateErr := validateFileContent(input.OverlayContent, baseFile.GetConfigFormat()); validateErr != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(validateErr, bkerrs.ErrCodeInvalidArgument, "validate overlayContent"))
+		bkerrs.AbortWithErr(c, errInvalidFileContent.WithCause(validateErr))
 		return
 	}
 
@@ -661,7 +657,7 @@ func (h *Handler) updateContentOrOverlay(
 	expectedCurrentVersion *int64,
 ) (*slz.UpdateAppConfigFileContentOutput, error) {
 	if fileType != appcfg.AppConfigFileTypeNormal && fileType != appcfg.AppConfigFileTypeOverlay {
-		return nil, bkerrs.Errorf(bkerrs.ErrCodeInvalidArgument, "invalid values file type: %s", fileType)
+		return nil, errInvalidFileType.With("fileType", string(fileType))
 	}
 	app, acf, err := h.validateAndGetAppConfigFile(ctx, appID, id, perm.TypeEdit)
 	if err != nil {
@@ -670,12 +666,12 @@ func (h *Handler) updateContentOrOverlay(
 	oldAcf := *acf
 
 	if validateErr := validateFileContent(content, acf.GetConfigFormat()); validateErr != nil {
-		return nil, bkerrs.Wrap(validateErr, bkerrs.ErrCodeInvalidArgument, "validate file content")
+		return nil, errInvalidFileContent.WithCause(validateErr)
 	}
 
 	editor, err := appcfg.NewAppConfigFileEditor(h.registry.DB, acf)
 	if err != nil {
-		return nil, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "creating values file editor")
+		return nil, errInitFileEditorFailed.WithCause(err)
 	}
 
 	if fileType == appcfg.AppConfigFileTypeNormal {
@@ -684,7 +680,7 @@ func (h *Handler) updateContentOrOverlay(
 		err = editor.SetOverlayContent(content)
 	}
 	if err != nil {
-		return nil, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "setting content")
+		return nil, errSetFileContentFailed.WithCause(err)
 	}
 
 	compiledContent, err := editor.GetCompiledContent(ctx)
@@ -695,7 +691,7 @@ func (h *Handler) updateContentOrOverlay(
 	arranger := arrangement.NewAppArranger()
 	validatedRet, err := arranger.ValidateFileContent(ctx, app, []byte(compiledContent), acf.GetConfigFormat())
 	if err != nil {
-		return nil, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "validating file content")
+		return nil, errInvalidFileContent.WithCause(err)
 	}
 
 	operator := auth.MustGetUser(ctx).ID

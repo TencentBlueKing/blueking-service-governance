@@ -94,7 +94,7 @@ func (h *Handler) CreateEnv(c *gin.Context) {
 	}
 
 	if err = perm.NewManager().HasCreateEnvPerm(ctx, ws.ID); err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.WrapIAMNoPermission(err, ws.ID, "check app perm"))
+		bkerrs.AbortWithErr(c, perm.WrapIAMNoPermission(err, ws.ID, "check app perm"))
 		return
 	}
 
@@ -122,7 +122,11 @@ func (h *Handler) CreateEnv(c *gin.Context) {
 		if abortIfEnvClusterNamespaceOccupied(c, err) {
 			return
 		}
-		bkerrs.AbortWithErr(c, bkerrs.Wrapf(err, bkerrs.ErrCodeInvalidRequest, "create env %s", input.Name))
+		if errors.Is(err, envmodel.ErrEnvAlreadyExists) {
+			bkerrs.AbortWithErr(c, envmodel.ErrEnvAlreadyExists.With("name", input.Name).WithCause(err))
+			return
+		}
+		bkerrs.AbortWithErr(c, errors.Wrapf(err, "create env %s", input.Name))
 		return
 	}
 
@@ -237,11 +241,7 @@ func (h *Handler) CreateFeatureEnv(c *gin.Context) {
 		if abortIfEnvClusterNamespaceOccupied(c, err) {
 			return
 		}
-		code := bkerrs.ErrCodeInternalServerError
-		if errors.Is(err, bkmsenv.ErrInvalidFeatureEnvInput) {
-			code = bkerrs.ErrCodeInvalidRequest
-		}
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, code, "create feature environment"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "create feature environment"))
 		return
 	}
 
@@ -257,7 +257,7 @@ func (h *Handler) CreateFeatureEnv(c *gin.Context) {
 	)
 
 	ginutils.OK(c, serializer.CreateFeatureEnvOutput{
-		Data: new(serializer.EnvOutput).FromModel(*featureEnv),
+		Data: new(serializer.EnvOutput).FromModel(ctx, *featureEnv),
 	})
 }
 
@@ -284,7 +284,7 @@ func (h *Handler) ListEnvs(c *gin.Context) {
 	ctx := c.Request.Context()
 
 	if err := perm.NewManager().HasViewWorkspacePerm(ctx, uriInput.WorkspaceID); err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.WrapIAMNoPermission(err, uriInput.WorkspaceID, "check workspace perm"))
+		bkerrs.AbortWithErr(c, perm.WrapIAMNoPermission(err, uriInput.WorkspaceID, "check workspace perm"))
 		return
 	}
 
@@ -292,13 +292,13 @@ func (h *Handler) ListEnvs(c *gin.Context) {
 		ctx, envmodel.StdEnvsIn(uriInput.WorkspaceID), envmodel.NewestFirst(),
 	)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, "list envs"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "list envs"))
 		return
 	}
 
 	ginutils.OK(c, serializer.ListEnvsOutput{
 		Data: lo.Map(envs, func(env envmodel.Environment, _ int) *serializer.EnvOutput {
-			return new(serializer.EnvOutput).FromModel(env)
+			return new(serializer.EnvOutput).FromModel(ctx, env)
 		}),
 	})
 }
@@ -332,13 +332,13 @@ func (h *Handler) ListAppEnvs(c *gin.Context) {
 	envs, err := h.envs().
 		List(ctx, envmodel.InWorkspace(app.WorkspaceID), envmodel.AvailableToApp(app.ID), envmodel.NewestFirst())
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, "list app envs"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "list app envs"))
 		return
 	}
 
 	ginutils.OK(c, serializer.ListEnvsOutput{
 		Data: lo.Map(envs, func(env envmodel.Environment, _ int) *serializer.EnvOutput {
-			return new(serializer.EnvOutput).FromModel(env)
+			return new(serializer.EnvOutput).FromModel(ctx, env)
 		}),
 	})
 }
@@ -375,7 +375,7 @@ func (h *Handler) ListFeatureEnvs(c *gin.Context) {
 
 	featureEnvs, sourceEnvByFeatEnvName, err := bkmsenv.ListAppFeatEnvs(ctx, h.registry.DB, app)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, "list feature envs"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "list feature envs"))
 		return
 	}
 
@@ -393,6 +393,7 @@ func (h *Handler) ListFeatureEnvs(c *gin.Context) {
 	}
 
 	ginutils.OK(c, serializer.NewListFeatureEnvsOutput(
+		ctx,
 		featureEnvs,
 		sourceEnvByFeatEnvName,
 		deployStatusByFeatEnvName,
@@ -432,7 +433,7 @@ func (h *Handler) GetEnv(c *gin.Context) {
 	}
 
 	ginutils.OK(c, serializer.GetEnvOutput{
-		Data: new(serializer.EnvDetailOutput).FromModel(*env, deployStatuses),
+		Data: new(serializer.EnvDetailOutput).FromModel(ctx, *env, deployStatuses),
 	})
 }
 
@@ -464,12 +465,16 @@ func (h *Handler) GetEnvByName(c *gin.Context) {
 
 	env, err := h.envs().Get(ctx, envmodel.ByName(uriInput.WorkspaceID, uriInput.EnvName))
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, "get env by workspace and name"))
+		if errors.Is(err, envmodel.ErrEnvNotFound) {
+			bkerrs.AbortWithErr(c, envmodel.ErrEnvNotFound.With("envName", uriInput.EnvName).WithCause(err))
+			return
+		}
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "get env by workspace and name"))
 		return
 	}
 
 	ginutils.OK(c, serializer.GetEnvByNameOutput{
-		Data: new(serializer.EnvOutput).FromModel(*env),
+		Data: new(serializer.EnvOutput).FromModel(ctx, *env),
 	})
 }
 
@@ -512,7 +517,11 @@ func (h *Handler) UpdateEnvBasicInfo(c *gin.Context) {
 
 	svc := bkmsenv.NewEnvService(h.registry.DB)
 	if err = svc.Update(ctx, env.ID, updateData); err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, "update env basic info"))
+		if errors.Is(err, envmodel.ErrEnvNotFound) {
+			bkerrs.AbortWithErr(c, envmodel.ErrEnvNotFound.With("envID", env.ID.Hex()).WithCause(err))
+			return
+		}
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "update env basic info"))
 		return
 	}
 
@@ -576,7 +585,15 @@ func (h *Handler) UpdateEnvCluster(c *gin.Context) {
 		if abortIfEnvClusterNamespaceOccupied(c, err) {
 			return
 		}
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, "update env cluster"))
+		if errors.Is(err, bkmsenv.ErrEnvHasDeployedAppsCannotUpdateCluster) {
+			bkerrs.AbortWithErr(c, err)
+			return
+		}
+		if errors.Is(err, envmodel.ErrEnvNotFound) {
+			bkerrs.AbortWithErr(c, envmodel.ErrEnvNotFound.With("envID", env.ID.Hex()).WithCause(err))
+			return
+		}
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "update env cluster"))
 		return
 	}
 
@@ -669,7 +686,7 @@ func (h *Handler) ListEnvTrafficLanes(c *gin.Context) {
 	ctx := c.Request.Context()
 
 	if err := perm.NewManager().HasViewWorkspacePerm(ctx, uriInput.WorkspaceID); err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.WrapIAMNoPermission(err, uriInput.WorkspaceID, "check app perm"))
+		bkerrs.AbortWithErr(c, perm.WrapIAMNoPermission(err, uriInput.WorkspaceID, "check app perm"))
 		return
 	}
 

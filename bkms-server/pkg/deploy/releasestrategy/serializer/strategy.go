@@ -20,11 +20,13 @@
 package serializer
 
 import (
+	"context"
 	"strings"
 	"time"
 
 	"github.com/samber/lo"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/i18n"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/releasestrategy"
 )
 
@@ -125,13 +127,22 @@ type ReleaseStrategyOutputObj struct {
 }
 
 // FromModel fills output fields from a release strategy model.
-func (o *ReleaseStrategyOutputObj) FromModel(s releasestrategy.ReleaseStrategy) *ReleaseStrategyOutputObj {
+func (o *ReleaseStrategyOutputObj) FromModel(
+	ctx context.Context,
+	s releasestrategy.ReleaseStrategy,
+) *ReleaseStrategyOutputObj {
 	builtin := s.IsBuiltin()
+	name := s.Name
+	if builtin {
+		if key := releasestrategy.BuiltinNameI18nKey(s.ID.Hex()); key != "" {
+			name = i18n.LocalizeOr(ctx, key, nil, s.Name)
+		}
+	}
 	*o = ReleaseStrategyOutputObj{
 		ID:          s.ID.Hex(),
 		IsBuiltin:   builtin,
 		WorkspaceID: s.WorkspaceID,
-		Name:        s.Name,
+		Name:        name,
 		Description: s.Description,
 		Batches:     NewBatchOutputObjs(s.Batches),
 		Creator:     s.Creator,

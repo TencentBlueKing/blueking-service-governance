@@ -19,10 +19,13 @@
 package handler
 
 import (
+	"context"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"go.mongodb.org/mongo-driver/v2/bson"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/i18n"
 	alertstrategy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/bkmonitor/alert/strategy"
 )
 
@@ -31,7 +34,7 @@ var _ = Describe("collectRemoteStrategyIDsForAppAlerts", func() {
 		matchedID := bson.NewObjectID()
 		otherID := bson.NewObjectID()
 
-		ids, remoteToBKMS := collectRemoteStrategyIDsForAppAlerts([]alertstrategy.AlertStrategy{
+		ids, remoteToBKMS := collectRemoteStrategyIDsForAppAlerts(context.Background(), []alertstrategy.AlertStrategy{
 			{
 				ID:          matchedID,
 				DisplayName: "CPU 过高",
@@ -60,7 +63,7 @@ var _ = Describe("collectRemoteStrategyIDsForAppAlerts", func() {
 	It("deduplicates a shared remote strategy id across multiple environments", func() {
 		ruleID := bson.NewObjectID()
 
-		ids, remoteToBKMS := collectRemoteStrategyIDsForAppAlerts([]alertstrategy.AlertStrategy{{
+		ids, remoteToBKMS := collectRemoteStrategyIDsForAppAlerts(context.Background(), []alertstrategy.AlertStrategy{{
 			ID:          ruleID,
 			DisplayName: "容器异常重启",
 			RemoteRefs: []alertstrategy.RemoteStrategyRef{
@@ -73,6 +76,23 @@ var _ = Describe("collectRemoteStrategyIDsForAppAlerts", func() {
 		Expect(remoteToBKMS).To(HaveKey(int64(1001)))
 		Expect(remoteToBKMS[1001].StrategyID).To(Equal(ruleID.Hex()))
 		Expect(remoteToBKMS[1001].AlertDisplayName).To(Equal("容器异常重启"))
+	})
+
+	It("localizes default strategy display name in English context", func() {
+		ruleID := bson.NewObjectID()
+		enCtx := i18n.WithLang(context.Background(), i18n.LangEN)
+
+		ids, remoteToBKMS := collectRemoteStrategyIDsForAppAlerts(enCtx, []alertstrategy.AlertStrategy{{
+			ID:           ruleID,
+			StrategyCode: "cpu_limit_usage_high",
+			DisplayName:  "CPU 使用率过高",
+			RemoteRefs: []alertstrategy.RemoteStrategyRef{
+				{EnvName: "prod", RemoteStrategyID: 1001},
+			},
+		}}, "High CPU")
+
+		Expect(ids).To(Equal([]int64{1001}))
+		Expect(remoteToBKMS[1001].AlertDisplayName).To(Equal("High CPU Usage"))
 	})
 })
 

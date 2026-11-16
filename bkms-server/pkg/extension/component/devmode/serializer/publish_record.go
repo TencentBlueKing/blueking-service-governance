@@ -27,6 +27,12 @@ import (
 	devmode "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component/devmode"
 )
 
+var errRecordQueryScopeConflict = bkerrs.Define(
+	bkerrs.ErrCodeInvalidArgument,
+	"EXTENSION_DEVMODE_RECORD_QUERY_SCOPE_CONFLICT",
+	"exactly one of envNames, envTypes or recordIDs is required",
+)
+
 // PublishRecordURIInput DevMode Publish Record URI 路径参数
 type PublishRecordURIInput struct {
 	// AppID 应用 ID
@@ -101,9 +107,7 @@ func (i *ListPublishRecordsByScopeInput) Validate() error {
 		len(i.EnvNames) > 0, len(i.EnvTypes) > 0, len(i.RecordIDs) > 0,
 	}, func(ok bool) bool { return ok })
 	if specified != 1 {
-		return bkerrs.New(
-			bkerrs.ErrCodeInvalidArgument, "exactly one of envNames, envTypes or recordIDs is required",
-		)
+		return errRecordQueryScopeConflict
 	}
 	return nil
 }

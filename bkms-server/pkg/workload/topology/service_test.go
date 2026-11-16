@@ -34,6 +34,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/yaml"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/i18n"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
@@ -131,7 +132,7 @@ var _ = Describe("Service", func() {
 
 	Describe("GetTopology", func() {
 		It("should return empty topology with partial=true when no ResourceSnapshot exists", func() {
-			graph, err := svc.GetTopology(testCtx, "non-existent-app", "dev", "")
+			graph, err := svc.GetTopology(i18n.WithLang(testCtx, i18n.LangEN), "non-existent-app", "dev", "")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(graph).NotTo(BeNil())
 			Expect(graph.IsPartial).To(BeTrue())
@@ -140,6 +141,10 @@ var _ = Describe("Service", func() {
 			Expect(graph.RootID).To(BeEmpty())
 			Expect(graph.Warnings).To(ContainElement(ContainSubstring("no resource snapshot data found")))
 			Expect(graph.DataVersion).To(Equal(int64(0)))
+
+			zhGraph, err := svc.GetTopology(testCtx, "non-existent-app", "dev", "")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(zhGraph.Warnings).To(ContainElement("暂无资源快照数据，请先执行部署"))
 		})
 
 		It("should add warning when refresh status is failed", func() {
@@ -159,12 +164,16 @@ var _ = Describe("Service", func() {
 			err := SaveWithVersion(testCtx, snapshots, snapshot, 0)
 			Expect(err).NotTo(HaveOccurred())
 
-			graph, err := svc.GetTopology(testCtx, "test-app", "dev", "")
+			graph, err := svc.GetTopology(i18n.WithLang(testCtx, i18n.LangEN), "test-app", "dev", "")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(graph).NotTo(BeNil())
 			Expect(graph.IsPartial).To(BeTrue())
 			Expect(graph.Warnings).To(ContainElement(ContainSubstring("resource snapshot data may be stale")))
 			Expect(graph.Warnings).To(ContainElement(ContainSubstring("connection timeout")))
+
+			zhGraph, err := svc.GetTopology(testCtx, "test-app", "dev", "")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(zhGraph.Warnings).To(ContainElement("资源快照数据可能已过期（上次刷新失败：connection timeout）"))
 		})
 
 		It("should return topology with metadata when ResourceSnapshot exists", func() {

@@ -29,6 +29,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/autodeploy"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
@@ -42,7 +43,11 @@ const StatusUnknown = "unknown"
 
 var (
 	// ErrDeployRecordNotFound 部署记录不存在错误
-	ErrDeployRecordNotFound = errors.New("deploy record not found")
+	ErrDeployRecordNotFound = bkerrs.Define(
+		bkerrs.ErrCodeNotFound,
+		"DEPLOY_RECORD_NOT_FOUND",
+		"deploy record not found",
+	)
 	// ErrUnsupportedAppType 不支持的应用类型错误
 	ErrUnsupportedAppType = errors.New("unsupported app type")
 )

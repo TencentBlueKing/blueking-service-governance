@@ -1,0 +1,79 @@
+# 部署（pkg/deploy）
+DEPLOY_RECORD_NOT_FOUND:
+  zh: "部署记录不存在"
+  en: "Deploy record not found"
+
+# 应用模型与 Helm 部署
+DEPLOY_NOT_APPMODEL_APP:
+  zh: "当前应用不是应用模型类型，不支持该部署操作"
+  en: "Application is not an AppModel app"
+DEPLOY_UNEXPECTED_APP_TYPE:
+  zh: "应用类型不匹配：期望 {{.expected}}，实际为 {{.actual}}"
+  en: "Invalid app type: expected {{.expected}}, got {{.actual}}"
+DEPLOY_INVALID_APP_TYPE:
+  zh: "不支持的应用类型：{{.appType}}"
+  en: "Invalid app type: {{.appType}}"
+DEPLOY_RESOURCE_SNAPSHOT_NOT_FOUND:
+  zh: "部署资源快照不存在"
+  en: "Resource snapshot not found"
+DEPLOY_CONCURRENCY_CONFLICT:
+  zh: "存在并发部署冲突，请稍后重试"
+  en: "Concurrency deploy conflict occurred, please retry later"
+DEPLOY_HELM_ROLLBACK_RECORD_NOT_FOUND:
+  zh: "未找到可用于回滚的部署记录"
+  en: "Deploy record for rollback not found"
+DEPLOY_HELM_ROLLBACK_STATUS_INVALID:
+  zh: "目标回滚版本未处于已部署状态"
+  en: "Target revision for rollback is not in deployed status"
+DEPLOY_HELM_LATEST_RECORD_REQUIRED:
+  zh: "必须提供最新一次部署记录 ID"
+  en: "Must provide latest deploy record ID"
+
+# 发布策略与分批发布
+DEPLOY_RELEASE_STRATEGY_INVALID_BATCH_TARGET:
+  zh: "发布策略的批次目标值不合法"
+  en: "Invalid batch target in release strategy"
+DEPLOY_RELEASE_STRATEGY_NOT_FOUND:
+  zh: "发布策略不存在"
+  en: "Release strategy not found"
+DEPLOY_RELEASE_STRATEGY_NAME_CONFLICT:
+  zh: "发布策略名称已存在"
+  en: "Release strategy name already exists"
+DEPLOY_RELEASE_STRATEGY_BUILTIN_READ_ONLY:
+  zh: "平台内置发布策略不可修改或删除"
+  en: "Built-in release strategy cannot be modified or deleted"
+DEPLOY_BATCH_RELEASE_ROLLOUT_NOT_FOUND:
+  zh: "集群中未找到对应的 Rollout 资源"
+  en: "Rollout resource not found in cluster"
+DEPLOY_BATCH_RELEASE_ROLLOUT_NOT_INSTALLED:
+  zh: "目标集群未安装分批发布（Rollout）组件"
+  en: "Rollout component is not installed in target cluster"
+DEPLOY_BATCH_RELEASE_IN_PROGRESS:
+  zh: "当前存在进行中的分批发布，请先完成、跳过或回滚"
+  en: "Batch release is in progress, complete, skip, or roll it back first"
+DEPLOY_BATCH_RELEASE_WORKLOAD_NOT_SUPPORTED:
+  zh: "当前应用工作负载类型不支持分批发布"
+  en: "Current application workload does not support batch release"
+DEPLOY_BATCH_RELEASE_ACTION_NOT_ALLOWED:
+  zh: "当前分批发布状态不支持该操作"
+  en: "Batch release action is not allowed in current state"
+DEPLOY_BATCH_RELEASE_NOT_IN_PROGRESS:
+  zh: "当前没有进行中的分批发布"
+  en: "No batch release is in progress"
+DEPLOY_BATCH_RELEASE_SWITCHING:
+  zh: "分批发布正在切换到最新部署版本，请稍后重试"
+  en: "Batch release is switching to the latest deploy, please retry later"
+DEPLOY_BATCH_RELEASE_ROLLOUT_CHANGED:
+  zh: "分批发布状态已变更，请刷新后重试"
+  en: "Batch release state has changed, please refresh and retry"
+
+# 展示文本：平台内置发布策略名称
+deploy.releaseStrategy.builtin.threeBatches.name:
+  zh: "分三批灰度(1个,50%,全量)"
+  en: "3-Batch Canary (1 pod, 50%, 100%)"
+deploy.releaseStrategy.builtin.fourBatches.name:
+  zh: "分四批灰度(1个,33%,66%,全量)"
+  en: "4-Batch Canary (1 pod, 33%, 66%, 100%)"
+deploy.releaseStrategy.builtin.fiveBatches.name:
+  zh: "分五批灰度(1个,25%,50%,75%,全量)"
+  en: "5-Batch Canary (1 pod, 25%, 50%, 75%, 100%)"

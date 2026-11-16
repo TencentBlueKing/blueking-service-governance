@@ -25,14 +25,43 @@ import (
 	"github.com/samber/lo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/i18n"
 	clusteraddon "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/clusteraddon"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/clusteraddon/serializer"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/helm"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/misc/audit"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/perm"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
+	storereg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
+)
+
+var (
+	errEnvClusterNotConfigured = bkerrs.Define(
+		bkerrs.ErrCodeInvalidArgument,
+		"CLUSTER_ADDON_ENV_CLUSTER_NOT_CONFIGURED",
+		"environment has no cluster configured",
+	)
+	errClusterAddonNotFound = bkerrs.Define(
+		bkerrs.ErrCodeNotFound,
+		"CLUSTER_ADDON_NOT_FOUND",
+		"cluster addon not found",
+	)
+	errConcurrentInstallConflict = bkerrs.Define(
+		bkerrs.ErrCodeAborted,
+		"CLUSTER_ADDON_CONCURRENT_INSTALL_CONFLICT",
+		"concurrent install/update conflict occurred",
+	)
+	errConcurrentUninstallConflict = bkerrs.Define(
+		bkerrs.ErrCodeAborted,
+		"CLUSTER_ADDON_CONCURRENT_UNINSTALL_CONFLICT",
+		"concurrent uninstall conflict occurred",
+	)
+	errAddonNotApplicable = bkerrs.Define(
+		bkerrs.ErrCodeInvalidRequest,
+		"CLUSTER_ADDON_NOT_APPLICABLE",
+		"cluster addon is not applicable to the target cluster",
+	)
 )
 
 // Handler handles Gin cluster-addon API requests.
@@ -80,8 +109,7 @@ func (h *Handler) ListClusterAddons(c *gin.Context) {
 
 	clusterID := env.Cluster.ClusterID
 	if clusterID == "" {
-		bkerrs.AbortWithErr(c, bkerrs.Errorf(bkerrs.ErrCodeInvalidArgument,
-			"environment %s has no cluster configured", uriInput.EnvID))
+		bkerrs.AbortWithErr(c, errEnvClusterNotConfigured.With("envID", uriInput.EnvID))
 		return
 	}
 
@@ -107,7 +135,7 @@ func (h *Handler) ListClusterAddons(c *gin.Context) {
 
 	ginutils.OK(c, &serializer.ListClusterAddonsOutput{
 		Addons: lo.Map(addons, func(addon *clusteraddon.ClusterAddonInfo, _ int) *serializer.ClusterAddonInfoOutput {
-			return new(serializer.ClusterAddonInfoOutput).FromModel(*addon)
+			return new(serializer.ClusterAddonInfoOutput).FromModel(ctx, *addon)
 		}),
 	})
 }
@@ -145,8 +173,7 @@ func (h *Handler) UpsertClusterAddon(c *gin.Context) {
 
 	clusterID := env.Cluster.ClusterID
 	if clusterID == "" {
-		bkerrs.AbortWithErr(c, bkerrs.Errorf(bkerrs.ErrCodeInvalidArgument,
-			"environment %s has no cluster configured", uriInput.EnvID))
+		bkerrs.AbortWithErr(c, errEnvClusterNotConfigured.With("envID", uriInput.EnvID))
 		return
 	}
 
@@ -155,10 +182,7 @@ func (h *Handler) UpsertClusterAddon(c *gin.Context) {
 	)
 	if err != nil {
 		if errors.Is(err, clusteraddon.ErrClusterAddonDefNotFound) {
-			bkerrs.AbortWithErr(
-				c,
-				bkerrs.Errorf(bkerrs.ErrCodeNotFound, "cluster addon %s not found", uriInput.AddonName),
-			)
+			bkerrs.AbortWithErr(c, errClusterAddonNotFound.With("addonName", uriInput.AddonName).WithCause(err))
 			return
 		}
 		bkerrs.AbortWithErr(c, bkerrs.Wrapf(err, bkerrs.ErrCodeInternalServerError,
@@ -170,7 +194,7 @@ func (h *Handler) UpsertClusterAddon(c *gin.Context) {
 
 	installLock := clusteraddon.NewInstallLock(clusterID, namespace, uriInput.AddonName)
 	if ok := installLock.Acquire(ctx); !ok {
-		bkerrs.AbortWithErr(c, bkerrs.New(bkerrs.ErrCodeAborted, "concurrent install/update conflict occurred"))
+		bkerrs.AbortWithErr(c, errConcurrentInstallConflict)
 		return
 	}
 	defer installLock.Release(ctx)
@@ -179,7 +203,7 @@ func (h *Handler) UpsertClusterAddon(c *gin.Context) {
 		ctx, addonDef, env, namespace, jsonInput.ChartVersion, jsonInput.Values,
 	); err != nil {
 		if errors.Is(err, clusteraddon.ErrAddonNotApplicable) {
-			bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, "deploy cluster addon"))
+			bkerrs.AbortWithErr(c, errAddonNotApplicable.With("addonName", uriInput.AddonName).WithCause(err))
 			return
 		}
 		bkerrs.AbortWithErr(c, bkerrs.Wrapf(err, bkerrs.ErrCodeInternalServerError,
@@ -235,8 +259,7 @@ func (h *Handler) DeleteClusterAddon(c *gin.Context) {
 
 	clusterID := env.Cluster.ClusterID
 	if clusterID == "" {
-		bkerrs.AbortWithErr(c, bkerrs.Errorf(bkerrs.ErrCodeInvalidArgument,
-			"environment %s has no cluster configured", uriInput.EnvID))
+		bkerrs.AbortWithErr(c, errEnvClusterNotConfigured.With("envID", uriInput.EnvID))
 		return
 	}
 
@@ -245,10 +268,7 @@ func (h *Handler) DeleteClusterAddon(c *gin.Context) {
 	)
 	if err != nil {
 		if errors.Is(err, clusteraddon.ErrClusterAddonDefNotFound) {
-			bkerrs.AbortWithErr(
-				c,
-				bkerrs.Errorf(bkerrs.ErrCodeNotFound, "cluster addon %s not found", uriInput.AddonName),
-			)
+			bkerrs.AbortWithErr(c, errClusterAddonNotFound.With("addonName", uriInput.AddonName).WithCause(err))
 			return
 		}
 		bkerrs.AbortWithErr(c, bkerrs.Wrapf(err, bkerrs.ErrCodeInternalServerError,
@@ -260,7 +280,7 @@ func (h *Handler) DeleteClusterAddon(c *gin.Context) {
 
 	installLock := clusteraddon.NewInstallLock(clusterID, namespace, uriInput.AddonName)
 	if ok := installLock.Acquire(ctx); !ok {
-		bkerrs.AbortWithErr(c, bkerrs.New(bkerrs.ErrCodeAborted, "concurrent uninstall conflict occurred"))
+		bkerrs.AbortWithErr(c, errConcurrentUninstallConflict)
 		return
 	}
 	defer installLock.Release(ctx)
@@ -282,6 +302,6 @@ func (h *Handler) DeleteClusterAddon(c *gin.Context) {
 
 	ginutils.OK(c, serializer.DeleteClusterAddonOutput{
 		Status:  string(helm.StatusUninstalled),
-		Message: "addon uninstalled successfully",
+		Message: i18n.LocalizeOr(ctx, "cluster_addon.uninstallSuccess", nil, "addon uninstalled successfully"),
 	})
 }

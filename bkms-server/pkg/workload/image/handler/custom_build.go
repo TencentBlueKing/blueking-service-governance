@@ -34,6 +34,30 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/snapshot"
 )
 
+var (
+	errCustomImageNameNotFound = bkerrs.Define(
+		bkerrs.ErrCodeNotFound,
+		"WORKLOAD_IMAGE_CUSTOM_IMAGE_NAME_NOT_FOUND",
+		"custom image name not found in registry",
+	)
+	errCustomRuntimeImageNotFound = bkerrs.Define(
+		bkerrs.ErrCodeNotFound, "WORKLOAD_IMAGE_CUSTOM_RUNTIME_IMAGE_NOT_FOUND",
+		"custom runtime image not found in workspace",
+	)
+	errCustomRegistryAccessDenied = bkerrs.Define(
+		bkerrs.ErrCodeInvalidRequest, "WORKLOAD_IMAGE_CUSTOM_REGISTRY_ACCESS_DENIED",
+		"registry authentication failed",
+	)
+	errWorkspaceRegistryUnbound = bkerrs.Define(
+		bkerrs.ErrCodeInvalidRequest, "WORKLOAD_IMAGE_WORKSPACE_REGISTRY_UNBOUND",
+		"workspace image registry is not bound",
+	)
+	errImageNotInWorkspaceRegistry = bkerrs.Define(
+		bkerrs.ErrCodeInvalidRequest, "WORKLOAD_IMAGE_NOT_IN_WORKSPACE_REGISTRY",
+		"image does not belong to the workspace image registry",
+	)
+)
+
 // ListCustomBuildImages 获取工作空间自定义构建镜像候选列表
 //
 //	@ID				ListCustomBuildImages
@@ -130,9 +154,7 @@ func (h *Handler) ListCustomBuildImageTags(c *gin.Context) {
 		int(queryInput.PageSize),
 	)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrapf(
-			err, customTagErrCode(err), "list tags of custom build image %s", queryInput.Name,
-		))
+		bkerrs.AbortWithErr(c, wrapCustomTagError(err, queryInput.Name, "list"))
 		return
 	}
 
@@ -193,9 +215,7 @@ func (h *Handler) RefreshCustomBuildImageTags(c *gin.Context) {
 		if errors.Is(err, customruntime.ErrRegistryAccessTimeout) {
 			metricStatus = metrics.StatusTimeout
 		}
-		bkerrs.AbortWithErr(c, bkerrs.Wrapf(
-			err, customTagErrCode(err), "refresh tags of custom build image %s", jsonInput.Name,
-		))
+		bkerrs.AbortWithErr(c, wrapCustomTagError(err, jsonInput.Name, "refresh"))
 		return
 	}
 	if result.Status == snapshot.RefreshResultFailed {
@@ -217,20 +237,26 @@ func (h *Handler) newTagQueryManager() *customruntime.TagQueryManager {
 	)
 }
 
-// customTagErrCode 把自定义镜像 tag 链路的错误映射为对外错误码。
-//
-// 全部复用既有 ErrCode，不新增常量；bkerrs 没有 deadline 语义的错误码，
-// 超时只能归入服务端错误，可识别性由错误信息中的超时字样承担
-func customTagErrCode(err error) bkerrs.ErrCode {
+// wrapCustomTagError 把自定义镜像 tag 链路的错误映射为分类错误。
+func wrapCustomTagError(err error, imageName, action string) error {
 	switch {
-	case errors.Is(err, customruntime.ErrImageNameNotFound),
-		errors.Is(err, customruntime.ErrCustomRuntimeImageNotFound):
-		return bkerrs.ErrCodeNotFound
-	case errors.Is(err, customruntime.ErrRegistryAccessDenied),
-		errors.Is(err, customruntime.ErrWorkspaceRegistryUnbound),
-		errors.Is(err, customruntime.ErrImageNotInWorkspaceRegistry):
-		return bkerrs.ErrCodeInvalidRequest
+	case errors.Is(err, customruntime.ErrImageNameNotFound):
+		return errCustomImageNameNotFound.With("imageName", imageName).WithCause(err)
+	case errors.Is(err, customruntime.ErrCustomRuntimeImageNotFound):
+		return errCustomRuntimeImageNotFound.With("imageName", imageName).WithCause(err)
+	case errors.Is(err, customruntime.ErrRegistryAccessDenied):
+		return errCustomRegistryAccessDenied.With("imageName", imageName).WithCause(err)
+	case errors.Is(err, customruntime.ErrWorkspaceRegistryUnbound):
+		return errWorkspaceRegistryUnbound.With("imageName", imageName).WithCause(err)
+	case errors.Is(err, customruntime.ErrImageNotInWorkspaceRegistry):
+		return errImageNotInWorkspaceRegistry.With("imageName", imageName).WithCause(err)
 	default:
-		return bkerrs.ErrCodeInternalServerError
+		return bkerrs.Wrapf(
+			err,
+			bkerrs.ErrCodeInternalServerError,
+			"%s tags of custom build image %s",
+			action,
+			imageName,
+		)
 	}
 }

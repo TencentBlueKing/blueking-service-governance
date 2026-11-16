@@ -24,7 +24,8 @@ assert {
 
 tests {
   test("should return the error message", () => {
-    expect(res.body.error.message).to.contains('only normal app config file can set');
+    expect(res.body.error.details[0].code).to.equal("CORE_APPCFG_SET_FILE_CONTENT_FAILED");
+    expect(res.body.error.details[0].message).to.contains('only normal app config file can set');
   });
 }
 

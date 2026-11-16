@@ -36,6 +36,15 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars/serializer"
 )
 
+var (
+	errUnsupportedExportScope = bkerrs.Define(
+		bkerrs.ErrCodeInvalidRequest, "WORKLOAD_ENVVARS_UNSUPPORTED_EXPORT_SCOPE", "unsupported export scope",
+	)
+	errEnvNameRequiredForEffectiveExport = bkerrs.Define(
+		bkerrs.ErrCodeInvalidRequest, "WORKLOAD_ENVVARS_EXPORT_ENV_NAME_REQUIRED", "envName is required",
+	)
+)
+
 const (
 	// exportScopeAppDefined 表示导出应用直接定义的环境变量（appDefined 范围）。
 	// 仅导出由应用自身定义、未经环境层叠覆盖的变量。
@@ -353,7 +362,7 @@ func (h *Handler) ExportAppEnvVars(c *gin.Context) {
 	case exportScopeEffectiveByEnv:
 		h.exportEffectiveAppEnvVars(ctx, c, uriInput.AppID, queryInput.EnvName)
 	default:
-		bkerrs.AbortWithErr(c, bkerrs.Errorf(bkerrs.ErrCodeInvalidRequest, "unsupported export scope"))
+		bkerrs.AbortWithErr(c, errUnsupportedExportScope.With("scope", queryInput.Scope))
 	}
 }
 
@@ -390,11 +399,7 @@ func (h *Handler) exportEffectiveAppEnvVars(
 	if strings.TrimSpace(envName) == "" {
 		bkerrs.AbortWithErr(
 			c,
-			bkerrs.Errorf(
-				bkerrs.ErrCodeInvalidRequest,
-				"envName is required when scope=%s",
-				exportScopeEffectiveByEnv,
-			),
+			errEnvNameRequiredForEffectiveExport.With("scope", exportScopeEffectiveByEnv),
 		)
 		return
 	}
@@ -433,7 +438,11 @@ func (h *Handler) exportEffectiveAppEnvVars(
 //	@Failure		400	{object}	bkerrs.GinErrorOutput
 //	@Router			/env-var-templates/scoped [get]
 func (h *Handler) DownloadScopedEnvVarTemplate(c *gin.Context) {
-	writeEnvFileAttachment(c, scopedEnvVarTemplateFilename, exporter.RenderScopedImportTemplate())
+	writeEnvFileAttachment(
+		c,
+		scopedEnvVarTemplateFilename,
+		exporter.RenderScopedImportTemplate(c.Request.Context()),
+	)
 }
 
 // DownloadSingleEnvVarTemplate 下载单环境环境变量导入模板。
@@ -449,7 +458,11 @@ func (h *Handler) DownloadScopedEnvVarTemplate(c *gin.Context) {
 //	@Failure		400	{object}	bkerrs.GinErrorOutput
 //	@Router			/env-var-templates/env [get]
 func (h *Handler) DownloadSingleEnvVarTemplate(c *gin.Context) {
-	writeEnvFileAttachment(c, singleEnvVarTemplateFilename, exporter.RenderEnvAppImportTemplate())
+	writeEnvFileAttachment(
+		c,
+		singleEnvVarTemplateFilename,
+		exporter.RenderEnvAppImportTemplate(c.Request.Context()),
+	)
 }
 
 // DownloadAppEnvVarTemplate 下载应用环境变量导入模板。
@@ -465,7 +478,11 @@ func (h *Handler) DownloadSingleEnvVarTemplate(c *gin.Context) {
 //	@Failure		400	{object}	bkerrs.GinErrorOutput
 //	@Router			/env-var-templates/app [get]
 func (h *Handler) DownloadAppEnvVarTemplate(c *gin.Context) {
-	writeEnvFileAttachment(c, appEnvVarTemplateFilename, exporter.RenderEnvAppImportTemplate())
+	writeEnvFileAttachment(
+		c,
+		appEnvVarTemplateFilename,
+		exporter.RenderEnvAppImportTemplate(c.Request.Context()),
+	)
 }
 
 func writeEnvFileAttachment(c *gin.Context, filename, content string) {

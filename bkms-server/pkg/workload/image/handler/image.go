@@ -54,6 +54,18 @@ import (
 
 var _ image.Handler = (*Handler)(nil)
 
+var (
+	errImageRepoNotFound = bkerrs.Define(
+		bkerrs.ErrCodeNotFound, "WORKLOAD_IMAGE_REPO_NOT_FOUND", "image repository is empty or not found",
+	)
+	errImagePromoteTagNotFound = bkerrs.Define(
+		bkerrs.ErrCodeNotFound, "WORKLOAD_IMAGE_PROMOTE_TAG_NOT_FOUND", "image tag not found in app images",
+	)
+	errImageTagNotFound = bkerrs.Define(
+		bkerrs.ErrCodeNotFound, "WORKLOAD_IMAGE_TAG_NOT_FOUND", "image tag not found",
+	)
+)
+
 // Handler handles Gin build and image API requests.
 type Handler struct {
 	registry *storereg.Registry
@@ -203,7 +215,7 @@ func (h *Handler) RefreshAppImages(c *gin.Context) {
 	if err != nil {
 		metricStatus = metrics.StatusErr
 		if errors.Is(err, snapshot.ErrRepoNotFound) {
-			err = bkerrs.Wrapf(err, bkerrs.ErrCodeNotFound, "refresh images for app %s", uriInput.AppID).SetDetails(
+			err = errImageRepoNotFound.With("appID", uriInput.AppID).WithCause(err).SetDetails(
 				bkerrs.NewDetail(
 					bkerrs.ErrDetailCodeImageRepositoryNotFound,
 					"image repository is empty or not found",
@@ -270,11 +282,10 @@ func (h *Handler) PromoteAppImage(c *gin.Context) {
 		auth.MustGetUser(ctx).ID,
 	); err != nil {
 		if errors.Is(err, promotion.ErrImageTagNotFound) {
-			bkerrs.AbortWithErr(c, bkerrs.Wrapf(
-				err, bkerrs.ErrCodeNotFound,
-				"image tag %q not found in app %s images, please refresh images first if it was just pushed",
-				uriInput.Tag, app.ID,
-			))
+			bkerrs.AbortWithErr(
+				c,
+				errImagePromoteTagNotFound.With("tag", uriInput.Tag).With("appID", app.ID).WithCause(err),
+			)
 			return
 		}
 		bkerrs.AbortWithErr(
@@ -377,12 +388,14 @@ func (h *Handler) DeleteAppImage(c *gin.Context) {
 	svc := tagdeletion.NewService(h.registry.DB)
 	if err := svc.DeleteImageTag(ctx, uriInput.AppID, uriInput.Tag); err != nil {
 		metricStatus = metrics.StatusErr
-		code := bkerrs.ErrCodeInternalServerError
 		if reginfra.IsTagNotFound(err) {
-			code = bkerrs.ErrCodeNotFound
+			bkerrs.AbortWithErr(c, errImageTagNotFound.With("tag", uriInput.Tag).With("appID", app.ID).WithCause(err))
+			return
 		}
-		wrappedErr := bkerrs.Wrapf(err, code, "delete image %s for app %s", uriInput.Tag, app.ID)
-		if code == bkerrs.ErrCodeInternalServerError && errors.Is(err, tagdeletion.ErrImageRepoAuthRequired) {
+		wrappedErr := bkerrs.Wrapf(
+			err, bkerrs.ErrCodeInternalServerError, "delete image %s for app %s", uriInput.Tag, app.ID,
+		)
+		if errors.Is(err, tagdeletion.ErrImageRepoAuthRequired) {
 			wrappedErr = wrappedErr.SetDetails(
 				bkerrs.NewDetail(
 					bkerrs.ErrDetailCodeImageRepositoryAuthRequired,

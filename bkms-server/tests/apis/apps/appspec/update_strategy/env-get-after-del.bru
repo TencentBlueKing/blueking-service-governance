@@ -17,7 +17,7 @@ assert {
 
 tests {
   test("should return not found after deleting env update strategy override", () => {
-    expect(res.body.error.message).to.contains("env update strategy not found");
+    expect(res.body.error.details[0].code).to.equal("WORKLOAD_APPSPEC_ENV_SECTION_NOT_FOUND");
   });
 }
 

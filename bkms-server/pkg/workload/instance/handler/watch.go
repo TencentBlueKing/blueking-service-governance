@@ -38,7 +38,14 @@ import (
 )
 
 // Watch 基础层通过 PodSource 读集群 Pod；断言放在组装处，避免 infras 反向依赖 workload
-var _ watch.PodSource = (*k8sclient.PodClient)(nil)
+var (
+	_ watch.PodSource = (*k8sclient.PodClient)(nil)
+
+	errResourceVersionExpired = bkerrs.Define(
+		bkerrs.ErrCodeAborted, "WORKLOAD_INSTANCE_RESOURCE_VERSION_EXPIRED",
+		"resourceVersion expired, re-list required",
+	)
+)
 
 // WatchAppInstances 订阅应用实例投影变更（SSE）
 // 本函数只做编排：绑定参数、鉴权取部署记录、从续传位点起推增量
@@ -109,9 +116,7 @@ func (h *Handler) WatchAppInstances(c *gin.Context) {
 	if err != nil {
 		// 位点过期必须与其他集群故障分开：前端据此重新 List，而不是当 500 重试旧位点
 		if errors.Is(err, watch.ErrResourceVersionGone) {
-			bkerrs.AbortWithErr(c, bkerrs.Wrap(
-				err, bkerrs.ErrCodeAborted, "resourceVersion expired, re-list required",
-			))
+			bkerrs.AbortWithErr(c, errResourceVersionExpired.WithCause(err))
 			return
 		}
 

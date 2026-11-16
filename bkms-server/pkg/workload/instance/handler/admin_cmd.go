@@ -37,6 +37,10 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/instance/serializer"
 )
 
+var errAdminCmdServiceInvalid = bkerrs.Define(
+	bkerrs.ErrCodeInvalidArgument, "WORKLOAD_INSTANCE_ADMIN_CMD_INVALID", "failed to initialize admin service",
+)
+
 // ListTrpcAdminCmds 查询 Trpc 管理命令。
 //
 //	@ID			ListTrpcAdminCmds
@@ -68,7 +72,7 @@ func (h *Handler) ListTrpcAdminCmds(c *gin.Context) {
 	}
 	service, err := h.newTrpcAdminService(ctx, app, uriInput.EnvName, queryInput.InstanceIDs)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "new admin service failed"))
+		bkerrs.AbortWithErr(c, errAdminCmdServiceInvalid.WithCause(err))
 		return
 	}
 	// 预检查 admin 配置
@@ -124,7 +128,7 @@ func (h *Handler) ExecuteTrpcAdminCmd(c *gin.Context) {
 	}
 	service, err := h.newTrpcAdminService(ctx, app, uriInput.EnvName, input.InstanceIDs)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "new admin service failed"))
+		bkerrs.AbortWithErr(c, errAdminCmdServiceInvalid.WithCause(err))
 		return
 	}
 	// 预检查 admin 配置
@@ -220,7 +224,7 @@ func (h *Handler) ExecuteTafAdminCmd(c *gin.Context) {
 		},
 	)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "new taf admin service failed"))
+		bkerrs.AbortWithErr(c, errAdminCmdServiceInvalid.WithCause(err))
 		return
 	}
 	// 初始化服务

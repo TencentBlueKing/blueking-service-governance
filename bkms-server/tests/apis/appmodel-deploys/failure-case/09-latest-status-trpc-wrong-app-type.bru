@@ -20,7 +20,7 @@ tests {
     expect(res.body.error).to.be.an("object");
     // getLatestAppModelDeployStatus -> "invalid app type" with INVALID_ARGUMENT.
     expect(res.body.error.code).to.equal("INVALID_ARGUMENT");
-    expect(res.body.error.message).to.contain("invalid app type");
+    expect(res.body.error.details[0].code).to.equal("DEPLOY_INVALID_APP_TYPE");
     expect(res.body.error.system).to.equal("bkms");
     expect(res.body.error.module).to.equal("bkms-server");
   });

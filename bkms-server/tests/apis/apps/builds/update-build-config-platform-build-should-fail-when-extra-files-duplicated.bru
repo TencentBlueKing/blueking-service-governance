@@ -39,7 +39,8 @@ assert {
 
 tests {
   test("should reject duplicated extra files after trim", () => {
-    expect(res.body.error.message).to.contains(
+    expect(res.body.error.details[0].code).to.equal("BUILD_BUILD_INVALID_CODE_REPO_CONFIG");
+    expect(res.body.error.details[0].message).to.contains(
       "buildConfig.repoBuildConfig.platformBuildConfig.extraFiles[1] is duplicated"
     );
   });

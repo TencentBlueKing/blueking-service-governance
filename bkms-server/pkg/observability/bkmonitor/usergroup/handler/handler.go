@@ -30,6 +30,19 @@ import (
 	storereg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
 )
 
+var (
+	errUserGroupNotFound = bkerrs.Define(
+		bkerrs.ErrCodeNotFound,
+		"OBSERVABILITY_BKMONITOR_USER_GROUP_NOT_FOUND",
+		"user group not found or does not belong to current workspace",
+	)
+	errUserGroupInvalidParams = bkerrs.Define(
+		bkerrs.ErrCodeInvalidArgument,
+		"OBSERVABILITY_BKMONITOR_USER_GROUP_INVALID_PARAMS",
+		"invalid user group parameters",
+	)
+)
+
 // Handler handles user group HTTP requests.
 type Handler struct {
 	registry *storereg.Registry
@@ -43,11 +56,11 @@ func New(registry *storereg.Registry, service *bkmusergroup.Service) *Handler {
 
 func (h *Handler) wrapServiceError(err error, action string) error {
 	if errors.Is(err, bkmusergroup.ErrUserGroupNotInWorkspace) {
-		return bkerrs.Wrap(err, bkerrs.ErrCodeNotFound, action)
+		return errUserGroupNotFound.WithCause(err)
 	}
 	var validationErrs validator.ValidationErrors
 	if errors.As(err, &validationErrs) {
-		return bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, action)
+		return errUserGroupInvalidParams.WithCause(err)
 	}
 	return bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, action)
 }

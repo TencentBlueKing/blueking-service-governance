@@ -19,6 +19,7 @@
 package handler
 
 import (
+	"context"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -100,7 +101,7 @@ func (h *Handler) ListAlertEvents(c *gin.Context) {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list alert strategies by app"))
 		return
 	}
-	strategyIDs, remoteToBKMS := collectRemoteStrategyIDsForAppAlerts(rules, queryInput.AlertDisplayName)
+	strategyIDs, remoteToBKMS := collectRemoteStrategyIDsForAppAlerts(ctx, rules, queryInput.AlertDisplayName)
 	if len(strategyIDs) == 0 {
 		ginutils.OK(c, &serializer.ListAlertEventsResp{Data: &serializer.ListAlertEventsOutput{
 			Count: 0, Results: []*serializer.AlertEventOutput{},
@@ -180,7 +181,7 @@ func (h *Handler) ListAlertEventsByStrategy(c *gin.Context) {
 
 	strategyObjID, err := bson.ObjectIDFromHex(uriInput.StrategyID)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Errorf(bkerrs.ErrCodeInvalidRequest, "invalid strategy ID"))
+		bkerrs.AbortWithErr(c, errInvalidStrategyID.WithCause(err))
 		return
 	}
 
@@ -199,9 +200,11 @@ func (h *Handler) ListAlertEventsByStrategy(c *gin.Context) {
 		}})
 		return
 	}
+	localizedDisplayName := serializer.LocalizeStrategyDisplayName(ctx, rule.StrategyCode, rule.DisplayName)
 	// 当前接口已通过 strategyID 定位到单条 BKMS 本地策略；若调用方还额外传入 alertDisplayName，
 	// 则可先用本地展示名做一次短路过滤。
 	if alertDisplayName := strings.TrimSpace(queryInput.AlertDisplayName); alertDisplayName != "" &&
+		!strings.Contains(localizedDisplayName, alertDisplayName) &&
 		!strings.Contains(rule.DisplayName, alertDisplayName) {
 		ginutils.OK(c, &serializer.ListAlertEventsResp{Data: &serializer.ListAlertEventsOutput{
 			Count: 0, Results: []*serializer.AlertEventOutput{},
@@ -219,7 +222,7 @@ func (h *Handler) ListAlertEventsByStrategy(c *gin.Context) {
 	}
 
 	results := lo.Map(resp.Alerts, func(a bkmapi.AlertEvent, _ int) *serializer.AlertEventOutput {
-		return serializer.NewAlertEventOutput(a, rule.ID.Hex(), rule.DisplayName)
+		return serializer.NewAlertEventOutput(a, rule.ID.Hex(), localizedDisplayName)
 	})
 	ginutils.OK(c, &serializer.ListAlertEventsResp{Data: &serializer.ListAlertEventsOutput{
 		Count:   resp.Total,
@@ -260,7 +263,10 @@ func (h *Handler) GetAlertDetail(c *gin.Context) {
 		return
 	}
 
-	ginutils.OK(c, serializer.NewGetAlertDetailResp(detail, extractAlertDisplayNameFromAlertDetail(detail)))
+	alertDisplayName := serializer.LocalizeDefaultStrategyDisplayNameByStored(
+		ctx, extractAlertDisplayNameFromAlertDetail(detail),
+	)
+	ginutils.OK(c, serializer.NewGetAlertDetailResp(detail, alertDisplayName))
 }
 
 type alertEventBackfillInfo struct {
@@ -273,6 +279,7 @@ type alertEventBackfillInfo struct {
 // 这里默认同一 app 范围内，一个 remoteStrategyID 只应归属一个本地策略。
 // 返回 remoteStrategyID 到事件列表回填信息的映射，供结果组装时回填本地策略 ID 与展示名。
 func collectRemoteStrategyIDsForAppAlerts(
+	ctx context.Context,
 	rules []alertstrategy.AlertStrategy,
 	alertDisplayName string,
 ) ([]int64, map[int64]alertEventBackfillInfo) {
@@ -281,7 +288,10 @@ func collectRemoteStrategyIDsForAppAlerts(
 	remoteToBKMS := make(map[int64]alertEventBackfillInfo)
 	ids := make([]int64, 0)
 	for _, rule := range rules {
-		if alertDisplayName != "" && !strings.Contains(rule.DisplayName, alertDisplayName) {
+		localizedDisplayName := serializer.LocalizeStrategyDisplayName(ctx, rule.StrategyCode, rule.DisplayName)
+		if alertDisplayName != "" &&
+			!strings.Contains(localizedDisplayName, alertDisplayName) &&
+			!strings.Contains(rule.DisplayName, alertDisplayName) {
 			continue
 		}
 		for _, ref := range rule.RemoteRefs {
@@ -294,7 +304,7 @@ func collectRemoteStrategyIDsForAppAlerts(
 			seen[ref.RemoteStrategyID] = struct{}{}
 			remoteToBKMS[ref.RemoteStrategyID] = alertEventBackfillInfo{
 				StrategyID:       rule.ID.Hex(),
-				AlertDisplayName: rule.DisplayName,
+				AlertDisplayName: localizedDisplayName,
 			}
 			ids = append(ids, ref.RemoteStrategyID)
 		}

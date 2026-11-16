@@ -28,6 +28,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/i18n"
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime"
@@ -97,7 +98,10 @@ func (s *Service) GetTopology(ctx context.Context, appID, envName, trafficLaneNa
 			RootID:      "",
 			GeneratedAt: time.Now().UTC().Format(time.RFC3339),
 			IsPartial:   true,
-			Warnings:    []string{"no resource snapshot data found, please deploy first"},
+			Warnings: []string{i18n.LocalizeOr(
+				ctx, "workload.topology.noResourceSnapshotWarning", nil,
+				"no resource snapshot data found, please deploy first",
+			)},
 			DataVersion: 0,
 		}, nil
 	}
@@ -110,8 +114,11 @@ func (s *Service) GetTopology(ctx context.Context, appID, envName, trafficLaneNa
 
 	if snapshot.RefreshStatus == RefreshStatusFailed {
 		graph.IsPartial = true
-		graph.Warnings = append(graph.Warnings, fmt.Sprintf(
-			"resource snapshot data may be stale (last refresh failed: %s)", snapshot.WarningSummary,
+		graph.Warnings = append(graph.Warnings, i18n.LocalizeOr(
+			ctx,
+			"workload.topology.refreshFailedWarning",
+			map[string]string{"summary": snapshot.WarningSummary},
+			fmt.Sprintf("resource snapshot data may be stale (last refresh failed: %s)", snapshot.WarningSummary),
 		))
 	}
 

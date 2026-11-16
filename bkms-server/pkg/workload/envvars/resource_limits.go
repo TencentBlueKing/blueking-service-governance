@@ -19,8 +19,11 @@
 package envvars
 
 import (
+	"context"
+
 	corev1 "k8s.io/api/core/v1"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/i18n"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/resourcevalue"
 	envvartypes "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars/types"
 )
@@ -28,7 +31,7 @@ import (
 // resourceLimitBuiltinVars builds builtin env vars from a workload resource map.
 // The map value is "{requests}" or "{requests}-{limits}". Both sides are parsed
 // by resourcevalue.ParseResourceBounds; only the original limit text is injected.
-func resourceLimitBuiltinVars(resources map[string]string) envvartypes.EnvVariableList {
+func resourceLimitBuiltinVars(ctx context.Context, resources map[string]string) envvartypes.EnvVariableList {
 	if len(resources) == 0 {
 		return nil
 	}
@@ -36,10 +39,17 @@ func resourceLimitBuiltinVars(resources map[string]string) envvartypes.EnvVariab
 	specs := []struct {
 		resourceName string
 		envName      string
+		descKey      string
 		description  string
 	}{
-		{string(corev1.ResourceCPU), EnvVarNameCPULimit, "The CPU limit configured for the workload"},
-		{string(corev1.ResourceMemory), EnvVarNameMemoryLimit, "The memory limit configured for the workload"},
+		{
+			string(corev1.ResourceCPU), EnvVarNameCPULimit,
+			"workload.envvars.builtin.cpuLimit", "The CPU limit configured for the workload",
+		},
+		{
+			string(corev1.ResourceMemory), EnvVarNameMemoryLimit,
+			"workload.envvars.builtin.memoryLimit", "The memory limit configured for the workload",
+		},
 	}
 
 	vars := make(envvartypes.EnvVariableList, 0, len(specs))
@@ -55,7 +65,7 @@ func resourceLimitBuiltinVars(resources map[string]string) envvartypes.EnvVariab
 		vars = append(vars, envvartypes.EnvVariableObj{
 			Key:         spec.envName,
 			Value:       bounds.Limit,
-			Description: spec.description,
+			Description: i18n.LocalizeOr(ctx, spec.descKey, nil, spec.description),
 			IsBuiltin:   true,
 		})
 	}

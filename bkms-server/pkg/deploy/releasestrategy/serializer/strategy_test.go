@@ -19,6 +19,7 @@
 package serializer_test
 
 import (
+	"context"
 	"encoding/json"
 	"strings"
 	"time"
@@ -30,6 +31,7 @@ import (
 	"github.com/samber/lo"
 	"go.mongodb.org/mongo-driver/v2/bson"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/i18n"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/releasestrategy"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/releasestrategy/serializer"
 )
@@ -121,7 +123,7 @@ var _ = Describe("ReleaseStrategyOutputObj", func() {
 	It("marks builtin strategies and leaves their audit fields empty", func() {
 		builtin := releasestrategy.BuiltinStrategies()[0]
 		builtin.WorkspaceID = "demo-space"
-		output := new(serializer.ReleaseStrategyOutputObj).FromModel(builtin)
+		output := new(serializer.ReleaseStrategyOutputObj).FromModel(context.Background(), builtin)
 
 		Expect(output.ID).To(Equal(builtin.ID.Hex()))
 		Expect(output.IsBuiltin).To(BeTrue())
@@ -138,18 +140,32 @@ var _ = Describe("ReleaseStrategyOutputObj", func() {
 		Expect(string(raw)).To(ContainSubstring(`"isBuiltin":true`))
 	})
 
+	It("localizes builtin strategy names in English context", func() {
+		enCtx := i18n.WithLang(context.Background(), i18n.LangEN)
+		builtins := releasestrategy.BuiltinStrategies()
+		Expect(new(serializer.ReleaseStrategyOutputObj).FromModel(enCtx, builtins[0]).Name).
+			To(Equal("3-Batch Canary (1 pod, 50%, 100%)"))
+		Expect(new(serializer.ReleaseStrategyOutputObj).FromModel(enCtx, builtins[1]).Name).
+			To(Equal("4-Batch Canary (1 pod, 33%, 66%, 100%)"))
+		Expect(new(serializer.ReleaseStrategyOutputObj).FromModel(enCtx, builtins[2]).Name).
+			To(Equal("5-Batch Canary (1 pod, 25%, 50%, 75%, 100%)"))
+	})
+
 	It("keeps ownership and audit fields of custom strategies", func() {
 		createdAt := time.Date(2026, 10, 22, 2, 0, 0, 0, time.UTC)
-		output := new(serializer.ReleaseStrategyOutputObj).FromModel(releasestrategy.ReleaseStrategy{
-			ID:          bson.NewObjectID(),
-			WorkspaceID: "demo-space",
-			Name:        "careful",
-			Batches:     []releasestrategy.Batch{{Target: "1", PauseMode: releasestrategy.PauseModeNone}},
-			Creator:     "admin",
-			CreatedAt:   createdAt,
-			Updater:     "operator",
-			UpdatedAt:   createdAt.Add(time.Hour),
-		})
+		output := new(serializer.ReleaseStrategyOutputObj).FromModel(
+			context.Background(),
+			releasestrategy.ReleaseStrategy{
+				ID:          bson.NewObjectID(),
+				WorkspaceID: "demo-space",
+				Name:        "careful",
+				Batches:     []releasestrategy.Batch{{Target: "1", PauseMode: releasestrategy.PauseModeNone}},
+				Creator:     "admin",
+				CreatedAt:   createdAt,
+				Updater:     "operator",
+				UpdatedAt:   createdAt.Add(time.Hour),
+			},
+		)
 
 		Expect(output.IsBuiltin).To(BeFalse())
 		Expect(output.WorkspaceID).To(Equal("demo-space"))

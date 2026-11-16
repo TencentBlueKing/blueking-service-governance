@@ -16,7 +16,7 @@ assert {
 
 tests {
   test("should return not found after deleting env lifecycle override", () => {
-    expect(res.body.error.message).to.contains("lifecycle not found");
+    expect(res.body.error.details[0].code).to.equal("WORKLOAD_APPSPEC_ENV_SECTION_NOT_FOUND");
   });
 }
 

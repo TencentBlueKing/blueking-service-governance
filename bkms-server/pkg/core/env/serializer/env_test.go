@@ -19,6 +19,7 @@
 package serializer_test
 
 import (
+	"context"
 	"encoding/json"
 	"time"
 
@@ -27,6 +28,7 @@ import (
 	. "github.com/onsi/gomega"
 	"go.mongodb.org/mongo-driver/v2/bson"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/i18n"
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/serializer"
@@ -73,7 +75,7 @@ var _ = Describe("Env output serializers", func() {
 				Status:      envmodel.EnvStatusReady,
 			}
 
-			output := new(serializer.EnvOutput).FromModel(env)
+			output := new(serializer.EnvOutput).FromModel(context.Background(), env)
 
 			Expect(output.ID).To(Equal(envIDHex))
 			Expect(output.Name).To(Equal("dev"))
@@ -112,7 +114,7 @@ var _ = Describe("Env output serializers", func() {
 				Status: envmodel.EnvStatusNotReady,
 			}
 
-			output := new(serializer.EnvOutput).FromModel(env)
+			output := new(serializer.EnvOutput).FromModel(context.Background(), env)
 			payload, err := json.Marshal(output)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(payload).To(MatchJSON(`{
@@ -133,6 +135,24 @@ var _ = Describe("Env output serializers", func() {
 				"appIDs": [],
 				"kind": "standard"
 			}`))
+		})
+		It("localizes default env displayName only when unchanged by user", func() {
+			defaultEnv := envmodel.Environment{
+				ID:          envID,
+				Name:        "test",
+				DisplayName: "测试环境",
+				Type:        "test",
+			}
+			enCtx := i18n.WithLang(context.Background(), i18n.LangEN)
+			Expect(new(serializer.EnvOutput).FromModel(enCtx, defaultEnv).DisplayName).To(Equal("Test Environment"))
+
+			customEnv := envmodel.Environment{
+				ID:          envID,
+				Name:        "test",
+				DisplayName: "我的测试环境",
+				Type:        "test",
+			}
+			Expect(new(serializer.EnvOutput).FromModel(enCtx, customEnv).DisplayName).To(Equal("我的测试环境"))
 		})
 	})
 
@@ -170,6 +190,7 @@ var _ = Describe("Env output serializers", func() {
 			}
 
 			output := serializer.NewListFeatureEnvsOutput(
+				context.Background(),
 				[]envmodel.Environment{featureEnv},
 				map[string]*envmodel.Environment{featureEnv.Name: sourceEnv},
 				nil,
@@ -201,6 +222,7 @@ var _ = Describe("Env output serializers", func() {
 
 		It("keeps the source ID and marks a deleted source explicitly", func() {
 			output := serializer.NewListFeatureEnvsOutput(
+				context.Background(),
 				[]envmodel.Environment{featureEnv},
 				map[string]*envmodel.Environment{},
 				nil,
@@ -214,7 +236,7 @@ var _ = Describe("Env output serializers", func() {
 		})
 
 		It("returns an empty JSON array when the app has no feature environments", func() {
-			output := serializer.NewListFeatureEnvsOutput(nil, nil, nil)
+			output := serializer.NewListFeatureEnvsOutput(context.Background(), nil, nil, nil)
 
 			payload, err := json.Marshal(output)
 			Expect(err).NotTo(HaveOccurred())
@@ -223,6 +245,7 @@ var _ = Describe("Env output serializers", func() {
 
 		It("includes deploy status only when the caller asks for it", func() {
 			output := serializer.NewListFeatureEnvsOutput(
+				context.Background(),
 				[]envmodel.Environment{featureEnv},
 				map[string]*envmodel.Environment{},
 				map[string][]status.AppDeployStatus{
@@ -266,6 +289,7 @@ var _ = Describe("Env output serializers", func() {
 
 		It("returns an empty deployStatuses array when status query is requested but nothing is deployed", func() {
 			output := serializer.NewListFeatureEnvsOutput(
+				context.Background(),
 				[]envmodel.Environment{featureEnv},
 				map[string]*envmodel.Environment{},
 				map[string][]status.AppDeployStatus{},
@@ -326,7 +350,7 @@ var _ = Describe("Env output serializers", func() {
 				},
 			}
 
-			output := new(serializer.EnvDetailOutput).FromModel(env, deployStatuses)
+			output := new(serializer.EnvDetailOutput).FromModel(context.Background(), env, deployStatuses)
 
 			Expect(output.ID).To(Equal(envIDHex))
 			Expect(output.Creator).To(Equal("admin"))
@@ -354,7 +378,7 @@ var _ = Describe("Env output serializers", func() {
 				AppIDs:      []string{},
 			}
 
-			output := new(serializer.EnvDetailOutput).FromModel(env, nil)
+			output := new(serializer.EnvDetailOutput).FromModel(context.Background(), env, nil)
 			Expect(output.AppDeployStatuses).To(BeEmpty())
 		})
 	})

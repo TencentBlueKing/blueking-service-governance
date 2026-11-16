@@ -1,0 +1,310 @@
+# 工作负载（pkg/workload）
+APP_MODEL_NOT_FOUND:
+  zh: "应用模型不存在"
+  en: "Application model not found"
+
+# 4xx 错误：envvars
+WORKLOAD_ENVVARS_ENV_FILE_REQUIRED:
+  zh: "请上传环境变量文件"
+  en: "Env file is required"
+WORKLOAD_ENVVARS_READ_ENV_FILE_FAILED:
+  zh: "读取上传的环境变量文件失败"
+  en: "Failed to read uploaded env file"
+WORKLOAD_ENVVARS_ENV_FILE_EMPTY:
+  zh: "环境变量文件不能为空"
+  en: "Env file must not be empty"
+WORKLOAD_ENVVARS_ENV_FILE_TOO_LARGE:
+  zh: "环境变量文件大小不能超过 {{.maxBytes}} 字节"
+  en: "Env file must not exceed {{.maxBytes}} bytes"
+WORKLOAD_ENVVARS_OPEN_ENV_FILE_FAILED:
+  zh: "打开上传的环境变量文件失败"
+  en: "Failed to open uploaded env file"
+WORKLOAD_ENVVARS_ENV_FILE_CONTENT_INVALID:
+  zh: "环境变量文件内容校验失败"
+  en: "Env file content validation failed"
+WORKLOAD_ENVVARS_UNSUPPORTED_EXPORT_SCOPE:
+  zh: "不支持的导出范围：{{.scope}}"
+  en: "Unsupported export scope: {{.scope}}"
+WORKLOAD_ENVVARS_EXPORT_ENV_NAME_REQUIRED:
+  zh: "当导出范围为 {{.scope}} 时，环境名称不能为空"
+  en: "envName is required when scope={{.scope}}"
+WORKLOAD_ENVVARS_INVALID_SCOPE:
+  zh: "环境变量作用域不合法"
+  en: "Invalid scoped env var scope"
+WORKLOAD_ENVVARS_INVALID_SCOPED_ENV_VAR_ID:
+  zh: "作用域环境变量 ID {{.scopedEnvVarID}} 格式无效"
+  en: "Invalid scoped env var ID {{.scopedEnvVarID}}"
+WORKLOAD_ENVVARS_SCOPED_ENV_VAR_NOT_FOUND:
+  zh: "作用域环境变量 {{.scopedEnvVarID}} 不存在"
+  en: "Scoped env var {{.scopedEnvVarID}} not found"
+WORKLOAD_ENVVARS_SENSITIVE_IMMUTABLE:
+  zh: "敏感环境变量不允许修改为非敏感"
+  en: "Sensitive env var cannot be changed to non-sensitive"
+WORKLOAD_ENVVARS_APP_ENV_VAR_KEY_EXISTS:
+  zh: "应用环境变量 {{.key}} 已存在"
+  en: "App env var {{.key}} already exists"
+WORKLOAD_ENVVARS_APP_ENV_VAR_NOT_FOUND:
+  zh: "应用环境变量 {{.key}} 不存在"
+  en: "App env var {{.key}} not found"
+WORKLOAD_ENVVARS_APP_TYPE_UNSUPPORTED:
+  zh: "应用类型 {{.appType}} 不支持应用自定义环境变量"
+  en: "App type {{.appType}} does not support app-defined env vars"
+
+# 4xx 错误：networking
+WORKLOAD_NETWORKING_SERVICE_ALREADY_EXISTS:
+  zh: "服务 {{.name}} 已存在"
+  en: "Service {{.name}} already exists"
+WORKLOAD_NETWORKING_INVALID_SERVICE:
+  zh: "服务配置校验失败"
+  en: "Invalid service configuration"
+WORKLOAD_NETWORKING_SERVICE_NOT_FOUND:
+  zh: "服务 {{.name}} 不存在"
+  en: "Service {{.name}} not found"
+
+# 4xx 错误：appmodelcore (appspec / appdefaults)
+WORKLOAD_APPSPEC_VALIDATION_FAILED:
+  zh: "应用配置校验失败"
+  en: "App spec {{.section}} validation failed"
+WORKLOAD_APPSPEC_ENV_SECTION_NOT_FOUND:
+  zh: "环境 {{.envName}} 的应用配置不存在"
+  en: "Env {{.envName}} {{.section}} configuration not found"
+WORKLOAD_APPSPEC_INVALID_ENV_SECTION:
+  zh: "环境 {{.envName}} 的应用配置参数无效"
+  en: "Invalid env {{.envName}} {{.section}} configuration"
+WORKLOAD_APPDEFAULTS_INVALID_RULE_ID:
+  zh: "规则 ID {{.ruleID}} 格式无效"
+  en: "Invalid rule ID {{.ruleID}}"
+WORKLOAD_APPDEFAULTS_RULE_NOT_FOUND:
+  zh: "应用默认配置规则不存在"
+  en: "Application default rule not found"
+WORKLOAD_APPDEFAULTS_INVALID_RULE:
+  zh: "应用默认配置规则不合法"
+  en: "Invalid application default rule"
+WORKLOAD_APPDEFAULTS_RULE_CONFLICT:
+  zh: "所选环境类型下已存在应用默认配置规则"
+  en: "Application default rule already exists for the selected environment type"
+
+# 4xx 错误：image
+WORKLOAD_IMAGE_REPO_NOT_FOUND:
+  zh: "镜像仓库为空或不存在"
+  en: "Image repository is empty or not found"
+WORKLOAD_IMAGE_PROMOTE_TAG_NOT_FOUND:
+  zh: "应用 {{.appID}} 的镜像列表中未找到标签 {{.tag}}，如果是刚推送的镜像请先刷新列表"
+  en: "Image tag {{.tag}} not found in app {{.appID}} images, please refresh images first if it was just pushed"
+WORKLOAD_IMAGE_TAG_NOT_FOUND:
+  zh: "应用 {{.appID}} 中未找到镜像标签 {{.tag}}"
+  en: "Image tag {{.tag}} not found in app {{.appID}}"
+WORKLOAD_IMAGE_RUNTIME_IMAGE_NOT_FOUND:
+  zh: "平台运行时镜像 {{.imageID}} 不存在"
+  en: "Runtime image {{.imageID}} not found"
+WORKLOAD_IMAGE_CUSTOM_IMAGE_NAME_NOT_FOUND:
+  zh: "生效镜像源中不存在镜像 {{.imageName}}"
+  en: "Custom runtime image {{.imageName}} not found in registry"
+WORKLOAD_IMAGE_CUSTOM_RUNTIME_IMAGE_NOT_FOUND:
+  zh: "工作空间下不存在自定义镜像 {{.imageName}}"
+  en: "Custom runtime image {{.imageName}} not found in workspace"
+WORKLOAD_IMAGE_CUSTOM_REGISTRY_ACCESS_DENIED:
+  zh: "访问工作空间镜像源鉴权失败，请检查镜像源凭证"
+  en: "Registry authentication failed, please check the workspace image registry credential"
+WORKLOAD_IMAGE_WORKSPACE_REGISTRY_UNBOUND:
+  zh: "工作空间尚未绑定镜像源"
+  en: "Workspace image registry is not bound"
+WORKLOAD_IMAGE_NOT_IN_WORKSPACE_REGISTRY:
+  zh: "镜像 {{.imageName}} 不在工作空间生效镜像源路径下"
+  en: "Image {{.imageName}} does not belong to the workspace image registry"
+
+# 4xx 错误：instance
+WORKLOAD_INSTANCE_INVALID_APP_TYPE:
+  zh: "应用类型 {{.appType}} 不支持实例管理"
+  en: "Invalid app type: {{.appType}}"
+WORKLOAD_INSTANCE_DEPLOY_ENV_NO_PERMISSION:
+  zh: "无环境 {{.envName}} 的部署权限"
+  en: "No permission to deploy environment {{.envName}}"
+WORKLOAD_INSTANCE_POLARIS_UPDATE_EMPTY:
+  zh: "权重与隔离状态不能同时为空"
+  en: "Weight and isolate cannot both be empty"
+WORKLOAD_INSTANCE_PORT_FORWARD_PROD_FORBIDDEN:
+  zh: "生产环境不允许使用端口转发"
+  en: "Port-forward is not allowed in production environment"
+WORKLOAD_INSTANCE_PORT_FORWARD_NO_PERMISSION:
+  zh: "无环境 {{.envName}} 的端口转发权限"
+  en: "Permission denied for port-forward in environment {{.envName}}"
+WORKLOAD_INSTANCE_PORT_FORWARD_WS_UPGRADE_FAILED:
+  zh: "升级端口转发 WebSocket 连接失败"
+  en: "Failed to upgrade port-forward websocket"
+WORKLOAD_INSTANCE_RESOURCE_VERSION_EXPIRED:
+  zh: "实例列表位点已过期，请重新拉取列表"
+  en: "ResourceVersion expired, re-list required"
+WORKLOAD_INSTANCE_ADMIN_CMD_INVALID:
+  zh: "初始化管理命令服务失败，请检查参数或环境配置"
+  en: "Failed to initialize admin command service, please check parameters or environment configuration"
+WORKLOAD_INSTANCE_ALL_WITH_PAGINATION:
+  zh: "all=true 不能与 page 或 pageSize 同时使用"
+  en: "all=true cannot be used together with page or pageSize"
+WORKLOAD_INSTANCE_PAGE_REQUIRED:
+  zh: "page 为必填项"
+  en: "page is required"
+WORKLOAD_INSTANCE_PAGE_SIZE_REQUIRED:
+  zh: "pageSize 为必填项"
+  en: "pageSize is required"
+WORKLOAD_INSTANCE_PAGE_OUT_OF_RANGE:
+  zh: "page 必须在 {{.min}} 到 {{.max}} 之间"
+  en: "page must be between {{.min}} and {{.max}}"
+WORKLOAD_INSTANCE_INVALID_PAGE_SIZE:
+  zh: "pageSize 必须为 5、10、20、50 或 100 之一"
+  en: "pageSize must be one of 5, 10, 20, 50, 100"
+WORKLOAD_INSTANCE_INVALID_IP:
+  zh: "{{.field}} 的值 {{.ip}} 不是合法的 IP 地址"
+  en: "{{.field}} {{.ip}} is not a valid IP address"
+WORKLOAD_INSTANCE_RESOURCE_VERSION_REQUIRED:
+  zh: "resourceVersion 为必填项"
+  en: "resourceVersion is required"
+
+# 展示文本：helmcore/arrangement
+workload.helm.placeholderVar.ARTIFACT_IMAGE:
+  zh: "镜像地址，如：mirrors.tencent.com/bk/myapp:1.0.0"
+  en: "Image address, e.g. mirrors.tencent.com/bk/myapp:1.0.0"
+workload.helm.placeholderVar.ARTIFACT_IMAGE_NAME:
+  zh: "镜像名，如：mirrors.tencent.com/bk/myapp"
+  en: "Image name, e.g. mirrors.tencent.com/bk/myapp"
+workload.helm.placeholderVar.ARTIFACT_IMAGE_TAG:
+  zh: "镜像 Tag，如：1.0.0"
+  en: "Image tag, e.g. 1.0.0"
+workload.helm.placeholderVar.ARTIFACT_IMAGE_REGISTRY:
+  zh: "镜像仓库，如：mirrors.tencent.com"
+  en: "Image registry, e.g. mirrors.tencent.com"
+workload.helm.placeholderVar.ARTIFACT_IMAGE_REPOSITORY:
+  zh: "镜像库，如：bk/myapp"
+  en: "Image repository, e.g. bk/myapp"
+workload.helm.placeholderVar.APP_IMAGE_PULL_SECRET:
+  zh: "镜像拉取密钥，如：myapp-pull-secret"
+  en: "Image pull secret, e.g. myapp-pull-secret"
+workload.helm.arrangement.missingImagePlaceholders:
+  zh: "values.yaml 中缺少镜像占位符"
+  en: "missing image placeholders in values.yaml"
+workload.helm.arrangement.missingIngressDomainPlaceholder:
+  zh: "values.yaml 中缺少 Ingress 域名占位符"
+  en: "missing ingress domain placeholder in values.yaml"
+
+# 展示文本：envvars
+workload.envvars.conflictedDetail:
+  zh: "冲突值为：{{.values}}"
+  en: "Conflicting values: {{.values}}"
+workload.envvars.builtin.podIP:
+  zh: "Pod IP 地址"
+  en: "Pod IP address"
+workload.envvars.builtin.podName:
+  zh: "Pod 名称"
+  en: "Pod name"
+workload.envvars.builtin.nodeIP:
+  zh: "节点 IP 地址"
+  en: "Node IP address"
+workload.envvars.builtin.envType:
+  zh: "环境类型"
+  en: "The type of the environment"
+workload.envvars.builtin.envName:
+  zh: "环境名称"
+  en: "The name of the environment"
+workload.envvars.builtin.envNamespace:
+  zh: "环境配置的命名空间"
+  en: "The namespace configured in the environment"
+workload.envvars.builtin.envCluster:
+  zh: "环境配置的集群 ID"
+  en: "The cluster ID configured in the environment"
+workload.envvars.builtin.appName:
+  zh: "应用名称"
+  en: "The name of the application"
+workload.envvars.builtin.containerName:
+  zh: "容器名称"
+  en: "The name of the container"
+workload.envvars.builtin.cpuLimit:
+  zh: "工作负载配置的 CPU 上限"
+  en: "The CPU limit configured for the workload"
+workload.envvars.builtin.memoryLimit:
+  zh: "工作负载配置的内存上限"
+  en: "The memory limit configured for the workload"
+
+workload.envvars.exportTemplate.header.keyValueFormat:
+  zh: "# - 每个变量使用 KEY=VALUE 格式。"
+  en: "# - Each variable uses KEY=VALUE format."
+workload.envvars.exportTemplate.header.optionalDesc:
+  zh: "# - 可选 # desc: 作用于紧随其后的下一条变量。"
+  en: "# - Optional # desc: applies to the next variable."
+workload.envvars.exportTemplate.header.scopedRequired:
+  zh: "# - 作用域导入必须包含 # scopeType: workspace 或 envType。"
+  en: "# - Scoped import requires # scopeType: workspace or envType."
+workload.envvars.exportTemplate.header.scopeValueRequired:
+  zh: "# - 当 scopeType=envType 时，必须填写 # scopeValue。"
+  en: "# - # scopeValue is required when scopeType=envType."
+workload.envvars.exportTemplate.header.scopeValueOptions:
+  zh: "# - envType 的 scopeValue 可选值为：development、test、staging、production。"
+  en: "# - scopeValue for envType can be: development, test, staging, production."
+workload.envvars.exportTemplate.header.noScopeInEnvApp:
+  zh: "# - 单环境/应用导入请勿添加 # scopeType 或 # scopeValue。"
+  en: "# - Do not add # scopeType or # scopeValue in env/app import."
+workload.envvars.exportTemplate.desc.sharedAcrossEnvs:
+  zh: "在所有环境中共享"
+  en: "shared across all envs"
+workload.envvars.exportTemplate.desc.onlyForDevelopment:
+  zh: "仅用于开发环境"
+  en: "only for development"
+workload.envvars.exportTemplate.desc.onlyForProduction:
+  zh: "仅用于生产环境"
+  en: "only for production"
+workload.envvars.exportTemplate.desc.plainStringValue:
+  zh: "普通字符串值"
+  en: "plain string value"
+workload.envvars.exportTemplate.desc.booleanStyleValue:
+  zh: "布尔风格值"
+  en: "boolean-style value"
+workload.envvars.exportTemplate.desc.numberStyleValue:
+  zh: "数字风格值"
+  en: "number-style value"
+workload.envvars.exportTemplate.desc.valueWithSpaces:
+  zh: "包含空格的值"
+  en: "value with spaces"
+workload.envvars.exportTemplate.desc.emptyStringValue:
+  zh: "空字符串值"
+  en: "empty string value"
+
+# 展示文本：image
+workload.image.snapshot.refreshInProgress:
+  zh: "该镜像仓库的快照正在刷新中"
+  en: "Snapshot refresh for this repository is already in progress"
+workload.image.snapshot.refreshCompletedNoDetailSync:
+  zh: "快照刷新完成，无需同步标签详情"
+  en: "Snapshot refresh completed, no tags need detail sync"
+workload.image.snapshot.refreshCompletedDetailSyncNotSubmitted:
+  zh: "快照刷新完成，但详情同步任务未提交"
+  en: "Snapshot refresh completed, but the detail sync task was not submitted"
+workload.image.snapshot.refreshCompletedDetailSyncStarted:
+  zh: "快照刷新完成，详情同步任务已异步启动"
+  en: "Snapshot refresh completed, and the detail sync task has started asynchronously"
+workload.image.customruntime.registryAuthFailed:
+  zh: "镜像仓库认证失败，请检查工作空间镜像源凭证"
+  en: "registry authentication failed, please check the workspace image registry credential"
+workload.image.customruntime.registryImageNotFound:
+  zh: "镜像仓库中未找到该镜像，请确认镜像是否已推送"
+  en: "image not found in the registry, please check whether the image has been pushed"
+workload.image.customruntime.registryUnreachable:
+  zh: "访问镜像仓库失败，请稍后重试"
+  en: "failed to access the registry, please try again later"
+
+# 展示文本：topology
+workload.topology.noResourceSnapshotWarning:
+  zh: "暂无资源快照数据，请先执行部署"
+  en: "no resource snapshot data found, please deploy first"
+workload.topology.refreshFailedWarning:
+  zh: "资源快照数据可能已过期（上次刷新失败：{{.summary}}）"
+  en: "resource snapshot data may be stale (last refresh failed: {{.summary}})"
+
+# 系统写入的内置作用域环境变量描述（key 中为变量名，见 ScopedEnvVar.LocalizedDescription）
+workload.envvars.scopedBuiltin.BKMS_BKAPM_API.description:
+  zh: "APM gRPC 采集地址"
+  en: "APM gRPC collector endpoint"
+workload.envvars.scopedBuiltin.BKMS_BKAPM_HTTP_API.description:
+  zh: "APM HTTP 采集地址"
+  en: "APM HTTP collector endpoint"
+workload.envvars.scopedBuiltin.BKMS_BKAPM_TOKEN.description:
+  zh: "APM 采集 token"
+  en: "APM collector token"

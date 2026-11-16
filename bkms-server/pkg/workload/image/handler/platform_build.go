@@ -23,7 +23,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/pkg/errors"
-	"github.com/samber/lo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
@@ -31,6 +30,10 @@ import (
 	workloadruntime "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/runtime"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/serializer"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/snapshot"
+)
+
+var errRuntimeImageNotFound = bkerrs.Define(
+	bkerrs.ErrCodeNotFound, "WORKLOAD_IMAGE_RUNTIME_IMAGE_NOT_FOUND", "runtime image not found",
 )
 
 // ListPlatformBuildImages 获取平台通用构建镜像列表
@@ -107,12 +110,13 @@ func (h *Handler) ListPlatformBuildImageTags(c *gin.Context) {
 	imageID := strings.TrimSpace(uriInput.ImageID)
 	runtimeImage, err := store.Of(h.registry.DB, workloadruntime.Meta).GetByID(ctx, imageID)
 	if err != nil {
-		code := lo.Ternary(
-			errors.Is(err, workloadruntime.ErrRuntimeImageNotFound),
-			bkerrs.ErrCodeNotFound,
-			bkerrs.ErrCodeInternalServerError,
-		)
-		bkerrs.AbortWithErr(c, bkerrs.Wrapf(err, code, "get runtime image %s", uriInput.ImageID))
+		if errors.Is(err, workloadruntime.ErrRuntimeImageNotFound) {
+			bkerrs.AbortWithErr(c, errRuntimeImageNotFound.With("imageID", uriInput.ImageID).WithCause(err))
+			return
+		}
+		bkerrs.AbortWithErr(c, bkerrs.Wrapf(
+			err, bkerrs.ErrCodeInternalServerError, "get runtime image %s", uriInput.ImageID,
+		))
 		return
 	}
 

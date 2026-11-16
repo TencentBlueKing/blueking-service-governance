@@ -19,11 +19,13 @@
 package serializer
 
 import (
+	"context"
 	"time"
 
 	"github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/v2/bson"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/i18n"
 	alertstrategy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/bkmonitor/alert/strategy"
 )
 
@@ -230,8 +232,34 @@ type AlertStrategyOutput struct {
 	UpdatedAt          time.Time               `json:"updatedAt"`
 }
 
+// LocalizeStrategyDisplayName 翻译系统默认创建的告警策略展示名（用户修改过则保持原值）
+func LocalizeStrategyDisplayName(ctx context.Context, strategyCode, displayName string) string {
+	if strategyCode == "" {
+		return displayName
+	}
+	return i18n.LocalizeStored(
+		ctx,
+		"observability.bkmonitor.alert.defaultStrategy."+strategyCode+".displayName",
+		nil,
+		displayName,
+	)
+}
+
+// LocalizeDefaultStrategyDisplayNameByStored 按存储的默认中文名称尝试翻译默认告警策略展示名（无 strategyCode 时使用）
+func LocalizeDefaultStrategyDisplayNameByStored(ctx context.Context, displayName string) string {
+	for _, code := range []string{"cpu_limit_usage_high", "memory_limit_usage_high", "pod_restart_frequent"} {
+		if localized := LocalizeStrategyDisplayName(ctx, code, displayName); localized != displayName {
+			return localized
+		}
+	}
+	return displayName
+}
+
 // FromModel 从领域模型转换为输出
-func (o *AlertStrategyOutput) FromModel(strategy alertstrategy.AlertStrategy) *AlertStrategyOutput {
+func (o *AlertStrategyOutput) FromModel(
+	ctx context.Context,
+	strategy alertstrategy.AlertStrategy,
+) *AlertStrategyOutput {
 	envIDs := make([]string, 0, len(strategy.EffectiveScope.EnvIDs))
 	for _, id := range strategy.EffectiveScope.EnvIDs {
 		envIDs = append(envIDs, id.Hex())
@@ -254,7 +282,7 @@ func (o *AlertStrategyOutput) FromModel(strategy alertstrategy.AlertStrategy) *A
 		AppID:         strategy.AppID,
 		AppName:       strategy.AppName,
 		StrategyCode:  strategy.StrategyCode,
-		DisplayName:   strategy.DisplayName,
+		DisplayName:   LocalizeStrategyDisplayName(ctx, strategy.StrategyCode, strategy.DisplayName),
 		MonitorMetric: strategy.MonitorMetric,
 		Severity:      int(strategy.Severity),
 		Threshold: ThresholdConfigInput{

@@ -69,7 +69,7 @@ func (h *Handler) ListAlertStrategies(c *gin.Context) {
 	}
 
 	results := lo.Map(rules, func(r alertstrategy.AlertStrategy, _ int) *serializer.AlertStrategyOutput {
-		return new(serializer.AlertStrategyOutput).FromModel(r)
+		return new(serializer.AlertStrategyOutput).FromModel(ctx, r)
 	})
 	ginutils.OK(c, &serializer.ListAlertStrategiesResp{Data: &serializer.ListAlertStrategiesOutput{
 		Count:   int64(len(results)),
@@ -109,7 +109,7 @@ func (h *Handler) GetAlertStrategy(c *gin.Context) {
 
 	strategyObjID, err := bson.ObjectIDFromHex(uriInput.StrategyID)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Errorf(bkerrs.ErrCodeInvalidRequest, "invalid strategy ID"))
+		bkerrs.AbortWithErr(c, errInvalidStrategyID.WithCause(err))
 		return
 	}
 
@@ -119,7 +119,7 @@ func (h *Handler) GetAlertStrategy(c *gin.Context) {
 		return
 	}
 
-	ginutils.OK(c, &serializer.GetAlertStrategyResp{Data: new(serializer.AlertStrategyOutput).FromModel(*rule)})
+	ginutils.OK(c, &serializer.GetAlertStrategyResp{Data: new(serializer.AlertStrategyOutput).FromModel(ctx, *rule)})
 }
 
 // CreateAlertStrategy 创建告警策略
@@ -162,16 +162,13 @@ func (h *Handler) CreateAlertStrategy(c *gin.Context) {
 	operator := auth.MustGetUser(ctx).ID
 	createReq, parseErr := body.ToCreateReq(app.WorkspaceID, app.ID, app.Name, operator)
 	if parseErr != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Errorf(bkerrs.ErrCodeInvalidRequest, "invalid env IDs"))
+		bkerrs.AbortWithErr(c, errInvalidEnvIDs.WithCause(parseErr))
 		return
 	}
 	rule, err := svc.CreateAndSync(ctx, ws, createReq)
 	if err != nil {
 		if errors.Is(err, alertstrategy.ErrDisplayNameAlreadyExists) {
-			bkerrs.AbortWithErr(c, bkerrs.Errorf(
-				bkerrs.ErrCodeAlreadyExists,
-				"alert strategy displayName already exists in app",
-			))
+			bkerrs.AbortWithErr(c, errAlertStrategyDisplayNameExists.WithCause(err))
 			return
 		}
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "create alert strategy"))
@@ -183,7 +180,10 @@ func (h *Handler) CreateAlertStrategy(c *gin.Context) {
 		audit.WithDataAfter(body), audit.WithWorkspaceID(app.WorkspaceID), audit.WithAppID(app.ID),
 	)
 
-	ginutils.OK(c, &serializer.CreateAlertStrategyResp{Data: new(serializer.AlertStrategyOutput).FromModel(*rule)})
+	ginutils.OK(
+		c,
+		&serializer.CreateAlertStrategyResp{Data: new(serializer.AlertStrategyOutput).FromModel(ctx, *rule)},
+	)
 }
 
 // UpdateAlertStrategy 更新告警策略
@@ -226,7 +226,7 @@ func (h *Handler) UpdateAlertStrategy(c *gin.Context) {
 	operator := auth.MustGetUser(ctx).ID
 	updateReq, parseErr := body.ToUpdateReq(operator)
 	if parseErr != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Errorf(bkerrs.ErrCodeInvalidRequest, "invalid env IDs"))
+		bkerrs.AbortWithErr(c, errInvalidEnvIDs.WithCause(parseErr))
 		return
 	}
 
@@ -234,10 +234,7 @@ func (h *Handler) UpdateAlertStrategy(c *gin.Context) {
 	changed, err := svc.UpdateAndSync(ctx, ws, strategyObjID, updateReq)
 	if err != nil {
 		if errors.Is(err, alertstrategy.ErrDisplayNameAlreadyExists) {
-			bkerrs.AbortWithErr(c, bkerrs.Errorf(
-				bkerrs.ErrCodeAlreadyExists,
-				"alert strategy displayName already exists in app",
-			))
+			bkerrs.AbortWithErr(c, errAlertStrategyDisplayNameExists.WithCause(err))
 			return
 		}
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "update alert strategy"))

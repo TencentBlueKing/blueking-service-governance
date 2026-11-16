@@ -25,32 +25,99 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/releasestrategy"
 )
 
-// APIError 将发布策略与分批发布相关的错误转换为 API 错误，msg 作为错误信息传给 bkerrs.Wrap。
-// 只映射现有 ErrCode，不附加详情码；集群返回的信息保留在错误链中。
-//
-//   - 批次目标值不合法 → INVALID_ARGUMENT
-//   - 策略不存在、Rollout CR 不存在、集群未安装 Rollout → NOT_FOUND
-//   - 策略名称已存在、修改或删除平台内置策略、分批发布进行中、主工作负载不支持、当前状态不满足、
-//     没有进行中的分批发布 → INVALID_REQUEST
-//   - 其他错误（含 Rollout CR 读写失败）→ INTERNAL_SERVER_ERROR
+var (
+	errInvalidBatchTarget = bkerrs.Define(
+		bkerrs.ErrCodeInvalidArgument,
+		"DEPLOY_RELEASE_STRATEGY_INVALID_BATCH_TARGET",
+		"invalid batch target in release strategy",
+	)
+	errReleaseStrategyNotFound = bkerrs.Define(
+		bkerrs.ErrCodeNotFound,
+		"DEPLOY_RELEASE_STRATEGY_NOT_FOUND",
+		"release strategy not found",
+	)
+	errRolloutNotFound = bkerrs.Define(
+		bkerrs.ErrCodeNotFound,
+		"DEPLOY_BATCH_RELEASE_ROLLOUT_NOT_FOUND",
+		"rollout resource not found in cluster",
+	)
+	errRolloutNotInstalled = bkerrs.Define(
+		bkerrs.ErrCodeNotFound,
+		"DEPLOY_BATCH_RELEASE_ROLLOUT_NOT_INSTALLED",
+		"rollout component is not installed in target cluster",
+	)
+	errStrategyNameConflict = bkerrs.Define(
+		bkerrs.ErrCodeInvalidRequest,
+		"DEPLOY_RELEASE_STRATEGY_NAME_CONFLICT",
+		"release strategy name already exists",
+	)
+	errBuiltinStrategyReadOnly = bkerrs.Define(
+		bkerrs.ErrCodeInvalidRequest,
+		"DEPLOY_RELEASE_STRATEGY_BUILTIN_READ_ONLY",
+		"builtin release strategy cannot be modified or deleted",
+	)
+	errBatchReleaseInProgress = bkerrs.Define(
+		bkerrs.ErrCodeInvalidRequest,
+		"DEPLOY_BATCH_RELEASE_IN_PROGRESS",
+		"batch release is in progress",
+	)
+	errWorkloadNotSupported = bkerrs.Define(
+		bkerrs.ErrCodeInvalidRequest,
+		"DEPLOY_BATCH_RELEASE_WORKLOAD_NOT_SUPPORTED",
+		"current workload does not support batch release",
+	)
+	errActionNotAllowed = bkerrs.Define(
+		bkerrs.ErrCodeInvalidRequest,
+		"DEPLOY_BATCH_RELEASE_ACTION_NOT_ALLOWED",
+		"batch release action is not allowed in current state",
+	)
+	errNoBatchReleaseInProgress = bkerrs.Define(
+		bkerrs.ErrCodeInvalidRequest,
+		"DEPLOY_BATCH_RELEASE_NOT_IN_PROGRESS",
+		"no batch release is in progress",
+	)
+	errReleaseSwitching = bkerrs.Define(
+		bkerrs.ErrCodeAborted,
+		"DEPLOY_BATCH_RELEASE_SWITCHING",
+		"batch release is switching to the latest deploy",
+	)
+	errRolloutChanged = bkerrs.Define(
+		bkerrs.ErrCodeAborted,
+		"DEPLOY_BATCH_RELEASE_ROLLOUT_CHANGED",
+		"batch release state has changed",
+	)
+)
+
+// APIError 将发布策略与分批发布相关的错误转换为 API 错误：
+// 4xx 领域错误映射到对应已定义的详情码（保留原错误作为 cause 供 details 排查）；
+// 其余错误（含 Rollout CR 读写失败）以 INTERNAL_SERVER_ERROR 包装返回。
 func APIError(err error, msg string) error {
-	code := bkerrs.ErrCodeInternalServerError
 	switch {
 	case errors.Is(err, releasestrategy.ErrInvalidBatchTarget):
-		code = bkerrs.ErrCodeInvalidArgument
-	case errors.Is(err, releasestrategy.ErrStrategyNotFound),
-		errors.Is(err, ErrRolloutNotFound),
-		errors.Is(err, ErrRolloutNotInstalled):
-		code = bkerrs.ErrCodeNotFound
-	case errors.Is(err, releasestrategy.ErrStrategyNameConflict),
-		errors.Is(err, releasestrategy.ErrBuiltinStrategyReadOnly),
-		errors.Is(err, ErrBatchReleaseInProgress),
-		errors.Is(err, ErrWorkloadNotSupported),
-		errors.Is(err, ErrActionNotAllowed),
-		errors.Is(err, ErrNoBatchReleaseInProgress):
-		code = bkerrs.ErrCodeInvalidRequest
-	case errors.Is(err, ErrReleaseSwitching), errors.Is(err, ErrRolloutChanged):
-		code = bkerrs.ErrCodeAborted
+		return errInvalidBatchTarget.WithCause(err)
+	case errors.Is(err, releasestrategy.ErrStrategyNotFound):
+		return errReleaseStrategyNotFound.WithCause(err)
+	case errors.Is(err, ErrRolloutNotFound):
+		return errRolloutNotFound.WithCause(err)
+	case errors.Is(err, ErrRolloutNotInstalled):
+		return errRolloutNotInstalled.WithCause(err)
+	case errors.Is(err, releasestrategy.ErrStrategyNameConflict):
+		return errStrategyNameConflict.WithCause(err)
+	case errors.Is(err, releasestrategy.ErrBuiltinStrategyReadOnly):
+		return errBuiltinStrategyReadOnly.WithCause(err)
+	case errors.Is(err, ErrBatchReleaseInProgress):
+		return errBatchReleaseInProgress.WithCause(err)
+	case errors.Is(err, ErrWorkloadNotSupported):
+		return errWorkloadNotSupported.WithCause(err)
+	case errors.Is(err, ErrActionNotAllowed):
+		return errActionNotAllowed.WithCause(err)
+	case errors.Is(err, ErrNoBatchReleaseInProgress):
+		return errNoBatchReleaseInProgress.WithCause(err)
+	case errors.Is(err, ErrReleaseSwitching):
+		return errReleaseSwitching.WithCause(err)
+	case errors.Is(err, ErrRolloutChanged):
+		return errRolloutChanged.WithCause(err)
+	default:
+		return errors.Wrap(err, msg)
 	}
-	return bkerrs.Wrap(err, code, msg)
 }

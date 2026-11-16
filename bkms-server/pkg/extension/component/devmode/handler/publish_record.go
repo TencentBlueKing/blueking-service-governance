@@ -20,6 +20,7 @@ package handler
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -35,6 +36,18 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/perm"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
+)
+
+var (
+	errInvalidRecordID = bkerrs.Define(
+		bkerrs.ErrCodeInvalidArgument, "EXTENSION_DEVMODE_INVALID_RECORD_ID", "invalid publish record id",
+	)
+	errEnvsNotFound = bkerrs.Define(
+		bkerrs.ErrCodeNotFound, "EXTENSION_DEVMODE_ENVS_NOT_FOUND", "environments not found",
+	)
+	errInvalidSinceTime = bkerrs.Define(
+		bkerrs.ErrCodeInvalidArgument, "EXTENSION_DEVMODE_INVALID_SINCE_TIME", "invalid since time format",
+	)
 )
 
 // CreateDevModePublishRecords 上报开发模式发布结果。
@@ -180,9 +193,7 @@ func (h *Handler) ListDevModePublishRecords(c *gin.Context) {
 		for _, raw := range input.RecordIDs {
 			id, parseErr := bson.ObjectIDFromHex(raw)
 			if parseErr != nil {
-				bkerrs.AbortWithErr(c, bkerrs.Errorf(
-					bkerrs.ErrCodeInvalidArgument, "invalid record id %q", raw,
-				))
+				bkerrs.AbortWithErr(c, errInvalidRecordID.With("recordID", raw).WithCause(parseErr))
 				return
 			}
 			ids = append(ids, id)
@@ -210,9 +221,7 @@ func (h *Handler) ListDevModePublishRecords(c *gin.Context) {
 			return !ok
 		})
 		if len(notFound) > 0 {
-			bkerrs.AbortWithErr(c, bkerrs.Errorf(
-				bkerrs.ErrCodeNotFound, "environments not found: %v", notFound,
-			))
+			bkerrs.AbortWithErr(c, errEnvsNotFound.With("envs", strings.Join(notFound, ", ")))
 			return
 		}
 		envNames = input.EnvNames
@@ -257,9 +266,7 @@ func parseSince(raw string) (*time.Time, error) {
 	}
 	since, err := time.Parse(time.RFC3339, raw)
 	if err != nil {
-		return nil, bkerrs.Errorf(
-			bkerrs.ErrCodeInvalidArgument, "invalid since %q, expect RFC3339 format", raw,
-		)
+		return nil, errInvalidSinceTime.With("since", raw).WithCause(err)
 	}
 	return &since, nil
 }

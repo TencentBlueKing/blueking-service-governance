@@ -29,9 +29,23 @@ var ErrBSCPDisabled = errors.New("bscp integration is disabled by featureIntegra
 
 const bscpDisabledMsg = "bscp is disabled in current environment"
 
+var (
+	errBSCPNoPermission = Define(
+		ErrCodeNoPermission,
+		ErrDetailCodeBSCPNoPermission,
+		"bscp service permission denied",
+	)
+	errBSCPDisabled         = Define(ErrCodeNotImplemented, ErrDetailCodeBSCPDisabled, bscpDisabledMsg)
+	errBSCPNotFullyReleased = Define(
+		ErrCodeNotFound,
+		ErrDetailCodeNotFullyReleased,
+		"bscp service has no fully released version",
+	)
+)
+
 // WrapBSCPNoPermission wraps a BSCP permission error into the standard API shape.
 func WrapBSCPNoPermission(err error, msg string) *Error {
-	return Wrap(err, ErrCodeNoPermission, msg).SetDetails(
+	return errBSCPNoPermission.WithCause(annotate(err, msg)).SetDetails(
 		NewDetail(
 			ErrDetailCodeBSCPNoPermission,
 			"bscp service permission denied",
@@ -43,7 +57,7 @@ func WrapBSCPNoPermission(err error, msg string) *Error {
 
 // WrapBSCPDisabled 包装为当前环境关闭了 BSCP 对接的错误
 func WrapBSCPDisabled(err error) *Error {
-	return Wrap(err, ErrCodeNotImplemented, bscpDisabledMsg).SetDetails(
+	return errBSCPDisabled.WithCause(err).SetDetails(
 		NewDetail(
 			ErrDetailCodeBSCPDisabled,
 			bscpDisabledMsg,
@@ -55,8 +69,7 @@ func WrapBSCPDisabled(err error) *Error {
 
 // WrapBSCPNotFullyReleased 包装为 BSCP 服务未全量发布错误
 func WrapBSCPNotFullyReleased(err error, bizID, serviceID string) error {
-	wrappedErr := Wrapf(err, ErrCodeNotFound, "no fully released version for service: %s in biz: %s", serviceID, bizID)
-	return wrappedErr.SetDetails(
+	return errBSCPNotFullyReleased.With("bizID", bizID).With("serviceID", serviceID).WithCause(err).SetDetails(
 		NewDetail(
 			ErrDetailCodeNotFullyReleased,
 			fmt.Sprintf("bscp service %s has no fully released version in biz %s", serviceID, bizID),

@@ -152,7 +152,9 @@ func (h *GinHandler) GetPlatWorkspace(c *gin.Context) {
 	item, err := h.service().Get(c.Request.Context(), path.WorkspaceID)
 	if err != nil {
 		if errors.Is(err, bkmsworkspace.ErrWorkspaceNotFound) {
-			bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeNotFound, "platform workspace not found"))
+			bkerrs.AbortWithErr(
+				c, bkmsworkspace.ErrWorkspaceNotFound.With("workspaceID", path.WorkspaceID).WithCause(err),
+			)
 		} else {
 			bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get platform workspace"))
 		}

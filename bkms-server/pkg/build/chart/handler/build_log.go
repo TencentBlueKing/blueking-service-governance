@@ -19,6 +19,9 @@
 package handler
 
 import (
+	"context"
+	"net/http"
+
 	"github.com/gin-gonic/gin"
 	"github.com/pkg/errors"
 
@@ -27,6 +30,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/chart/serializer"
 	buildlog "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/log"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/i18n"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	bkciapi "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bkci"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/perm"
@@ -96,7 +100,7 @@ func (h *Handler) prepareBuildLogDeps(
 ) (*buildLogDeps, error) {
 	var uriInput serializer.BuildLogURIInput
 	if err := c.ShouldBindUri(&uriInput); err != nil {
-		return nil, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "bind uri")
+		return nil, errInvalidBuildLogURIParams.WithCause(err)
 	}
 
 	ctx := c.Request.Context()
@@ -113,12 +117,23 @@ func (h *Handler) prepareBuildLogDeps(
 	record, err := store.Of(h.registry.DB, helmchartbuild.RecordMeta).
 		Get(ctx, helmchartbuild.ByBuild(app.ID, uriInput.BuildID))
 	if err != nil {
-		return nil, bkerrs.Wrap(err, bkerrs.ErrCodeNotFound, "get chart build record")
+		if errors.Is(err, helmchartbuild.ErrRecordNotFound) {
+			return nil, errChartBuildRecordNotFound.
+				With("appID", app.ID).
+				With("buildID", uriInput.BuildID).
+				WithCause(err)
+		}
+		return nil, errors.Wrap(err, "get chart build record")
 	}
 	project, err := store.Of(h.registry.DB, bkciproject.ProjectMeta).
 		Get(ctx, bkciproject.ByWorkspace(record.WorkspaceID))
 	if err != nil {
-		return nil, bkerrs.Wrap(err, bkerrs.ErrCodeNotFound, "get bkci project")
+		if errors.Is(err, bkciproject.ErrProjectNotFound) {
+			return nil, errBKCIProjectNotFound.
+				With("workspaceID", record.WorkspaceID).
+				WithCause(err)
+		}
+		return nil, errors.Wrap(err, "get bkci project")
 	}
 
 	svc := buildlog.NewService()
@@ -154,16 +169,34 @@ func wrapBuildLogHTTPError(err error, query *buildlog.BuildLogQuery) *bkerrs.Err
 	}
 }
 
-func buildLogSSEErrorOutput(err error, query *buildlog.BuildLogQuery) any {
+func buildLogSSEErrorOutput(ctx context.Context, err error, query *buildlog.BuildLogQuery) any {
 	wrappedErr := wrapBuildLogHTTPError(err, query)
+	message := localizeBuildLogSSEMessage(ctx, wrappedErr)
 	details := wrappedErr.Details()
 	return bkerrs.GinErrorOutput{
 		Error: bkerrs.GinError{
 			Code:    wrappedErr.Code(),
-			Message: wrappedErr.Error(),
+			Message: message,
 			System:  bkerrs.SystemName,
 			Module:  bkerrs.ModuleName,
 			Details: details.AsMaps(),
 		},
 	}
+}
+
+func localizeBuildLogSSEMessage(ctx context.Context, wrappedErr *bkerrs.Error) string {
+	if code := wrappedErr.DetailCode(); code != "" {
+		if msg, ok := i18n.Localize(ctx, string(code), wrappedErr.Params()); ok {
+			return msg
+		}
+		if msg, ok := i18n.Localize(ctx, string(wrappedErr.Code()), nil); ok {
+			return msg
+		}
+	}
+	if wrappedErr.Code().AsHTTPStatusCode() >= http.StatusInternalServerError {
+		if msg, ok := i18n.Localize(ctx, string(wrappedErr.Code()), nil); ok {
+			return msg
+		}
+	}
+	return wrappedErr.Error()
 }

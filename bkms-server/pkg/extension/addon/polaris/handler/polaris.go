@@ -32,6 +32,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris/instancestats"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris/serializer"
+	polarisprovider "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/provider/polaris"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/misc/audit"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/perm"
@@ -40,6 +41,74 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars"
 )
+
+var (
+	errPolarisTokenRequired = bkerrs.Define(
+		bkerrs.ErrCodeInvalidRequest,
+		"EXTENSION_POLARIS_TOKEN_REQUIRED",
+		"polarisToken is required when importing existing polaris service",
+	)
+	errConfigNameExists = bkerrs.Define(
+		bkerrs.ErrCodeInvalidRequest,
+		"EXTENSION_POLARIS_CONFIG_NAME_EXISTS",
+		"polaris config name already exists in app",
+	)
+	errConfigNotFound = bkerrs.Define(
+		bkerrs.ErrCodeNotFound,
+		"EXTENSION_POLARIS_CONFIG_NOT_FOUND",
+		"polaris config not found",
+	)
+	errInstancesExist = bkerrs.Define(
+		bkerrs.ErrCodeAlreadyExists,
+		"EXTENSION_POLARIS_INSTANCES_EXIST",
+		"some instances existed in service",
+	)
+	errEnvOutOfScope = bkerrs.Define(
+		bkerrs.ErrCodeInvalidRequest,
+		"EXTENSION_POLARIS_ENV_OUT_OF_SCOPE",
+		"env is not in scope of polaris config and has not been deployed",
+	)
+	errPolarisUnauthorized = bkerrs.Define(
+		bkerrs.ErrCodeInvalidRequest,
+		"EXTENSION_POLARIS_TOKEN_UNAUTHORIZED",
+		"polaris token is invalid or has no write permission",
+	)
+	errPolarisServiceNotFound = bkerrs.Define(
+		bkerrs.ErrCodeInvalidRequest,
+		"EXTENSION_POLARIS_SERVICE_NOT_FOUND",
+		"polaris service not found",
+	)
+	errOperatorEmpty = bkerrs.Define(
+		bkerrs.ErrCodeInvalidRequest,
+		"EXTENSION_POLARIS_OPERATOR_EMPTY",
+		"operator cannot be empty",
+	)
+	errNotManaged = bkerrs.Define(
+		bkerrs.ErrCodeInvalidRequest,
+		"EXTENSION_POLARIS_NOT_MANAGED",
+		"field can only be set for platform-created polaris services",
+	)
+	errClientRequestInvalid = bkerrs.Define(
+		bkerrs.ErrCodeInvalidRequest,
+		"EXTENSION_POLARIS_INVALID_REQUEST",
+		"invalid polaris request",
+	)
+)
+
+func mapClientRequestError(err error) error {
+	switch {
+	case errors.Is(err, polarisprovider.ErrUnauthorized):
+		return errPolarisUnauthorized.WithCause(err)
+	case errors.Is(err, polarisprovider.ErrServiceNotFound):
+		return errPolarisServiceNotFound.WithCause(err)
+	case errors.Is(err, polaris.ErrOperatorEmpty):
+		return errOperatorEmpty.WithCause(err)
+	case errors.Is(err, polaris.ErrNotManaged):
+		return errNotManaged.WithCause(err)
+	default:
+		return errClientRequestInvalid.WithCause(err)
+	}
+}
 
 // Handler handles Gin polaris-config API requests.
 type Handler struct {
@@ -151,10 +220,7 @@ func (h *Handler) CreateAppPolarisConfig(c *gin.Context) {
 
 	polarisToken := lo.FromPtr(jsonInput.PolarisToken)
 	if !jsonInput.CreateNewService && polarisToken == "" {
-		bkerrs.AbortWithErr(c, bkerrs.New(
-			bkerrs.ErrCodeInvalidRequest,
-			"polarisToken is required when importing existing polaris service",
-		))
+		bkerrs.AbortWithErr(c, errPolarisTokenRequired)
 		return
 	}
 
@@ -164,15 +230,11 @@ func (h *Handler) CreateAppPolarisConfig(c *gin.Context) {
 	// 集群同步失败时配置已经落库，仍需记录审计并把失败原因返回给调用方
 	if createErr != nil && !errors.Is(createErr, polaris.ErrClusterSyncFailed) {
 		if errors.Is(createErr, polaris.ErrConfigNameExists) {
-			bkerrs.AbortWithErr(c, bkerrs.Errorf(
-				bkerrs.ErrCodeInvalidRequest,
-				"polaris config name already exists in app(%s)",
-				uriInput.AppID,
-			))
+			bkerrs.AbortWithErr(c, errConfigNameExists.With("appID", uriInput.AppID).WithCause(createErr))
 			return
 		}
 		if polaris.IsClientRequestError(createErr) {
-			bkerrs.AbortWithErr(c, bkerrs.Wrap(createErr, bkerrs.ErrCodeInvalidRequest, createErr.Error()))
+			bkerrs.AbortWithErr(c, mapClientRequestError(createErr))
 			return
 		}
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(createErr, bkerrs.ErrCodeInternalServerError, "create polaris config"))
@@ -235,10 +297,10 @@ func (h *Handler) PatchAppPolarisConfig(c *gin.Context) {
 	existingConfig, err := h.polarisConfigs().Get(ctx, polaris.ByName(app.ID, uriInput.ConfigName))
 	if err != nil {
 		if errors.Is(err, polaris.ErrConfigNotFound) {
-			bkerrs.AbortWithErr(c, bkerrs.Errorf(
-				bkerrs.ErrCodeNotFound,
-				"polaris config(%s) not found in app(%s)", uriInput.ConfigName, uriInput.AppID,
-			))
+			bkerrs.AbortWithErr(
+				c,
+				errConfigNotFound.With("configName", uriInput.ConfigName).With("appID", uriInput.AppID).WithCause(err),
+			)
 			return
 		}
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get polaris config"))
@@ -260,14 +322,17 @@ func (h *Handler) PatchAppPolarisConfig(c *gin.Context) {
 	// 集群同步失败时配置已经落库，仍需记录审计并把失败原因返回给调用方
 	if updateErr != nil && !errors.Is(updateErr, polaris.ErrClusterSyncFailed) {
 		if errors.Is(updateErr, polaris.ErrConfigNotFound) {
-			bkerrs.AbortWithErr(c, bkerrs.Errorf(
-				bkerrs.ErrCodeNotFound,
-				"polaris config(%s) not found in app(%s)", uriInput.ConfigName, uriInput.AppID,
-			))
+			bkerrs.AbortWithErr(
+				c,
+				errConfigNotFound.
+					With("configName", uriInput.ConfigName).
+					With("appID", uriInput.AppID).
+					WithCause(updateErr),
+			)
 			return
 		}
 		if polaris.IsClientRequestError(updateErr) {
-			bkerrs.AbortWithErr(c, bkerrs.Wrap(updateErr, bkerrs.ErrCodeInvalidRequest, updateErr.Error()))
+			bkerrs.AbortWithErr(c, mapClientRequestError(updateErr))
 			return
 		}
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(updateErr, bkerrs.ErrCodeInternalServerError, "update polaris config"))
@@ -331,11 +396,10 @@ func (h *Handler) DeleteAppPolarisConfig(c *gin.Context) {
 	existingConfig, err := h.polarisConfigs().Get(ctx, polaris.ByName(app.ID, uriInput.ConfigName))
 	if err != nil {
 		if errors.Is(err, polaris.ErrConfigNotFound) {
-			bkerrs.AbortWithErr(c, bkerrs.Errorf(
-				bkerrs.ErrCodeNotFound,
-				"polaris config(%s) not found in app(%s)",
-				uriInput.ConfigName, uriInput.AppID,
-			))
+			bkerrs.AbortWithErr(
+				c,
+				errConfigNotFound.With("configName", uriInput.ConfigName).With("appID", uriInput.AppID).WithCause(err),
+			)
 			return
 		}
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get polaris config"))
@@ -344,18 +408,14 @@ func (h *Handler) DeleteAppPolarisConfig(c *gin.Context) {
 
 	if err := service.Delete(ctx, app, existingConfig); err != nil {
 		if strings.Contains(err.Error(), "some instances existed in service") {
-			bkerrs.AbortWithErr(c, bkerrs.Errorf(
-				bkerrs.ErrCodeAlreadyExists,
-				"some instances existed in service, please delete the instances first",
-			))
+			bkerrs.AbortWithErr(c, errInstancesExist.WithCause(err))
 			return
 		}
 		if errors.Is(err, polaris.ErrConfigNotFound) {
-			bkerrs.AbortWithErr(c, bkerrs.Errorf(
-				bkerrs.ErrCodeNotFound,
-				"polaris config(%s) not found in app(%s)",
-				uriInput.ConfigName, uriInput.AppID,
-			))
+			bkerrs.AbortWithErr(
+				c,
+				errConfigNotFound.With("configName", uriInput.ConfigName).With("appID", uriInput.AppID).WithCause(err),
+			)
 			return
 		}
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "delete polaris config"))
@@ -407,11 +467,10 @@ func (h *Handler) ListAppPolarisConfigVars(c *gin.Context) {
 	config, err := h.polarisConfigs().Get(ctx, polaris.ByName(app.ID, uriInput.ConfigName))
 	if err != nil {
 		if errors.Is(err, polaris.ErrConfigNotFound) {
-			bkerrs.AbortWithErr(c, bkerrs.Errorf(
-				bkerrs.ErrCodeNotFound,
-				"polaris config(%s) not found in app(%s)",
-				uriInput.ConfigName, uriInput.AppID,
-			))
+			bkerrs.AbortWithErr(
+				c,
+				errConfigNotFound.With("configName", uriInput.ConfigName).With("appID", uriInput.AppID).WithCause(err),
+			)
 			return
 		}
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get polaris config"))
@@ -503,7 +562,7 @@ func (h *Handler) GetImportedPolarisService(c *gin.Context) {
 	)
 	if err != nil {
 		if polaris.IsClientRequestError(err) {
-			bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, err.Error()))
+			bkerrs.AbortWithErr(c, mapClientRequestError(err))
 			return
 		}
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get imported polaris service"))
@@ -550,7 +609,7 @@ func (h *Handler) UpdateImportedPolaris(c *gin.Context) {
 		ctx, jsonInput.PolarisName, jsonInput.PolarisNamespace, jsonInput.PolarisToken, enabled,
 	); err != nil {
 		if polaris.IsClientRequestError(err) {
-			bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, err.Error()))
+			bkerrs.AbortWithErr(c, mapClientRequestError(err))
 			return
 		}
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "update polaris weight factor"))
@@ -610,11 +669,10 @@ func (h *Handler) PutEnvWeight(c *gin.Context) {
 	config, err := h.polarisConfigs().Get(ctx, polaris.ByName(app.ID, uriInput.ConfigName))
 	if err != nil {
 		if errors.Is(err, polaris.ErrConfigNotFound) {
-			bkerrs.AbortWithErr(c, bkerrs.Errorf(
-				bkerrs.ErrCodeNotFound,
-				"polaris config(%s) not found in app(%s)",
-				uriInput.ConfigName, uriInput.AppID,
-			))
+			bkerrs.AbortWithErr(
+				c,
+				errConfigNotFound.With("configName", uriInput.ConfigName).With("appID", uriInput.AppID).WithCause(err),
+			)
 			return
 		}
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get polaris config"))
@@ -625,11 +683,9 @@ func (h *Handler) PutEnvWeight(c *gin.Context) {
 	// 其中已部署的环境将自动同步到集群，没部署的则存入配置，下发时使用
 	if !config.IsAvailableInEnv(uriInput.EnvName) &&
 		!config.GetEnvState(uriInput.EnvName).IsDeployed() {
-		bkerrs.AbortWithErr(c, bkerrs.Errorf(
-			bkerrs.ErrCodeInvalidRequest,
-			"env(%s) is not in scope of polaris config(%s) and has not been deployed",
-			uriInput.EnvName, uriInput.ConfigName,
-		))
+		bkerrs.AbortWithErr(
+			c, errEnvOutOfScope.With("envName", uriInput.EnvName).With("configName", uriInput.ConfigName),
+		)
 		return
 	}
 
@@ -693,11 +749,10 @@ func (h *Handler) GetEnvInstanceStats(c *gin.Context) {
 	config, err := h.polarisConfigs().Get(ctx, polaris.ByName(app.ID, uriInput.ConfigName))
 	if err != nil {
 		if errors.Is(err, polaris.ErrConfigNotFound) {
-			bkerrs.AbortWithErr(c, bkerrs.Errorf(
-				bkerrs.ErrCodeNotFound,
-				"polaris config(%s) not found in app(%s)",
-				uriInput.ConfigName, uriInput.AppID,
-			))
+			bkerrs.AbortWithErr(
+				c,
+				errConfigNotFound.With("configName", uriInput.ConfigName).With("appID", uriInput.AppID).WithCause(err),
+			)
 			return
 		}
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get polaris config"))

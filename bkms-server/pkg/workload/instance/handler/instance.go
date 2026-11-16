@@ -52,7 +52,21 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/instance/serializer"
 )
 
-var _ instanceroute.Handler = (*Handler)(nil)
+var (
+	_ instanceroute.Handler = (*Handler)(nil)
+
+	errInvalidAppType = bkerrs.Define(
+		bkerrs.ErrCodeInvalidArgument, "WORKLOAD_INSTANCE_INVALID_APP_TYPE", "invalid app type",
+	)
+	errDeployEnvNoPermission = bkerrs.Define(
+		bkerrs.ErrCodeNoPermission, "WORKLOAD_INSTANCE_DEPLOY_ENV_NO_PERMISSION",
+		"no permission to deploy environment",
+	)
+	errPolarisWeightAndIsolateEmpty = bkerrs.Define(
+		bkerrs.ErrCodeInvalidArgument, "WORKLOAD_INSTANCE_POLARIS_UPDATE_EMPTY",
+		"weight and isolate cannot both be empty",
+	)
+)
 
 // Handler handles Gin app instance API requests.
 type Handler struct {
@@ -177,7 +191,7 @@ func (h *Handler) UpdateAppInstances(c *gin.Context) {
 	}
 	// 操作实例（Pod）都需要有部署当前 Env 的权限
 	if err = perm.NewManager().HasDeployEnvPerm(ctx, app.WorkspaceID, uriInput.EnvName); err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeNoPermission, "check deploy env perm"))
+		bkerrs.AbortWithErr(c, errDeployEnvNoPermission.With("envName", uriInput.EnvName).WithCause(err))
 		return
 	}
 
@@ -268,7 +282,7 @@ func (h *Handler) ScaleAppInstances(c *gin.Context) {
 	}
 	// 操作实例（Pod）都需要有部署当前 Env 的权限
 	if err = perm.NewManager().HasDeployEnvPerm(ctx, app.WorkspaceID, uriInput.EnvName); err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeNoPermission, "check deploy env perm"))
+		bkerrs.AbortWithErr(c, errDeployEnvNoPermission.With("envName", uriInput.EnvName).WithCause(err))
 		return
 	}
 
@@ -340,7 +354,7 @@ func (h *Handler) BatchDeleteAppInstances(c *gin.Context) {
 	}
 	// 操作实例（Pod）都需要有部署当前 Env 的权限
 	if err = perm.NewManager().HasDeployEnvPerm(ctx, app.WorkspaceID, uriInput.EnvName); err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeNoPermission, "check deploy env perm"))
+		bkerrs.AbortWithErr(c, errDeployEnvNoPermission.With("envName", uriInput.EnvName).WithCause(err))
 		return
 	}
 
@@ -398,12 +412,12 @@ func (h *Handler) UpdateAppInstancePolaris(c *gin.Context) {
 	}
 	// 操作实例（Pod）都需要有部署当前 Env 的权限
 	if err = perm.NewManager().HasDeployEnvPerm(ctx, app.WorkspaceID, uriInput.EnvName); err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeNoPermission, "check deploy env perm"))
+		bkerrs.AbortWithErr(c, errDeployEnvNoPermission.With("envName", uriInput.EnvName).WithCause(err))
 		return
 	}
 	// weight 和 isolate 至少要设置一个
 	if input.Weight == nil && input.Isolate == nil {
-		bkerrs.AbortWithErr(c, bkerrs.New(bkerrs.ErrCodeInvalidArgument, "weight and isolate cannot both be empty"))
+		bkerrs.AbortWithErr(c, errPolarisWeightAndIsolateEmpty)
 		return
 	}
 
@@ -472,7 +486,7 @@ func (h *Handler) validateEditableAppModel(ctx context.Context, appID string) (*
 	}
 	// 目前只支持操作 AppModel 类型应用实例
 	if !appruntime.IsAppModelType(app.Type) {
-		return nil, bkerrs.Errorf(bkerrs.ErrCodeInvalidArgument, "invalid app type: %s", app.Type)
+		return nil, errInvalidAppType.With("appType", app.Type)
 	}
 	return app, nil
 }

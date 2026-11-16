@@ -41,12 +41,18 @@ type Error struct {
 	cause error
 	// code 是自定义错误码
 	code ErrCode
+	// detailCode 是稳定的机器可读错误详情码，同时作为 i18n key，仅由 Define 定义的错误携带
+	detailCode ErrDetailCode
+	// params 是错误原因的参数，如重名资源的名称
+	params map[string]string
 	// msg 是错误描述
 	msg string
 	// details 包含错误详情，主要是面向开发者的错误提示
 	details []Detail
 	// stack 是调用栈，包含原始错误出现的位置
 	stack *stack
+	// defined 标记该错误是 Define 返回的定义本身，定义为全局共享，不可原地修改
+	defined bool
 }
 
 // New 新建错误
@@ -75,6 +81,7 @@ func Errorf(code ErrCode, format string, args ...any) *Error {
 
 // Wrap 错误包装
 // 需注意：bkerrs.Wrap() 会覆盖原 bkerrs.Error 的错误码 & 错误详情，若希望避免该行为，则应使用 pkg/errors.Wrap()
+// 新代码不要再使用 bkerrs.Wrap()，按场景改用：仅补充上下文用 pkg/errors.Wrap()；需要定码用 Define 定义的错误；在边界上改判用 WithCause
 //
 // 使用示例:
 //
@@ -90,6 +97,7 @@ func Wrap(cause error, code ErrCode, msg string) *Error {
 
 // Wrapf 错误包装（支持字符串 format）
 // 需注意：bkerrs.Wrapf() 会覆盖原 bkerrs.Error 的错误码 & 错误详情，若希望避免该行为，则应使用 pkg/errors.Wrapf()
+// 新代码不要再使用 bkerrs.Wrapf()，按场景改用：仅补充上下文用 pkg/errors.Wrapf()；需要定码用 Define 定义的错误；在边界上改判用 WithCause
 //
 // 使用示例:
 //
@@ -102,6 +110,14 @@ func Wrap(cause error, code ErrCode, msg string) *Error {
 // 返回: [INTERNAL_SERVER_ERROR] 删除工作空间 my-workspace 失败: original db error message
 func Wrapf(cause error, code ErrCode, format string, args ...any) *Error {
 	return newErr(cause, code, fmt.Sprintf(format, args...))
+}
+
+// annotate 为 err 补充上下文，err 为 nil 时以 msg 作为错误
+func annotate(err error, msg string) error {
+	if err == nil {
+		return fmt.Errorf("%s", msg)
+	}
+	return fmt.Errorf("%s: %w", msg, err)
 }
 
 // newErr 新建错误
@@ -118,6 +134,9 @@ func newErr(cause error, code ErrCode, msg string) *Error {
 // Error 返回错误信息
 func (e *Error) Error() string {
 	msg := e.msg
+	if len(e.params) > 0 {
+		msg = msg + " (" + formatParams(e.params) + ")"
+	}
 	if e.cause != nil {
 		msg = msg + ": " + e.cause.Error()
 	}
@@ -149,13 +168,19 @@ func (e *Error) Code() ErrCode {
 	return e.code
 }
 
-// Details 返回错误详情
+// Details 返回错误详情；未显式设置时，由 Define 定义的错误会根据 detailCode 与 params 生成一条
 func (e *Error) Details() Details {
-	return e.details
+	if len(e.details) > 0 || e.detailCode == "" {
+		return e.details
+	}
+	return Details{{code: e.detailCode, msg: e.msg, system: SystemName, extras: e.Params()}}
 }
 
-// SetDetails 设置错误详情（全量替换）
+// SetDetails 设置错误详情（全量替换）；对 Define 返回的定义调用时返回副本，不修改定义本身
 func (e *Error) SetDetails(details ...Detail) *Error {
+	if e.defined {
+		e = e.clone()
+	}
 	e.details = details
 	return e
 }

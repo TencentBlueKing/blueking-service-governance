@@ -1,0 +1,47 @@
+# 平台管理（pkg/platmgt）
+PLATMGT_ADMIN_PERMISSION_REQUIRED:
+  zh: "需要平台管理员权限"
+  en: "Platform administrator permission required"
+PLATMGT_ADMIN_INVALID_ROLE_CODE:
+  zh: "平台管理员角色编码不合法"
+  en: "Invalid platform administrator role code"
+PLATMGT_ADMIN_ROLE_BINDING_EXISTS:
+  zh: "该用户的平台管理员角色绑定已存在"
+  en: "Platform administrator role binding already exists"
+
+PLATMGT_WORKSPACE_ADMIN_ALREADY_EXISTS:
+  zh: "已拥有该工作空间的管理员权限"
+  en: "Workspace administrator permission already exists"
+PLATMGT_WORKSPACE_ADMIN_NOT_FOUND:
+  zh: "未找到该工作空间的管理员权限"
+  en: "Workspace administrator permission not found"
+PLATMGT_TEMP_ADMIN_ALREADY_EXISTS:
+  zh: "已存在有效的临时管理员授权"
+  en: "Temporary administrator grant already exists"
+
+PLATMGT_IMAGE_REGISTRY_INVALID_ADDRESS:
+  zh: "镜像仓库地址不合法，应为不含协议前缀的 host/namespace"
+  en: "Invalid image registry address, expected host/namespace without a protocol prefix"
+PLATMGT_IMAGE_REGISTRY_PASSWORD_REQUIRED:
+  zh: "请填写镜像仓库密码"
+  en: "Image registry password is required"
+PLATMGT_BUILTIN_IMAGE_REGISTRY_NOT_FOUND:
+  zh: "未找到平台内置镜像仓库配置"
+  en: "Builtin image registry not found"
+PLATMGT_IMAGE_REGISTRY_AUTH_FAILED:
+  zh: "镜像仓库认证失败或缺少推送权限"
+  en: "Image registry authentication failed or push permission denied"
+PLATMGT_IMAGE_REGISTRY_NAMESPACE_INACCESSIBLE:
+  zh: "镜像仓库命名空间不存在或无权访问"
+  en: "Image registry namespace does not exist or is inaccessible"
+PLATMGT_IMAGE_REGISTRY_UNREACHABLE:
+  zh: "镜像仓库不可达"
+  en: "Image registry is unreachable"
+PLATMGT_IMAGE_REGISTRY_CREDENTIAL_CREATE_FAILED:
+  zh: "创建蓝盾镜像凭证失败"
+  en: "Failed to create BKCI image credential"
+
+# 展示文本
+platmgt.admin.role.admin:
+  zh: "平台管理员"
+  en: "Platform Administrator"

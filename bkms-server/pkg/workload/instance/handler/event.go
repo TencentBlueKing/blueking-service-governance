@@ -19,10 +19,9 @@
 package handler
 
 import (
-	"errors"
-
 	"github.com/TencentBlueKing/gopkg/mapx"
 	"github.com/gin-gonic/gin"
+	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 
@@ -93,7 +92,11 @@ func (h *Handler) ListEvents(c *gin.Context) {
 	// 获取环境信息，用于获取 BCS 项目 Code
 	env, err := h.envs().Get(ctx, envmodel.AppEnvByName(app.WorkspaceID, app.ID, uriInput.EnvName))
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeNotFound, "get env by name"))
+		if errors.Is(err, envmodel.ErrEnvNotFound) {
+			bkerrs.AbortWithErr(c, envmodel.ErrEnvNotFound.With("envName", uriInput.EnvName).WithCause(err))
+			return
+		}
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "get env by name"))
 		return
 	}
 

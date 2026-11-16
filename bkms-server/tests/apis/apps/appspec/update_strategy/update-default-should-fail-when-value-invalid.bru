@@ -26,7 +26,7 @@ assert {
 
 tests {
   test("should return error when maxUnavailable is invalid", () => {
-    expect(res.body.error.message).to.contains("int_or_percent_gte0");
+    expect(res.body.error.details[0].message).to.contains("int_or_percent_gte0");
   });
 }
 

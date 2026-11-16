@@ -27,7 +27,7 @@ tests {
   test("should reject unknown release strategy before deploying", () => {
     expect(res.body.error).to.be.an("object");
     expect(res.body.error.code).to.equal("NOT_FOUND");
-    expect(res.body.error.message).to.include("release strategy not found");
+    expect(res.body.error.details[0].code).to.equal("DEPLOY_RELEASE_STRATEGY_NOT_FOUND");
   });
 }
 

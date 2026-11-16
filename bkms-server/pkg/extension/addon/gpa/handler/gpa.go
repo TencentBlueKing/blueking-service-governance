@@ -33,6 +33,19 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
+var (
+	errFederationNotSupported = bkerrs.Define(
+		bkerrs.ErrCodeInvalidRequest,
+		"EXTENSION_GPA_FEDERATION_NOT_SUPPORTED",
+		"gpa is not supported in federation environment",
+	)
+	errConfigNotFound = bkerrs.Define(
+		bkerrs.ErrCodeNotFound,
+		"EXTENSION_GPA_CONFIG_NOT_FOUND",
+		"gpa config not found",
+	)
+)
+
 // Handler handles Gin GPA config API requests.
 type Handler struct {
 	registry *storereg.Registry
@@ -59,7 +72,7 @@ func abortWithGPAApplyError(c *gin.Context, clusterID string, err error) {
 	}
 	switch {
 	case errors.Is(err, gpa.ErrFederationNotSupported):
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, "apply gpa CR"))
+		bkerrs.AbortWithErr(c, errFederationNotSupported.WithCause(err))
 	case errors.Is(err, gpa.ErrComponentNotInstalled):
 		bkerrs.AbortWithErr(c, bkerrs.WrapComponentsNotInstalled(err, []string{gpa.ClusterAddonName}, clusterID))
 	default:
@@ -98,11 +111,9 @@ func (h *Handler) GetAppEnvGPAConfig(c *gin.Context) {
 	config, err := h.gpaConfigs().Get(ctx, gpa.ByAppAndEnv(uriInput.AppID, uriInput.EnvName))
 	if err != nil {
 		if errors.Is(err, gpa.ErrConfigNotFound) {
-			bkerrs.AbortWithErr(c, bkerrs.Errorf(
-				bkerrs.ErrCodeNotFound,
-				"gpa config not found for app(%s) env(%s)",
-				uriInput.AppID, uriInput.EnvName,
-			))
+			bkerrs.AbortWithErr(
+				c, errConfigNotFound.With("appID", uriInput.AppID).With("envName", uriInput.EnvName).WithCause(err),
+			)
 			return
 		}
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get gpa config"))
@@ -155,11 +166,7 @@ func (h *Handler) UpsertAppEnvGPAConfig(c *gin.Context) {
 		return
 	}
 	if env.Cluster.IsFederation {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(
-			gpa.ErrFederationNotSupported,
-			bkerrs.ErrCodeInvalidRequest,
-			"gpa is not supported in federation environment",
-		))
+		bkerrs.AbortWithErr(c, errFederationNotSupported.WithCause(gpa.ErrFederationNotSupported))
 		return
 	}
 
@@ -248,11 +255,9 @@ func (h *Handler) DeleteAppEnvGPAConfig(c *gin.Context) {
 	before, err := h.gpaConfigs().Get(ctx, gpa.ByAppAndEnv(uriInput.AppID, uriInput.EnvName))
 	if err != nil {
 		if errors.Is(err, gpa.ErrConfigNotFound) {
-			bkerrs.AbortWithErr(c, bkerrs.Errorf(
-				bkerrs.ErrCodeNotFound,
-				"gpa config not found for app(%s) env(%s)",
-				uriInput.AppID, uriInput.EnvName,
-			))
+			bkerrs.AbortWithErr(
+				c, errConfigNotFound.With("appID", uriInput.AppID).With("envName", uriInput.EnvName).WithCause(err),
+			)
 			return
 		}
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get gpa config"))
@@ -319,11 +324,9 @@ func (h *Handler) ToggleAppEnvGPAConfig(c *gin.Context) {
 	before, err := h.gpaConfigs().Get(ctx, gpa.ByAppAndEnv(uriInput.AppID, uriInput.EnvName))
 	if err != nil {
 		if errors.Is(err, gpa.ErrConfigNotFound) {
-			bkerrs.AbortWithErr(c, bkerrs.Errorf(
-				bkerrs.ErrCodeNotFound,
-				"gpa config not found for app(%s) env(%s)",
-				uriInput.AppID, uriInput.EnvName,
-			))
+			bkerrs.AbortWithErr(
+				c, errConfigNotFound.With("appID", uriInput.AppID).With("envName", uriInput.EnvName).WithCause(err),
+			)
 			return
 		}
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get gpa config"))

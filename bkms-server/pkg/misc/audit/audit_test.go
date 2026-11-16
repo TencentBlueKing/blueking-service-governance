@@ -27,6 +27,7 @@ import (
 	"github.com/samber/lo"
 	"go.mongodb.org/mongo-driver/v2/bson"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/i18n"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
@@ -34,12 +35,14 @@ import (
 var _ = Describe("Audit", func() {
 	Describe("Attribute", func() {
 		It("displays port-forward attribute name", func() {
-			Expect(AttributePortForward.DisplayName()).To(Equal("端口转发"))
+			Expect(AttributePortForward.DisplayName(context.Background())).To(Equal("端口转发"))
+			enCtx := i18n.WithLang(context.Background(), i18n.LangEN)
+			Expect(AttributePortForward.DisplayName(enCtx)).To(Equal("Port Forward"))
 		})
 
 		It("displays app config file attribute name", func() {
 			Expect(AttributeAppConfigFile).To(Equal(Attribute("appConfigFile")))
-			Expect(AttributeAppConfigFile.DisplayName()).To(Equal("配置文件"))
+			Expect(AttributeAppConfigFile.DisplayName(context.Background())).To(Equal("配置文件"))
 		})
 	})
 

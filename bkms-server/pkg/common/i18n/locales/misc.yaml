@@ -1,0 +1,166 @@
+# 杂项模块（pkg/misc）
+
+# 操作审计（pkg/misc/audit）
+MISC_AUDIT_QUERY_INVALID:
+  zh: "查询参数不合法，请检查时间格式是否为 RFC3339"
+  en: "Invalid query parameters, please check that timestamps are in RFC3339 format"
+
+misc.audit.operationType.create:
+  zh: "创建"
+  en: "Create"
+misc.audit.operationType.update:
+  zh: "更新"
+  en: "Update"
+misc.audit.operationType.rollback:
+  zh: "回滚"
+  en: "Rollback"
+misc.audit.operationType.delete:
+  zh: "删除"
+  en: "Delete"
+misc.audit.operationType.build:
+  zh: "构建"
+  en: "Build"
+misc.audit.operationType.deploy:
+  zh: "部署"
+  en: "Deploy"
+misc.audit.operationType.uninstall:
+  zh: "卸载"
+  en: "Uninstall"
+misc.audit.operationType.scale:
+  zh: "扩缩容"
+  en: "Scale"
+misc.audit.operationType.gray:
+  zh: "灰度"
+  en: "Canary"
+misc.audit.operationType.execute:
+  zh: "执行"
+  en: "Execute"
+misc.audit.operationType.publish:
+  zh: "热更新"
+  en: "Hot Reload"
+misc.audit.operationType.restart:
+  zh: "进程重启"
+  en: "Restart Process"
+misc.audit.operationType.continue:
+  zh: "继续发布"
+  en: "Continue Release"
+misc.audit.operationType.pause:
+  zh: "暂停"
+  en: "Pause"
+misc.audit.operationType.backward:
+  zh: "回退上一批"
+  en: "Roll Back Previous Batch"
+misc.audit.operationType.skip:
+  zh: "跳过剩余批次"
+  en: "Skip Remaining Batches"
+
+misc.audit.resourceType.workspace:
+  zh: "工作空间"
+  en: "Workspace"
+misc.audit.resourceType.env:
+  zh: "环境"
+  en: "Environment"
+misc.audit.resourceType.app:
+  zh: "应用"
+  en: "Application"
+misc.audit.resourceType.instance:
+  zh: "应用实例"
+  en: "App Instance"
+misc.audit.resourceType.componentDef:
+  zh: "组件定义"
+  en: "Component Definition"
+misc.audit.resourceType.clusterAddon:
+  zh: "集群插件"
+  en: "Cluster Add-on"
+misc.audit.resourceType.portPool:
+  zh: "端口池"
+  en: "Port Pool"
+misc.audit.resourceType.alertStrategy:
+  zh: "告警策略"
+  en: "Alert Strategy"
+misc.audit.resourceType.dashboard:
+  zh: "仪表盘"
+  en: "Dashboard"
+
+misc.audit.attribute.displayName:
+  zh: "展示名称"
+  en: "Display Name"
+misc.audit.attribute.helmSpec:
+  zh: "Helm 配置"
+  en: "Helm Config"
+misc.audit.attribute.appModel:
+  zh: "应用模型"
+  en: "App Model"
+misc.audit.attribute.appConfigFile:
+  zh: "配置文件"
+  en: "Config File"
+misc.audit.attribute.buildConfig:
+  zh: "构建配置"
+  en: "Build Config"
+misc.audit.attribute.userRole:
+  zh: "空间角色"
+  en: "Workspace Role"
+misc.audit.attribute.appComponents:
+  zh: "应用组件"
+  en: "App Components"
+misc.audit.attribute.workspaceComponent:
+  zh: "空间组件"
+  en: "Workspace Component"
+misc.audit.attribute.workspaceAppSpecDefaults:
+  zh: "应用默认配置"
+  en: "Default App Config"
+misc.audit.attribute.releaseStrategy:
+  zh: "发布策略"
+  en: "Release Strategy"
+misc.audit.attribute.replicas:
+  zh: "副本数"
+  en: "Replicas"
+misc.audit.attribute.instance:
+  zh: "应用实例"
+  en: "App Instance"
+misc.audit.attribute.webConsole:
+  zh: "WebConsole"
+  en: "WebConsole"
+misc.audit.attribute.weTerm:
+  zh: "WeTerm"
+  en: "WeTerm"
+misc.audit.attribute.portForward:
+  zh: "端口转发"
+  en: "Port Forward"
+misc.audit.attribute.adminCommand:
+  zh: "管理命令"
+  en: "Admin Command"
+misc.audit.attribute.envVars:
+  zh: "环境变量"
+  en: "Environment Variables"
+misc.audit.attribute.helmChart:
+  zh: "Helm Chart"
+  en: "Helm Chart"
+misc.audit.attribute.scopedEnvVars:
+  zh: "作用域环境变量"
+  en: "Scoped Env Vars"
+misc.audit.attribute.polaris:
+  zh: "北极星"
+  en: "Polaris"
+misc.audit.attribute.gpa:
+  zh: "自动扩缩容配置"
+  en: "Autoscaling Config"
+misc.audit.attribute.hostport:
+  zh: "HostPort 端口映射"
+  en: "HostPort Mapping"
+misc.audit.attribute.visibleEnvNames:
+  zh: "可见环境"
+  en: "Visible Environments"
+misc.audit.attribute.imageRegistry:
+  zh: "镜像仓库"
+  en: "Image Registry"
+misc.audit.attribute.batchRelease:
+  zh: "分批发布"
+  en: "Batch Release"
+
+misc.audit.result.success:
+  zh: "成功"
+  en: "Success"
+misc.audit.result.failed:
+  zh: "失败"
+  en: "Failed"

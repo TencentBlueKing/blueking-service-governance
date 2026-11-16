@@ -223,7 +223,7 @@ func (h *Handler) DeleteEnvAppSpecProbeByType(c *gin.Context) {
 		appspec.SectionWriteModeReplace,
 	); err != nil {
 		if errors.Is(err, appspec.ErrAppSpecValidation) {
-			bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, "validate env probe"))
+			bkerrs.AbortWithErr(c, errAppSpecValidationFailed.With("section", "probe").WithCause(err))
 			return
 		}
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "deleting env probe by type"))

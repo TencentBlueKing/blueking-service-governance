@@ -20,7 +20,7 @@ tests {
     expect(res.status).to.equal(404);
   });
   test("should return not found for deleted app", () => {
-    expect(res.body.error.message).to.contain("not found");
+    expect(res.body.error.code).to.equal("NOT_FOUND");
   });
 }
 

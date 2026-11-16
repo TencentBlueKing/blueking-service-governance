@@ -21,6 +21,8 @@ package portpool
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 )
 
 var _ = Describe("validateItemNamesUnique", func() {
@@ -38,8 +40,9 @@ var _ = Describe("validateItemNamesUnique", func() {
 			{ItemName: "item-0", StartPort: 31000, EndPort: 31100},
 		}
 		err := validateItemNamesUnique(items)
-		Expect(err).To(HaveOccurred())
-		Expect(err.Error()).To(ContainSubstring("item-0 already exists"))
+		Expect(err).To(MatchError(ErrItemNameDuplicated))
+		Expect(bkerrs.FromError(err).Code()).To(Equal(bkerrs.ErrCodeInvalidArgument))
+		Expect(bkerrs.FromError(err).Params()).To(HaveKeyWithValue("itemName", "item-0"))
 	})
 })
 
@@ -66,8 +69,18 @@ var _ = Describe("validateEndPortNotShrunk", func() {
 			{ItemName: "item-0", EndPort: 30000},
 		}
 		err := validateItemUpdate(oldItems, newItems)
-		Expect(err).To(HaveOccurred())
-		Expect(err.Error()).To(ContainSubstring("must not be less than"))
+		Expect(err).To(MatchError(ErrItemEndPortDecreased))
+		Expect(bkerrs.FromError(err).Params()).To(Equal(map[string]string{
+			"itemName": "item-0", "endPort": "30000", "currentEndPort": "30100",
+		}))
+	})
+
+	It("should fail when startPort is changed", func() {
+		oldItems[0].StartPort = 30000
+		newItems := []PoolItem{
+			{ItemName: "item-0", StartPort: 30001, EndPort: 30100},
+		}
+		Expect(validateItemUpdate(oldItems, newItems)).To(MatchError(ErrItemStartPortChanged))
 	})
 
 	It("should pass for new items not in old list", func() {

@@ -20,6 +20,7 @@
 package serializer
 
 import (
+	"context"
 	"time"
 
 	platmgtadmin "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/platmgt/admin"
@@ -88,10 +89,10 @@ type RoleOutput struct {
 }
 
 // NewRoleOutput builds a role response object from model.
-func NewRoleOutput(roleInfo platmgtadmin.RoleInfo) *RoleOutput {
+func NewRoleOutput(ctx context.Context, roleInfo platmgtadmin.RoleInfo) *RoleOutput {
 	return &RoleOutput{
 		RoleCode: roleInfo.RoleCode,
-		Name:     roleInfo.Name,
+		Name:     roleInfo.DisplayName(ctx),
 	}
 }
 

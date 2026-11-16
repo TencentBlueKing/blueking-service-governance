@@ -30,6 +30,19 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/perm"
 )
 
+var (
+	errEnvInstanceMapInvalid = bkerrs.Define(
+		bkerrs.ErrCodeInvalidRequest,
+		"EXTENSION_DEPSERVICE_ENV_INSTANCE_MAP_INVALID",
+		"parse envInstanceMap failed",
+	)
+	errEnvVarsInvalid = bkerrs.Define(
+		bkerrs.ErrCodeInvalidRequest,
+		"EXTENSION_DEPSERVICE_ENV_VARS_INVALID",
+		"validate envVars failed",
+	)
+)
+
 // CreateBinding 创建应用侧依赖服务绑定。
 //
 //	@ID			CreateServiceBinding
@@ -62,11 +75,11 @@ func (h *Handler) CreateBinding(c *gin.Context) {
 
 	envMap, err := serializer.ParseEnvInstanceMap(jsonInput.EnvInstanceMap)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, "parse envInstanceMap"))
+		bkerrs.AbortWithErr(c, errEnvInstanceMapInvalid.WithCause(err))
 		return
 	}
 	if err = serializer.ValidateEnvVars(jsonInput.EnvVars); err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, "validate envVars"))
+		bkerrs.AbortWithErr(c, errEnvVarsInvalid.WithCause(err))
 		return
 	}
 
@@ -201,11 +214,11 @@ func (h *Handler) UpdateBinding(c *gin.Context) {
 
 	envMap, err := serializer.ParseEnvInstanceMap(jsonInput.EnvInstanceMap)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, "parse envInstanceMap"))
+		bkerrs.AbortWithErr(c, errEnvInstanceMapInvalid.WithCause(err))
 		return
 	}
 	if err = serializer.ValidateEnvVars(jsonInput.EnvVars); err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, "validate envVars"))
+		bkerrs.AbortWithErr(c, errEnvVarsInvalid.WithCause(err))
 		return
 	}
 

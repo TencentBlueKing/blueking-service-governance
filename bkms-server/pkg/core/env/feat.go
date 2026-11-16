@@ -32,6 +32,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
@@ -46,7 +47,9 @@ import (
 const featureEnvNamePrefix = "feat"
 
 // ErrInvalidFeatureEnvInput 表示创建特性环境的入参不符合业务约束。
-var ErrInvalidFeatureEnvInput = errors.New("invalid feature environment input")
+var ErrInvalidFeatureEnvInput = bkerrs.Define(
+	bkerrs.ErrCodeInvalidRequest, "FEATURE_ENV_INVALID_INPUT", "invalid feature environment input",
+)
 
 // featureEnvCleanupTimeout 限制创建失败后的清理耗时，清理运行在与请求解绑的 context 上。
 const featureEnvCleanupTimeout = 10 * time.Second
@@ -202,14 +205,10 @@ func ListAppFeatEnvs(
 // - 按需复制来源环境的自定义变量；之后双方独立修改，不持续同步；
 func (s *FeatureEnvService) Create(ctx context.Context, input CreateFeatureEnvInput) (*model.Environment, error) {
 	if err := validate.Struct(input); err != nil {
-		return nil, errors.Wrapf(
-			ErrInvalidFeatureEnvInput,
-			"validate create feature environment input: %v",
-			formatError(err),
-		)
+		return nil, ErrInvalidFeatureEnvInput.With("reason", formatError(err).Error())
 	}
 	if err := input.App.CheckVisibleEnv(input.SourceEnv); err != nil {
-		return nil, errors.Wrapf(ErrInvalidFeatureEnvInput, "validate source environment visibility: %v", err)
+		return nil, ErrInvalidFeatureEnvInput.With("reason", err.Error())
 	}
 
 	index, err := s.indexCounter.Next(ctx, input.App.ID)

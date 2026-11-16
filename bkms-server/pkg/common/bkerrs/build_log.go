@@ -20,10 +20,11 @@ package bkerrs
 
 import "fmt"
 
+var errBuildLogUnavailable = Define(ErrCodeNotFound, ErrDetailCodeBuildLogUnavailable, "build log unavailable")
+
 // WrapBuildLogUnavailable 包装为构建日志已过期或已清理错误
 func WrapBuildLogUnavailable(err error, appID, buildID string) *Error {
-	wrappedErr := Wrapf(err, ErrCodeNotFound, "build log unavailable, appID: %s, buildID: %s", appID, buildID)
-	return wrappedErr.SetDetails(
+	return errBuildLogUnavailable.With("appID", appID).With("buildID", buildID).WithCause(err).SetDetails(
 		NewDetail(
 			ErrDetailCodeBuildLogUnavailable,
 			fmt.Sprintf("build log has expired or been cleaned, appID: %s, buildID: %s", appID, buildID),

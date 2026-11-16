@@ -29,6 +29,7 @@ import (
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/i18n"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
@@ -231,6 +232,16 @@ var _ = Describe("CollectConfigWarnings", func() {
 				Expect(warnings[0]).To(ContainSubstring("推荐与 tRPC 配置中的服务名"))
 				Expect(warnings[0]).To(ContainSubstring("trpc.app.server.service"))
 				Expect(warnings[0]).To(ContainSubstring("trpc.app.server.other"))
+
+				enWarnings := polaris.CollectConfigWarnings(
+					i18n.WithLang(ctx, i18n.LangEN),
+					db,
+					cfgProvider,
+					config,
+				)
+				Expect(enWarnings).To(HaveLen(1))
+				Expect(enWarnings[0]).To(ContainSubstring("Environment 'dev'"))
+				Expect(enWarnings[0]).To(ContainSubstring("is recommended to match service names"))
 			})
 
 			It("should skip the warning for immediate-register configs", func() {

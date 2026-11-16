@@ -1,0 +1,25 @@
+# 蓝鲸系统集成（pkg/bkintegrations）
+
+# BKMonitor（蓝鲸监控）
+BKINTEGRATIONS_BKMONITOR_PROJECT_NOT_READY:
+  zh: "工作空间 {{.workspaceID}} 的蓝鲸监控空间尚未就绪"
+  en: "BKMonitor project is not ready for workspace {{.workspaceID}}"
+BKINTEGRATIONS_BKMONITOR_APM_NOT_FOUND:
+  zh: "环境 {{.envID}} 未绑定 APM 实例"
+  en: "APM not found for environment {{.envID}}"
+BKINTEGRATIONS_BKMONITOR_RANK_UNSUPPORTED_APP_TYPE:
+  zh: "应用类型 {{.appType}} 不支持对全部实例排名，请指定实例"
+  en: "Ranking all instances is not supported for app type {{.appType}}, specify instances instead"
+BKINTEGRATIONS_BKMONITOR_ENV_CLUSTER_NOT_CONFIGURED:
+  zh: "环境 {{.envName}} 未配置集群信息"
+  en: "Cluster info is not configured for environment {{.envName}}"
+
+# KubeInsight（集群巡检）
+BKINTEGRATIONS_KUBEINSIGHT_REPORT_NOT_FOUND:
+  zh: "未找到集群巡检报告"
+  en: "Cluster inspection report not found"
+
+# BCS（蓝鲸容器服务）
+BKINTEGRATIONS_BCS_NO_ACTIVE_AUTH_INFO:
+  zh: "未找到有效的 BCS 认证信息，请先在 BCS 平台创建"
+  en: "No active BCS auth info found, please create one in BCS platform"

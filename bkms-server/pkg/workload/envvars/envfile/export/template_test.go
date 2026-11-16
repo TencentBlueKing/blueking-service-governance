@@ -19,13 +19,17 @@
 package export
 
 import (
+	"context"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/i18n"
 )
 
 var _ = Describe("TemplateRendering", func() {
 	It("renders scoped import template", func() {
-		content := RenderScopedImportTemplate()
+		content := RenderScopedImportTemplate(i18n.WithLang(context.Background(), i18n.LangEN))
 
 		Expect(content).To(ContainSubstring("# - Each variable uses KEY=VALUE format."))
 		Expect(content).To(ContainSubstring("# - Optional # desc: applies to the next variable."))
@@ -44,7 +48,7 @@ var _ = Describe("TemplateRendering", func() {
 	})
 
 	It("renders shared env and app import template", func() {
-		content := RenderEnvAppImportTemplate()
+		content := RenderEnvAppImportTemplate(i18n.WithLang(context.Background(), i18n.LangEN))
 
 		Expect(content).To(ContainSubstring("# - Each variable uses KEY=VALUE format."))
 		Expect(content).To(ContainSubstring("# - Optional # desc: applies to the next variable."))
@@ -57,5 +61,15 @@ var _ = Describe("TemplateRendering", func() {
 		Expect(content).NotTo(ContainSubstring("# scopeType:"))
 		Expect(content).NotTo(ContainSubstring("# scopeValue:"))
 		Expect(content).To(HaveSuffix("\n"))
+	})
+
+	It("renders templates in Chinese by default", func() {
+		scopedContent := RenderScopedImportTemplate(context.Background())
+		Expect(scopedContent).To(ContainSubstring("# - 每个变量使用 KEY=VALUE 格式。"))
+		Expect(scopedContent).To(ContainSubstring("# desc: 在所有环境中共享"))
+
+		envAppContent := RenderEnvAppImportTemplate(context.Background())
+		Expect(envAppContent).To(ContainSubstring("# - 单环境/应用导入请勿添加 # scopeType 或 # scopeValue。"))
+		Expect(envAppContent).To(ContainSubstring("# desc: 普通字符串值"))
 	})
 })

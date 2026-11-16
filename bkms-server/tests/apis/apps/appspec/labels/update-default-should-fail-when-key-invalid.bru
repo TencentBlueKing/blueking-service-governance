@@ -25,7 +25,7 @@ assert {
 
 tests {
   test("should reject invalid label key", () => {
-    expect(res.body.error.message).to.contains("is invalid");
+    expect(res.body.error.details[0].message).to.contains("is invalid");
   });
 }
 

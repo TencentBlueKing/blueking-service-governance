@@ -19,11 +19,14 @@
 package serializer
 
 import (
+	"context"
+	"strconv"
 	"time"
 
 	"github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/v2/bson"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/i18n"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
 )
 
@@ -125,7 +128,10 @@ type AppConfigFileVersionOutputObj struct {
 }
 
 // FromModel fills output fields from an app config file version model.
-func (o *AppConfigFileVersionOutputObj) FromModel(obj appcfg.AppConfigFileVersion) *AppConfigFileVersionOutputObj {
+func (o *AppConfigFileVersionOutputObj) FromModel(
+	ctx context.Context,
+	obj appcfg.AppConfigFileVersion,
+) *AppConfigFileVersionOutputObj {
 	*o = AppConfigFileVersionOutputObj{
 		ID:                  obj.ID.Hex(),
 		AppConfigFileID:     obj.AppConfigFileID.Hex(),
@@ -133,7 +139,7 @@ func (o *AppConfigFileVersionOutputObj) FromModel(obj appcfg.AppConfigFileVersio
 		EnvName:             obj.EnvName,
 		Name:                obj.Name,
 		Version:             obj.Version,
-		Description:         obj.Description,
+		Description:         localizeVersionDescription(ctx, obj),
 		Type:                string(obj.Type),
 		ContentSourceType:   string(obj.ContentSourceType),
 		FileFormat:          string(obj.Format),
@@ -161,6 +167,22 @@ func (o *AppConfigFileVersionOutputObj) FromModel(obj appcfg.AppConfigFileVersio
 		o.DeletedAt = obj.DeletedAt.Format(time.RFC3339)
 	}
 	return o
+}
+
+func localizeVersionDescription(ctx context.Context, obj appcfg.AppConfigFileVersion) string {
+	if obj.Description == "" {
+		return ""
+	}
+	desc := i18n.LocalizeStored(ctx, "core.appcfg.version.systemInitDescription", nil, obj.Description)
+	if obj.OperationType == appcfg.AppConfigFileVersionOperationTypeRollback && obj.RollbackFromVersion != nil {
+		desc = i18n.LocalizeStored(
+			ctx,
+			"core.appcfg.version.rollbackDescription",
+			map[string]string{"version": strconv.FormatInt(*obj.RollbackFromVersion, 10)},
+			desc,
+		)
+	}
+	return desc
 }
 
 // PaginatedAppConfigFileVersionOutputObjs is the paginated version list payload.

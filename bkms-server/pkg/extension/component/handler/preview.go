@@ -30,6 +30,15 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
+var (
+	errComponentDefPreviewFailed = bkerrs.Define(
+		bkerrs.ErrCodeInvalidRequest, "EXTENSION_COMPONENT_DEF_PREVIEW_FAILED", "preview component def failed",
+	)
+	errComponentInstPreviewFailed = bkerrs.Define(
+		bkerrs.ErrCodeInvalidRequest, "EXTENSION_COMPONENT_INST_PREVIEW_FAILED", "preview component inst failed",
+	)
+)
+
 // PreviewComponentDef 试运行预览组件定义：
 // 用内置变量、属性默认值、请求提供的输出模板渲染附加资源和 patch 预览，并返回。
 //
@@ -59,7 +68,7 @@ func (h *Handler) PreviewComponentDef(c *gin.Context) {
 	)
 	result, err := builder.Build()
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, "preview component def"))
+		bkerrs.AbortWithErr(c, errComponentDefPreviewFailed.WithCause(err))
 		return
 	}
 
@@ -93,12 +102,13 @@ func (h *Handler) PreviewComponentInst(c *gin.Context) {
 			store.TenantWithPlatform(component.BuiltinShared()))
 	if err != nil {
 		if errors.Is(err, component.ErrComponentDefNotFound) {
-			bkerrs.AbortWithErr(c, bkerrs.Errorf(
-				bkerrs.ErrCodeNotFound,
-				"component def(%s:%s) not found",
-				input.Type,
-				component.DefaultComponentDefVersion,
-			))
+			bkerrs.AbortWithErr(
+				c,
+				errComponentDefNotFound.
+					With("name", input.Type).
+					With("version", component.DefaultComponentDefVersion).
+					WithCause(err),
+			)
 			return
 		}
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get component def"))
@@ -110,7 +120,7 @@ func (h *Handler) PreviewComponentInst(c *gin.Context) {
 		WithPropertyValues(input.Properties)
 	result, err := builder.Build()
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, "preview component inst"))
+		bkerrs.AbortWithErr(c, errComponentInstPreviewFailed.WithCause(err))
 		return
 	}
 

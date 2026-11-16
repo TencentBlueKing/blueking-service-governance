@@ -99,7 +99,7 @@ func (h *Handler) GetBatchReleaseProgress(c *gin.Context) {
 		}
 	}
 	ginutils.OK(c, serializer.GetBatchReleaseProgressOutput{
-		Data: new(serializer.BatchReleaseProgressOutputObj).FromModel(record),
+		Data: new(serializer.BatchReleaseProgressOutputObj).FromModel(ctx, record),
 	})
 }
 

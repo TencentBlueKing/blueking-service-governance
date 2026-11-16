@@ -35,6 +35,24 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
+var (
+	errComponentDefNotFound = bkerrs.Define(
+		bkerrs.ErrCodeNotFound,
+		"CORE_WORKSPACE_COMPONENT_DEF_NOT_FOUND",
+		"component def not found",
+	)
+	errWorkspaceComponentNotFound = bkerrs.Define(
+		bkerrs.ErrCodeNotFound,
+		"CORE_WORKSPACE_COMPONENT_NOT_FOUND",
+		"workspace component not found",
+	)
+	errWorkspaceComponentReferenced = bkerrs.Define(
+		bkerrs.ErrCodeInvalidRequest,
+		"CORE_WORKSPACE_COMPONENT_REFERENCED",
+		"workspace component is referenced by apps",
+	)
+)
+
 // CreateWorkspaceComponent 创建工作空间组件。
 //
 //	@ID			CreateWorkspaceComponent
@@ -65,7 +83,7 @@ func (h *Handler) CreateWorkspaceComponent(c *gin.Context) {
 		if errors.Is(err, component.ErrComponentDefNotFound) {
 			bkerrs.AbortWithErr(
 				c,
-				bkerrs.Errorf(bkerrs.ErrCodeNotFound, "component def(%s:%s) not found", newComp.Type, newComp.Version),
+				errComponentDefNotFound.With("type", newComp.Type).With("version", newComp.Version).WithCause(err),
 			)
 			return
 		}
@@ -122,12 +140,10 @@ func (h *Handler) PatchWorkspaceComponent(c *gin.Context) {
 		if errors.Is(err, workspace.ErrComponentNotFound) {
 			bkerrs.AbortWithErr(
 				c,
-				bkerrs.Errorf(
-					bkerrs.ErrCodeNotFound,
-					"component(%s) not found in workspace(%s)",
-					uriInput.CompName,
-					uriInput.WorkspaceID,
-				),
+				errWorkspaceComponentNotFound.
+					With("compName", uriInput.CompName).
+					With("workspaceID", uriInput.WorkspaceID).
+					WithCause(err),
 			)
 			return
 		}
@@ -194,11 +210,7 @@ func (h *Handler) DeleteWorkspaceComponent(c *gin.Context) {
 		return
 	}
 	if len(compRefMap[oldComp.Name]) > 0 {
-		bkerrs.AbortWithErr(c, bkerrs.Errorf(
-			bkerrs.ErrCodeInvalidRequest,
-			"component(%s) is referenced by other apps, cannot be deleted",
-			oldComp.Name,
-		))
+		bkerrs.AbortWithErr(c, errWorkspaceComponentReferenced.With("compName", oldComp.Name))
 		return
 	}
 

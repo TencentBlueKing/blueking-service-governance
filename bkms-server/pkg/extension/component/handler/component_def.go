@@ -21,6 +21,7 @@ package handler
 
 import (
 	"errors"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 
@@ -32,6 +33,31 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
 	storereg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
+)
+
+var (
+	errComponentDefAlreadyExists = bkerrs.Define(
+		bkerrs.ErrCodeAlreadyExists, "EXTENSION_COMPONENT_DEF_ALREADY_EXISTS", "component def already exists",
+	)
+	errComponentDefNotFound = bkerrs.Define(
+		bkerrs.ErrCodeNotFound, "EXTENSION_COMPONENT_DEF_NOT_FOUND", "component def not found",
+	)
+	errBuiltinUpdateForbidden = bkerrs.Define(
+		bkerrs.ErrCodeInvalidRequest,
+		"EXTENSION_COMPONENT_BUILTIN_UPDATE_FORBIDDEN",
+		"builtin component def cannot be updated",
+	)
+	errComponentDefInvalid = bkerrs.Define(
+		bkerrs.ErrCodeInvalidRequest, "EXTENSION_COMPONENT_DEF_INVALID", "validate component def failed",
+	)
+	errBuiltinDeleteForbidden = bkerrs.Define(
+		bkerrs.ErrCodeInvalidRequest,
+		"EXTENSION_COMPONENT_BUILTIN_DELETE_FORBIDDEN",
+		"builtin component def cannot be deleted",
+	)
+	errComponentDefInUse = bkerrs.Define(
+		bkerrs.ErrCodeInvalidRequest, "EXTENSION_COMPONENT_DEF_IN_USE", "component def is still referenced",
+	)
 )
 
 // Handler handles Gin component definition API requests.
@@ -90,7 +116,7 @@ func (h *Handler) ListComponentDefs(c *gin.Context) {
 	output := make([]*serializer.ComponentDefOutputObj, 0, len(compDefs))
 	for i := range compDefs {
 		output = append(output, new(serializer.ComponentDefOutputObj).FromModel(
-			&compDefs[i], counts[compDefs[i].Key()],
+			ctx, &compDefs[i], counts[compDefs[i].Key()],
 		))
 	}
 	ginutils.OK(c, serializer.ListComponentDefsOutput{Data: output})
@@ -121,9 +147,7 @@ func (h *Handler) CreateComponentDef(c *gin.Context) {
 
 	ctx := c.Request.Context()
 	defs := h.componentDefs()
-	alreadyExists := bkerrs.Errorf(
-		bkerrs.ErrCodeAlreadyExists, "component def(%s:%s) already exists", compDef.Name, compDef.Version,
-	)
+	alreadyExists := errComponentDefAlreadyExists.With("name", compDef.Name).With("version", compDef.Version)
 	builtinExists, err := component.BuiltinDefExists(ctx, defs, compDef.Name, compDef.Version)
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "create component def"))
@@ -185,21 +209,14 @@ func (h *Handler) PatchComponentDef(c *gin.Context) {
 	)
 	if err != nil {
 		if errors.Is(err, component.ErrComponentDefNotFound) {
-			bkerrs.AbortWithErr(
-				c,
-				bkerrs.Errorf(bkerrs.ErrCodeNotFound, "component def(%s) not found", uriInput.CompDefName),
-			)
+			bkerrs.AbortWithErr(c, errComponentDefNotFound.With("name", uriInput.CompDefName).WithCause(err))
 			return
 		}
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get component def"))
 		return
 	}
 	if existingCompDef.IsBuiltin {
-		bkerrs.AbortWithErr(c, bkerrs.Errorf(
-			bkerrs.ErrCodeInvalidRequest,
-			"builtin component def(%s) cannot be updated",
-			uriInput.CompDefName,
-		))
+		bkerrs.AbortWithErr(c, errBuiltinUpdateForbidden.With("name", uriInput.CompDefName))
 		return
 	}
 
@@ -208,7 +225,7 @@ func (h *Handler) PatchComponentDef(c *gin.Context) {
 	// Patch binding 只能校验本次传入的增量字段，无法校验与存量数据合并后的跨字段约束。
 	// 因此需要在 ToModel 合并后校验完整模型，例如 patchers 和 specs 不能同时为空。
 	if err = component.ValidateComponentDef(nextCompDef); err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, "validate component def"))
+		bkerrs.AbortWithErr(c, errComponentDefInvalid.WithCause(err))
 		return
 	}
 
@@ -262,11 +279,7 @@ func (h *Handler) DeleteComponentDef(c *gin.Context) {
 		return
 	}
 	if existingCompDef.IsBuiltin {
-		bkerrs.AbortWithErr(c, bkerrs.Errorf(
-			bkerrs.ErrCodeInvalidRequest,
-			"builtin component def(%s) cannot be deleted",
-			uriInput.CompDefName,
-		))
+		bkerrs.AbortWithErr(c, errBuiltinDeleteForbidden.With("name", uriInput.CompDefName))
 		return
 	}
 	counts := h.instanceCounts()
@@ -277,13 +290,13 @@ func (h *Handler) DeleteComponentDef(c *gin.Context) {
 	}
 	count := countsByKey[existingCompDef.Key()]
 	if count.AppCompInstanceCount > 0 || count.WorkspaceCompInstanceCount > 0 {
-		bkerrs.AbortWithErr(c, bkerrs.Errorf(
-			bkerrs.ErrCodeInvalidRequest,
-			"component def(%s) is still referenced by %d app component(s) and %d workspace component(s), cannot be deleted",
-			uriInput.CompDefName,
-			count.AppCompInstanceCount,
-			count.WorkspaceCompInstanceCount,
-		))
+		bkerrs.AbortWithErr(
+			c,
+			errComponentDefInUse.
+				With("name", uriInput.CompDefName).
+				With("appCount", strconv.Itoa(int(count.AppCompInstanceCount))).
+				With("workspaceCount", strconv.Itoa(int(count.WorkspaceCompInstanceCount))),
+		)
 		return
 	}
 
@@ -320,6 +333,6 @@ func (h *Handler) DeleteComponentDef(c *gin.Context) {
 func (h *Handler) ListBuiltinVars(c *gin.Context) {
 	ginutils.OK(
 		c,
-		new(serializer.ListBuiltinVarsOutput).FromModels(component.BuiltinVars),
+		new(serializer.ListBuiltinVarsOutput).FromModels(c.Request.Context(), component.BuiltinVars),
 	)
 }

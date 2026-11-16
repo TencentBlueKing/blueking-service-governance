@@ -36,6 +36,19 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
+var (
+	errEnvBindingAlreadyExists = bkerrs.Define(
+		bkerrs.ErrCodeAlreadyExists,
+		"EXTENSION_BSCPCFG_ENV_BINDING_ALREADY_EXISTS",
+		"bscpcfg env binding already exists",
+	)
+	errEnvBindingNotFound = bkerrs.Define(
+		bkerrs.ErrCodeNotFound,
+		"EXTENSION_BSCPCFG_ENV_BINDING_NOT_FOUND",
+		"bscpcfg env binding not found",
+	)
+)
+
 // CreateEnvBinding 创建环境绑定（前置条件：已调用 InitMetadata）。
 //
 //	@ID			CreateBscpCfgEnvBinding
@@ -70,7 +83,7 @@ func (h *Handler) CreateEnvBinding(c *gin.Context) {
 		return
 	}
 	if ws.BkSystems.BkCCBizID == "" {
-		bkerrs.AbortWithErr(c, bkerrs.New(bkerrs.ErrCodeNotFound, "workspace missing bizID"))
+		bkerrs.AbortWithErr(c, errWorkspaceBizIDMissing)
 		return
 	}
 
@@ -90,8 +103,9 @@ func (h *Handler) CreateEnvBinding(c *gin.Context) {
 	})
 	if err != nil {
 		if errors.Is(err, cfgmodel.ErrEnvBindingAlreadyExists) {
-			bkerrs.AbortWithErr(c, bkerrs.Errorf(bkerrs.ErrCodeAlreadyExists,
-				"bscpcfg env binding already exists for app %s env %s", app.ID, uri.EnvName))
+			bkerrs.AbortWithErr(
+				c, errEnvBindingAlreadyExists.With("appID", app.ID).With("envName", uri.EnvName).WithCause(err),
+			)
 			return
 		}
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "create bscpcfg env binding"))
@@ -138,7 +152,7 @@ func (h *Handler) DeleteEnvBinding(c *gin.Context) {
 	if err = mgr.DeleteEnvBinding(ctx, app.ID, uri.EnvName); err != nil {
 		if errors.Is(err, cfgmodel.ErrEnvBindingNotFound) {
 			bkerrs.AbortWithErr(
-				c, bkerrs.Errorf(bkerrs.ErrCodeNotFound, "bscpcfg env binding not found for env %s", uri.EnvName),
+				c, errEnvBindingNotFound.With("envName", uri.EnvName).WithCause(err),
 			)
 			return
 		}
@@ -189,12 +203,12 @@ func (h *Handler) GetEnvBinding(c *gin.Context) {
 		case errors.Is(err, cfgmodel.ErrMetadataNotFound):
 			bkerrs.AbortWithErr(
 				c,
-				bkerrs.Errorf(bkerrs.ErrCodeNotFound, "bscpcfg metadata not found for app %s", uri.AppID),
+				errMetadataNotFound.With("appID", uri.AppID).WithCause(err),
 			)
 		case errors.Is(err, cfgmodel.ErrEnvBindingNotFound):
 			bkerrs.AbortWithErr(
 				c,
-				bkerrs.Errorf(bkerrs.ErrCodeNotFound, "bscpcfg env binding not found for env %s", uri.EnvName),
+				errEnvBindingNotFound.With("envName", uri.EnvName).WithCause(err),
 			)
 		default:
 			bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get bscpcfg env binding"))

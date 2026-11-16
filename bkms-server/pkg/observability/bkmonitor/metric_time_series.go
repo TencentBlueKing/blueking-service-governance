@@ -25,6 +25,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/i18n"
 	bkmapi "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bkmonitor"
 )
 
@@ -59,7 +60,7 @@ func (s *MetricTimeSeriesService) QueryTimeSeries(
 	result := &MetricsResult{
 		Metrics: lo.SliceToMap(targetDefs, func(def MetricDefinition) (string, *MetricTimeSeriesData) {
 			return def.Key, &MetricTimeSeriesData{
-				DisplayName: def.DisplayName,
+				DisplayName: i18n.LocalizeOr(ctx, "observability.bkmonitor.metric."+def.Key, nil, def.DisplayName),
 				Unit:        def.Unit,
 				Series:      make([]*TimeSeries, 0),
 			}

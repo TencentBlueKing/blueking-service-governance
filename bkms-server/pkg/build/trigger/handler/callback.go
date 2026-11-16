@@ -27,6 +27,12 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
 )
 
+var errCallbackCredentialRequired = bkerrs.Define(
+	bkerrs.ErrCodeUnauthenticated,
+	"BUILD_TRIGGER_CALLBACK_CREDENTIAL_REQUIRED",
+	"build trigger callback credential is required",
+)
+
 // HandleBuildTriggerPolicyCallback 接收蓝盾触发专用流水线的回调并发起镜像构建。
 //
 // 该路由不走用户票据鉴权，而是校验应用独享的回调凭证。三态处理结果均以 HTTP 200 返回，
@@ -53,9 +59,7 @@ import (
 func (h *Handler) HandleBuildTriggerPolicyCallback(c *gin.Context) {
 	// FIXME(后续子需求): 校验应用独享回调凭证内容，并做限流；当前仅要求 header 存在
 	if c.GetHeader(triggerserializer.CallbackCredentialHeader) == "" {
-		bkerrs.AbortWithErr(c, bkerrs.New(
-			bkerrs.ErrCodeUnauthenticated, "build trigger callback credential is required",
-		))
+		bkerrs.AbortWithErr(c, errCallbackCredentialRequired)
 		return
 	}
 

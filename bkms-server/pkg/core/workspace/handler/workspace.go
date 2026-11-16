@@ -61,6 +61,24 @@ import (
 // 查询参数 limit 只有下限，调用方传入过大时不能按空间数无上限开协程。
 const workspaceOverviewMaxConcurrency = 8
 
+var (
+	errBkCCAndBkCIBothEmpty = bkerrs.Define(
+		bkerrs.ErrCodeInvalidRequest,
+		"CORE_WORKSPACE_BKCC_BKCI_BOTH_EMPTY",
+		"bkCCBizID and bkCIProjectID cannot both be empty",
+	)
+	errBkCCAndBkCIBothProvided = bkerrs.Define(
+		bkerrs.ErrCodeInvalidRequest,
+		"CORE_WORKSPACE_BKCC_BKCI_BOTH_PROVIDED",
+		"bkCCBizID and bkCIProjectID cannot both be provided",
+	)
+	errWorkspaceHasActiveDeployments = bkerrs.Define(
+		bkerrs.ErrCodeInvalidRequest,
+		"CORE_WORKSPACE_HAS_ACTIVE_DEPLOYMENTS",
+		"workspace has active deployments, please remove them first",
+	)
+)
+
 // Handler handles Gin workspace API requests.
 type Handler struct {
 	registry *storereg.Registry
@@ -277,8 +295,8 @@ func (h *Handler) GetWorkspace(c *gin.Context) {
 //	@Router			/workspaces [get]
 func (h *Handler) ListWorkspaces(c *gin.Context) {
 	var queryInput serializer.ListWorkspacesQueryInput
-	if err := c.ShouldBindQuery(&queryInput); err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, "bind query"))
+	if err := ginutils.BindQuery(c, &queryInput); err != nil {
+		bkerrs.AbortWithErr(c, err)
 		return
 	}
 
@@ -305,7 +323,7 @@ func (h *Handler) ListWorkspaces(c *gin.Context) {
 
 	allowedWorkspaceSet, err := perm.NewManager().FilterViewableWorkspaces(ctx, workspaceIDs)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeNoPermission, "check workspace perm"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "filter workspaces perm"))
 		return
 	}
 
@@ -337,8 +355,8 @@ func (h *Handler) ListWorkspaces(c *gin.Context) {
 //	@Router			/workspaces-overview [get]
 func (h *Handler) ListWorkspacesOverview(c *gin.Context) {
 	var queryInput serializer.ListWorkspacesOverviewQueryInput
-	if err := c.ShouldBindQuery(&queryInput); err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, "bind query"))
+	if err := ginutils.BindQuery(c, &queryInput); err != nil {
+		bkerrs.AbortWithErr(c, err)
 		return
 	}
 
@@ -363,7 +381,7 @@ func (h *Handler) ListWorkspacesOverview(c *gin.Context) {
 	workspaceIDs := lo.Map(workspaces, func(ws workspace.WorkspaceWithOpTime, _ int) string { return ws.ID })
 	allowedWorkspaceSet, err := perm.NewManager().FilterViewableWorkspaces(ctx, workspaceIDs)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeNoPermission, "check workspace perm"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "filter workspaces perm"))
 		return
 	}
 
@@ -483,7 +501,7 @@ func (h *Handler) loadWorkspaceOverviewApps(
 				return &serializer.AppDeployedEnvOutputObj{
 					ID:              row.EnvID,
 					Name:            row.EnvName,
-					DisplayName:     row.EnvDisplayName,
+					DisplayName:     envmodel.LocalizeEnvDisplayName(ctx, row.EnvName, row.EnvDisplayName),
 					Type:            row.EnvType,
 					Kind:            row.EnvKind,
 					TrafficLaneName: row.TrafficLaneName,
@@ -526,18 +544,12 @@ func (h *Handler) CreateWorkspace(c *gin.Context) {
 
 	if input.BkCCBizID <= 0 && input.BkCIProjectID == "" {
 		// bkccID 与 bkCIProjectID 不能同时为空
-		bkerrs.AbortWithErr(
-			c,
-			bkerrs.New(bkerrs.ErrCodeInvalidRequest, "bkCCBizID and bkCIProjectID cannot both be empty"),
-		)
+		bkerrs.AbortWithErr(c, errBkCCAndBkCIBothEmpty)
 		return
 	}
 	if input.BkCCBizID > 0 && input.BkCIProjectID != "" {
 		// 新建容器项目时传 bkCCBizID，绑定已有容器项目时传 bkCIProjectID，两者不能同时传入
-		bkerrs.AbortWithErr(
-			c,
-			bkerrs.New(bkerrs.ErrCodeInvalidRequest, "bkCCBizID and bkCIProjectID cannot both be provided"),
-		)
+		bkerrs.AbortWithErr(c, errBkCCAndBkCIBothProvided)
 		return
 	}
 
@@ -903,9 +915,7 @@ func (h *Handler) SetWorkspaceState(c *gin.Context) {
 			return
 		}
 		if hasActive {
-			bkerrs.AbortWithErr(c,
-				bkerrs.New(bkerrs.ErrCodeInvalidRequest,
-					"workspace has active deployments, please remove them first"))
+			bkerrs.AbortWithErr(c, errWorkspaceHasActiveDeployments)
 			return
 		}
 	}

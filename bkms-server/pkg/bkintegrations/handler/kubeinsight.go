@@ -30,6 +30,12 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/perm"
 )
 
+var errClusterReportNotFound = bkerrs.Define(
+	bkerrs.ErrCodeNotFound,
+	"BKINTEGRATIONS_KUBEINSIGHT_REPORT_NOT_FOUND",
+	"cluster inspection report not found",
+)
+
 // GetLatestEnvReport 获取最新环境巡检报告
 //
 //	@ID			GetLatestEnvReport
@@ -72,7 +78,7 @@ func (h *Handler) GetLatestEnvReport(c *gin.Context) {
 	report, pdfData, err := client.GetLatestClusterReport(ctx, environment.Cluster.ClusterID, queryInput.GeneratePDF)
 	if err != nil {
 		if errors.Is(err, kubeinsight.ErrReportNotFound) {
-			bkerrs.AbortWithErr(c, bkerrs.Errorf(bkerrs.ErrCodeNotFound, "report not found"))
+			bkerrs.AbortWithErr(c, errClusterReportNotFound.WithCause(err))
 			return
 		}
 		bkerrs.AbortWithErr(

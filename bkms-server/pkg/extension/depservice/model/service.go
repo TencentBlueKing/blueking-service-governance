@@ -19,10 +19,13 @@
 package model
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 
 	"github.com/spf13/cast"
+
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/i18n"
 )
 
 const (
@@ -44,6 +47,16 @@ type Service struct {
 	// Plans is all plans of the service.
 	// - every plan has a unique name in the service
 	Plans []ServicePlan `bson:"plans" validate:"required"`
+}
+
+// LocalizedDisplayName 按请求语言返回服务展示名称，翻译缺失时回退原值
+func (s *Service) LocalizedDisplayName(ctx context.Context) string {
+	return i18n.LocalizeOr(ctx, "extension.depservice.service."+s.Name+".displayName", nil, s.DisplayName)
+}
+
+// LocalizedDescription 按请求语言返回服务描述，翻译缺失时回退原值
+func (s *Service) LocalizedDescription(ctx context.Context) string {
+	return i18n.LocalizeOr(ctx, "extension.depservice.service."+s.Name+".description", nil, s.Description)
 }
 
 // GetPlanByName gets the plan by name

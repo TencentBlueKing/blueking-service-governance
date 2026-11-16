@@ -32,7 +32,7 @@ assert {
 tests {
   test("should return Gin error for non-helm app", () => {
     expect(res.body.error.code).to.equal("INVALID_ARGUMENT");
-    expect(res.body.error.message).to.contain("app type is not helm based");
+    expect(res.body.error.details[0].code).to.equal("BUILD_CHART_APP_NOT_HELM_BASED");
   });
 }
 

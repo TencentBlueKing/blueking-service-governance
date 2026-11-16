@@ -19,6 +19,7 @@
 package serializer_test
 
 import (
+	"context"
 	"encoding/json"
 	"time"
 
@@ -28,6 +29,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/autodeploy"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/i18n"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/clusteraddon"
 	deploypkg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy"
 	appmodeldeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/appmodel"
@@ -166,7 +168,9 @@ var _ = Describe("AppModel deploy serializers", func() {
 
 	Describe("AppModelDeployRecordOutputObj", func() {
 		It("reads build info directly from deploy record extras", func() {
-			output := new(serializer.AppModelDeployRecordOutputObj).FromModel(appmodeldeploy.Record{
+			output := new(
+				serializer.AppModelDeployRecordOutputObj,
+			).FromModel(context.Background(), appmodeldeploy.Record{
 				ID:           bson.NewObjectID(),
 				ClusterID:    "cls-1",
 				Namespace:    "default",
@@ -196,7 +200,9 @@ var _ = Describe("AppModel deploy serializers", func() {
 		})
 
 		It("returns the release mode and strategy name of a batch release record", func() {
-			output := new(serializer.AppModelDeployRecordOutputObj).FromModel(appmodeldeploy.Record{
+			output := new(
+				serializer.AppModelDeployRecordOutputObj,
+			).FromModel(context.Background(), appmodeldeploy.Record{
 				ID:              bson.NewObjectID(),
 				Status:          appmodeldeploy.StatusDeploying,
 				ReleaseMode:     appmodeldeploy.ReleaseModeCanary,
@@ -205,10 +211,22 @@ var _ = Describe("AppModel deploy serializers", func() {
 
 			Expect(output.ReleaseMode).To(Equal("canary"))
 			Expect(output.ReleaseStrategyName).To(Equal("careful"))
+
+			builtin := releasestrategy.BuiltinStrategies()[0]
+			enCtx := i18n.WithLang(context.Background(), i18n.LangEN)
+			builtinOut := new(serializer.AppModelDeployRecordOutputObj).FromModel(enCtx, appmodeldeploy.Record{
+				ID:              bson.NewObjectID(),
+				Status:          appmodeldeploy.StatusDeploying,
+				ReleaseMode:     appmodeldeploy.ReleaseModeCanary,
+				ReleaseStrategy: &appmodeldeploy.ReleaseStrategySnapshot{ID: builtin.ID.Hex(), Name: builtin.Name},
+			})
+			Expect(builtinOut.ReleaseStrategyName).To(Equal("3-Batch Canary (1 pod, 50%, 100%)"))
 		})
 
 		It("reads commit revision without presenting it as a branch", func() {
-			output := new(serializer.AppModelDeployRecordOutputObj).FromModel(appmodeldeploy.Record{
+			output := new(
+				serializer.AppModelDeployRecordOutputObj,
+			).FromModel(context.Background(), appmodeldeploy.Record{
 				ID: bson.NewObjectID(),
 				Extras: map[string]string{
 					appmodeldeploy.ExtraKeyDeploySource:      appmodeldeploy.DeploySourceBuildAutoDeploy,
@@ -225,7 +243,9 @@ var _ = Describe("AppModel deploy serializers", func() {
 		})
 
 		It("infers WorkloadKind from ResourceKeys when the field is empty", func() {
-			output := new(serializer.AppModelDeployRecordOutputObj).FromModel(appmodeldeploy.Record{
+			output := new(
+				serializer.AppModelDeployRecordOutputObj,
+			).FromModel(context.Background(), appmodeldeploy.Record{
 				ID:        bson.NewObjectID(),
 				ClusterID: "cls-1",
 				Namespace: "default",
@@ -299,7 +319,7 @@ var _ = Describe("AppModel deploy serializers", func() {
 				WorkloadCurrentRevision: "demo-7b697647cb",
 			}
 
-			output := new(serializer.BatchReleaseProgressOutputObj).FromModel(record)
+			output := new(serializer.BatchReleaseProgressOutputObj).FromModel(context.Background(), record)
 			Expect(output).To(Equal(&serializer.BatchReleaseProgressOutputObj{
 				DeployID:     record.ID.Hex(),
 				Status:       "deploying",
@@ -326,14 +346,16 @@ var _ = Describe("AppModel deploy serializers", func() {
 		It("keeps a missing batch index as null rather than 0", func() {
 			record.BatchProgress = &appmodeldeploy.BatchProgress{BatchPhase: batchrelease.BatchPhaseUpdating}
 
-			payload, err := json.Marshal(new(serializer.BatchReleaseProgressOutputObj).FromModel(record))
+			payload, err := json.Marshal(
+				new(serializer.BatchReleaseProgressOutputObj).FromModel(context.Background(), record),
+			)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(string(payload)).To(ContainSubstring(`"currentBatchIndex":null`))
 			Expect(string(payload)).To(ContainSubstring(`"pauseStartTime":null`))
 		})
 
 		It("falls back to a pending progress before the poller writes one", func() {
-			output := new(serializer.BatchReleaseProgressOutputObj).FromModel(record)
+			output := new(serializer.BatchReleaseProgressOutputObj).FromModel(context.Background(), record)
 			Expect(output.BatchPhase).To(Equal("pending"))
 			Expect(output.CurrentBatchIndex).To(BeNil())
 			Expect(output.Replicas).To(Equal(int32(4)))

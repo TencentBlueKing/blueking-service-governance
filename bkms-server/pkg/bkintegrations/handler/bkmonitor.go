@@ -36,6 +36,7 @@ import (
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	appmodeldeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/appmodel"
+	deploystatus "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/status"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	bkmapi "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bkmonitor"
 	bkmmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/bkmonitor"
@@ -47,6 +48,29 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appspec"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars"
 	slz "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/networking/serializer"
+)
+
+var (
+	errBkMonitorProjectNotReady = bkerrs.Define(
+		bkerrs.ErrCodeInvalidRequest,
+		"BKINTEGRATIONS_BKMONITOR_PROJECT_NOT_READY",
+		"bk monitor project is not ready for workspace",
+	)
+	errEnvAPMNotFound = bkerrs.Define(
+		bkerrs.ErrCodeNotFound,
+		"BKINTEGRATIONS_BKMONITOR_APM_NOT_FOUND",
+		"apm not found for environment",
+	)
+	errTopInstancesUnsupportedAppType = bkerrs.Define(
+		bkerrs.ErrCodeInvalidArgument,
+		"BKINTEGRATIONS_BKMONITOR_RANK_UNSUPPORTED_APP_TYPE",
+		"ranking all instances is not supported for app type, specify instances instead",
+	)
+	errEnvClusterNotConfigured = bkerrs.Define(
+		bkerrs.ErrCodeInvalidRequest,
+		"BKINTEGRATIONS_BKMONITOR_ENV_CLUSTER_NOT_CONFIGURED",
+		"cluster info is not configured for environment",
+	)
 )
 
 // GetApmServiceName 获取 Apm 服务名称
@@ -262,10 +286,7 @@ func (h *Handler) CreateEnvApm(c *gin.Context) {
 		return
 	}
 	if ws.BkSystems.BkMonitorProjectID == "" {
-		bkerrs.AbortWithErr(
-			c,
-			bkerrs.Errorf(bkerrs.ErrCodeInvalidRequest, "bk monitor project is not ready for workspace %s", ws.ID),
-		)
+		bkerrs.AbortWithErr(c, errBkMonitorProjectNotReady.With("workspaceID", ws.ID))
 		return
 	}
 
@@ -387,10 +408,7 @@ func (h *Handler) GetEnvApm(c *gin.Context) {
 	apm, err := store.Of(h.registry.DB, bkmmodel.ApmInstConfigMeta).Get(ctx, bkmmodel.ApmBoundToEnv(env.ID))
 	if err != nil {
 		if errors.Is(err, bkmmodel.ErrApmInstConfigNotFound) {
-			bkerrs.AbortWithErr(
-				c,
-				bkerrs.Errorf(bkerrs.ErrCodeNotFound, "apm not found for environment %s", uriInput.EnvID),
-			)
+			bkerrs.AbortWithErr(c, errEnvAPMNotFound.With("envID", uriInput.EnvID).WithCause(err))
 			return
 		}
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get apm by env id"))
@@ -549,17 +567,17 @@ func (h *Handler) RankInstances(c *gin.Context) {
 // 仅 AppModel 类型应用存在部署记录
 func (h *Handler) getRankWorkload(ctx context.Context, target *instanceMonitorTarget) (string, string, error) {
 	if !appruntime.IsAppModelType(target.app.Type) {
-		return "", "", bkerrs.Errorf(
-			bkerrs.ErrCodeInvalidArgument,
-			"ranking all instances is not supported for app type %s, specify instances instead", target.app.Type,
-		)
+		return "", "", errTopInstancesUnsupportedAppType.With("appType", target.app.Type)
 	}
 	kind, name, err := appmodeldeploy.GetLatestWorkload(ctx, h.registry.DB, target.app.ID, target.env.Name, "")
 	if err != nil {
 		if errors.Is(err, appmodeldeploy.ErrDeployRecordNotFound) {
-			return "", "", bkerrs.Wrap(err, bkerrs.ErrCodeNotFound, "deploy record not found")
+			return "", "", deploystatus.ErrDeployRecordNotFound.
+				With("appID", target.app.ID).
+				With("envName", target.env.Name).
+				WithCause(err)
 		}
-		return "", "", bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get deployed workload")
+		return "", "", errors.Wrap(err, "get deployed workload")
 	}
 	return kind, name, nil
 }
@@ -584,14 +602,10 @@ func (h *Handler) validateInstanceMonitorTarget(
 		return nil, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get workspace")
 	}
 	if ws.BkSystems.BkMonitorProjectID == "" {
-		return nil, bkerrs.Errorf(
-			bkerrs.ErrCodeInvalidRequest, "bk monitor project is not ready for workspace %s", ws.ID,
-		)
+		return nil, errBkMonitorProjectNotReady.With("workspaceID", ws.ID)
 	}
 	if env.Cluster.ClusterID == "" || env.Cluster.Namespace == "" {
-		return nil, bkerrs.Errorf(
-			bkerrs.ErrCodeInvalidRequest, "cluster info is not configured for environment %s", env.Name,
-		)
+		return nil, errEnvClusterNotConfigured.With("envName", env.Name)
 	}
 	return &instanceMonitorTarget{
 		app:     app,
@@ -628,15 +642,7 @@ func (h *Handler) ListDashboardDirectoryTree(c *gin.Context) {
 
 	bkMonitorProjectID, err := ws.ResolveBkMonitorProjectID()
 	if err != nil {
-		bkerrs.AbortWithErr(
-			c,
-			bkerrs.Wrapf(
-				err,
-				bkerrs.ErrCodeInvalidRequest,
-				"bk monitor project is not ready for workspace %s",
-				ws.ID,
-			),
-		)
+		bkerrs.AbortWithErr(c, errBkMonitorProjectNotReady.With("workspaceID", ws.ID).WithCause(err))
 		return
 	}
 

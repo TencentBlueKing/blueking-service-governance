@@ -25,6 +25,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	corev1 "k8s.io/api/core/v1"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/i18n"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
@@ -44,7 +45,7 @@ func ListBuiltinVars(
 	am *appmodel.AppModel,
 ) (envvartypes.EnvVariableList, error) {
 	envVars := make(envvartypes.EnvVariableList, 0)
-	envVars = append(envVars, getEnvBuiltinVars(environment)...)
+	envVars = append(envVars, getEnvBuiltinVars(ctx, environment)...)
 
 	scopedVars, err := ListBuiltinScoped(ctx, db, environment)
 	if err != nil {
@@ -54,51 +55,55 @@ func ListBuiltinVars(
 		envVars = append(envVars, envvartypes.EnvVariableObj{
 			Key:         item.Key,
 			Value:       item.Value,
-			Description: item.Description,
+			Description: item.LocalizedDescription(ctx),
 			IsBuiltin:   item.IsBuiltin,
 			IsSensitive: item.IsSensitive,
 		})
 	}
 
-	envVars = append(envVars, getRuntimeBuiltinVars()...)
+	envVars = append(envVars, getRuntimeBuiltinVars(ctx)...)
 
 	if app != nil {
-		envVars = append(envVars, getAppBuiltinVars(*app)...)
+		envVars = append(envVars, getAppBuiltinVars(ctx, *app)...)
 	}
 	if am != nil {
-		envVars = append(envVars, resourceLimitBuiltinVars(am.Workload.Resources)...)
+		envVars = append(envVars, resourceLimitBuiltinVars(ctx, am.Workload.Resources)...)
 	}
 	return envVars, nil
 }
 
 // Get the environment-level built-in env vars.
-func getEnvBuiltinVars(environment envmodel.Environment) envvartypes.EnvVariableList {
+func getEnvBuiltinVars(ctx context.Context, environment envmodel.Environment) envvartypes.EnvVariableList {
 	envVars := make(envvartypes.EnvVariableList, 0)
 	envVars = append(envVars, []envvartypes.EnvVariableObj{{
 		Key:         EnvVarNameEnvType,
 		Value:       environment.Type,
-		Description: "The type of the environment",
+		Description: i18n.LocalizeOr(ctx, "workload.envvars.builtin.envType", nil, "The type of the environment"),
 		IsBuiltin:   true,
 	}, {
 		Key:         EnvVarNameEnvName,
 		Value:       environment.Name,
-		Description: "The name of the environment",
+		Description: i18n.LocalizeOr(ctx, "workload.envvars.builtin.envName", nil, "The name of the environment"),
 		IsBuiltin:   true,
 	}}...)
 
 	// Extend the cluster-related vars
 	if environment.Cluster.ClusterID != "" {
 		envVars = append(envVars, envvartypes.EnvVariableObj{
-			Key:         EnvVarNameEnvNS,
-			Value:       environment.Cluster.Namespace,
-			Description: "The namespace configured in the environment",
-			IsBuiltin:   true,
+			Key:   EnvVarNameEnvNS,
+			Value: environment.Cluster.Namespace,
+			Description: i18n.LocalizeOr(
+				ctx, "workload.envvars.builtin.envNamespace", nil, "The namespace configured in the environment",
+			),
+			IsBuiltin: true,
 		})
 		envVars = append(envVars, envvartypes.EnvVariableObj{
-			Key:         EnvVarNameEnvCluster,
-			Value:       environment.Cluster.ClusterID,
-			Description: "The cluster ID configured in the environment",
-			IsBuiltin:   true,
+			Key:   EnvVarNameEnvCluster,
+			Value: environment.Cluster.ClusterID,
+			Description: i18n.LocalizeOr(
+				ctx, "workload.envvars.builtin.envCluster", nil, "The cluster ID configured in the environment",
+			),
+			IsBuiltin: true,
 		})
 	}
 	return envVars
@@ -106,10 +111,11 @@ func getEnvBuiltinVars(environment envmodel.Environment) envvartypes.EnvVariable
 
 // Get the runtime built-in env vars, which does not has any configured value but has Placeholder and
 // ValueFrom for config rendering and pod runtime injection.
-func getRuntimeBuiltinVars() envvartypes.EnvVariableList {
+func getRuntimeBuiltinVars(ctx context.Context) envvartypes.EnvVariableList {
 	vars := make(envvartypes.EnvVariableList, 0, len(RuntimeVars))
 	for _, rv := range RuntimeVars {
-		vars = append(vars, newRuntimeVariable(rv.Name, rv.Description, rv.FieldPath))
+		desc := i18n.LocalizeOr(ctx, rv.descKey, nil, rv.Description)
+		vars = append(vars, newRuntimeVariable(rv.Name, desc, rv.FieldPath))
 	}
 	return vars
 }
@@ -135,22 +141,27 @@ func newRuntimeVariable(name, description, fieldPath string) envvartypes.EnvVari
 }
 
 // Get the app-level built-in env vars.
-func getAppBuiltinVars(app bkmsapp.Application) envvartypes.EnvVariableList {
+func getAppBuiltinVars(ctx context.Context, app bkmsapp.Application) envvartypes.EnvVariableList {
 	envVars := make(envvartypes.EnvVariableList, 0)
 	envVars = append(envVars, envvartypes.EnvVariableObj{
 		Key:         EnvVarNameAppName,
 		Value:       app.Name,
-		Description: "The name of the application",
+		Description: i18n.LocalizeOr(ctx, "workload.envvars.builtin.appName", nil, "The name of the application"),
 		IsBuiltin:   true,
 	})
 
 	// AppModel 管理的应用由平台渲染容器，容器名固定，需要注入；Helm 应用的容器由 chart 决定
 	if appruntime.IsAppModelType(app.Type) {
 		envVars = append(envVars, envvartypes.EnvVariableObj{
-			Key:         EnvVarNameContainerName,
-			Value:       defaults.WorkloadMainContainerName,
-			Description: "The name of the container",
-			IsBuiltin:   true,
+			Key:   EnvVarNameContainerName,
+			Value: defaults.WorkloadMainContainerName,
+			Description: i18n.LocalizeOr(
+				ctx,
+				"workload.envvars.builtin.containerName",
+				nil,
+				"The name of the container",
+			),
+			IsBuiltin: true,
 		})
 	}
 	return envVars

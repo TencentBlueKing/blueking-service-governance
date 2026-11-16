@@ -1,0 +1,23 @@
+# 工作空间（pkg/core/workspace）
+WORKSPACE_NOT_FOUND:
+  zh: "工作空间不存在"
+  en: "Workspace not found"
+
+CORE_WORKSPACE_COMPONENT_DEF_NOT_FOUND:
+  zh: "组件定义 {{.type}}:{{.version}} 不存在"
+  en: "Component definition {{.type}}:{{.version}} not found"
+CORE_WORKSPACE_COMPONENT_NOT_FOUND:
+  zh: "工作空间 {{.workspaceID}} 中不存在组件 {{.compName}}"
+  en: "Component {{.compName}} not found in workspace {{.workspaceID}}"
+CORE_WORKSPACE_COMPONENT_REFERENCED:
+  zh: "组件 {{.compName}} 正被其他应用引用，无法删除"
+  en: "Component {{.compName}} is referenced by other applications and cannot be deleted"
+CORE_WORKSPACE_BKCC_BKCI_BOTH_EMPTY:
+  zh: "bkCCBizID 和 bkCIProjectID 不能同时为空"
+  en: "bkCCBizID and bkCIProjectID cannot both be empty"
+CORE_WORKSPACE_BKCC_BKCI_BOTH_PROVIDED:
+  zh: "bkCCBizID 和 bkCIProjectID 不能同时传入"
+  en: "bkCCBizID and bkCIProjectID cannot both be provided"
+CORE_WORKSPACE_HAS_ACTIVE_DEPLOYMENTS:
+  zh: "工作空间存在活跃部署，请先清理后再停用"
+  en: "Workspace has active deployments, please remove them first"

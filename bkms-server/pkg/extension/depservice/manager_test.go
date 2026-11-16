@@ -378,7 +378,7 @@ var _ = Describe("ServiceManager", func() {
 				EnvInstanceMap: map[string]bson.ObjectID{"prod": bson.NewObjectID()},
 			})
 			Expect(err).To(MatchError(depservice.ErrInvalidArgument))
-			Expect(err.Error()).To(ContainSubstring(`environment "prod" not found`))
+			Expect(err).To(MatchError(depservice.ErrBindingEnvNotFound))
 		})
 
 		It("maps an instance per env and rejects delete while referenced", func() {

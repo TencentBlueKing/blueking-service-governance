@@ -20,10 +20,11 @@ package bkerrs
 
 import "fmt"
 
+var errAPMConfigMissing = Define(ErrCodeNotFound, ErrDetailCodeAPMConfigMissing, "apm config missing")
+
 // WrapAPMConfigMissing 包装为 APM 配置缺失错误
 func WrapAPMConfigMissing(err error, appID, envName string) error {
-	wrappedErr := Wrapf(err, ErrCodeNotFound, "apm config missing, appID: %s, envName: %s", appID, envName)
-	return wrappedErr.SetDetails(
+	return errAPMConfigMissing.With("appID", appID).With("envName", envName).WithCause(err).SetDetails(
 		NewDetail(
 			ErrDetailCodeAPMConfigMissing,
 			fmt.Sprintf("should enable apm config in config file for appID: %s, envName: %s", appID, envName),

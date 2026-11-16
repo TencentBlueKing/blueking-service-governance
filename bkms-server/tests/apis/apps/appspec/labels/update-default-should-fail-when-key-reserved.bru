@@ -25,7 +25,7 @@ assert {
 
 tests {
   test("should reject system-reserved label key", () => {
-    expect(res.body.error.message).to.contains("reserved by the system");
+    expect(res.body.error.details[0].message).to.contains("reserved by the system");
   });
 }
 

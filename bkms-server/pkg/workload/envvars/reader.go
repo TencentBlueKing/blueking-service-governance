@@ -28,6 +28,7 @@ import (
 	"github.com/samber/lo"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/i18n"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
@@ -283,6 +284,7 @@ func (r *UnifiedEnvVarsReader) BuildEnvConflictedInfoByKeys(
 	}
 
 	return buildConflictedInfoByKeys(
+		ctx,
 		keys,
 		envvartypes.ConflictedSource{Source: envvartypes.EnvVarSourceScopedEnv},
 		bgVars.Vars,
@@ -303,6 +305,7 @@ func (r *UnifiedEnvVarsReader) BuildAppConflictedInfoByKeys(
 	}
 
 	return buildConflictedInfoByKeys(
+		ctx,
 		keys,
 		envvartypes.ConflictedSource{Source: envvartypes.EnvVarSourceApp, SourceValue: app.ID},
 		bgVars.Vars,
@@ -310,6 +313,7 @@ func (r *UnifiedEnvVarsReader) BuildAppConflictedInfoByKeys(
 }
 
 func buildConflictedInfoByKeys(
+	ctx context.Context,
 	keys []string,
 	keysSource envvartypes.ConflictedSource,
 	bgVars []envvartypes.EnvVariableRichItem,
@@ -349,10 +353,16 @@ func buildConflictedInfoByKeys(
 			conflictedValues = append(conflictedValues, cmp.Or(item.Obj.ValueForDisplay(), "--"))
 		}
 
+		joinedValues := strings.Join(conflictedValues, ", ")
 		result[key] = envvartypes.EnvVarConflictedInfo{
 			ConflictedSources:  conflictedSources,
 			OverrideConflicted: isHigherPriority(keysSource.Source, conflictedSources),
-			ConflictedDetail:   fmt.Sprintf("冲突值为：%s", strings.Join(conflictedValues, ", ")),
+			ConflictedDetail: i18n.LocalizeOr(
+				ctx,
+				"workload.envvars.conflictedDetail",
+				map[string]string{"values": joinedValues},
+				fmt.Sprintf("冲突值为：%s", joinedValues),
+			),
 		}
 	}
 	return result

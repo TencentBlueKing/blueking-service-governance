@@ -34,6 +34,10 @@ import (
 
 var _ audit.Handler = (*Handler)(nil)
 
+var errInvalidQueryParams = bkerrs.Define(
+	bkerrs.ErrCodeInvalidRequest, "MISC_AUDIT_QUERY_INVALID", "invalid operation record query",
+)
+
 // Handler handles Gin operation audit API requests.
 type Handler struct {
 	registry *storereg.Registry
@@ -84,7 +88,7 @@ func (h *Handler) ListOperationRecords(c *gin.Context) {
 
 	opts, err := queryInput.ToListOptions(uriInput.WorkspaceID)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, "parse query request"))
+		bkerrs.AbortWithErr(c, errInvalidQueryParams.WithCause(err))
 		return
 	}
 
@@ -107,7 +111,7 @@ func (h *Handler) ListOperationRecords(c *gin.Context) {
 		if e, ok := envMap[record.Group.EnvName]; ok {
 			env = &e
 		}
-		results = append(results, new(serializer.OperationRecordOutputObj).FromModel(record, env))
+		results = append(results, new(serializer.OperationRecordOutputObj).FromModel(ctx, record, env))
 	}
 
 	ginutils.OK(c, serializer.ListOperationRecordsOutput{
@@ -130,12 +134,13 @@ func (h *Handler) ListOperationRecords(c *gin.Context) {
 //	@Failure		500	{object}	bkerrs.GinErrorOutput
 //	@Router			/operation-records/filter-options [get]
 func (h *Handler) ListOperationRecordFilterOptions(c *gin.Context) {
+	ctx := c.Request.Context()
 	// 可选的资源类型
 	resourceTypes := make([]*serializer.FilterOptionOutputObj, 0, len(audit.AllResourceTypes))
 	for _, resourceType := range audit.AllResourceTypes {
 		resourceTypes = append(resourceTypes, &serializer.FilterOptionOutputObj{
 			Value:       string(resourceType),
-			DisplayName: resourceType.DisplayName(),
+			DisplayName: resourceType.DisplayName(ctx),
 		})
 	}
 	// 可选的操作类型
@@ -143,7 +148,7 @@ func (h *Handler) ListOperationRecordFilterOptions(c *gin.Context) {
 	for _, operationType := range audit.AllOperationTypes {
 		operationTypes = append(operationTypes, &serializer.FilterOptionOutputObj{
 			Value:       string(operationType),
-			DisplayName: operationType.DisplayName(),
+			DisplayName: operationType.DisplayName(ctx),
 		})
 	}
 	// 可选的操作结果
@@ -151,7 +156,7 @@ func (h *Handler) ListOperationRecordFilterOptions(c *gin.Context) {
 	for _, result := range audit.AllOperationResults {
 		operationResults = append(operationResults, &serializer.FilterOptionOutputObj{
 			Value:       string(result),
-			DisplayName: result.DisplayName(),
+			DisplayName: result.DisplayName(ctx),
 		})
 	}
 

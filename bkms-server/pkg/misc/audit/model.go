@@ -19,13 +19,20 @@
 package audit
 
 import (
+	"context"
 	"encoding/json"
 	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/i18n"
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 )
+
+type displayNameEntry struct {
+	key      string
+	fallback string
+}
 
 // AccessType 访问类型
 type AccessType string
@@ -96,45 +103,32 @@ var AllOperationTypes = []OperationType{
 	OperationTypeSkip,
 }
 
-// DisplayName 操作类型展示用名称 TODO 国际化
-func (t OperationType) DisplayName() string {
-	switch t {
-	case OperationTypeCreate:
-		return "创建"
-	case OperationTypeUpdate:
-		return "更新"
-	case OperationTypeRollback:
-		return "回滚"
-	case OperationTypeDelete:
-		return "删除"
-	case OperationTypeBuild:
-		return "构建"
-	case OperationTypeDeploy:
-		return "部署"
-	case OperationTypeUninstall:
-		return "卸载"
-	case OperationTypeScale:
-		return "扩缩容"
-	case OperationTypeGray:
-		return "灰度"
-	case OperationTypeExecute:
-		return "执行"
-	case OperationTypePublish:
-		return "热更新"
-	case OperationTypeRestart:
-		return "进程重启"
-	case OperationTypeContinue:
-		return "继续发布"
-	case OperationTypePause:
-		return "暂停"
-	case OperationTypeBackward:
-		return "回退上一批"
-	case OperationTypeSkip:
-		return "跳过剩余批次"
-	default:
-		// 默认返回原始值
-		return string(t)
+var operationTypeDisplayNames = map[OperationType]displayNameEntry{
+	OperationTypeCreate:    {key: "misc.audit.operationType.create", fallback: "创建"},
+	OperationTypeUpdate:    {key: "misc.audit.operationType.update", fallback: "更新"},
+	OperationTypeRollback:  {key: "misc.audit.operationType.rollback", fallback: "回滚"},
+	OperationTypeDelete:    {key: "misc.audit.operationType.delete", fallback: "删除"},
+	OperationTypeBuild:     {key: "misc.audit.operationType.build", fallback: "构建"},
+	OperationTypeDeploy:    {key: "misc.audit.operationType.deploy", fallback: "部署"},
+	OperationTypeUninstall: {key: "misc.audit.operationType.uninstall", fallback: "卸载"},
+	OperationTypeScale:     {key: "misc.audit.operationType.scale", fallback: "扩缩容"},
+	OperationTypeGray:      {key: "misc.audit.operationType.gray", fallback: "灰度"},
+	OperationTypeExecute:   {key: "misc.audit.operationType.execute", fallback: "执行"},
+	OperationTypePublish:   {key: "misc.audit.operationType.publish", fallback: "热更新"},
+	OperationTypeRestart:   {key: "misc.audit.operationType.restart", fallback: "进程重启"},
+	OperationTypeContinue:  {key: "misc.audit.operationType.continue", fallback: "继续发布"},
+	OperationTypePause:     {key: "misc.audit.operationType.pause", fallback: "暂停"},
+	OperationTypeBackward:  {key: "misc.audit.operationType.backward", fallback: "回退上一批"},
+	OperationTypeSkip:      {key: "misc.audit.operationType.skip", fallback: "跳过剩余批次"},
+}
+
+// DisplayName 操作类型展示用名称
+func (t OperationType) DisplayName(ctx context.Context) string {
+	if entry, ok := operationTypeDisplayNames[t]; ok {
+		return i18n.LocalizeOr(ctx, entry.key, nil, entry.fallback)
 	}
+	// 默认返回原始值
+	return string(t)
 }
 
 // ResourceType 资源类型
@@ -174,31 +168,25 @@ var AllResourceTypes = []ResourceType{
 	ResourceTypeDashboard,
 }
 
-// DisplayName 资源类型展示用名称 TODO 国际化
-func (t ResourceType) DisplayName() string {
-	switch t {
-	case ResourceTypeWorkspace:
-		return "工作空间"
-	case ResourceTypeEnv:
-		return "环境"
-	case ResourceTypeApp:
-		return "应用"
-	case ResourceTypeInstance:
-		return "应用实例"
-	case ResourceTypeComponentDef:
-		return "组件定义"
-	case ResourceTypeClusterAddon:
-		return "集群插件"
-	case ResourceTypePortPool:
-		return "端口池"
-	case ResourceTypeAlertStrategy:
-		return "告警策略"
-	case ResourceTypeDashboard:
-		return "仪表盘"
-	default:
-		// 默认返回原始值
-		return string(t)
+var resourceTypeDisplayNames = map[ResourceType]displayNameEntry{
+	ResourceTypeWorkspace:     {key: "misc.audit.resourceType.workspace", fallback: "工作空间"},
+	ResourceTypeEnv:           {key: "misc.audit.resourceType.env", fallback: "环境"},
+	ResourceTypeApp:           {key: "misc.audit.resourceType.app", fallback: "应用"},
+	ResourceTypeInstance:      {key: "misc.audit.resourceType.instance", fallback: "应用实例"},
+	ResourceTypeComponentDef:  {key: "misc.audit.resourceType.componentDef", fallback: "组件定义"},
+	ResourceTypeClusterAddon:  {key: "misc.audit.resourceType.clusterAddon", fallback: "集群插件"},
+	ResourceTypePortPool:      {key: "misc.audit.resourceType.portPool", fallback: "端口池"},
+	ResourceTypeAlertStrategy: {key: "misc.audit.resourceType.alertStrategy", fallback: "告警策略"},
+	ResourceTypeDashboard:     {key: "misc.audit.resourceType.dashboard", fallback: "仪表盘"},
+}
+
+// DisplayName 资源类型展示用名称
+func (t ResourceType) DisplayName(ctx context.Context) string {
+	if entry, ok := resourceTypeDisplayNames[t]; ok {
+		return i18n.LocalizeOr(ctx, entry.key, nil, entry.fallback)
 	}
+	// 默认返回原始值
+	return string(t)
 }
 
 // Attribute 资源属性
@@ -257,63 +245,41 @@ const (
 	AttributeBatchRelease Attribute = "batchRelease"
 )
 
-// DisplayName 属性展示用名称 TODO 国际化
-func (t Attribute) DisplayName() string {
-	switch t {
-	case AttributeDisplayName:
-		return "展示名称"
-	case AttributeHelmSpec:
-		return "Helm 配置"
-	case AttributeAppModel:
-		return "应用模型"
-	case AttributeAppConfigFile:
-		return "配置文件"
-	case AttributeBuildConfig:
-		return "构建配置"
-	case AttributeUserRole:
-		return "空间角色"
-	case AttributeAppComponents:
-		return "应用组件"
-	case AttributeWorkspaceComponent:
-		return "空间组件"
-	case AttributeWorkspaceAppSpecDefaults:
-		return "应用默认配置"
-	case AttributeReleaseStrategy:
-		return "发布策略"
-	case AttributeReplicas:
-		return "副本数"
-	case AttributeInstance:
-		return "应用实例"
-	case AttributeWebConsole:
-		return "WebConsole"
-	case AttributeWeTerm:
-		return "WeTerm"
-	case AttributePortForward:
-		return "端口转发"
-	case AttributeAdminCommand:
-		return "管理命令"
-	case AttributeEnvVars:
-		return "环境变量"
-	case AttributeHelmChart:
-		return "Helm Chart"
-	case AttributeScopedEnvVars:
-		return "作用域环境变量"
-	case AttributePolaris:
-		return "北极星"
-	case AttributeGPA:
-		return "自动扩缩容配置"
-	case AttributeHostPort:
-		return "HostPort 端口映射"
-	case AttributeVisibleEnvNames:
-		return "可见环境"
-	case AttributeImageRegistry:
-		return "镜像仓库"
-	case AttributeBatchRelease:
-		return "分批发布"
-	default:
-		// 默认返回原始值
-		return string(t)
+var attributeDisplayNames = map[Attribute]displayNameEntry{
+	AttributeDisplayName:              {key: "misc.audit.attribute.displayName", fallback: "展示名称"},
+	AttributeHelmSpec:                 {key: "misc.audit.attribute.helmSpec", fallback: "Helm 配置"},
+	AttributeAppModel:                 {key: "misc.audit.attribute.appModel", fallback: "应用模型"},
+	AttributeAppConfigFile:            {key: "misc.audit.attribute.appConfigFile", fallback: "配置文件"},
+	AttributeBuildConfig:              {key: "misc.audit.attribute.buildConfig", fallback: "构建配置"},
+	AttributeUserRole:                 {key: "misc.audit.attribute.userRole", fallback: "空间角色"},
+	AttributeAppComponents:            {key: "misc.audit.attribute.appComponents", fallback: "应用组件"},
+	AttributeWorkspaceComponent:       {key: "misc.audit.attribute.workspaceComponent", fallback: "空间组件"},
+	AttributeWorkspaceAppSpecDefaults: {key: "misc.audit.attribute.workspaceAppSpecDefaults", fallback: "应用默认配置"},
+	AttributeReleaseStrategy:          {key: "misc.audit.attribute.releaseStrategy", fallback: "发布策略"},
+	AttributeReplicas:                 {key: "misc.audit.attribute.replicas", fallback: "副本数"},
+	AttributeInstance:                 {key: "misc.audit.attribute.instance", fallback: "应用实例"},
+	AttributeWebConsole:               {key: "misc.audit.attribute.webConsole", fallback: "WebConsole"},
+	AttributeWeTerm:                   {key: "misc.audit.attribute.weTerm", fallback: "WeTerm"},
+	AttributePortForward:              {key: "misc.audit.attribute.portForward", fallback: "端口转发"},
+	AttributeAdminCommand:             {key: "misc.audit.attribute.adminCommand", fallback: "管理命令"},
+	AttributeEnvVars:                  {key: "misc.audit.attribute.envVars", fallback: "环境变量"},
+	AttributeHelmChart:                {key: "misc.audit.attribute.helmChart", fallback: "Helm Chart"},
+	AttributeScopedEnvVars:            {key: "misc.audit.attribute.scopedEnvVars", fallback: "作用域环境变量"},
+	AttributePolaris:                  {key: "misc.audit.attribute.polaris", fallback: "北极星"},
+	AttributeGPA:                      {key: "misc.audit.attribute.gpa", fallback: "自动扩缩容配置"},
+	AttributeHostPort:                 {key: "misc.audit.attribute.hostport", fallback: "HostPort 端口映射"},
+	AttributeVisibleEnvNames:          {key: "misc.audit.attribute.visibleEnvNames", fallback: "可见环境"},
+	AttributeImageRegistry:            {key: "misc.audit.attribute.imageRegistry", fallback: "镜像仓库"},
+	AttributeBatchRelease:             {key: "misc.audit.attribute.batchRelease", fallback: "分批发布"},
+}
+
+// DisplayName 属性展示用名称
+func (t Attribute) DisplayName(ctx context.Context) string {
+	if entry, ok := attributeDisplayNames[t]; ok {
+		return i18n.LocalizeOr(ctx, entry.key, nil, entry.fallback)
 	}
+	// 默认返回原始值
+	return string(t)
 }
 
 // Result 操作结果
@@ -329,17 +295,18 @@ const (
 // AllOperationResults 所有操作结果
 var AllOperationResults = []Result{ResultSuccess, ResultFailed}
 
-// DisplayName 操作结果展示用名称 TODO 国际化
-func (r Result) DisplayName() string {
-	switch r {
-	case ResultSuccess:
-		return "成功"
-	case ResultFailed:
-		return "失败"
-	default:
-		// 默认返回原始值
-		return string(r)
+var resultDisplayNames = map[Result]displayNameEntry{
+	ResultSuccess: {key: "misc.audit.result.success", fallback: "成功"},
+	ResultFailed:  {key: "misc.audit.result.failed", fallback: "失败"},
+}
+
+// DisplayName 操作结果展示用名称
+func (r Result) DisplayName(ctx context.Context) string {
+	if entry, ok := resultDisplayNames[r]; ok {
+		return i18n.LocalizeOr(ctx, entry.key, nil, entry.fallback)
 	}
+	// 默认返回原始值
+	return string(r)
 }
 
 // OperationData 操作数据

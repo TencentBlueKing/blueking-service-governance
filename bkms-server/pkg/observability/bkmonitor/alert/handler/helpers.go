@@ -33,6 +33,34 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
+var (
+	errInvalidStrategyID = bkerrs.Define(
+		bkerrs.ErrCodeInvalidRequest,
+		"OBSERVABILITY_BKMONITOR_ALERT_INVALID_STRATEGY_ID",
+		"invalid alert strategy ID",
+	)
+	errInvalidEnvIDs = bkerrs.Define(
+		bkerrs.ErrCodeInvalidRequest,
+		"OBSERVABILITY_BKMONITOR_ALERT_INVALID_ENV_IDS",
+		"invalid environment IDs in alert strategy",
+	)
+	errAlertStrategyDisplayNameExists = bkerrs.Define(
+		bkerrs.ErrCodeAlreadyExists,
+		"OBSERVABILITY_BKMONITOR_ALERT_STRATEGY_NAME_EXISTS",
+		"alert strategy display name already exists in app",
+	)
+	errAlertStrategyNotFound = bkerrs.Define(
+		bkerrs.ErrCodeNotFound,
+		"OBSERVABILITY_BKMONITOR_ALERT_STRATEGY_NOT_FOUND",
+		"alert strategy not found",
+	)
+	errAppNotFoundInWorkspace = bkerrs.Define(
+		bkerrs.ErrCodeNotFound,
+		"OBSERVABILITY_BKMONITOR_ALERT_APP_NOT_IN_WORKSPACE",
+		"app not found in workspace",
+	)
+)
+
 func (h *Handler) alertStrategyService() *alertstrategy.Service {
 	return alertstrategy.NewService(h.registry.DB)
 }
@@ -52,7 +80,7 @@ func (h *Handler) loadStrategyContext(
 	}
 	strategyObjID, err := bson.ObjectIDFromHex(strategyID)
 	if err != nil {
-		return nil, nil, bson.NilObjectID, bkerrs.Errorf(bkerrs.ErrCodeInvalidRequest, "invalid strategy ID")
+		return nil, nil, bson.NilObjectID, errInvalidStrategyID.WithCause(err)
 	}
 	if _, err = getAlertStrategyInApp(ctx, h.registry, strategyObjID, workspaceID, appID); err != nil {
 		return nil, nil, bson.NilObjectID, wrapAlertStrategyLookupErr(err)
@@ -62,7 +90,7 @@ func (h *Handler) loadStrategyContext(
 
 func wrapAlertStrategyLookupErr(err error) error {
 	if errors.Is(err, alertstrategy.ErrNotFound) {
-		return bkerrs.Wrap(err, bkerrs.ErrCodeNotFound, "alert strategy not found")
+		return errAlertStrategyNotFound.WithCause(err)
 	}
 	return bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get alert strategy")
 }
@@ -89,7 +117,7 @@ func validateAppInWorkspace(
 		return nil, err
 	}
 	if app.WorkspaceID != workspaceID {
-		return nil, bkerrs.Errorf(bkerrs.ErrCodeNotFound, "app %s not found in workspace %s", appID, workspaceID)
+		return nil, errAppNotFoundInWorkspace.With("appID", appID).With("workspaceID", workspaceID)
 	}
 	return app, nil
 }

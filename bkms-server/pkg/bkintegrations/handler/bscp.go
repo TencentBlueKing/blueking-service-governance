@@ -142,7 +142,7 @@ func (h *Handler) ListBSCPConfigs(c *gin.Context) {
 	ver := versions.LatestFullyReleased()
 	if ver == nil {
 		bkerrs.AbortWithErr(c, bkerrs.WrapBSCPNotFullyReleased(
-			bkerrs.New(bkerrs.ErrCodeNotFound, "no fully released version"),
+			errors.New("no fully released version"),
 			uriInput.BizID,
 			uriInput.ServiceID,
 		))
@@ -208,7 +208,7 @@ func (h *Handler) GetBSCPConfig(c *gin.Context) {
 	ver := versions.LatestFullyReleased()
 	if ver == nil {
 		bkerrs.AbortWithErr(c, bkerrs.WrapBSCPNotFullyReleased(
-			bkerrs.New(bkerrs.ErrCodeNotFound, "no fully released version"),
+			errors.New("no fully released version"),
 			uriInput.BizID,
 			uriInput.ServiceID,
 		))

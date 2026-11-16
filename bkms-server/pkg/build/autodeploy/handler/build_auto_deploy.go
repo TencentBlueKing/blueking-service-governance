@@ -46,6 +46,39 @@ import (
 
 var _ autodeploy.Handler = (*Handler)(nil)
 
+var (
+	errInvalidCodeRevision = bkerrs.Define(
+		bkerrs.ErrCodeInvalidArgument,
+		"BUILD_AUTODEPLOY_INVALID_CODE_REVISION",
+		"invalid code revision",
+	)
+	errInvalidAppType = bkerrs.Define(
+		bkerrs.ErrCodeInvalidArgument,
+		"BUILD_AUTODEPLOY_INVALID_APP_TYPE",
+		"invalid app type",
+	)
+	errNonProductionEnvRequired = bkerrs.Define(
+		bkerrs.ErrCodeInvalidArgument,
+		"BUILD_AUTODEPLOY_NON_PROD_ENV_REQUIRED",
+		"build auto deploy only supports non-production env",
+	)
+	errImageReferenceInvalid = bkerrs.Define(
+		bkerrs.ErrCodeInvalidArgument,
+		"BUILD_AUTODEPLOY_INVALID_IMAGE_REFERENCE",
+		"invalid platform build image reference",
+	)
+	errWorkspaceImageCredentialMissing = bkerrs.Define(
+		bkerrs.ErrCodeInvalidArgument,
+		"BUILD_AUTODEPLOY_IMAGE_CREDENTIAL_MISSING",
+		"workspace image registry credential is missing",
+	)
+	errCodeRevisionRequired = bkerrs.Define(
+		bkerrs.ErrCodeInvalidRequest,
+		"BUILD_AUTODEPLOY_CODE_REVISION_REQUIRED",
+		"code revision is required",
+	)
+)
+
 // Handler handles Gin build auto deploy requests.
 type Handler struct {
 	registry           *storereg.Registry
@@ -155,7 +188,7 @@ func (h *Handler) createAppModelBuildDeploy(c *gin.Context, expectedFramework st
 		return
 	}
 
-	// 触发构建并登记自动部署；参数类失败由 buildAutoDeployErrCode 映射
+	// 触发构建并登记自动部署；参数类失败由 wrapBuildAutoDeployError 映射
 	buildRecord, err := build.StartAndScheduleBuild(
 		c.Request.Context(),
 		buildService,
@@ -172,7 +205,7 @@ func (h *Handler) createAppModelBuildDeploy(c *gin.Context, expectedFramework st
 		},
 	)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, buildAutoDeployErrCode(err), "start build auto deploy"))
+		bkerrs.AbortWithErr(c, wrapBuildAutoDeployError(err))
 		return
 	}
 
@@ -195,7 +228,7 @@ func bindBuildDeployRequest(
 
 	rev, err := revision.Resolve(input.RevisionType, input.Revision, input.Branch)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "resolve code revision"))
+		bkerrs.AbortWithErr(c, errInvalidCodeRevision.WithCause(err))
 		return serializer.AppEnvURIInput{}, serializer.CreateAppModelBuildDeployInput{}, revision.CodeRevision{}, false
 	}
 
@@ -219,31 +252,35 @@ func (h *Handler) prepareBuildAutoDeploy(
 	// build-deploys 接口只要求是 AppModel 应用，旧专属接口还要求框架一致
 	if !appruntime.IsAppModelType(app.Type) ||
 		(expectedFramework != "" && mods.Of(app).Stack.Framework != expectedFramework) {
-		bkerrs.AbortWithErr(c, bkerrs.Errorf(bkerrs.ErrCodeInvalidArgument, "invalid app type: %s", app.Type))
+		bkerrs.AbortWithErr(c, errInvalidAppType.With("appType", app.Type))
 		return nil, false
 	}
 
 	if err = perm.NewManager().HasDeployEnvPerm(ctx, app.WorkspaceID, uriInput.EnvName); err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.WrapIAMNoPermission(err, app.WorkspaceID, "check env deploy perm"))
+		bkerrs.AbortWithErr(c, perm.WrapIAMNoPermission(err, app.WorkspaceID, "check env deploy perm"))
 		return nil, false
 	}
 
 	env, err := store.Of(h.registry.DB, envmodel.EnvMeta).
 		Get(ctx, envmodel.AppEnvByName(app.WorkspaceID, app.ID, uriInput.EnvName))
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeNotFound, "get env"))
+		if errors.Is(err, envmodel.ErrEnvNotFound) {
+			bkerrs.AbortWithErr(
+				c,
+				envmodel.ErrEnvNotFound.
+					With("workspaceID", app.WorkspaceID).
+					With("envName", uriInput.EnvName).
+					WithCause(err),
+			)
+			return nil, false
+		}
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "get env"))
 		return nil, false
 	}
 
 	// 生产环境不允许构建后直接部署，需要先发布再单独部署
 	if !supportsBuildAutoDeployEnvType(env.Type) {
-		bkerrs.AbortWithErr(
-			c,
-			bkerrs.Errorf(
-				bkerrs.ErrCodeInvalidArgument,
-				"build auto deploy only supports non-production env, please promote and deploy separately",
-			),
-		)
+		bkerrs.AbortWithErr(c, errNonProductionEnvRequired)
 		return nil, false
 	}
 
@@ -255,17 +292,19 @@ func (h *Handler) prepareBuildAutoDeploy(
 	return app, true
 }
 
-// buildAutoDeployErrCode 把构建启动失败映射成接口错误码
+// wrapBuildAutoDeployError 把构建启动失败映射成对应接口错误
 // StartAndScheduleBuild 内部会跑构建前置校验，镜像引用填错或缺凭证属参数问题，
 // 与保存构建配置时的错误码保持一致；其余失败仍按内部错误上报
-func buildAutoDeployErrCode(err error) bkerrs.ErrCode {
+func wrapBuildAutoDeployError(err error) error {
 	switch {
-	case build.IsImageReferenceInvalid(err) || errors.Is(err, build.ErrWorkspaceImageCredentialMissing):
-		return bkerrs.ErrCodeInvalidArgument
+	case build.IsImageReferenceInvalid(err):
+		return errImageReferenceInvalid.WithCause(err)
+	case errors.Is(err, build.ErrWorkspaceImageCredentialMissing):
+		return errWorkspaceImageCredentialMissing.WithCause(err)
 	case errors.Is(err, revision.ErrRequired):
-		return bkerrs.ErrCodeInvalidRequest
+		return errCodeRevisionRequired.WithCause(err)
 	default:
-		return bkerrs.ErrCodeInternalServerError
+		return errors.Wrap(err, "start build auto deploy")
 	}
 }
 

@@ -37,6 +37,22 @@ import (
 // Type defines the permission type required by a route.
 type Type string
 
+var (
+	errWorkspaceIDRequired = bkerrs.Define(
+		bkerrs.ErrCodeInvalidRequest,
+		"PERM_WORKSPACE_ID_REQUIRED",
+		"workspaceID is required",
+	)
+	errEnvIDRequired   = bkerrs.Define(bkerrs.ErrCodeInvalidRequest, "PERM_ENV_ID_REQUIRED", "envID is required")
+	errInvalidEnvID    = bkerrs.Define(bkerrs.ErrCodeInvalidArgument, "PERM_INVALID_ENV_ID", "invalid env id")
+	errAppIDRequired   = bkerrs.Define(bkerrs.ErrCodeInvalidRequest, "PERM_APP_ID_REQUIRED", "appID is required")
+	errEnvNameRequired = bkerrs.Define(
+		bkerrs.ErrCodeInvalidRequest,
+		"PERM_ENV_NAME_REQUIRED",
+		"envName is required",
+	)
+)
+
 const (
 	// TypeView checks view permission.
 	TypeView Type = "view"
@@ -82,7 +98,7 @@ func ValidateWorkspaceByID(
 		return nil, bkerrs.New(bkerrs.ErrCodeInternalServerError, "invalid permission type")
 	}
 	if err != nil {
-		return nil, bkerrs.WrapIAMNoPermission(err, ws.ID, "check workspace perm")
+		return nil, perm.WrapIAMNoPermission(err, ws.ID, "check workspace perm")
 	}
 	return ws, nil
 }
@@ -106,7 +122,7 @@ func ValidateWorkspaceForAppCreate(
 
 	err = perm.NewManager().HasCreateAppPerm(ctx, ws.ID)
 	if err != nil {
-		return nil, bkerrs.WrapIAMNoPermission(err, ws.ID, "check app perm")
+		return nil, perm.WrapIAMNoPermission(err, ws.ID, "check app perm")
 	}
 	return ws, nil
 }
@@ -117,13 +133,13 @@ func getWorkspaceByID(
 	workspaceID string,
 ) (*workspace.Workspace, error) {
 	if workspaceID == "" {
-		return nil, bkerrs.New(bkerrs.ErrCodeInvalidRequest, "workspaceID is required")
+		return nil, errWorkspaceIDRequired
 	}
 
 	ws, err := store.Of(registry.DB, workspace.Meta).Get(ctx, workspace.ByWorkspaceID(workspaceID))
 	if err != nil {
 		if errors.Is(err, workspace.ErrWorkspaceNotFound) {
-			return nil, bkerrs.Errorf(bkerrs.ErrCodeNotFound, "workspace %s not found", workspaceID)
+			return nil, workspace.ErrWorkspaceNotFound.With("workspaceID", workspaceID).WithCause(err)
 		}
 		return nil, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get workspace")
 	}
@@ -148,18 +164,18 @@ func ValidateEnvByID(
 	permType Type,
 ) (*envmodel.Environment, error) {
 	if envID == "" {
-		return nil, bkerrs.New(bkerrs.ErrCodeInvalidRequest, "envID is required")
+		return nil, errEnvIDRequired
 	}
 
 	envBsonID, err := bson.ObjectIDFromHex(envID)
 	if err != nil {
-		return nil, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "invalid env id")
+		return nil, errInvalidEnvID.WithCause(err)
 	}
 
 	env, err := store.Of(registry.DB, envmodel.EnvMeta).GetByID(ctx, envBsonID)
 	if err != nil {
 		if errors.Is(err, envmodel.ErrEnvNotFound) {
-			return nil, bkerrs.Errorf(bkerrs.ErrCodeNotFound, "environment %s not found", envID)
+			return nil, envmodel.ErrEnvNotFound.With("envID", envID).WithCause(err)
 		}
 		return nil, bkerrs.Wrapf(err, bkerrs.ErrCodeInternalServerError, "get environment %s", envID)
 	}
@@ -178,7 +194,7 @@ func ValidateEnvByID(
 		return nil, bkerrs.Errorf(bkerrs.ErrCodeInternalServerError, "invalid permission type: %v", permType)
 	}
 	if err != nil {
-		return nil, bkerrs.WrapIAMNoPermission(err, env.WorkspaceID, "check env perm")
+		return nil, perm.WrapIAMNoPermission(err, env.WorkspaceID, "check env perm")
 	}
 	return env, nil
 }
@@ -201,13 +217,13 @@ func ValidateAppByID(
 	permType Type,
 ) (*bkmsapp.Application, error) {
 	if appID == "" {
-		return nil, bkerrs.New(bkerrs.ErrCodeInvalidRequest, "appID is required")
+		return nil, errAppIDRequired
 	}
 
 	app, err := store.Of(registry.DB, bkmsapp.AppMeta).Get(ctx, bkmsapp.ByID(appID))
 	if err != nil {
 		if errors.Is(err, bkmsapp.ErrAppNotFound) {
-			return nil, bkerrs.Errorf(bkerrs.ErrCodeNotFound, "app %s not found", appID)
+			return nil, bkmsapp.ErrAppNotFound.With("appID", appID).WithCause(err)
 		}
 		return nil, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get app")
 	}
@@ -224,7 +240,7 @@ func ValidateAppByID(
 		return nil, bkerrs.New(bkerrs.ErrCodeInternalServerError, "invalid permission type")
 	}
 	if err != nil {
-		return nil, bkerrs.WrapIAMNoPermission(err, app.WorkspaceID, "check app perm")
+		return nil, perm.WrapIAMNoPermission(err, app.WorkspaceID, "check app perm")
 	}
 	return app, nil
 }
@@ -253,14 +269,14 @@ func ValidateAppEnvByName(
 		return nil, nil, err
 	}
 	if envName == "" {
-		return nil, nil, bkerrs.New(bkerrs.ErrCodeInvalidRequest, "envName is required")
+		return nil, nil, errEnvNameRequired
 	}
 
 	env, err := store.Of(registry.DB, envmodel.EnvMeta).
 		Get(ctx, envmodel.AppEnvByName(app.WorkspaceID, app.ID, envName))
 	if err != nil {
 		if errors.Is(err, envmodel.ErrEnvNotFound) {
-			return nil, nil, bkerrs.Errorf(bkerrs.ErrCodeNotFound, "environment %s not found", envName)
+			return nil, nil, envmodel.ErrEnvNotFound.With("envName", envName).WithCause(err)
 		}
 		return nil, nil, bkerrs.Wrapf(err, bkerrs.ErrCodeInternalServerError, "get env %s by name", envName)
 	}

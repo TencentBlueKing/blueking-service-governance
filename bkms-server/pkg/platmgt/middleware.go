@@ -45,10 +45,7 @@ func RequirePlatformRole(db *mongo.Database, allowedRoles ...platmgtadmin.RoleCo
 			return
 		}
 		if !ok || !slices.Contains(allowedRoles, roleCode) {
-			bkerrs.AbortWithErr(
-				c,
-				bkerrs.New(bkerrs.ErrCodeNoPermission, "platform administrator permission required"),
-			)
+			bkerrs.AbortWithErr(c, platmgtadmin.ErrPermissionDenied)
 			return
 		}
 		// 平台管理需要跨租户，但 ctx 里是操作者的租户

@@ -25,6 +25,12 @@ import (
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 )
 
+var errEnvNotVisible = bkerrs.Define(
+	bkerrs.ErrCodeInvalidRequest,
+	"CORE_APP_ENV_NOT_VISIBLE",
+	"environment is not in the application's visible environments",
+)
+
 // CheckVisibleEnv 按应用可见环境名单校验目标环境。
 // 名单为空表示未配置，不做限制；应用自己的特性环境无需写入名单，始终允许。
 // 用于创建部署（含构建后自动部署）、precheck 和创建特性环境时的来源环境校验。
@@ -39,9 +45,5 @@ func (a *Application) CheckVisibleEnv(env *envmodel.Environment) error {
 	if lo.Contains(a.VisibleEnvNames, env.Name) {
 		return nil
 	}
-	return bkerrs.Errorf(
-		bkerrs.ErrCodeInvalidRequest,
-		"environment %q is not in the application's visible environments",
-		env.Name,
-	)
+	return errEnvNotVisible.With("envName", env.Name)
 }

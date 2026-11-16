@@ -22,6 +22,7 @@ import (
 	"context"
 
 	"github.com/gin-gonic/gin"
+	"github.com/pkg/errors"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
@@ -62,12 +63,18 @@ func (h *Handler) resolveConsoleTarget(
 	workspace, err := store.Of(h.registry.DB, bkmsworkspace.Meta).
 		Get(ctx, bkmsworkspace.ByWorkspaceID(app.WorkspaceID))
 	if err != nil {
-		return nil, bkerrs.Wrap(err, bkerrs.ErrCodeNotFound, "get workspace failed")
+		if errors.Is(err, bkmsworkspace.ErrWorkspaceNotFound) {
+			return nil, bkmsworkspace.ErrWorkspaceNotFound.With("workspaceID", app.WorkspaceID).WithCause(err)
+		}
+		return nil, errors.Wrap(err, "get workspace failed")
 	}
 	// 获取当前部署对应的集群环境
 	env, err := h.envs().Get(ctx, envmodel.AppEnvByName(app.WorkspaceID, app.ID, uriInput.EnvName))
 	if err != nil {
-		return nil, bkerrs.Wrap(err, bkerrs.ErrCodeNotFound, "get env by name")
+		if errors.Is(err, envmodel.ErrEnvNotFound) {
+			return nil, envmodel.ErrEnvNotFound.With("envName", uriInput.EnvName).WithCause(err)
+		}
+		return nil, errors.Wrap(err, "get env by name")
 	}
 
 	containerName := defaults.WorkloadMainContainerName

@@ -22,6 +22,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strings"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/pkg/errors"
@@ -228,14 +229,14 @@ func (m *ServiceManager) DeleteServiceInstance(ctx context.Context, instID bson.
 		for _, b := range bindings {
 			names = append(names, fmt.Sprintf("%s/%s", b.AppID, b.Name))
 		}
-		return errors.Wrapf(ErrInvalidArgument, "service instance is used by bindings(%v), cannot delete", names)
+		return errInstanceInUse.With("bindings", strings.Join(names, ", ")).WithCause(ErrInvalidArgument)
 	}
 
 	if inst.Status == model.ProvisioningStatus {
-		return errors.Wrap(ErrInvalidArgument, "service instance is provisioning, cannot delete")
+		return errInstanceProvisioning.WithCause(ErrInvalidArgument)
 	}
 	if inst.Status == model.DeletingStatus {
-		return errors.Wrap(ErrInvalidArgument, "service instance is deleting, cannot delete")
+		return errInstanceDeleting.WithCause(ErrInvalidArgument)
 	}
 
 	if inst.Status == model.CreateFailedStatus {
@@ -243,11 +244,7 @@ func (m *ServiceManager) DeleteServiceInstance(ctx context.Context, instID bson.
 	}
 
 	if !isDeletableStatus(inst.Status) {
-		return errors.Wrapf(
-			ErrInvalidArgument,
-			"service instance status %q does not allow delete, wait until it becomes available/unavailable/createFailed/deleteFailed",
-			inst.Status,
-		)
+		return errInstanceStatusNotDeletable.With("status", string(inst.Status)).WithCause(ErrInvalidArgument)
 	}
 
 	plan, svcProvider, err := m.getPlanAndProvider(ctx, inst.ServiceName, inst.PlanName)

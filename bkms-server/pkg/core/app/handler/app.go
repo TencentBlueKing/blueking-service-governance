@@ -143,7 +143,7 @@ func (h *Handler) CreateApp(c *gin.Context) {
 		}
 		helmSpec := new(bkmsapp.HelmSpec)
 		if err = mapstructure.Decode(input.HelmSpec, helmSpec); err != nil {
-			bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, "parse helm spec"))
+			bkerrs.AbortWithErr(c, errInvalidHelmSpec.WithCause(err))
 			return
 		}
 		if helmSpec.HelmSource != nil && helmSpec.HelmSource.HelmRepoConfig != nil {
@@ -152,7 +152,7 @@ func (h *Handler) CreateApp(c *gin.Context) {
 				input.HelmSpec.HelmSource.HelmRepoConfig.Username,
 				input.HelmSpec.HelmSource.HelmRepoConfig.Password,
 			); err != nil {
-				bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "set user pass"))
+				bkerrs.AbortWithErr(c, errHelmRepoCredentialsInvalid.WithCause(err))
 				return
 			}
 		}
@@ -188,7 +188,7 @@ func (h *Handler) checkAppCreatable(ctx context.Context, workspaceID, name strin
 	// 检查应用是否已存在
 	existingApp, err := h.apps().Get(ctx, bkmsapp.ByName(workspaceID, name))
 	if existingApp != nil {
-		return bkerrs.Errorf(bkerrs.ErrCodeInvalidRequest, "app %s already exists", name)
+		return errAppAlreadyExists.With("appName", name)
 	}
 	if err != nil && !errors.Is(err, bkmsapp.ErrAppNotFound) {
 		return bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "check app existence")
@@ -204,18 +204,17 @@ func (h *Handler) createBuildConfig(
 ) (*imagebuild.Config, error) {
 	buildConfig, err := input.ToModel(app.ID)
 	if err != nil {
-		return nil, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, "parse build config")
+		return nil, errInvalidBuildConfig.WithCause(err)
 	}
 	imageReferenceValidator := workloadruntime.NewImageReferenceValidator(h.registry.DB)
 	if err = build.ValidatePlatformBuildImages(
 		ctx, imageReferenceValidator, h.persistMgr, buildConfig, app.WorkspaceID,
 	); err != nil {
 		// 镜像源鉴权失败或不可达时改镜像引用也没用，按内部错误上报；其余按参数问题
-		errCode := bkerrs.ErrCodeInvalidArgument
 		if build.IsImageRegistryFailure(err) {
-			errCode = bkerrs.ErrCodeInternalServerError
+			return nil, errors.Wrap(err, "validate platform build images")
 		}
-		return nil, bkerrs.New(errCode, err.Error())
+		return nil, errInvalidPlatformBuildImages.WithCause(err)
 	}
 	if err = bkci.EnsureWorkspaceRepositories(
 		ctx,
@@ -349,7 +348,7 @@ func (h *Handler) ResolveApp(c *gin.Context) {
 		app, err = h.apps().Get(ctx, bkmsapp.ByName(uriInput.WorkspaceID, input))
 		if err != nil {
 			if errors.Is(err, bkmsapp.ErrAppNotFound) {
-				bkerrs.AbortWithErr(c, bkerrs.Errorf(bkerrs.ErrCodeNotFound, "app %s not found", input))
+				bkerrs.AbortWithErr(c, bkmsapp.ErrAppNotFound.With("app", input).WithCause(err))
 				return
 			}
 			bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "resolve app by name"))
@@ -577,9 +576,7 @@ func (h *Handler) DeleteApp(c *gin.Context) {
 			return
 		}
 		if hasActive {
-			bkerrs.AbortWithErr(c, bkerrs.New(
-				bkerrs.ErrCodeInvalidRequest, "app has active deployments, please remove them first",
-			))
+			bkerrs.AbortWithErr(c, errAppHasActiveDeployments)
 			return
 		}
 	} else if appruntime.IsHelmBasedType(app.Type) {
@@ -589,9 +586,7 @@ func (h *Handler) DeleteApp(c *gin.Context) {
 			return
 		}
 		if hasActive {
-			bkerrs.AbortWithErr(c, bkerrs.New(
-				bkerrs.ErrCodeInvalidRequest, "app has active deployments, please remove them first",
-			))
+			bkerrs.AbortWithErr(c, errAppHasActiveDeployments)
 			return
 		}
 	}
@@ -669,7 +664,7 @@ func (h *Handler) UpdateAppDisplayName(c *gin.Context) {
 
 	if err = h.apps().Update(ctx, map[string]any{"displayName": input.DisplayName}, bkmsapp.ByID(app.ID)); err != nil {
 		if errors.Is(err, bkmsapp.ErrAppNotFound) {
-			bkerrs.AbortWithErr(c, bkerrs.Errorf(bkerrs.ErrCodeNotFound, "app %s not found", uriInput.AppID))
+			bkerrs.AbortWithErr(c, bkmsapp.ErrAppNotFound.With("appID", uriInput.AppID).WithCause(err))
 			return
 		}
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "update app display name"))
@@ -737,7 +732,7 @@ func (h *Handler) UpdateAppVisibleEnvs(c *gin.Context) {
 
 	if err = h.apps().Update(ctx, map[string]any{"visibleEnvNames": names}, bkmsapp.ByID(app.ID)); err != nil {
 		if errors.Is(err, bkmsapp.ErrAppNotFound) {
-			bkerrs.AbortWithErr(c, bkerrs.Errorf(bkerrs.ErrCodeNotFound, "app %s not found", uriInput.AppID))
+			bkerrs.AbortWithErr(c, bkmsapp.ErrAppNotFound.With("appID", uriInput.AppID).WithCause(err))
 			return
 		}
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "update app visible envs"))
@@ -770,21 +765,24 @@ func validateVisibleEnvs(appID string, names []string, envs []envmodel.Environme
 	envByName := lo.SliceToMap(envs, func(env envmodel.Environment) (string, envmodel.Environment) {
 		return env.Name, env
 	})
-	var invalid []string
+	var notFoundEnvs, featureEnvs []string
 	for _, name := range names {
 		env, exists := envByName[name]
 		if !exists {
-			invalid = append(invalid, name+" (environment does not exist)")
+			notFoundEnvs = append(notFoundEnvs, name)
 		} else if env.IsFeatureEnv() {
-			invalid = append(invalid, name+" (feature environments are not allowed)")
+			featureEnvs = append(featureEnvs, name)
 		}
 	}
-	if len(invalid) > 0 {
-		return bkerrs.Errorf(
-			bkerrs.ErrCodeInvalidRequest,
-			"invalid visible environment name(s): %s",
-			strings.Join(invalid, ", "),
-		)
+	switch {
+	case len(notFoundEnvs) > 0 && len(featureEnvs) > 0:
+		return errVisibleEnvsMixedInvalid.
+			With("notFoundEnvs", strings.Join(notFoundEnvs, ", ")).
+			With("featureEnvs", strings.Join(featureEnvs, ", "))
+	case len(notFoundEnvs) > 0:
+		return errVisibleEnvsNotFound.With("envs", strings.Join(notFoundEnvs, ", "))
+	case len(featureEnvs) > 0:
+		return errVisibleEnvsFeatureNotAllowed.With("envs", strings.Join(featureEnvs, ", "))
 	}
 
 	// 未选中的标准环境不能已有部署，也不能是特性环境的父环境。
@@ -794,20 +792,12 @@ func validateVisibleEnvs(appID string, names []string, envs []envmodel.Environme
 		}
 		// AppIDs 在尝试部署时加入，卸载成功后移除，覆盖部署中、失败和成功。
 		if lo.Contains(env.AppIDs, appID) {
-			return bkerrs.Errorf(
-				bkerrs.ErrCodeInvalidRequest,
-				"environment %q has a deployment and must remain visible",
-				env.Name,
-			)
+			return errVisibleEnvHasDeployment.With("envName", env.Name)
 		}
 		if lo.ContainsBy(envs, func(featureEnv envmodel.Environment) bool {
 			return featureEnv.IsFeatureEnv() && featureEnv.SourceEnvID == env.ID
 		}) {
-			return bkerrs.Errorf(
-				bkerrs.ErrCodeInvalidRequest,
-				"environment %q is the parent of a feature environment and must remain visible",
-				env.Name,
-			)
+			return errVisibleEnvHasFeatureChild.With("envName", env.Name)
 		}
 	}
 	return nil
@@ -887,11 +877,7 @@ func (h *Handler) GetAppDeployOverview(c *gin.Context) {
 	}
 
 	if !appruntime.IsAppModelType(app.Type) {
-		bkerrs.AbortWithErr(c, bkerrs.Errorf(
-			bkerrs.ErrCodeInvalidArgument,
-			"deploy overview is only supported for trpc/taf apps, got type %q",
-			app.Type,
-		))
+		bkerrs.AbortWithErr(c, errDeployOverviewUnsupportedType.With("appType", app.Type))
 		return
 	}
 
@@ -926,7 +912,7 @@ func (h *Handler) createAppByType(
 			return bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "create helm app resources")
 		}
 	default:
-		return bkerrs.Errorf(bkerrs.ErrCodeInvalidRequest, "unsupported app type: %s", app.Type)
+		return errUnsupportedAppType.With("appType", app.Type)
 	}
 	return nil
 }

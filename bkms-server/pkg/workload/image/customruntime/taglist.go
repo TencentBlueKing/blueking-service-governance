@@ -28,6 +28,7 @@ import (
 	"github.com/samber/lo"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/i18n"
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	infrasreg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/registry"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
@@ -140,7 +141,7 @@ func (m *TagQueryManager) RefreshTags(
 		log.Errorf(ctx, "refresh tags of %s failed: %v", imageName, err)
 		return &snapshot.RefreshResult{
 			Status:  snapshot.RefreshResultFailed,
-			Message: registryFailureMessage(err),
+			Message: registryFailureMessage(ctx, err),
 		}, nil
 	}
 	return nil, errors.Wrapf(err, "refresh tag snapshots of image %s", imageName)
@@ -247,14 +248,20 @@ func isRegistryFailure(err error) bool {
 }
 
 // registryFailureMessage 仓库侧失败的对外提示，不回显仓库原始响应，避免带出无关内部信息
-func registryFailureMessage(err error) string {
+func registryFailureMessage(ctx context.Context, err error) string {
 	switch {
 	case infrasreg.IsAuthRequired(err):
-		return registryAuthFailedMessage
+		return i18n.LocalizeOr(
+			ctx, "workload.image.customruntime.registryAuthFailed", nil, registryAuthFailedMessage,
+		)
 	case infrasreg.IsTagNotFound(err), errors.Is(err, snapshot.ErrRepoNotFound):
-		return registryImageMissedMessage
+		return i18n.LocalizeOr(
+			ctx, "workload.image.customruntime.registryImageNotFound", nil, registryImageMissedMessage,
+		)
 	default:
-		return registryUnreachableMessage
+		return i18n.LocalizeOr(
+			ctx, "workload.image.customruntime.registryUnreachable", nil, registryUnreachableMessage,
+		)
 	}
 }
 

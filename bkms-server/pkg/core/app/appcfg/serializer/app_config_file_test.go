@@ -19,12 +19,15 @@
 package serializer_test
 
 import (
+	"context"
 	"encoding/json"
 
 	"github.com/gin-gonic/gin/binding"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/i18n"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg/serializer"
 )
 
@@ -165,5 +168,43 @@ var _ = Describe("App config file serializers", func() {
 				]
 			}
 		}`))
+	})
+
+	Describe("AppConfigFileVersionOutputObj.FromModel", func() {
+		It("localizes system-generated version descriptions while keeping user descriptions intact", func() {
+			enCtx := i18n.WithLang(context.Background(), i18n.LangEN)
+			zhCtx := i18n.WithLang(context.Background(), i18n.LangZH)
+			rollbackFrom := int64(2)
+
+			initVersion := appcfg.AppConfigFileVersion{
+				Version:       1,
+				OperationType: appcfg.AppConfigFileVersionOperationTypeCreate,
+				Description:   appcfg.CfgSystemVersionDescription,
+			}
+			Expect(new(serializer.AppConfigFileVersionOutputObj).FromModel(enCtx, initVersion).Description).
+				To(Equal("Initial configuration (created by system)"))
+			Expect(new(serializer.AppConfigFileVersionOutputObj).FromModel(zhCtx, initVersion).Description).
+				To(Equal(appcfg.CfgSystemVersionDescription))
+
+			rollbackVersion := appcfg.AppConfigFileVersion{
+				Version:             3,
+				OperationType:       appcfg.AppConfigFileVersionOperationTypeRollback,
+				RollbackFromVersion: &rollbackFrom,
+				Description:         "回滚到 v2",
+			}
+			Expect(new(serializer.AppConfigFileVersionOutputObj).FromModel(enCtx, rollbackVersion).Description).
+				To(Equal("Rolled back to v2"))
+			Expect(new(serializer.AppConfigFileVersionOutputObj).FromModel(zhCtx, rollbackVersion).Description).
+				To(Equal("回滚到 v2"))
+
+			customVersion := appcfg.AppConfigFileVersion{
+				Version:             4,
+				OperationType:       appcfg.AppConfigFileVersionOperationTypeRollback,
+				RollbackFromVersion: &rollbackFrom,
+				Description:         "manual rollback note",
+			}
+			Expect(new(serializer.AppConfigFileVersionOutputObj).FromModel(enCtx, customVersion).Description).
+				To(Equal("manual rollback note"))
+		})
 	})
 })

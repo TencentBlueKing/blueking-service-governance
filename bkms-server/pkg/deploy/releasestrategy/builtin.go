@@ -85,6 +85,18 @@ func IsBuiltinName(name string) bool {
 	return lo.ContainsBy(builtinStrategies, func(s ReleaseStrategy) bool { return s.Name == name })
 }
 
+// builtinStrategyNameKeys 平台内置发布策略 ID（Hex）到 i18n key 的映射
+var builtinStrategyNameKeys = map[string]string{
+	(bson.ObjectID{11: 3}).Hex(): "deploy.releaseStrategy.builtin.threeBatches.name",
+	(bson.ObjectID{11: 4}).Hex(): "deploy.releaseStrategy.builtin.fourBatches.name",
+	(bson.ObjectID{11: 5}).Hex(): "deploy.releaseStrategy.builtin.fiveBatches.name",
+}
+
+// BuiltinNameI18nKey 返回平台内置策略 ID（Hex）对应的国际化 key；非内置策略返回空字符串
+func BuiltinNameI18nKey(idHex string) string {
+	return builtinStrategyNameKeys[idHex]
+}
+
 // getBuiltinStrategy 按 ID 查找平台内置策略，返回副本
 func getBuiltinStrategy(id string) (*ReleaseStrategy, bool) {
 	for _, s := range BuiltinStrategies() {

@@ -19,10 +19,11 @@
 package handler
 
 import (
+	"strconv"
+
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkci"
 	buildserializer "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/build/serializer"
 	imagebuild "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 )
 
 // buildConfigFromInput converts the request payload into a persisted build
@@ -44,17 +45,10 @@ func buildConfigFromInput(
 		if tagCfg.Type == string(imagebuild.VersionTypeCustom) && tagCfg.CustomOpts != nil {
 			opts := tagCfg.CustomOpts
 			if len(opts.Prefix) > imagebuild.MaxCustomTagPrefixLength {
-				return nil, bkerrs.Errorf(
-					bkerrs.ErrCodeInvalidArgument,
-					"custom tag prefix must be at most %d characters",
-					imagebuild.MaxCustomTagPrefixLength,
-				)
+				return nil, errCustomTagPrefixTooLong.With("max", strconv.Itoa(imagebuild.MaxCustomTagPrefixLength))
 			}
 			if !opts.WithRevision && !opts.WithBuildTime && opts.Prefix == "" {
-				return nil, bkerrs.New(
-					bkerrs.ErrCodeInvalidArgument,
-					"custom tag must have at least one of: prefix, withRevision, withBuildTime",
-				)
+				return nil, errCustomTagEmpty
 			}
 			cfg.TagConfig.CustomOpts = &imagebuild.CustomTagOpts{
 				Prefix:        opts.Prefix,
@@ -67,7 +61,7 @@ func buildConfigFromInput(
 	switch cfg.SourceType {
 	case imagebuild.SourceTypeImageRegistry:
 		if input.Image == nil {
-			return nil, bkerrs.New(bkerrs.ErrCodeInvalidArgument, "image field is required")
+			return nil, errImageFieldRequired
 		}
 		cfg.Image = &imagebuild.ImageConfig{Name: input.Image.Name}
 		var existingImage *imagebuild.ImageConfig
@@ -75,21 +69,21 @@ func buildConfigFromInput(
 			existingImage = dataBefore.Image
 		}
 		if err := cfg.Image.SetUserPass(existingImage, input.Image.Username, input.Image.Password); err != nil {
-			return nil, bkerrs.New(bkerrs.ErrCodeInvalidArgument, err.Error())
+			return nil, errInvalidImageCredentials.WithCause(err)
 		}
 	case imagebuild.SourceTypeCodeRepository:
 		if input.CodeRepo == nil {
-			return nil, bkerrs.New(bkerrs.ErrCodeInvalidArgument, "code repo field is required")
+			return nil, errCodeRepoFieldRequired
 		}
 		codeRepo, err := input.CodeRepo.ToModel()
 		if err != nil {
-			return nil, bkerrs.New(bkerrs.ErrCodeInvalidArgument, err.Error())
+			return nil, errInvalidCodeRepoConfig.WithCause(err)
 		}
 		cfg.PipelineType = string(bkci.PipelineTypeDockerfile)
 		cfg.CodeRepo = codeRepo
 	case imagebuild.SourceTypePipeline:
 		if input.Pipeline == nil {
-			return nil, bkerrs.New(bkerrs.ErrCodeInvalidArgument, "pipeline field is required")
+			return nil, errPipelineFieldRequired
 		}
 		cfg.PipelineType = input.Pipeline.PipelineID
 		cfg.Pipeline = &imagebuild.PipelineConfig{
@@ -97,7 +91,7 @@ func buildConfigFromInput(
 			Params:     input.Pipeline.Params,
 		}
 	default:
-		return nil, bkerrs.New(bkerrs.ErrCodeInvalidArgument, "invalid source type")
+		return nil, errInvalidSourceType
 	}
 
 	return cfg, nil

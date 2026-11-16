@@ -21,9 +21,11 @@ package handler
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/gin-gonic/gin"
+	pkgerrors "github.com/pkg/errors"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
@@ -34,6 +36,12 @@ import (
 	ginperm "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/perm"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/snapshot"
+)
+
+var errNotAppModelApp = bkerrs.Define(
+	bkerrs.ErrCodeInvalidRequest,
+	"DEPLOY_NOT_APPMODEL_APP",
+	"not appmodel app",
 )
 
 // validateHelmDeployAppEnv 校验 appID、envName 和应用权限，并返回部署环境信息
@@ -50,7 +58,13 @@ func (h *Handler) validateHelmDeployAppEnv(
 	env, err := store.Of(h.registry.DB, bkmsenv.EnvMeta).
 		Get(ctx, bkmsenv.AppEnvByName(app.WorkspaceID, app.ID, envName))
 	if err != nil {
-		return nil, nil, bkerrs.Wrapf(err, bkerrs.ErrCodeNotFound, "get workspace %s env %s", app.WorkspaceID, envName)
+		if errors.Is(err, bkmsenv.ErrEnvNotFound) {
+			return nil, nil, bkmsenv.ErrEnvNotFound.
+				With("workspaceID", app.WorkspaceID).
+				With("envName", envName).
+				WithCause(err)
+		}
+		return nil, nil, pkgerrors.Wrapf(err, "get workspace %s env %s", app.WorkspaceID, envName)
 	}
 	return app, env, nil
 }
@@ -68,11 +82,11 @@ func (h *Handler) validateAppModelDeployAppEnv(
 		return nil, nil, err
 	}
 	if !appruntime.IsAppModelType(app.Type) {
-		return nil, nil, bkerrs.New(bkerrs.ErrCodeInvalidRequest, "not appmodel app")
+		return nil, nil, errNotAppModelApp.With("appType", app.Type)
 	}
 	if requireDeployEnvPerm {
 		if err = perm.NewManager().HasDeployEnvPerm(ctx, app.WorkspaceID, envName); err != nil {
-			return nil, nil, bkerrs.WrapIAMNoPermission(err, app.WorkspaceID, "check env deploy perm")
+			return nil, nil, perm.WrapIAMNoPermission(err, app.WorkspaceID, "check env deploy perm")
 		}
 	}
 	return app, env, nil

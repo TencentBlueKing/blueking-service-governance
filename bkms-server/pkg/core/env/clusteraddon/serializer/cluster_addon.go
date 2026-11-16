@@ -20,6 +20,9 @@
 package serializer
 
 import (
+	"context"
+
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/i18n"
 	clusteraddon "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/clusteraddon"
 )
 
@@ -104,11 +107,16 @@ type ClusterInstallInfoOutput struct {
 }
 
 // FromModel fills output fields from a ClusterAddonInfo domain model.
-func (o *ClusterAddonInfoOutput) FromModel(info clusteraddon.ClusterAddonInfo) *ClusterAddonInfoOutput {
+func (o *ClusterAddonInfoOutput) FromModel(
+	ctx context.Context,
+	info clusteraddon.ClusterAddonInfo,
+) *ClusterAddonInfoOutput {
 	*o = ClusterAddonInfoOutput{
-		Name:                info.Name,
-		DisplayName:         info.DisplayName,
-		Description:         info.Description,
+		Name:        info.Name,
+		DisplayName: info.DisplayName,
+		Description: i18n.LocalizeOr(
+			ctx, "cluster_addon.addon."+info.Name+".description", nil, info.Description,
+		),
 		RequiredForAppTypes: info.RequiredForAppTypes,
 		OptionalForAppTypes: info.OptionalForAppTypes,
 		SupportedActions:    info.SupportedActions,
@@ -118,7 +126,9 @@ func (o *ClusterAddonInfoOutput) FromModel(info clusteraddon.ClusterAddonInfo) *
 			ChartName:           info.ChartInfo.ChartName,
 			DefaultChartVersion: info.ChartInfo.DefaultChartVersion,
 			AvailableVersions:   info.ChartInfo.AvailableVersions,
-			ExampleValues:       info.ChartInfo.ExampleValues,
+			ExampleValues: i18n.LocalizeOr(
+				ctx, "cluster_addon.addon."+info.Name+".exampleValues", nil, info.ChartInfo.ExampleValues,
+			),
 		}
 	}
 	if info.InstallInfo != nil {

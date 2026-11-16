@@ -173,7 +173,11 @@ func (h *Handler) ListAppBgEnvVars(c *gin.Context) {
 	env, err := store.Of(h.registry.DB, envmodel.EnvMeta).
 		Get(ctx, envmodel.AppEnvByName(app.WorkspaceID, app.ID, uriInput.EnvName))
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrapf(err, bkerrs.ErrCodeNotFound, "get env by name"))
+		if errors.Is(err, envmodel.ErrEnvNotFound) {
+			bkerrs.AbortWithErr(c, envmodel.ErrEnvNotFound.With("envName", uriInput.EnvName).WithCause(err))
+			return
+		}
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "get env by name"))
 		return
 	}
 

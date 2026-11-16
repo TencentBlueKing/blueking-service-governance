@@ -61,10 +61,11 @@ func (h *Handler) platAdminService() *admin.Service {
 //	@Failure	500	{object}	bkerrs.GinErrorOutput
 //	@Router		/plat-mgt/admins/roles [get]
 func (h *Handler) ListRoles(c *gin.Context) {
+	ctx := c.Request.Context()
 	roles := admin.Roles()
 	data := make([]*serializer.RoleOutput, 0, len(roles))
 	for _, roleInfo := range roles {
-		data = append(data, serializer.NewRoleOutput(roleInfo))
+		data = append(data, serializer.NewRoleOutput(ctx, roleInfo))
 	}
 	ginutils.OK(c, serializer.ListRolesResponse{Data: data})
 }
@@ -172,14 +173,25 @@ func (h *Handler) RevokeRole(c *gin.Context) {
 	ginutils.NoContent(c)
 }
 
+var (
+	errInvalidRoleCode = bkerrs.Define(
+		bkerrs.ErrCodeInvalidArgument, "PLATMGT_ADMIN_INVALID_ROLE_CODE", "invalid platform role code",
+	)
+	errRoleBindingAlreadyExists = bkerrs.Define(
+		bkerrs.ErrCodeAlreadyExists,
+		"PLATMGT_ADMIN_ROLE_BINDING_EXISTS",
+		"platform administrator role binding already exists",
+	)
+)
+
 func toAPIError(err error, internalMessage string) error {
 	switch {
 	case errors.Is(err, admin.ErrPermissionDenied):
-		return bkerrs.New(bkerrs.ErrCodeNoPermission, "platform administrator permission required")
+		return admin.ErrPermissionDenied.WithCause(err)
 	case errors.Is(err, admin.ErrInvalidRoleCode):
-		return bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "invalid platform role code")
+		return errInvalidRoleCode.WithCause(err)
 	case errors.Is(err, admin.ErrRoleBindingAlreadyExists):
-		return bkerrs.Wrap(err, bkerrs.ErrCodeAlreadyExists, "platform administrator role binding already exists")
+		return errRoleBindingAlreadyExists.WithCause(err)
 	default:
 		return bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, internalMessage)
 	}

@@ -71,6 +71,8 @@ type RuntimeVar struct {
 	Name string
 	// Description is a human-readable description.
 	Description string
+	// descKey is the i18n key for Description.
+	descKey string
 	// FieldPath is the Kubernetes Downward API field path (e.g., "status.podIP").
 	FieldPath string
 }
@@ -79,9 +81,24 @@ type RuntimeVar struct {
 // These variables have their Value set to a placeholder at compile time and are resolved
 // at pod startup by an init container.
 var RuntimeVars = []RuntimeVar{
-	{Name: EnvVarNamePodIP, Description: "Pod IP address", FieldPath: "status.podIP"},
-	{Name: EnvVarNamePodName, Description: "Pod name", FieldPath: "metadata.name"},
-	{Name: EnvVarNameNodeIP, Description: "Node IP address", FieldPath: "status.hostIP"},
+	{
+		Name:        EnvVarNamePodIP,
+		Description: "Pod IP address",
+		descKey:     "workload.envvars.builtin.podIP",
+		FieldPath:   "status.podIP",
+	},
+	{
+		Name:        EnvVarNamePodName,
+		Description: "Pod name",
+		descKey:     "workload.envvars.builtin.podName",
+		FieldPath:   "metadata.name",
+	},
+	{
+		Name:        EnvVarNameNodeIP,
+		Description: "Node IP address",
+		descKey:     "workload.envvars.builtin.nodeIP",
+		FieldPath:   "status.hostIP",
+	},
 }
 
 // BuildAppEnvVars returns the env variables for the given application in the environment.

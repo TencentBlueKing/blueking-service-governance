@@ -25,6 +25,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/i18n"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
@@ -105,7 +106,9 @@ global:
 `)
 
 			// Validate the YAML
-			result, err := arranger.ValidateFileContent(ctx, &app, yamlWithoutPlaceholders, appcfg.FileFormatYAML)
+			result, err := arranger.ValidateFileContent(
+				i18n.WithLang(ctx, i18n.LangEN), &app, yamlWithoutPlaceholders, appcfg.FileFormatYAML,
+			)
 			// Both validations should fail
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result).To(Equal(ArrgResult{
@@ -116,6 +119,19 @@ global:
 				IngressDomain: ArrgResultItem{
 					Status:        ArrgStatusSkipped,
 					SkippedReason: "missing ingress domain placeholder in values.yaml",
+				},
+			}))
+
+			zhResult, err := arranger.ValidateFileContent(ctx, &app, yamlWithoutPlaceholders, appcfg.FileFormatYAML)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(zhResult).To(Equal(ArrgResult{
+				WorkloadImage: ArrgResultItem{
+					Status:        ArrgStatusSkipped,
+					SkippedReason: "values.yaml 中缺少镜像占位符",
+				},
+				IngressDomain: ArrgResultItem{
+					Status:        ArrgStatusSkipped,
+					SkippedReason: "values.yaml 中缺少 Ingress 域名占位符",
 				},
 			}))
 		})

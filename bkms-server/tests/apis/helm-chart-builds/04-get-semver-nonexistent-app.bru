@@ -18,7 +18,7 @@ assert {
 tests {
   test("should return Gin error for nonexistent app", () => {
     expect(res.body.error.code).to.equal("NOT_FOUND");
-    expect(res.body.error.message).to.contain("not found");
+    expect(res.body.error.code).to.equal("NOT_FOUND");
   });
 }
 

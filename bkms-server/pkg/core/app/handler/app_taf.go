@@ -20,9 +20,9 @@ package handler
 
 import (
 	"context"
-	"errors"
 
 	"github.com/gin-gonic/gin"
+	"github.com/pkg/errors"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
@@ -72,27 +72,23 @@ func (h *Handler) UpdateAppTafSpec(c *gin.Context) {
 
 	// 新接口创建的 bkmsApp 应用只能通过 startup-config 修改，避免把旧字段写回新应用
 	if app.Type == bkmsapp.AppTypeBKMSApp {
-		bkerrs.AbortWithErr(c, bkerrs.New(bkerrs.ErrCodeInvalidRequest, "bkmsApp app must use startup-config"))
+		bkerrs.AbortWithErr(c, errBKMSAppMustUseStartupConfig)
 		return
 	}
 
 	// 检查应用框架
 	if mods.Of(app).Stack.Framework != appruntime.FrameworkTAF {
-		bkerrs.AbortWithErr(c, bkerrs.New(bkerrs.ErrCodeInvalidRequest, "only TAF app supports taf spec"))
+		bkerrs.AbortWithErr(c, errOnlyTAFSupportsTafSpec)
 		return
 	}
 
 	if input.AppModelSpec == nil || input.AppModelSpec.TafSpec == nil {
-		bkerrs.AbortWithErr(c, bkerrs.New(bkerrs.ErrCodeInvalidRequest, "appModelSpec.tafSpec is required"))
+		bkerrs.AbortWithErr(c, errTafSpecRequired)
 		return
 	}
 
 	// 更新 AppModel 应用配置（复用现有逻辑）
 	if err = h.updateTafApp(ctx, app, input.AppModelSpec); err != nil {
-		code := bkerrs.ErrCodeInternalServerError
-		if errors.Is(err, appcfg.ErrInvalidConfigSpec) {
-			code = bkerrs.ErrCodeInvalidRequest
-		}
 		if errors.Is(err, appcfg.ErrAppConfigFileDefAlreadyExists) {
 			spec := input.AppModelSpec.TafSpec
 			bkerrs.AbortWithErr(c, bkerrs.WrapAppConfigFileMountIdentityConflict(
@@ -100,7 +96,11 @@ func (h *Handler) UpdateAppTafSpec(c *gin.Context) {
 			))
 			return
 		}
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, code, "update taf app"))
+		if errors.Is(err, appcfg.ErrInvalidConfigSpec) {
+			bkerrs.AbortWithErr(c, errInvalidConfigSpecRequest.WithCause(err))
+			return
+		}
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "update taf app"))
 		return
 	}
 

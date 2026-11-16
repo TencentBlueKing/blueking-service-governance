@@ -25,8 +25,9 @@ tests {
     expect(res.body.error.code).to.equal("INVALID_REQUEST");
     expect(res.body.error.system).to.equal("bkms");
     expect(res.body.error.module).to.equal("bkms-server");
-    expect(res.body.error.message).to.contain("ListTopologyNodeEventsQueryInput.PageSize");
-    expect(res.body.error.message).to.contain("failed on the 'oneof' tag");
+    expect(res.body.error.details[0].code).to.equal("REQUEST_PARAMS_INVALID");
+    expect(res.body.error.details[0].message).to.contain("ListTopologyNodeEventsQueryInput.PageSize");
+    expect(res.body.error.details[0].message).to.contain("failed on the 'oneof' tag");
   })
 }
 

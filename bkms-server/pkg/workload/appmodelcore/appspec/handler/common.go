@@ -35,6 +35,18 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appspec/serializer"
 )
 
+var (
+	errAppSpecValidationFailed = bkerrs.Define(
+		bkerrs.ErrCodeInvalidRequest, "WORKLOAD_APPSPEC_VALIDATION_FAILED", "app spec validation failed",
+	)
+	errEnvAppSpecSectionNotFound = bkerrs.Define(
+		bkerrs.ErrCodeNotFound, "WORKLOAD_APPSPEC_ENV_SECTION_NOT_FOUND", "env app spec section not found",
+	)
+	errInvalidEnvAppSpecSection = bkerrs.Define(
+		bkerrs.ErrCodeInvalidArgument, "WORKLOAD_APPSPEC_INVALID_ENV_SECTION", "invalid env app spec section",
+	)
+)
+
 // Handler handles Gin AppSpec API requests.
 type Handler struct {
 	registry *storereg.Registry
@@ -138,7 +150,7 @@ func setDefaultSection[T, I any](
 		appspec.SectionWriteModeReplace,
 	); err != nil {
 		if errors.Is(err, appspec.ErrAppSpecValidation) {
-			bkerrs.AbortWithErr(c, bkerrs.Wrapf(err, bkerrs.ErrCodeInvalidRequest, "validate %s", sectionName))
+			bkerrs.AbortWithErr(c, errAppSpecValidationFailed.With("section", sectionName).WithCause(err))
 			return
 		}
 		bkerrs.AbortWithErr(
@@ -175,7 +187,9 @@ func getEnvSection[T, O any](
 	sectionValue, err := appspec.GetEnvSection(ctx, h.registry.DB, app.ID, env.Name, section)
 	if err != nil {
 		if errors.Is(err, appspec.ErrAppSpecNotFound) {
-			bkerrs.AbortWithErr(c, bkerrs.Wrapf(err, bkerrs.ErrCodeNotFound, "env %s not found", sectionName))
+			bkerrs.AbortWithErr(
+				c, errEnvAppSpecSectionNotFound.With("section", sectionName).With("envName", env.Name).WithCause(err),
+			)
 			return
 		}
 		bkerrs.AbortWithErr(
@@ -185,7 +199,9 @@ func getEnvSection[T, O any](
 		return
 	}
 	if sectionValue == nil {
-		bkerrs.AbortWithErr(c, bkerrs.Errorf(bkerrs.ErrCodeNotFound, "env %s not found", sectionName))
+		bkerrs.AbortWithErr(
+			c, errEnvAppSpecSectionNotFound.With("section", sectionName).With("envName", env.Name),
+		)
 		return
 	}
 	ginutils.OK(c, sectionOutput[O]{Data: toOutput(sectionValue, app)})
@@ -274,7 +290,9 @@ func setEnvSectionChecked[T, I any](
 	}
 	newSection, err := toModel(input, app)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrapf(err, bkerrs.ErrCodeInvalidArgument, "invalid env %s", sectionName))
+		bkerrs.AbortWithErr(
+			c, errInvalidEnvAppSpecSection.With("section", sectionName).With("envName", env.Name).WithCause(err),
+		)
 		return
 	}
 
@@ -288,7 +306,7 @@ func setEnvSectionChecked[T, I any](
 		appspec.SectionWriteModeReplace,
 	); err != nil {
 		if errors.Is(err, appspec.ErrAppSpecValidation) {
-			bkerrs.AbortWithErr(c, bkerrs.Wrapf(err, bkerrs.ErrCodeInvalidRequest, "validate env %s", sectionName))
+			bkerrs.AbortWithErr(c, errAppSpecValidationFailed.With("section", sectionName).WithCause(err))
 			return
 		}
 		bkerrs.AbortWithErr(c, bkerrs.Wrapf(err, bkerrs.ErrCodeInternalServerError, "setting env %s", sectionName))
@@ -337,7 +355,7 @@ func deleteEnvSection[T any](
 		appspec.SectionWriteModeReplace,
 	); err != nil {
 		if errors.Is(err, appspec.ErrAppSpecValidation) {
-			bkerrs.AbortWithErr(c, bkerrs.Wrapf(err, bkerrs.ErrCodeInvalidRequest, "validate env %s", sectionName))
+			bkerrs.AbortWithErr(c, errAppSpecValidationFailed.With("section", sectionName).WithCause(err))
 			return
 		}
 		bkerrs.AbortWithErr(c, bkerrs.Wrapf(err, bkerrs.ErrCodeInternalServerError, "deleting env %s", sectionName))

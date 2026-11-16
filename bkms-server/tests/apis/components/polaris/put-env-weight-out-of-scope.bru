@@ -24,7 +24,7 @@ assert {
 tests {
   test("should reject an environment outside the config scope", () => {
     expect(res.body.error.code).to.equal("INVALID_REQUEST");
-    expect(res.body.error.message).to.contain("is not in scope");
+    expect(res.body.error.details[0].code).to.equal("EXTENSION_POLARIS_ENV_OUT_OF_SCOPE");
   });
 }
 

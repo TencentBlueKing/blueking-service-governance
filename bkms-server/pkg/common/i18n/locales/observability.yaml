@@ -1,0 +1,86 @@
+# 可观测性（pkg/observability）
+
+# 告警组（bkmonitor/usergroup）
+OBSERVABILITY_BKMONITOR_USER_GROUP_NOT_FOUND:
+  zh: "告警组不存在或不属于当前工作空间"
+  en: "User group not found or does not belong to current workspace"
+OBSERVABILITY_BKMONITOR_USER_GROUP_INVALID_PARAMS:
+  zh: "告警组参数不合法"
+  en: "Invalid user group parameters"
+
+# 告警策略与事件（bkmonitor/alert）
+OBSERVABILITY_BKMONITOR_ALERT_INVALID_STRATEGY_ID:
+  zh: "告警策略 ID 格式不合法"
+  en: "Invalid alert strategy ID"
+OBSERVABILITY_BKMONITOR_ALERT_INVALID_ENV_IDS:
+  zh: "告警策略生效环境 ID 列表不合法"
+  en: "Invalid environment IDs in alert strategy"
+OBSERVABILITY_BKMONITOR_ALERT_STRATEGY_NAME_EXISTS:
+  zh: "当前应用下已存在同名告警策略"
+  en: "Alert strategy display name already exists in app"
+OBSERVABILITY_BKMONITOR_ALERT_STRATEGY_NOT_FOUND:
+  zh: "告警策略不存在"
+  en: "Alert strategy not found"
+OBSERVABILITY_BKMONITOR_ALERT_APP_NOT_IN_WORKSPACE:
+  zh: "工作空间 {{.workspaceID}} 下不存在应用 {{.appID}}"
+  en: "Application {{.appID}} not found in workspace {{.workspaceID}}"
+
+# 应用仪表盘绑定（bkmonitor/dashboard）
+OBSERVABILITY_BKMONITOR_DASHBOARD_NOT_EXIST:
+  zh: "蓝鲸监控中不存在指定的仪表盘"
+  en: "Specified dashboard does not exist in BKMonitor"
+OBSERVABILITY_BKMONITOR_DASHBOARD_DUPLICATE:
+  zh: "该仪表盘已绑定到当前应用"
+  en: "Dashboard is already bound to current application"
+OBSERVABILITY_BKMONITOR_DASHBOARD_NOT_FOUND:
+  zh: "未找到应用仪表盘绑定记录"
+  en: "App dashboard binding not found"
+OBSERVABILITY_BKMONITOR_DASHBOARD_UID_REQUIRED:
+  zh: "请提供仪表盘 UID"
+  en: "Dashboard UID is required"
+
+# 实例日志（instancelog）
+OBSERVABILITY_INSTANCELOG_INSTANCE_NOT_FOUND:
+  zh: "应用 {{.appID}} 在环境 {{.envName}} 中不存在实例 {{.instanceID}}"
+  en: "Instance {{.instanceID}} not found in app {{.appID}} env {{.envName}}"
+
+# 展示文本：实例监控指标名称
+observability.bkmonitor.metric.cpu_usage:
+  zh: "CPU 使用量（核数）"
+  en: "CPU Usage (Cores)"
+observability.bkmonitor.metric.cpu_request_usage:
+  zh: "CPU Request 使用率"
+  en: "CPU Request Usage"
+observability.bkmonitor.metric.cpu_limit_usage:
+  zh: "CPU Limit 使用率"
+  en: "CPU Limit Usage"
+observability.bkmonitor.metric.memory_usage:
+  zh: "内存使用量（Working Set）"
+  en: "Memory Usage (Working Set)"
+observability.bkmonitor.metric.memory_request_usage:
+  zh: "内存 Request 使用率"
+  en: "Memory Request Usage"
+observability.bkmonitor.metric.memory_limit_usage:
+  zh: "内存 Limit 使用率"
+  en: "Memory Limit Usage"
+observability.bkmonitor.metric.network_receive:
+  zh: "网络入带宽"
+  en: "Network Receive Bandwidth"
+observability.bkmonitor.metric.network_transmit:
+  zh: "网络出带宽"
+  en: "Network Transmit Bandwidth"
+observability.bkmonitor.metric.disk_usage:
+  zh: "磁盘使用量"
+  en: "Disk Usage"
+
+# DB 默认文案：应用初始化的默认告警策略名称
+observability.bkmonitor.alert.defaultStrategy.cpu_limit_usage_high.displayName:
+  zh: "CPU 使用率过高"
+  en: "High CPU Usage"
+observability.bkmonitor.alert.defaultStrategy.memory_limit_usage_high.displayName:
+  zh: "内存使用率过高"
+  en: "High Memory Usage"
+observability.bkmonitor.alert.defaultStrategy.pod_restart_frequent.displayName:
+  zh: "容器异常重启"
+  en: "Frequent Container Restarts"
+

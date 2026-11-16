@@ -20,7 +20,6 @@
 package serializer
 
 import (
-	"fmt"
 	"path/filepath"
 	"strings"
 	"time"
@@ -31,6 +30,15 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/bscpcfg/model"
 	k8skind "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/kind"
+)
+
+var (
+	errFieldBlank = bkerrs.Define(
+		bkerrs.ErrCodeInvalidArgument, "EXTENSION_BSCPCFG_FIELD_BLANK", "field must not be blank",
+	)
+	errNoUpdateField = bkerrs.Define(
+		bkerrs.ErrCodeInvalidArgument, "EXTENSION_BSCPCFG_NO_UPDATE_FIELD", "at least one field must be provided",
+	)
 )
 
 // ValidWorkloadKinds 合法的 WorkloadKind 值列表
@@ -82,11 +90,11 @@ func normalizeMountPath(raw string) string {
 }
 
 func errBlankField(field string) error {
-	return bkerrs.New(bkerrs.ErrCodeInvalidArgument, fmt.Sprintf("%s must not be blank", field))
+	return errFieldBlank.With("field", field)
 }
 
 func errNoField() error {
-	return bkerrs.New(bkerrs.ErrCodeInvalidArgument, "at least one field must be provided")
+	return errNoUpdateField
 }
 
 // -------------------------------- URI Input --------------------------------

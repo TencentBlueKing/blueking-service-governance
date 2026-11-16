@@ -41,6 +41,64 @@ import (
 
 const redisPlanName = "default"
 
+var (
+	errRedisParamsInvalid = bkerrs.Define(
+		bkerrs.ErrCodeInvalidRequest,
+		"EXTENSION_DEPSERVICE_REDIS_PARAMS_INVALID",
+		"validate redis create params failed",
+	)
+	errInvalidInstanceID = bkerrs.Define(
+		bkerrs.ErrCodeInvalidRequest,
+		"EXTENSION_DEPSERVICE_INVALID_INSTANCE_ID",
+		"invalid instanceID",
+	)
+	errRedisInstanceNotFound = bkerrs.Define(
+		bkerrs.ErrCodeNotFound,
+		"EXTENSION_DEPSERVICE_REDIS_INSTANCE_NOT_FOUND",
+		"redis instance not found",
+	)
+	errServiceNotFound = bkerrs.Define(
+		bkerrs.ErrCodeNotFound,
+		"EXTENSION_DEPSERVICE_SERVICE_NOT_FOUND",
+		"service not found",
+	)
+	errInstanceNotFound = bkerrs.Define(
+		bkerrs.ErrCodeNotFound,
+		"EXTENSION_DEPSERVICE_INSTANCE_NOT_FOUND",
+		"service instance not found",
+	)
+	errBindingNotFound = bkerrs.Define(
+		bkerrs.ErrCodeNotFound,
+		"EXTENSION_DEPSERVICE_BINDING_NOT_FOUND",
+		"service binding not found",
+	)
+	errPlanNotFound = bkerrs.Define(
+		bkerrs.ErrCodeNotFound,
+		"EXTENSION_DEPSERVICE_PLAN_NOT_FOUND",
+		"service plan not found",
+	)
+	errDepServiceNotFound = bkerrs.Define(
+		bkerrs.ErrCodeNotFound,
+		"EXTENSION_DEPSERVICE_NOT_FOUND",
+		"dependency service resource not found",
+	)
+	errBindingAlreadyExists = bkerrs.Define(
+		bkerrs.ErrCodeAlreadyExists,
+		"EXTENSION_DEPSERVICE_BINDING_ALREADY_EXISTS",
+		"service binding already exists",
+	)
+	errInstanceAlreadyExists = bkerrs.Define(
+		bkerrs.ErrCodeAlreadyExists,
+		"EXTENSION_DEPSERVICE_INSTANCE_ALREADY_EXISTS",
+		"service instance already exists",
+	)
+	errDepServiceInvalidArgument = bkerrs.Define(
+		bkerrs.ErrCodeInvalidRequest,
+		"EXTENSION_DEPSERVICE_INVALID_ARGUMENT",
+		"invalid dependency service argument",
+	)
+)
+
 // Handler handles Gin dependency service API requests.
 type Handler struct {
 	registry *storereg.Registry
@@ -85,7 +143,7 @@ func (h *Handler) CreateRedisInstance(c *gin.Context) {
 
 	createParams := jsonInput.ToCreateParams()
 	if err := createParams.Validate(); err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, "validate redis create params"))
+		bkerrs.AbortWithErr(c, errRedisParamsInvalid.WithCause(err))
 		return
 	}
 
@@ -258,7 +316,7 @@ func (h *Handler) loadRedisInstance(
 ) (*model.ServiceInstance, error) {
 	objID, err := bson.ObjectIDFromHex(instanceID)
 	if err != nil {
-		return nil, bkerrs.New(bkerrs.ErrCodeInvalidRequest, "invalid instanceID")
+		return nil, errInvalidInstanceID.With("instanceID", instanceID).WithCause(err)
 	}
 
 	inst, err := h.serviceManager().GetServiceInstance(ctx, objID)
@@ -266,7 +324,7 @@ func (h *Handler) loadRedisInstance(
 		return nil, mapManagerErr(err, "get redis instance")
 	}
 	if inst.WorkspaceID != workspaceID || inst.ServiceName != provider.ServiceNameRedis {
-		return nil, bkerrs.Errorf(bkerrs.ErrCodeNotFound, "redis instance %s not found", instanceID)
+		return nil, errRedisInstanceNotFound.With("instanceID", instanceID)
 	}
 	return inst, nil
 }
@@ -295,14 +353,32 @@ func mapManagerErr(err error, message string) error {
 	if err == nil {
 		return nil
 	}
-	if model.AsNotFoundError(err) {
-		return bkerrs.Wrap(err, bkerrs.ErrCodeNotFound, message)
+	if bkErr := bkerrs.FromError(err); bkErr != nil {
+		return err
 	}
-	if errors.Is(err, model.ErrBindingNameExists) || errors.Is(err, model.ErrInstanceNameExists) {
-		return bkerrs.New(bkerrs.ErrCodeAlreadyExists, err.Error())
+	if model.AsNotFoundError(err) {
+		var notFoundErr *model.NotFoundError
+		switch {
+		case errors.Is(err, model.ErrServiceNotFound):
+			return errServiceNotFound.WithCause(err)
+		case errors.Is(err, model.ErrInstanceNotFound):
+			return errInstanceNotFound.WithCause(err)
+		case errors.Is(err, model.ErrBindingNotFound):
+			return errBindingNotFound.WithCause(err)
+		case errors.As(err, &notFoundErr):
+			return errPlanNotFound.WithCause(err)
+		default:
+			return errDepServiceNotFound.WithCause(err)
+		}
+	}
+	if errors.Is(err, model.ErrBindingNameExists) {
+		return errBindingAlreadyExists.WithCause(err)
+	}
+	if errors.Is(err, model.ErrInstanceNameExists) {
+		return errInstanceAlreadyExists.WithCause(err)
 	}
 	if errors.Is(err, depservice.ErrInvalidArgument) {
-		return bkerrs.New(bkerrs.ErrCodeInvalidRequest, err.Error())
+		return errDepServiceInvalidArgument.WithCause(err)
 	}
 	return bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, message)
 }

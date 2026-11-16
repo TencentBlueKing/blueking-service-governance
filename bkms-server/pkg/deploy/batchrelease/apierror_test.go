@@ -38,7 +38,12 @@ var _ = Describe("APIError", func() {
 			var apiErr *bkerrs.Error
 			Expect(errors.As(err, &apiErr)).To(BeTrue())
 			Expect(apiErr.Code()).To(Equal(code))
-			Expect(apiErr.Details()).To(BeEmpty())
+			if code == bkerrs.ErrCodeInternalServerError {
+				Expect(apiErr.DetailCode()).To(BeEmpty())
+				Expect(apiErr.Details()).To(BeEmpty())
+			} else {
+				Expect(apiErr.DetailCode()).NotTo(BeEmpty())
+			}
 			Expect(errors.Is(err, cause)).To(BeTrue())
 		},
 		Entry("strategy name conflict", releasestrategy.ErrStrategyNameConflict, bkerrs.ErrCodeInvalidRequest),

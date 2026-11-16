@@ -26,7 +26,8 @@ tests {
   test("should reject the whole update when a name is not a workspace standard env", () => {
     expect(res.body.error).to.be.an("object");
     expect(res.body.error.code).to.equal("INVALID_REQUEST");
-    expect(res.body.error.message).to.contain("vis-no-such-env");
+    expect(res.body.error.details[0].code).to.equal("CORE_APP_VISIBLE_ENVS_NOT_FOUND");
+    expect(res.body.error.details[0].extras.envs).to.contain("vis-no-such-env");
     expect(res.body.error.system).to.equal("bkms");
     expect(res.body.error.module).to.equal("bkms-server");
   });

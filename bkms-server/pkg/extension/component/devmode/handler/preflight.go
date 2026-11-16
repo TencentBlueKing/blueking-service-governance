@@ -38,6 +38,7 @@ import (
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	appmodeldeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/appmodel"
+	deploystatus "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/status"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component/devmode"
 	slz "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component/devmode/serializer"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/bcstoken"
@@ -48,6 +49,54 @@ import (
 	storereg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appspec"
+)
+
+var (
+	errClusterAPINotConfigured = bkerrs.Define(
+		bkerrs.ErrCodeInvalidRequest,
+		"EXTENSION_DEVMODE_CLUSTER_API_NOT_CONFIGURED",
+		"cluster API base URL is not configured",
+	)
+	errProductionEnvForbidden = bkerrs.Define(
+		bkerrs.ErrCodeInvalidRequest,
+		"EXTENSION_DEVMODE_PRODUCTION_FORBIDDEN",
+		"production environment is not allowed for devmode",
+	)
+	errClusterConfigIncomplete = bkerrs.Define(
+		bkerrs.ErrCodeInvalidRequest,
+		"EXTENSION_DEVMODE_CLUSTER_CONFIG_INCOMPLETE",
+		"cluster configuration is incomplete",
+	)
+	errDevModeNotEnabled = bkerrs.Define(
+		bkerrs.ErrCodeInvalidRequest,
+		"EXTENSION_DEVMODE_NOT_ENABLED",
+		"devmode is not enabled for app in environment",
+	)
+	errAppTypeUnsupported = bkerrs.Define(
+		bkerrs.ErrCodeInvalidRequest,
+		"EXTENSION_DEVMODE_APP_TYPE_UNSUPPORTED",
+		"application type does not support devmode",
+	)
+	errBCSTokenNotFound = bkerrs.Define(
+		bkerrs.ErrCodeNotFound,
+		"EXTENSION_DEVMODE_BCS_TOKEN_NOT_FOUND",
+		"active BCS user token not found",
+	)
+	errNoRunningInstances = bkerrs.Define(
+		bkerrs.ErrCodeNotFound,
+		"EXTENSION_DEVMODE_NO_RUNNING_INSTANCES",
+		"no running instances found",
+	)
+	errInstanceIDsRequired = bkerrs.Define(
+		bkerrs.ErrCodeInvalidRequest,
+		"EXTENSION_DEVMODE_INSTANCE_IDS_REQUIRED",
+		"instanceIDs is required when not targeting all instances",
+	)
+	errInstancesNotFound = bkerrs.Define(
+		bkerrs.ErrCodeNotFound,
+		"EXTENSION_DEVMODE_INSTANCES_NOT_FOUND",
+		"instances not found",
+	)
 )
 
 // Handler DevMode handler
@@ -156,10 +205,7 @@ func (h *Handler) validateEnv(
 // checkClusterAPIConfigured 检查集群 API 地址是否配置
 func checkClusterAPIConfigured() error {
 	if config.G.BCS.BaseUrl == "" {
-		return bkerrs.New(
-			bkerrs.ErrCodeInvalidRequest,
-			"publish is not supported: cluster API base URL is not configured",
-		)
+		return errClusterAPINotConfigured
 	}
 	return nil
 }
@@ -168,18 +214,12 @@ func checkClusterAPIConfigured() error {
 func checkEnvSupported(env *envmodel.Environment) error {
 	// 拒绝 production 环境
 	if bkmsenv.IsProductionType(bkmsenv.Type(env.Type)) {
-		return bkerrs.Errorf(
-			bkerrs.ErrCodeInvalidRequest,
-			"environment %s is a production environment, publish is not allowed", env.Name,
-		)
+		return errProductionEnvForbidden.With("envName", env.Name)
 	}
 
 	// 校验集群信息完整性
 	if env.Cluster.ClusterID == "" || env.Cluster.Namespace == "" {
-		return bkerrs.New(
-			bkerrs.ErrCodeInvalidRequest,
-			"publish is not supported: cluster configuration is incomplete (clusterID or namespace is empty)",
-		)
+		return errClusterConfigIncomplete
 	}
 	return nil
 }
@@ -198,14 +238,11 @@ func (h *Handler) getEffectiveDevMode(
 	}
 
 	if devModeSpec == nil || devModeSpec.Enabled == nil || !*devModeSpec.Enabled {
-		return nil, bkerrs.Errorf(
-			bkerrs.ErrCodeInvalidRequest,
-			"devmode is not enabled for app %s in environment %s", app.ID, envName,
-		)
+		return nil, errDevModeNotEnabled.With("appID", app.ID).With("envName", envName)
 	}
 	props, err := devmode.RequireProps(app)
 	if err != nil {
-		return nil, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, "dev mode")
+		return nil, errAppTypeUnsupported.With("appID", app.ID).WithCause(err)
 	}
 	devModeSpec.SetPaths(props.WorkPath, props.MountPath)
 
@@ -226,7 +263,7 @@ func (h *Handler) fetchActiveToken(ctx context.Context, bcsProjectCode string) (
 	token, err := bcstoken.FetchActiveUserToken(ctx, bcsProjectCode)
 	if err != nil {
 		if errors.Is(err, bcstoken.ErrNoActiveUserToken) {
-			return "", bkerrs.Wrap(err, bkerrs.ErrCodeNotFound, "fetch active BCS user token")
+			return "", errBCSTokenNotFound.WithCause(err)
 		}
 		return "", bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "fetch active BCS user token")
 	}
@@ -242,7 +279,10 @@ func (h *Handler) resolveInstanceIDs(
 	record, err := appmodeldeploy.GetLatest(ctx, h.registry.DB, appID, envName, "")
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
-			return nil, bkerrs.Wrap(err, bkerrs.ErrCodeNotFound, "no deploy record found for this environment")
+			return nil, deploystatus.ErrDeployRecordNotFound.
+				With("appID", appID).
+				With("envName", envName).
+				WithCause(err)
 		}
 		return nil, bkerrs.Wrapf(
 			err, bkerrs.ErrCodeInternalServerError, "get latest deploy record of app %s env %s", appID, envName,
@@ -276,7 +316,7 @@ func (h *Handler) getAllRunningInstanceIDs(
 		return name, status == "Running" && name != ""
 	})
 	if len(runningIDs) == 0 {
-		return nil, bkerrs.New(bkerrs.ErrCodeNotFound, "no running instances found")
+		return nil, errNoRunningInstances
 	}
 	return runningIDs, nil
 }
@@ -286,10 +326,7 @@ func (h *Handler) validateSpecifiedInstanceIDs(
 	items []unstructured.Unstructured, instanceIDs []string,
 ) ([]string, error) {
 	if len(instanceIDs) == 0 {
-		return nil, bkerrs.New(
-			bkerrs.ErrCodeInvalidRequest,
-			"instanceIDs is required when not targeting all instances",
-		)
+		return nil, errInstanceIDsRequired
 	}
 
 	podNameSet := make(map[string]struct{}, len(items))
@@ -307,10 +344,7 @@ func (h *Handler) validateSpecifiedInstanceIDs(
 		}
 	}
 	if len(notFound) > 0 {
-		return nil, bkerrs.Errorf(
-			bkerrs.ErrCodeNotFound,
-			"instances not found: %s", fmt.Sprintf("%v", notFound),
-		)
+		return nil, errInstancesNotFound.With("instances", strings.Join(notFound, ", "))
 	}
 
 	return instanceIDs, nil

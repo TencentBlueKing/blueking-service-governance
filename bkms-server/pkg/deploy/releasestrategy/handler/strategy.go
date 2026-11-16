@@ -81,7 +81,7 @@ func (h *Handler) ListReleaseStrategies(c *gin.Context) {
 	}
 	data := make([]*serializer.ReleaseStrategyOutputObj, 0, len(strategies))
 	for _, s := range strategies {
-		data = append(data, new(serializer.ReleaseStrategyOutputObj).FromModel(s))
+		data = append(data, new(serializer.ReleaseStrategyOutputObj).FromModel(ctx, s))
 	}
 	ginutils.OK(c, serializer.ListReleaseStrategiesOutput{Data: data})
 }
@@ -121,7 +121,7 @@ func (h *Handler) GetReleaseStrategy(c *gin.Context) {
 		return
 	}
 	ginutils.OK(c, serializer.ReleaseStrategyOutput{
-		Data: new(serializer.ReleaseStrategyOutputObj).FromModel(*strategy),
+		Data: new(serializer.ReleaseStrategyOutputObj).FromModel(ctx, *strategy),
 	})
 }
 
@@ -165,7 +165,7 @@ func (h *Handler) CreateReleaseStrategy(c *gin.Context) {
 	}
 	recordAudit(ctx, workspace.ID, audit.OperationTypeCreate, nil, created)
 	ginutils.OK(c, serializer.ReleaseStrategyOutput{
-		Data: new(serializer.ReleaseStrategyOutputObj).FromModel(*created),
+		Data: new(serializer.ReleaseStrategyOutputObj).FromModel(ctx, *created),
 	})
 }
 
@@ -217,7 +217,7 @@ func (h *Handler) UpdateReleaseStrategy(c *gin.Context) {
 	}
 	recordAudit(ctx, workspace.ID, audit.OperationTypeUpdate, before, updated)
 	ginutils.OK(c, serializer.ReleaseStrategyOutput{
-		Data: new(serializer.ReleaseStrategyOutputObj).FromModel(*updated),
+		Data: new(serializer.ReleaseStrategyOutputObj).FromModel(ctx, *updated),
 	})
 }
 

@@ -84,13 +84,14 @@ func (h *Handler) CreateAppComponent(c *gin.Context) {
 
 	if err = appmodel.AddComponent(ctx, h.registry.DB, app.ID, newComp); err != nil {
 		if errors.Is(err, appmodel.ErrAppModelNotFound) {
-			bkerrs.AbortWithErr(c, bkerrs.Errorf(bkerrs.ErrCodeNotFound, "app(%s) model not found", app.Name))
+			bkerrs.AbortWithErr(c, appmodel.ErrAppModelNotFound.With("appName", app.Name).WithCause(err))
 			return
 		}
 		if errors.Is(err, appmodel.ErrComponentNameExists) {
-			bkerrs.AbortWithErr(c, bkerrs.Errorf(
-				bkerrs.ErrCodeInvalidRequest, "component name(%s) already exists in app(%s)", newComp.Name, app.Name,
-			))
+			bkerrs.AbortWithErr(
+				c,
+				errComponentNameExists.With("compName", newComp.Name).With("appName", app.Name).WithCause(err),
+			)
 			return
 		}
 		bkerrs.AbortWithErr(
@@ -149,7 +150,7 @@ func (h *Handler) PatchAppComponent(c *gin.Context) {
 	appModel, err := store.Of(h.registry.DB, appmodel.AppModelMeta).Get(ctx, appmodel.ByApp(app.ID))
 	if err != nil {
 		if errors.Is(err, appmodel.ErrAppModelNotFound) {
-			bkerrs.AbortWithErr(c, bkerrs.Errorf(bkerrs.ErrCodeNotFound, "app(%s) model not found", app.Name))
+			bkerrs.AbortWithErr(c, appmodel.ErrAppModelNotFound.With("appName", app.Name).WithCause(err))
 			return
 		}
 		bkerrs.AbortWithErr(c, bkerrs.Wrapf(err, bkerrs.ErrCodeInternalServerError, "get app(%s) model", app.Name))
@@ -164,36 +165,36 @@ func (h *Handler) PatchAppComponent(c *gin.Context) {
 		}
 	}
 	if targetComp == nil {
-		bkerrs.AbortWithErr(c, bkerrs.Errorf(
-			bkerrs.ErrCodeNotFound, "component(%s) not found in app(%s)", uriInput.CompName, app.Name,
-		))
+		bkerrs.AbortWithErr(c, errComponentNotFound.With("compName", uriInput.CompName).With("appName", app.Name))
 		return
 	}
 	if targetComp.RefWorkspaceCompName != "" {
-		bkerrs.AbortWithErr(c, bkerrs.Errorf(
-			bkerrs.ErrCodeInvalidRequest,
-			"component(%s) is a reference component, cannot update",
-			uriInput.CompName,
-		))
+		bkerrs.AbortWithErr(c, errReferenceComponentCannotUpdate.With("compName", uriInput.CompName))
 		return
 	}
 
 	updateData := input.ToModel()
 	if err = appmodel.UpdateComponent(ctx, h.registry.DB, app.ID, uriInput.CompName, updateData); err != nil {
 		if errors.Is(err, appmodel.ErrAppModelNotFound) {
-			bkerrs.AbortWithErr(c, bkerrs.Errorf(bkerrs.ErrCodeNotFound, "app(%s) model not found", app.Name))
+			bkerrs.AbortWithErr(c, appmodel.ErrAppModelNotFound.With("appName", app.Name).WithCause(err))
 			return
 		}
 		if errors.Is(err, appmodel.ErrComponentNotFound) {
-			bkerrs.AbortWithErr(c, bkerrs.Errorf(
-				bkerrs.ErrCodeNotFound, "component(%s) not found in app(%s)", uriInput.CompName, app.Name,
-			))
+			bkerrs.AbortWithErr(
+				c,
+				errComponentNotFound.With("compName", uriInput.CompName).With("appName", app.Name).WithCause(err),
+			)
 			return
 		}
 		if errors.Is(err, appmodel.ErrComponentNameExists) {
-			bkerrs.AbortWithErr(c, bkerrs.Errorf(
-				bkerrs.ErrCodeInvalidRequest, "component name already exists in app(%s)", app.Name,
-			))
+			compName := uriInput.CompName
+			if updateData.Name != nil {
+				compName = *updateData.Name
+			}
+			bkerrs.AbortWithErr(
+				c,
+				errComponentNameExists.With("compName", compName).With("appName", app.Name).WithCause(err),
+			)
 			return
 		}
 		bkerrs.AbortWithErr(
@@ -247,7 +248,7 @@ func (h *Handler) DeleteAppComponent(c *gin.Context) {
 
 	if err = appmodel.RemoveComponent(ctx, h.registry.DB, app.ID, uriInput.CompName); err != nil {
 		if errors.Is(err, appmodel.ErrAppModelNotFound) {
-			bkerrs.AbortWithErr(c, bkerrs.Errorf(bkerrs.ErrCodeNotFound, "app(%s) model not found", app.Name))
+			bkerrs.AbortWithErr(c, appmodel.ErrAppModelNotFound.With("appName", app.Name).WithCause(err))
 			return
 		}
 		if errors.Is(err, appmodel.ErrComponentNotFound) {

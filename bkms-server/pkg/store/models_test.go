@@ -77,9 +77,17 @@ const (
 // longAgo 是 mustCreateStaleWidget 使用的时间戳，早于任何写操作的当前时间
 var longAgo = time.Date(2020, 1, 2, 3, 4, 5, 0, time.UTC)
 
+// codedError 模拟业务层带错误码的领域错误（如 bkerrs.Define 定义的错误）
+type codedError struct {
+	code string
+	msg  string
+}
+
+func (e *codedError) Error() string { return e.msg }
+
 var (
 	ErrWidgetNotFound = errors.New("widget not found")
-	ErrWidgetExists   = errors.New("widget already exists")
+	ErrWidgetExists   = &codedError{code: "WIDGET_EXISTS", msg: "widget already exists"}
 	errNameRequired   = errors.New("widget name is required")
 	errNotEncrypted   = errors.New("password is not encrypted")
 )

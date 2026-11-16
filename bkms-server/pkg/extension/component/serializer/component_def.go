@@ -20,10 +20,13 @@
 package serializer
 
 import (
+	"context"
+	"fmt"
 	"time"
 
 	"github.com/samber/lo"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/i18n"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component"
 	_ "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/validators" // register global validators
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
@@ -234,15 +237,27 @@ type ComponentDefOutputObj struct {
 
 // FromModel 将组件定义模型及其在当前租户下的实例计数转换为响应对象。
 func (o *ComponentDefOutputObj) FromModel(
-	compDef *component.ComponentDef, count component.InstanceCount,
+	ctx context.Context, compDef *component.ComponentDef, count component.InstanceCount,
 ) *ComponentDefOutputObj {
+	description := compDef.Description
+	if compDef.IsBuiltin {
+		description = i18n.LocalizeOr(
+			ctx,
+			fmt.Sprintf("extension.component.builtin.%s.description", compDef.Name),
+			nil,
+			compDef.Description,
+		)
+	}
 	*o = ComponentDefOutputObj{
 		Name:    compDef.Name,
 		Version: compDef.Version,
 
 		DisplayName: compDef.DisplayName,
-		Description: compDef.Description,
+		Description: description,
 		Properties: lo.Map(compDef.Properties, func(p component.Property, _ int) PropertyDefOutputObj {
+			if compDef.IsBuiltin {
+				return *new(PropertyDefOutputObj).fromBuiltinModel(ctx, compDef.Name, p)
+			}
 			return *new(PropertyDefOutputObj).FromModel(p)
 		}),
 		Patchers:                   emptySliceIfNil(compDef.Patchers),
@@ -274,11 +289,13 @@ type BuiltinVarOutputObj struct {
 
 // FromModel 将领域层系统变量转换为响应对象。
 func (o *BuiltinVarOutputObj) FromModel(
-	item component.BuiltinVar,
+	ctx context.Context, item component.BuiltinVar,
 ) *BuiltinVarOutputObj {
 	*o = BuiltinVarOutputObj{
-		Key:         item.Key,
-		Description: item.Description,
+		Key: item.Key,
+		Description: i18n.LocalizeOr(
+			ctx, "extension.component.builtinVar."+item.Key+".description", nil, item.Description,
+		),
 	}
 	return o
 }
@@ -290,10 +307,10 @@ type ListBuiltinVarsOutput struct {
 
 // FromModels 将领域层系统变量列表转换为响应对象。
 func (o *ListBuiltinVarsOutput) FromModels(
-	items []component.BuiltinVar,
+	ctx context.Context, items []component.BuiltinVar,
 ) *ListBuiltinVarsOutput {
 	o.Data = lo.Map(items, func(item component.BuiltinVar, _ int) *BuiltinVarOutputObj {
-		return new(BuiltinVarOutputObj).FromModel(item)
+		return new(BuiltinVarOutputObj).FromModel(ctx, item)
 	})
 	return o
 }
@@ -318,6 +335,20 @@ func (o *PropertyDefOutputObj) FromModel(p component.Property) *PropertyDefOutpu
 		DefaultValue: p.NormalizedDefaultValue(),
 		Description:  p.Description,
 	}
+	return o
+}
+
+// fromBuiltinModel 将内置组件的属性定义转换为响应对象，并按组件与属性标识翻译描述文案。
+func (o *PropertyDefOutputObj) fromBuiltinModel(
+	ctx context.Context, compName string, p component.Property,
+) *PropertyDefOutputObj {
+	o.FromModel(p)
+	o.Description = i18n.LocalizeOr(
+		ctx,
+		fmt.Sprintf("extension.component.builtin.%s.prop.%s.description", compName, p.Name),
+		nil,
+		p.Description,
+	)
 	return o
 }
 

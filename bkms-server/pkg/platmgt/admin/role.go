@@ -19,9 +19,12 @@
 package admin
 
 import (
+	"context"
 	"errors"
 
 	"github.com/samber/lo"
+
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/i18n"
 )
 
 // ErrInvalidRoleCode indicates the target platform role code is unsupported.
@@ -39,6 +42,11 @@ const (
 type RoleInfo struct {
 	RoleCode RoleCode
 	Name     string
+}
+
+// DisplayName returns the localized role display name.
+func (r RoleInfo) DisplayName(ctx context.Context) string {
+	return i18n.LocalizeOr(ctx, "platmgt.admin.role."+string(r.RoleCode), nil, r.Name)
 }
 
 // supportedRoles defines all supported platform administrator roles.

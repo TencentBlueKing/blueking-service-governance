@@ -25,7 +25,7 @@ tests {
     expect(res.body.error.code).to.equal("INTERNAL_SERVER_ERROR");
     expect(res.body.error.system).to.equal("bkms");
     expect(res.body.error.module).to.equal("bkms-server");
-    expect(res.body.error.message).to.contain("list node events: no resource snapshot found");
+    expect(res.body.error.details[0].message).to.contain("list node events: no resource snapshot found");
   })
 }
 

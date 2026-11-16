@@ -1,0 +1,165 @@
+# 应用（pkg/core/app）
+APP_NOT_FOUND:
+  zh: "应用不存在"
+  en: "Application not found"
+
+# pkg/core/app & pkg/core/app/handler
+CORE_APP_ENV_NOT_VISIBLE:
+  zh: "环境 {{.envName}} 不在应用可见环境名单中"
+  en: "Environment {{.envName}} is not in the application's visible environments"
+CORE_APP_INVALID_HELM_SPEC:
+  zh: "Helm 配置格式不正确"
+  en: "Invalid Helm specification"
+CORE_APP_HELM_REPO_CREDENTIALS_INVALID:
+  zh: "Helm 仓库用户名和密码必须同时填写或同时留空"
+  en: "Helm repository username and password must be both provided or both empty"
+CORE_APP_ALREADY_EXISTS:
+  zh: "应用 {{.appName}} 已存在"
+  en: "Application {{.appName}} already exists"
+CORE_APP_INVALID_BUILD_CONFIG:
+  zh: "构建配置不合法"
+  en: "Invalid build configuration"
+CORE_APP_INVALID_PLATFORM_BUILD_IMAGES:
+  zh: "平台构建镜像配置不合法"
+  en: "Invalid platform build image configuration"
+CORE_APP_HAS_ACTIVE_DEPLOYMENTS:
+  zh: "应用存在运行中的部署，请先下线后再删除"
+  en: "Application has active deployments, please remove them first"
+CORE_APP_VISIBLE_ENVS_NOT_FOUND:
+  zh: "可见环境名单中包含不存在的环境：{{.envs}}"
+  en: "Visible environment(s) do not exist: {{.envs}}"
+CORE_APP_VISIBLE_ENVS_FEATURE_NOT_ALLOWED:
+  zh: "可见环境名单不支持特性环境：{{.envs}}"
+  en: "Feature environments are not allowed in visible environments: {{.envs}}"
+CORE_APP_VISIBLE_ENVS_INVALID:
+  zh: "可见环境名单不合法（不存在的环境：{{.notFoundEnvs}}；不支持的特性环境：{{.featureEnvs}}）"
+  en: "Invalid visible environments (not found: {{.notFoundEnvs}}; feature environments not allowed: {{.featureEnvs}})"
+CORE_APP_VISIBLE_ENV_HAS_DEPLOYMENT:
+  zh: "环境 {{.envName}} 已有部署，必须保留在可见名单中"
+  en: "Environment {{.envName}} has a deployment and must remain visible"
+CORE_APP_VISIBLE_ENV_HAS_FEATURE_CHILD:
+  zh: "环境 {{.envName}} 是特性环境的父环境，必须保留在可见名单中"
+  en: "Environment {{.envName}} is the parent of a feature environment and must remain visible"
+CORE_APP_DEPLOY_OVERVIEW_UNSUPPORTED_TYPE:
+  zh: "部署总览仅支持 tRPC/TAF 应用，当前应用类型为 {{.appType}}"
+  en: "Deploy overview is only supported for tRPC/TAF apps, got type {{.appType}}"
+CORE_APP_UNSUPPORTED_TYPE:
+  zh: "不支持的应用类型：{{.appType}}"
+  en: "Unsupported application type: {{.appType}}"
+CORE_APP_INVALID_BKMSAPP_PARAMS:
+  zh: "应用参数或框架配置不合法"
+  en: "Invalid application parameters or framework configuration"
+CORE_APP_STARTUP_CONFIG_UNSUPPORTED_TYPE:
+  zh: "应用类型 {{.appType}} 不支持 startup-config，请使用 trpc-spec 或 taf-spec"
+  en: "Application type {{.appType}} does not support startup-config, please use trpc-spec or taf-spec"
+CORE_APP_INVALID_STARTUP_CONFIG:
+  zh: "启动配置不合法"
+  en: "Invalid startup configuration"
+CORE_APP_BKMSAPP_MUST_USE_STARTUP_CONFIG:
+  zh: "bkmsApp 类型应用请使用 startup-config 接口修改配置"
+  en: "bkmsApp applications must use startup-config"
+CORE_APP_ONLY_TAF_SUPPORTS_TAF_SPEC:
+  zh: "仅 TAF 应用支持修改 tafSpec"
+  en: "Only TAF applications support tafSpec"
+CORE_APP_TAF_SPEC_REQUIRED:
+  zh: "appModelSpec.tafSpec 不能为空"
+  en: "appModelSpec.tafSpec is required"
+CORE_APP_ONLY_TRPC_SUPPORTS_TRPC_SPEC:
+  zh: "仅 tRPC 应用支持修改 trpcSpec"
+  en: "Only tRPC applications support trpcSpec"
+CORE_APP_TRPC_SPEC_REQUIRED:
+  zh: "appModelSpec.trpcSpec 不能为空"
+  en: "appModelSpec.trpcSpec is required"
+CORE_APP_INVALID_CONFIG_SPEC:
+  zh: "应用配置规格不合法"
+  en: "Invalid application config specification"
+CORE_APP_COMPONENT_NAME_EXISTS:
+  zh: "组件名称 {{.compName}} 在应用 {{.appName}} 中已存在"
+  en: "Component name {{.compName}} already exists in application {{.appName}}"
+CORE_APP_COMPONENT_NOT_FOUND:
+  zh: "应用 {{.appName}} 中不存在组件 {{.compName}}"
+  en: "Component {{.compName}} not found in application {{.appName}}"
+CORE_APP_REFERENCE_COMPONENT_CANNOT_UPDATE:
+  zh: "组件 {{.compName}} 为引用组件，不支持修改"
+  en: "Component {{.compName}} is a reference component and cannot be updated"
+
+# pkg/core/app/appcfg/handler
+CORE_APPCFG_INVALID_FILE_ID:
+  zh: "配置文件 ID 格式不合法"
+  en: "Invalid app config file ID"
+CORE_APPCFG_INVALID_BASE_FILE:
+  zh: "基础配置文件无效，请确认其存在、类型为 normal 且属于当前应用"
+  en: "Invalid base app config file; ensure it exists, has type normal, and belongs to this application"
+CORE_APPCFG_INVALID_BSCP_CONFIG:
+  zh: "BSCP 配置无效或没有可用的全量发布版本"
+  en: "Invalid BSCP configuration or no fully released version available"
+CORE_APPCFG_ATTACH_FRAMEWORK_ENV_OVERLAY_FAILED:
+  zh: "附加框架环境覆盖配置失败"
+  en: "Failed to attach framework environment overlay configuration"
+CORE_APPCFG_PLAIN_ENV_INSTANCE_DELETE_NOT_ALLOWED:
+  zh: "通用配置文件的环境实例不允许通过旧接口直接删除，请通过环境策略或重置接口操作"
+  en: "Plain config file environment instances cannot be deleted via the legacy API; use env config policy or reset instead"
+CORE_APPCFG_INVALID_FILE_CONTENT:
+  zh: "配置文件内容校验失败，请检查格式与占位符"
+  en: "Invalid config file content; please check syntax and placeholders"
+CORE_APPCFG_INVALID_FILE_TYPE:
+  zh: "不支持的配置文件类型：{{.fileType}}"
+  en: "Invalid config file type: {{.fileType}}"
+CORE_APPCFG_INIT_FILE_EDITOR_FAILED:
+  zh: "初始化配置文件编辑器失败"
+  en: "Failed to initialize config file editor"
+CORE_APPCFG_SET_FILE_CONTENT_FAILED:
+  zh: "当前配置文件类型不支持设置该内容字段"
+  en: "Cannot set this content field for the current config file type"
+CORE_APPCFG_INVALID_VERSION_ID:
+  zh: "配置版本 ID 格式不合法"
+  en: "Invalid config file version ID"
+CORE_APPCFG_VERSION_NOT_FOUND:
+  zh: "配置文件版本不存在"
+  en: "App config file version not found"
+CORE_APPCFG_COMPARE_VERSIONS_DIFFERENT_FILES:
+  zh: "对比的两个版本必须属于同一个配置文件"
+  en: "The two compared versions must belong to the same config file"
+CORE_APPCFG_ROLLBACK_TYPE_MISMATCH:
+  zh: "当前配置文件类型与目标版本不一致，无法回滚"
+  en: "Current config file type does not match target version type, cannot rollback"
+CORE_APPCFG_ACTIVE_VERSION_CANNOT_BE_DELETED:
+  zh: "当前正在生效的版本不允许删除"
+  en: "Current active version cannot be deleted"
+
+# pkg/core/app/appcfg/appcfgfiledef
+CORE_APPCFG_DEF_INVALID_CONFIG_SPEC:
+  zh: "配置文件规格或内容校验不通过"
+  en: "Invalid config file specification or content"
+CORE_APPCFG_DEF_INVALID_CONFIG_KIND:
+  zh: "当前应用类型或框架不支持该配置文件种类"
+  en: "Config kind is not supported for this application type or framework"
+CORE_APPCFG_DEF_INVALID_BASE_FILE:
+  zh: "基础配置文件无效，请确认其存在、类型为 normal 且属于当前应用"
+  en: "Invalid base app config file; ensure it exists, has type normal, and belongs to this application"
+CORE_APPCFG_DEF_INVALID_BSCP_CONFIG:
+  zh: "BSCP 配置无效或没有可用的全量发布版本"
+  en: "Invalid BSCP configuration or no fully released version available"
+CORE_APPCFG_DEF_INVALID_QUERY:
+  zh: "查询参数不合法"
+  en: "Invalid query parameters"
+CORE_APPCFG_DEF_DEFAULT_ENV_CANNOT_RESET:
+  zh: "默认环境配置不能重置"
+  en: "Default environment config cannot be reset"
+CORE_APPCFG_DEF_RESET_REQUIRES_INDEPENDENT_MODE:
+  zh: "仅按环境独立配置模式支持恢复默认配置"
+  en: "Reset to default requires independent environment config mode"
+CORE_APPCFG_DEF_INVALID_ID:
+  zh: "配置文件定义 ID 格式不合法"
+  en: "Invalid config file definition ID"
+CORE_APPCFG_DEF_NOT_FOUND:
+  zh: "配置文件定义不存在"
+  en: "Config file definition not found"
+
+# 展示文本 / DB 默认文案
+core.appcfg.version.systemInitDescription:
+  zh: "初始配置（由系统创建）"
+  en: "Initial configuration (created by system)"
+core.appcfg.version.rollbackDescription:
+  zh: "回滚到 v{{.version}}"
+  en: "Rolled back to v{{.version}}"

@@ -20,24 +20,34 @@ package bkerrs
 
 import "fmt"
 
+var errEnvClusterNamespaceOccupied = Define(
+	ErrCodeAlreadyExists,
+	ErrDetailCodeEnvClusterNamespaceOccupied,
+	"cluster namespace is already bound to another environment",
+)
+
 // WrapEnvClusterNamespaceOccupied 包装为"集群命名空间已被其他环境占用"API 错误。
 func WrapEnvClusterNamespaceOccupied(clusterID, namespace, occupiedByEnvName, occupiedByWorkspaceID string) error {
-	msg := fmt.Sprintf(
-		"cluster %s namespace %s is already bound to environment %q in workspace %s",
-		clusterID, namespace, occupiedByEnvName, occupiedByWorkspaceID,
-	)
-	return New(ErrCodeAlreadyExists, msg).SetDetails(
+	extras := map[string]string{
+		"clusterID":             clusterID,
+		"namespace":             namespace,
+		"occupiedByEnvName":     occupiedByEnvName,
+		"occupiedByWorkspaceID": occupiedByWorkspaceID,
+	}
+	bkErr := errEnvClusterNamespaceOccupied
+	for k, v := range extras {
+		bkErr = bkErr.With(k, v)
+	}
+	return bkErr.SetDetails(
 		NewDetail(
 			ErrDetailCodeEnvClusterNamespaceOccupied,
-			msg,
+			fmt.Sprintf(
+				"cluster %s namespace %s is already bound to environment %q in workspace %s",
+				clusterID, namespace, occupiedByEnvName, occupiedByWorkspaceID,
+			),
 			WithSystem(SystemName),
 			WithModule("env"),
-			WithExtras(map[string]string{
-				"clusterID":             clusterID,
-				"namespace":             namespace,
-				"occupiedByEnvName":     occupiedByEnvName,
-				"occupiedByWorkspaceID": occupiedByWorkspaceID,
-			}),
+			WithExtras(extras),
 		),
 	)
 }

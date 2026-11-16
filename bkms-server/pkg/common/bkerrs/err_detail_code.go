@@ -20,6 +20,7 @@ package bkerrs
 
 // ErrDetailCode 错误详情码，用于标记某类具体的错误，如删除工作空间失败、创建环境失败等，推荐开发者按需定义
 // 重要：在业务逻辑中所有 bkerrs.NewDetail() 调用，都应使用该处枚举值之一，以便后续统一管理，单元测试则不做限制！
+// Define 定义的错误，其详情码直接写在 Define 调用处，由所在包维护（全局唯一性由 Define 在启动时校验），无需在此声明
 type ErrDetailCode string
 
 const (

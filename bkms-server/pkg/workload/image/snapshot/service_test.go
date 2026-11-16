@@ -36,6 +36,7 @@ import (
 
 	build "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/i18n"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/utils/crypto"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
@@ -467,7 +468,7 @@ var _ = Describe("Service", func() {
 				mockey.Mock(registry.New).Return(&registry.Client{}).Build()
 				mockey.Mock((*registry.Client).ListAllTags).Return([]string{"v1.0.0"}, nil).Build()
 
-				result, err := service.RefreshAppSnapshots(ctx, testAppID1)
+				result, err := service.RefreshAppSnapshots(i18n.WithLang(ctx, i18n.LangEN), testAppID1)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(result.Status).To(Equal("success"))
 				Expect(result.AddedTagCnt).To(BeEquivalentTo(0))
@@ -493,7 +494,7 @@ var _ = Describe("Service", func() {
 				mockey.Mock((*registry.Client).ListAllTags).Return([]string{"core-test-01"}, nil).Build()
 				mockey.Mock(taskq.Enqueue).Return(nil).Build()
 
-				result, err := service.RefreshAppSnapshots(ctx, testAppID1, "core-test-01")
+				result, err := service.RefreshAppSnapshots(i18n.WithLang(ctx, i18n.LangEN), testAppID1, "core-test-01")
 				Expect(err).NotTo(HaveOccurred())
 				Expect(result.Status).To(Equal("success"))
 				Expect(result.AddedTagCnt).To(BeEquivalentTo(0))

@@ -26,6 +26,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	slz "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component/devmode/serializer"
 )
 
@@ -60,15 +61,22 @@ var _ = Describe("ListPublishRecordsByScopeInput", func() {
 	})
 
 	DescribeTable("rejects invalid input",
-		func(envNames, envTypes []string, msg string) {
+		func(envNames, envTypes []string, expectedDetail, msg string) {
 			err := validate(envNames, envTypes)
 			Expect(err).To(HaveOccurred())
+			if expectedDetail != "" {
+				bkErr := bkerrs.FromError(err)
+				Expect(bkErr).NotTo(BeNil())
+				Expect(bkErr.Code()).To(Equal(bkerrs.ErrCodeInvalidArgument))
+				Expect(bkErr.DetailCode()).To(Equal(bkerrs.ErrDetailCode(expectedDetail)))
+				return
+			}
 			Expect(err.Error()).To(ContainSubstring(msg))
 		},
-		Entry("no scope", nil, nil, "exactly one of envNames, envTypes or recordIDs"),
-		Entry("both scopes", []string{"stag"}, []string{"test"}, "exactly one of envNames, envTypes or recordIDs"),
-		Entry("production", nil, []string{"production"}, "'oneof' tag"),
-		Entry("unknown type", nil, []string{"dev"}, "'oneof' tag"),
-		Entry("invalid env name", []string{"stag/1"}, nil, "'uri_slug' tag"),
+		Entry("no scope", nil, nil, "EXTENSION_DEVMODE_RECORD_QUERY_SCOPE_CONFLICT", ""),
+		Entry("both scopes", []string{"stag"}, []string{"test"}, "EXTENSION_DEVMODE_RECORD_QUERY_SCOPE_CONFLICT", ""),
+		Entry("production", nil, []string{"production"}, "", "'oneof' tag"),
+		Entry("unknown type", nil, []string{"dev"}, "", "'oneof' tag"),
+		Entry("invalid env name", []string{"stag/1"}, nil, "", "'uri_slug' tag"),
 	)
 })

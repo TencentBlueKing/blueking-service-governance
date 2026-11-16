@@ -19,6 +19,7 @@
 package serializer_test
 
 import (
+	"context"
 	"encoding/json"
 	"time"
 
@@ -116,14 +117,14 @@ var _ = Describe("Operation record output", func() {
 			Kind:        envmodel.EnvironmentKindFeature,
 		}
 
-		output := new(serializer.OperationRecordOutputObj).FromModel(record, env)
+		output := new(serializer.OperationRecordOutputObj).FromModel(context.Background(), record, env)
 		Expect(output.Group.EnvName).To(Equal("feat-demo-abcde"))
 		Expect(output.Group.EnvDisplayName).To(Equal("需求联调"))
 		Expect(output.Group.EnvKind).To(Equal("feature"))
 	})
 
 	It("leaves env display name and kind empty when env is missing", func() {
-		output := new(serializer.OperationRecordOutputObj).FromModel(record, nil)
+		output := new(serializer.OperationRecordOutputObj).FromModel(context.Background(), record, nil)
 		Expect(output.Group.EnvName).To(Equal("feat-demo-abcde"))
 		Expect(output.Group.EnvDisplayName).To(BeEmpty())
 		Expect(output.Group.EnvKind).To(BeEmpty())

@@ -84,7 +84,7 @@ func (h *Handler) UpdateHelmSpec(c *gin.Context) {
 			input.HelmSpec.HelmSource.HelmRepoConfig.Username,
 			input.HelmSpec.HelmSource.HelmRepoConfig.Password,
 		); err != nil {
-			bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "set user pass"))
+			bkerrs.AbortWithErr(c, errHelmRepoCredentialsInvalid.WithCause(err))
 			return
 		}
 	}

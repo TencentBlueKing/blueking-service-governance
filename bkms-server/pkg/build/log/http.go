@@ -19,6 +19,7 @@
 package log
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -63,7 +64,7 @@ func WriteSSEBuildLogs(
 	svc *Service,
 	client buildLogClient,
 	query *BuildLogQuery,
-	buildErrorOutput func(error, *BuildLogQuery) any,
+	buildErrorOutput func(context.Context, error, *BuildLogQuery) any,
 ) {
 	c.Header("Content-Type", "text/event-stream")
 	c.Header("Cache-Control", "no-cache")
@@ -80,7 +81,7 @@ func WriteSSEBuildLogs(
 		}
 	})
 	if err != nil {
-		errData, _ := json.Marshal(buildErrorOutput(err, query))
+		errData, _ := json.Marshal(buildErrorOutput(ctx, err, query))
 		fmt.Fprintf(c.Writer, "event: error\ndata: %s\n\n", errData)
 	}
 

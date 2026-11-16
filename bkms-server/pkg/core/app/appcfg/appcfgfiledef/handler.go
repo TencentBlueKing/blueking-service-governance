@@ -63,6 +63,10 @@ func abortDefWriteErr(c *gin.Context, err error, action, appID, name, mountDir s
 		bkerrs.AbortWithErr(c, bkerrs.WrapAppConfigFileMountIdentityConflict(err, appID, name, mountDir))
 		return
 	}
+	if errors.Is(err, appcfg.ErrInvalidConfigSpec) {
+		bkerrs.AbortWithErr(c, errInvalidConfigSpec.WithCause(err))
+		return
+	}
 	bkerrs.AbortWithErr(c, bkerrs.Wrap(err, errCodeForDefError(err), action))
 }
 
@@ -169,18 +173,18 @@ func (h *Handler) CreateAppConfigFileDef(c *gin.Context) {
 	fileFormat := appcfg.FileFormat(input.FileFormat)
 
 	if err = validateConfigKindForApp(app, appcfg.ConfigKind(input.ConfigKind)); err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "validating config kind"))
+		bkerrs.AbortWithErr(c, errInvalidConfigKind.WithCause(err))
 		return
 	}
 
 	baseFileID, err := h.validateBaseAppConfigFileID(ctx, app.ID, fileType, input.BaseAppConfigFileID)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "validating base file"))
+		bkerrs.AbortWithErr(c, errInvalidBaseFile.WithCause(err))
 		return
 	}
 	bscpConfig, err := h.validateBSCPConfig(ctx, sourceType, input.BSCPConfig, fileFormat)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "validating bscp config"))
+		bkerrs.AbortWithErr(c, errInvalidBSCPConfig.WithCause(err))
 		return
 	}
 
@@ -247,7 +251,7 @@ func (h *Handler) GetAppCfgFileDetail(c *gin.Context) {
 		return
 	}
 	if err := c.ShouldBindQuery(&query); err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "invalid query"))
+		bkerrs.AbortWithErr(c, errInvalidQuery.WithCause(err))
 		return
 	}
 
@@ -261,6 +265,10 @@ func (h *Handler) GetAppCfgFileDetail(c *gin.Context) {
 	svc := h.newAppCfgFileDefService()
 	result, err := svc.GetEnvFileDetail(ctx, def, query.EnvName)
 	if err != nil {
+		if errors.Is(err, appcfg.ErrInvalidConfigSpec) {
+			bkerrs.AbortWithErr(c, errInvalidConfigSpec.WithCause(err))
+			return
+		}
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, errCodeForDefError(err), "loading env file detail"))
 		return
 	}
@@ -391,14 +399,14 @@ func (h *Handler) UpdateHelmFile(c *gin.Context) {
 		ctx, app.ID, defaultFile.Type, input.BaseAppConfigFileID,
 	)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "validating base file"))
+		bkerrs.AbortWithErr(c, errInvalidBaseFile.WithCause(err))
 		return
 	}
 	bscpConfig, err := h.validateBSCPConfig(
 		ctx, defaultFile.ContentSourceType, input.BSCPConfig, defaultFile.GetConfigFormat(),
 	)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "validating bscp config"))
+		bkerrs.AbortWithErr(c, errInvalidBSCPConfig.WithCause(err))
 		return
 	}
 
@@ -562,7 +570,7 @@ func (h *Handler) UpdateContent(c *gin.Context) {
 		return
 	}
 	if err := c.ShouldBindQuery(&query); err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "invalid query"))
+		bkerrs.AbortWithErr(c, errInvalidQuery.WithCause(err))
 		return
 	}
 
@@ -604,15 +612,15 @@ func (h *Handler) UpdateContent(c *gin.Context) {
 		},
 	})
 	if err != nil {
-		code := bkerrs.ErrCodeInternalServerError
-		if errors.Is(err, appcfg.ErrInvalidConfigSpec) {
-			code = bkerrs.ErrCodeInvalidArgument
-		}
 		if errors.Is(err, appcfg.ErrAppConfigFileVersionConflict) && result != nil && result.File != nil {
 			bkerrs.AbortWithErr(c, bkerrs.WrapAppConfigFileVersionConflict(err, def.AppID, result.File.ID.Hex()))
 			return
 		}
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, code, "upserting content"))
+		if errors.Is(err, appcfg.ErrInvalidConfigSpec) {
+			bkerrs.AbortWithErr(c, errInvalidConfigSpec.WithCause(err))
+			return
+		}
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "upserting content"))
 		return
 	}
 
@@ -645,7 +653,7 @@ func (h *Handler) ResetEnvToDefault(c *gin.Context) {
 		return
 	}
 	if uriInput.EnvName == appcfg.EnvNameDefault {
-		bkerrs.AbortWithErr(c, bkerrs.New(bkerrs.ErrCodeInvalidArgument, "default env cannot be reset"))
+		bkerrs.AbortWithErr(c, errDefaultEnvCannotBeReset)
 		return
 	}
 
@@ -665,7 +673,7 @@ func (h *Handler) ResetEnvToDefault(c *gin.Context) {
 	envFile, err := svc.ResetEnvInstanceToDefault(ctx, def, uriInput.EnvName)
 	if err != nil {
 		if errors.Is(err, appcfg.ErrResetToDefaultRequiresIndependentConfig) {
-			bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "reset requires independent mode"))
+			bkerrs.AbortWithErr(c, errResetRequiresIndependentMode.WithCause(err))
 			return
 		}
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "resetting env to default"))
@@ -706,7 +714,7 @@ func (h *Handler) GetMountPreview(c *gin.Context) {
 		return
 	}
 	if err := c.ShouldBindQuery(&query); err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "invalid query"))
+		bkerrs.AbortWithErr(c, errInvalidQuery.WithCause(err))
 		return
 	}
 
@@ -745,14 +753,17 @@ func (h *Handler) getAppCfgFileDef(ctx *gin.Context, uri DefURIInput) (*appcfg.A
 	}
 	defID, err := bson.ObjectIDFromHex(uri.ID)
 	if err != nil {
-		return nil, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "parsing def ID")
+		return nil, errInvalidDefID.WithCause(err)
 	}
 	def, err := store.Of(h.registry.DB, appcfg.AppConfigFileDefMeta).GetByID(ctx.Request.Context(), defID)
 	if err != nil {
-		return nil, bkerrs.Wrap(err, bkerrs.ErrCodeNotFound, "config file def not found")
+		if errors.Is(err, appcfg.ErrAppConfigFileDefNotFound) {
+			return nil, errDefNotFound.With("defID", uri.ID).WithCause(err)
+		}
+		return nil, errors.Wrap(err, "get config file def")
 	}
 	if def.AppID != app.ID {
-		return nil, bkerrs.New(bkerrs.ErrCodeNotFound, "config file def not found")
+		return nil, errDefNotFound.With("defID", uri.ID)
 	}
 	return def, nil
 }

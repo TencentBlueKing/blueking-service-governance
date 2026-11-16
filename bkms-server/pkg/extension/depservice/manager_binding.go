@@ -158,16 +158,16 @@ func (m *ServiceManager) validateEnvInstanceMap(
 ) error {
 	for envName, instID := range envMap {
 		if envName == "" {
-			return errors.Wrap(ErrInvalidArgument, "env name in envInstanceMap must not be empty")
+			return errBindingEnvNameEmpty.WithCause(ErrInvalidArgument)
 		}
 		if instID.IsZero() {
-			return errors.Wrapf(ErrInvalidArgument, "instance id for env %q must not be empty", envName)
+			return errBindingInstanceIDEmpty.With("envName", envName).WithCause(ErrInvalidArgument)
 		}
 
 		environment, err := m.envs.Get(ctx, envmodel.AppEnvByName(workspaceID, appID, envName))
 		if err != nil {
 			if errors.Is(err, envmodel.ErrEnvNotFound) {
-				return errors.Wrapf(ErrInvalidArgument, "environment %q not found", envName)
+				return ErrBindingEnvNotFound.With("envName", envName).WithCause(ErrInvalidArgument)
 			}
 			return errors.Wrapf(err, "get environment %s", envName)
 		}
@@ -176,28 +176,27 @@ func (m *ServiceManager) validateEnvInstanceMap(
 		inst, err := m.insts.Get(ctx, store.ByID(instID))
 		if err != nil {
 			if model.AsNotFoundError(err) {
-				return errors.Wrapf(ErrInvalidArgument, "service instance %s not found", instID.Hex())
+				return errBindingInstanceNotFound.With("instanceID", instID.Hex()).WithCause(ErrInvalidArgument)
 			}
 			return errors.Wrap(err, "get service instance")
 		}
 		if inst.WorkspaceID != workspaceID {
-			return errors.Wrapf(
-				ErrInvalidArgument,
-				"instance %s does not belong to workspace %s",
-				instID.Hex(),
-				workspaceID,
-			)
+			return errBindingInstanceWorkspaceMismatch.
+				With("instanceID", instID.Hex()).
+				With("workspaceID", workspaceID).
+				WithCause(ErrInvalidArgument)
 		}
 		if inst.ServiceName != serviceName {
-			return errors.Wrapf(ErrInvalidArgument, "instance %s is not a %s instance", instID.Hex(), serviceName)
+			return errBindingInstanceServiceMismatch.
+				With("instanceID", instID.Hex()).
+				With("serviceName", serviceName).
+				WithCause(ErrInvalidArgument)
 		}
 		if !inst.MatchesEnv(envName, envType) {
-			return errors.Wrapf(
-				ErrInvalidArgument,
-				"instance %s is not available in environment %q",
-				instID.Hex(),
-				envName,
-			)
+			return errBindingInstanceEnvUnavailable.
+				With("instanceID", instID.Hex()).
+				With("envName", envName).
+				WithCause(ErrInvalidArgument)
 		}
 	}
 	return nil

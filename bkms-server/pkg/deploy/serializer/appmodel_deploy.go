@@ -19,16 +19,19 @@
 package serializer
 
 import (
+	"context"
 	"time"
 
 	"github.com/samber/lo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/autodeploy"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/revision"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/i18n"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/clusteraddon"
 	deploypkg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy"
 	appmodeldeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/appmodel"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/batchrelease"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/releasestrategy"
 	releasestrategyserializer "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/releasestrategy/serializer"
 	_ "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/validators" // register global validators
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/envvarrefs"
@@ -206,8 +209,23 @@ type AppModelDeployRecordOutputObj struct {
 	UpdatedAt    time.Time `json:"updatedAt"`
 }
 
+// localizeReleaseStrategySnapshotName 翻译部署记录快照中的平台内置发布策略名称
+func localizeReleaseStrategySnapshotName(
+	ctx context.Context,
+	strategy *appmodeldeploy.ReleaseStrategySnapshot,
+) string {
+	s := lo.FromPtr(strategy)
+	if key := releasestrategy.BuiltinNameI18nKey(s.ID); key != "" {
+		return i18n.LocalizeStored(ctx, key, nil, s.Name)
+	}
+	return s.Name
+}
+
 // FromModel converts an AppModel deploy record to output.
-func (o *AppModelDeployRecordOutputObj) FromModel(record appmodeldeploy.Record) *AppModelDeployRecordOutputObj {
+func (o *AppModelDeployRecordOutputObj) FromModel(
+	ctx context.Context,
+	record appmodeldeploy.Record,
+) *AppModelDeployRecordOutputObj {
 	o.ID = record.ID.Hex()
 	o.ClusterID = record.ClusterID
 	o.Namespace = record.Namespace
@@ -232,7 +250,7 @@ func (o *AppModelDeployRecordOutputObj) FromModel(record appmodeldeploy.Record) 
 	}
 	o.Replicas = record.Replicas
 	o.ReleaseMode = string(record.GetReleaseMode())
-	o.ReleaseStrategyName = lo.FromPtr(record.ReleaseStrategy).Name
+	o.ReleaseStrategyName = localizeReleaseStrategySnapshotName(ctx, record.ReleaseStrategy)
 	kind, _ := record.MainWorkload()
 	o.WorkloadKind = kind
 	o.Message = record.Message
@@ -372,7 +390,10 @@ type BatchReleaseProgressOutputObj struct {
 
 // FromModel converts a batch release deploy record to progress output.
 // 记录尚无进度（轮询任务未写入）时，批次状态视为 pending，新镜像取部署记录的镜像
-func (o *BatchReleaseProgressOutputObj) FromModel(record *appmodeldeploy.Record) *BatchReleaseProgressOutputObj {
+func (o *BatchReleaseProgressOutputObj) FromModel(
+	ctx context.Context,
+	record *appmodeldeploy.Record,
+) *BatchReleaseProgressOutputObj {
 	progress := lo.FromPtrOr(record.BatchProgress, appmodeldeploy.BatchProgress{
 		BatchPhase:  batchrelease.BatchPhasePending,
 		Replicas:    record.Replicas,
@@ -383,7 +404,7 @@ func (o *BatchReleaseProgressOutputObj) FromModel(record *appmodeldeploy.Record)
 		DeployID:                record.ID.Hex(),
 		Status:                  string(record.Status),
 		StrategyID:              strategy.ID,
-		StrategyName:            strategy.Name,
+		StrategyName:            localizeReleaseStrategySnapshotName(ctx, record.ReleaseStrategy),
 		Batches:                 releasestrategyserializer.NewBatchOutputObjs(strategy.Batches),
 		CurrentBatchIndex:       progress.CurrentBatchIndex,
 		BatchPhase:              string(progress.BatchPhase),

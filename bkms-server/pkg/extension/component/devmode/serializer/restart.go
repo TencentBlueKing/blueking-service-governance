@@ -27,6 +27,12 @@ import (
 	_ "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/validators" // register global validators
 )
 
+var errRestartScopeConflict = bkerrs.Define(
+	bkerrs.ErrCodeInvalidArgument,
+	"EXTENSION_DEVMODE_RESTART_SCOPE_CONFLICT",
+	"exactly one of envs, envTypes or instances is required",
+)
+
 // RestartURIInput DevMode 进程重启 URI 路径参数
 type RestartURIInput struct {
 	// AppID 应用 ID
@@ -69,7 +75,7 @@ func (i *RestartInput) Validate() error {
 		return ok
 	})
 	if specified != 1 {
-		return bkerrs.New(bkerrs.ErrCodeInvalidArgument, "exactly one of envs, envTypes or instances is required")
+		return errRestartScopeConflict
 	}
 	return nil
 }

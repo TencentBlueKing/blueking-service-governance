@@ -104,25 +104,25 @@ var _ = Describe("validateVisibleEnvs", func() {
 	})
 
 	DescribeTable("rejects hiding required environments or selecting invalid names",
-		func(names []string, message string) {
+		func(names []string, expectedErr *bkerrs.Error, expectedParams map[string]string) {
 			err := validateVisibleEnvs("app-a", names, envs)
 
 			var bkErr *bkerrs.Error
 			Expect(errors.As(err, &bkErr)).To(BeTrue())
 			Expect(bkErr.Code()).To(Equal(bkerrs.ErrCodeInvalidRequest))
-			Expect(err.Error()).To(ContainSubstring(message))
+			Expect(errors.Is(err, expectedErr)).To(BeTrue())
+			Expect(bkErr.Params()).To(Equal(expectedParams))
 		},
 		Entry("an environment with an app deployment", []string{"parent"},
-			`environment "deployed" has a deployment and must remain visible`),
+			errVisibleEnvHasDeployment, map[string]string{"envName": "deployed"}),
 		Entry("a feature environment parent without a deployment", []string{"deployed"},
-			`environment "parent" is the parent of a feature environment and must remain visible`),
+			errVisibleEnvHasFeatureChild, map[string]string{"envName": "parent"}),
 		Entry("an unknown environment name", []string{"deployed", "parent", "missing"},
-			"invalid visible environment name(s): missing (environment does not exist)"),
+			errVisibleEnvsNotFound, map[string]string{"envs": "missing"}),
 		Entry("a feature environment name", []string{"deployed", "parent", "feature"},
-			"invalid visible environment name(s): feature (feature environments are not allowed)"),
+			errVisibleEnvsFeatureNotAllowed, map[string]string{"envs": "feature"}),
 		Entry("unknown and feature environment names together", []string{"deployed", "parent", "missing", "feature"},
-			"invalid visible environment name(s): missing (environment does not exist), "+
-				"feature (feature environments are not allowed)"),
+			errVisibleEnvsMixedInvalid, map[string]string{"notFoundEnvs": "missing", "featureEnvs": "feature"}),
 	)
 
 	It("allows hiding unused environments and environments deployed by another app", func() {

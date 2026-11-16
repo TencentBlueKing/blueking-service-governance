@@ -29,6 +29,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/utils/crypto"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime"
@@ -42,7 +43,8 @@ const collectionName = "applications"
 var validate = validator.New(validator.WithRequiredStructEnabled())
 
 var (
-	ErrAppNotFound = errors.New("application not found")
+	// ErrAppNotFound 应用不存在
+	ErrAppNotFound = bkerrs.Define(bkerrs.ErrCodeNotFound, "APP_NOT_FOUND", "application not found")
 	// ErrAppAlreadyExists 应用 id 或（同一工作空间内的）名称与已有应用冲突
 	ErrAppAlreadyExists = errors.New("application already exists")
 )

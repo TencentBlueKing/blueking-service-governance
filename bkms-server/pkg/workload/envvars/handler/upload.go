@@ -21,11 +21,30 @@ package handler
 import (
 	"io"
 	"net/http"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"github.com/pkg/errors"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
+)
+
+var (
+	errEnvFileRequired = bkerrs.Define(
+		bkerrs.ErrCodeInvalidRequest, "WORKLOAD_ENVVARS_ENV_FILE_REQUIRED", "env file is required",
+	)
+	errReadUploadedEnvFileFailed = bkerrs.Define(
+		bkerrs.ErrCodeInvalidRequest, "WORKLOAD_ENVVARS_READ_ENV_FILE_FAILED", "read uploaded env file",
+	)
+	errEnvFileEmpty = bkerrs.Define(
+		bkerrs.ErrCodeInvalidRequest, "WORKLOAD_ENVVARS_ENV_FILE_EMPTY", "env file must not be empty",
+	)
+	errEnvFileTooLarge = bkerrs.Define(
+		bkerrs.ErrCodeInvalidRequest, "WORKLOAD_ENVVARS_ENV_FILE_TOO_LARGE", "env file exceeds max size",
+	)
+	errOpenUploadedEnvFileFailed = bkerrs.Define(
+		bkerrs.ErrCodeInvalidRequest, "WORKLOAD_ENVVARS_OPEN_ENV_FILE_FAILED", "open uploaded env file",
+	)
 )
 
 const (
@@ -40,41 +59,33 @@ func readUploadedEnvFileContent(c *gin.Context) (string, error) {
 	fileHeader, err := c.FormFile(envFileUploadFormField)
 	if err != nil {
 		if errors.Is(err, http.ErrMissingFile) {
-			return "", bkerrs.New(bkerrs.ErrCodeInvalidRequest, "env file is required")
+			return "", errEnvFileRequired
 		}
-		return "", bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, "read uploaded env file")
+		return "", errReadUploadedEnvFileFailed.WithCause(err)
 	}
 	// 空文件在产品语义上等价于“没有有效导入内容”，提前拦截
 	if fileHeader.Size == 0 {
-		return "", bkerrs.New(bkerrs.ErrCodeInvalidRequest, "env file must not be empty")
+		return "", errEnvFileEmpty
 	}
 	// 先利用 multipart header 上报的 Size 做一次快速拒绝。
 	if fileHeader.Size > envFileUploadMaxBytes {
-		return "", bkerrs.Errorf(
-			bkerrs.ErrCodeInvalidRequest,
-			"env file must not exceed %d bytes",
-			envFileUploadMaxBytes,
-		)
+		return "", errEnvFileTooLarge.With("maxBytes", strconv.FormatInt(envFileUploadMaxBytes, 10))
 	}
 
 	file, err := fileHeader.Open()
 	if err != nil {
-		return "", bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, "open uploaded env file")
+		return "", errOpenUploadedEnvFileFailed.WithCause(err)
 	}
 	defer file.Close()
 
 	// 再用 LimitReader 兜底，防止 header.Size 与实际内容不一致。
 	contentBytes, err := io.ReadAll(io.LimitReader(file, envFileUploadMaxBytes+1))
 	if err != nil {
-		return "", bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, "read uploaded env file")
+		return "", errReadUploadedEnvFileFailed.WithCause(err)
 	}
 	// 如果实际读取结果仍超过上限，在进入解析逻辑前统一返回请求错误。
 	if int64(len(contentBytes)) > envFileUploadMaxBytes {
-		return "", bkerrs.Errorf(
-			bkerrs.ErrCodeInvalidRequest,
-			"env file must not exceed %d bytes",
-			envFileUploadMaxBytes,
-		)
+		return "", errEnvFileTooLarge.With("maxBytes", strconv.FormatInt(envFileUploadMaxBytes, 10))
 	}
 
 	return string(contentBytes), nil

@@ -1,0 +1,40 @@
+# 基础设施（pkg/infras）
+
+# 用户认证
+USER_UNAUTHENTICATED:
+  zh: "用户未登录或登录已失效，请重新登录"
+  en: "You are not logged in or your session has expired, please log in again"
+
+# 账号与用户 Token
+ACCOUNT_LOGIN_CREDENTIALS_MISSING:
+  zh: "未在 Cookie 中找到登录凭证，请先登录"
+  en: "No login credentials found in cookie, please log in first"
+ACCOUNT_TOKEN_PARAM_REQUIRED:
+  zh: "缺少参数 {{.param}}"
+  en: "Parameter {{.param}} is required"
+ACCOUNT_CREATE_TOKEN_FAILED:
+  zh: "获取访问令牌失败"
+  en: "Failed to get access token"
+ACCOUNT_REFRESH_TOKEN_FAILED:
+  zh: "刷新访问令牌失败"
+  en: "Failed to refresh access token"
+ACCOUNT_VALIDATE_TOKEN_FAILED:
+  zh: "访问令牌校验失败"
+  en: "Failed to validate access token"
+
+# 租户
+TENANT_ID_REQUIRED:
+  zh: "缺少租户 ID"
+  en: "Tenant ID is required"
+TENANT_ID_INVALID:
+  zh: "租户 ID 不合法"
+  en: "Tenant ID is invalid"
+TENANT_USER_REQUIRED:
+  zh: "访问租户需要先登录"
+  en: "Login is required to access the tenant"
+TENANT_ACCESS_DENIED:
+  zh: "无权访问该租户"
+  en: "Access to the tenant is denied"
+TENANT_USER_DISABLED:
+  zh: "当前用户在该租户下已被停用"
+  en: "The current user is disabled in this tenant"

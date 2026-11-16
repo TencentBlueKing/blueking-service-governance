@@ -40,8 +40,8 @@ script:post-response {
 tests {
   test("should reject a deploy to an unlisted standard env", () => {
     expect(res.body.error.code).to.equal("INVALID_REQUEST");
-    expect(res.body.error.message).to.contain(bru.getVar("visEnvUnlistedEnvName"));
-    expect(res.body.error.message).to.contain("visible environment");
+    expect(res.body.error.details[0].code).to.equal("CORE_APP_ENV_NOT_VISIBLE");
+    expect(res.body.error.details[0].extras.envName).to.equal(bru.getVar("visEnvUnlistedEnvName"));
   });
 
   test("should not create a deploy record for the rejected env", () => {

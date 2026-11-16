@@ -25,10 +25,16 @@ import (
 	"github.com/samber/lo"
 )
 
+var errComponentsNotInstalled = Define(
+	ErrCodeNotFound, ErrDetailCodeComponentNotInstalled, "components not installed in cluster",
+)
+
 // WrapComponentsNotInstalled 包装多个组件缺失的错误，每个组件生成独立的详情。
 func WrapComponentsNotInstalled(err error, components []string, clusterID string) error {
-	wrappedErr := Wrapf(err, ErrCodeNotFound,
-		"component %s not installed in cluster: %s", strings.Join(components, ", "), clusterID)
+	wrappedErr := errComponentsNotInstalled.
+		With("components", strings.Join(components, ", ")).
+		With("clusterID", clusterID).
+		WithCause(err)
 	details := lo.Map(components, func(component string, _ int) Detail {
 		return NewDetail(
 			ErrDetailCodeComponentNotInstalled,

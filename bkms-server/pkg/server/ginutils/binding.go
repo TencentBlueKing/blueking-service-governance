@@ -20,14 +20,20 @@ package ginutils
 
 import (
 	"github.com/gin-gonic/gin"
+	"github.com/pkg/errors"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
+)
+
+// ErrInvalidRequestParams 请求参数无法解析或未通过校验，校验器给出的具体原因保留在错误详情中
+var ErrInvalidRequestParams = bkerrs.Define(
+	bkerrs.ErrCodeInvalidRequest, "REQUEST_PARAMS_INVALID", "request params invalid",
 )
 
 // BindJSON binds a JSON request body and converts binding errors to bkms errors.
 func BindJSON(c *gin.Context, obj any) error {
 	if err := c.ShouldBindJSON(obj); err != nil {
-		return bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, "bind json request")
+		return ErrInvalidRequestParams.WithCause(errors.Wrap(err, "bind json request"))
 	}
 	return nil
 }
@@ -35,7 +41,7 @@ func BindJSON(c *gin.Context, obj any) error {
 // BindURI binds URI path parameters and converts binding errors to bkms errors.
 func BindURI(c *gin.Context, obj any) error {
 	if err := c.ShouldBindUri(obj); err != nil {
-		return bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, "bind uri request")
+		return ErrInvalidRequestParams.WithCause(errors.Wrap(err, "bind uri request"))
 	}
 	return nil
 }
@@ -43,7 +49,7 @@ func BindURI(c *gin.Context, obj any) error {
 // BindQuery binds query parameters and converts binding errors to bkms errors.
 func BindQuery(c *gin.Context, obj any) error {
 	if err := c.ShouldBindQuery(obj); err != nil {
-		return bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, "bind query request")
+		return ErrInvalidRequestParams.WithCause(errors.Wrap(err, "bind query request"))
 	}
 	return nil
 }
