@@ -105,12 +105,12 @@
             </span>
             <Popover
               placement="bottom"
-              :popover-delay="[300, 100]"
+              :popover-delay="[300, 0]"
               theme="light"
               trigger="hover"
             >
               <i
-                class="bkms-icon bkms-icon-circle-info strategy-info-icon shrink-0 text-[14px]"
+                class="bkms-icon bkms-icon-circle-info text-[#979ba5] hover:text-[#3a84ff] shrink-0 text-[14px]"
                 data-testid="batch-release-progress-strategy-info"
               ></i>
               <template #content>
@@ -481,17 +481,6 @@
 </script>
 
 <style lang="postcss" scoped>
-  /* ⓘ 信息图标：默认浅灰，hover 变主蓝色 */
-  .strategy-info-icon {
-    color: #979ba5;
-    cursor: pointer;
-    transition: color 0.2s;
-
-    &:hover {
-      color: #3a84ff;
-    }
-  }
-
   :deep(.bk-step) {
     display: flex;
     flex-direction: column;
