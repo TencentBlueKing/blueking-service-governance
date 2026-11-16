@@ -20,6 +20,7 @@ import { defineComponent, ref } from 'vue';
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/vue';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { APP_TYPES } from '~/common/app-types';
 import Home from '~/pages/home/home.vue';
 
 import { i18nGlobalMocks } from '../helpers/mock-i18n';
@@ -68,7 +69,11 @@ async function renderHome(deployedEnvs: AppDeployedEnvOutputObj[], columnWidth =
   vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(columnWidth);
   vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(70);
   listWorkspacesOverview.mockResolvedValue([
-    { id: 'workspace-demo', displayName: '应用空间', apps: [{ id: 'app-demo', name: '示例应用', deployedEnvs }] },
+    {
+      id: 'workspace-demo',
+      displayName: '应用空间',
+      apps: [{ id: 'app-demo', name: '示例应用', type: APP_TYPES.BKMS_APP, deployedEnvs }],
+    },
   ]);
   render(Home, {
     global: {
@@ -104,6 +109,20 @@ describe('首页已部署环境', () => {
     expect(visibleTags().map(tag => tag.textContent?.trim())).toEqual(['特性（1）']);
     await hoverTag('特性（1）');
     expect(screen.getByText('feat-demo')).toBeInTheDocument();
+  });
+
+  it('悬浮环境标签时显示已回滚、已部署和部署失败的状态文案', async () => {
+    await renderHome([
+      { ...development, deployStatus: 'rolled-back' },
+      { ...production, deployStatus: 'deployed' },
+      { ...feature, deployStatus: 'failed' },
+    ]);
+
+    expect((await hoverTag('生产（1）')).parentElement).toHaveTextContent('（已部署）');
+    expect((await hoverTag('特性（1）')).parentElement).toHaveTextContent('（部署失败）');
+    const rollbackTooltip = (await hoverTag('开发（1）')).parentElement;
+    expect(rollbackTooltip).toHaveTextContent('（已回滚）');
+    expect(rollbackTooltip?.querySelector('svg use')).toHaveAttribute('xlink:href', '#bkms-icon-warning-2');
   });
 
   it('窄列的折叠标签保留特性分组及环境明细', async () => {
