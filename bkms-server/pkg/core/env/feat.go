@@ -39,6 +39,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/cluster"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/gvr"
 	k8skind "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/kind"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/trafficmanager"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/metrics"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
@@ -66,6 +67,7 @@ type FeatureEnvService struct {
 	indexCounter         *store.Counter
 	envVarStore          FeatureEnvVarStore
 	namespaceInitializer FeatureEnvNamespaceInitializer
+	trafficManager       trafficmanager.TrafficManager
 }
 
 // FeatureEnvVarStore 提供创建特性环境时的变量复制，避免环境模块依赖变量模块。
@@ -140,6 +142,9 @@ type CreateFeatureEnvInput struct {
 	Creator string
 	// CopyEnvVars 决定是否在创建时复制来源环境的自定义变量；默认不复制
 	CopyEnvVars bool
+	// ShareSourceNamespace 决定是否复用来源环境的命名空间；为 true 时不新建命名空间，
+	// 而是生成 resourceKey 作为资源名前缀，与来源环境共存于同一命名空间
+	ShareSourceNamespace bool
 }
 
 // NewFeatureEnvService 创建特性环境服务。
@@ -153,6 +158,7 @@ func NewFeatureEnvService(
 		indexCounter:         model.NewFeatureEnvCounter(db),
 		envVarStore:          envVarStore,
 		namespaceInitializer: namespaceInitializer,
+		trafficManager:       trafficmanager.New(),
 	}
 }
 
@@ -199,6 +205,7 @@ func ListAppFeatEnvs(
 // - sourceEnv 必须是应用可见的标准环境，且与应用属于同一个 workspace；
 // - name / namespace 由平台按 feat-<appID>-<index> 自动生成，调用方不能指定；
 // - 集群的 namespace 也是自动生成，将由后台自动完成初始化；
+// - ShareSourceNamespace 时改为复用来源环境的 namespace，不创建 namespace，并生成 resourceKey 区分资源；
 // - 按需复制来源环境的自定义变量；之后双方独立修改，不持续同步；
 func (s *FeatureEnvService) Create(ctx context.Context, input CreateFeatureEnvInput) (*model.Environment, error) {
 	if err := validate.Struct(input); err != nil {
@@ -210,6 +217,11 @@ func (s *FeatureEnvService) Create(ctx context.Context, input CreateFeatureEnvIn
 	}
 	if err := input.App.CheckVisibleEnv(input.SourceEnv); err != nil {
 		return nil, errors.Wrapf(ErrInvalidFeatureEnvInput, "validate source environment visibility: %v", err)
+	}
+	if input.ShareSourceNamespace {
+		if err := validateShareSourceNamespace(input); err != nil {
+			return nil, err
+		}
 	}
 
 	index, err := s.indexCounter.Next(ctx, input.App.ID)
@@ -237,21 +249,25 @@ func (s *FeatureEnvService) Create(ctx context.Context, input CreateFeatureEnvIn
 		Creator: input.Creator,
 	}
 
-	if conflictErr := findClusterNamespaceOccupant(
-		ctx, s.db, env.Cluster, bson.NilObjectID,
-	); conflictErr != nil {
-		return nil, errors.Wrap(conflictErr, "check feature environment cluster namespace conflict")
+	if input.ShareSourceNamespace {
+		env.Cluster.Namespace = input.SourceEnv.Cluster.Namespace
+		err = s.createEnvWithResourceKey(ctx, env, input.SourceEnv)
+	} else {
+		err = s.createEnv(ctx, env)
 	}
-
-	if err = store.Of(s.db, model.EnvMeta).Create(ctx, env); err != nil {
-		err = rewriteWriteErrIfClusterOccupied(ctx, s.db, env.Cluster, bson.NilObjectID, err)
-		return nil, errors.Wrap(err, "create feature environment")
+	if err != nil {
+		return nil, err
 	}
 
 	if input.CopyEnvVars {
 		if err = s.copyEnvVars(ctx, *input.SourceEnv, *env); err != nil {
 			return nil, err
 		}
+	}
+
+	// 复用的 namespace 属于来源环境，不由特性环境初始化或托管。
+	if env.SharesNamespace() {
+		return env, nil
 	}
 
 	// 先落库再创建 namespace：避免 K8s 成功而 Mongo 失败时留下无法通过环境记录回收的孤儿 namespace。
@@ -273,6 +289,21 @@ func (s *FeatureEnvService) Create(ctx context.Context, input CreateFeatureEnvIn
 	}
 
 	return env, nil
+}
+
+// createEnv 校验 cluster+namespace+resourceKey 未被占用后落库特性环境记录。
+func (s *FeatureEnvService) createEnv(ctx context.Context, env *model.Environment) error {
+	if conflictErr := findClusterNamespaceOccupant(
+		ctx, s.db, env.Cluster, env.ResourceKey, bson.NilObjectID,
+	); conflictErr != nil {
+		return errors.Wrap(conflictErr, "check feature environment cluster namespace conflict")
+	}
+
+	if err := store.Of(s.db, model.EnvMeta).Create(ctx, env); err != nil {
+		err = rewriteWriteErrIfClusterOccupied(ctx, s.db, env.Cluster, env.ResourceKey, bson.NilObjectID, err)
+		return errors.Wrap(err, "create feature environment")
+	}
+	return nil
 }
 
 // copyEnvVars 复制来源环境的变量，失败时通过删除 Hook 清理目标环境。

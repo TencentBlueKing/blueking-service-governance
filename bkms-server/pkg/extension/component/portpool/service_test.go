@@ -21,6 +21,9 @@ package portpool
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+
+	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 )
 
 var _ = Describe("validateItemNamesUnique", func() {
@@ -126,4 +129,19 @@ var _ = Describe("fillItemNames", func() {
 		Expect(items[1].ItemName).To(Equal("item-2"))
 		Expect(items[2].ItemName).To(Equal("item-3"))
 	})
+})
+
+var _ = Describe("buildEnvPortPoolManifest", func() {
+	DescribeTable("names the CR by the env resource key",
+		func(resourceKey, wantName string) {
+			env := &bkmsenv.Environment{Name: "dev", WorkspaceID: "ws-1", ResourceKey: resourceKey}
+			config := &PortPoolConfig{Name: "pool", WorkspaceID: "ws-1", EnvName: "dev"}
+
+			manifest := buildEnvPortPoolManifest(env, config)
+			Expect((&unstructured.Unstructured{Object: manifest}).GetName()).To(Equal(wantName))
+			Expect(config.Name).To(Equal("pool"))
+		},
+		Entry("keeps the name in a standard env", "", "pool"),
+		Entry("prefixes the name in an env sharing namespace", "fab12", "fab12-pool"),
+	)
 })

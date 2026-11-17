@@ -37,6 +37,8 @@ var (
 	ErrEnvNotFound = errors.New("environment not found")
 	// ErrEnvAlreadyExists 环境与已有环境冲突：同一工作空间内重名，或绑定了已被占用的集群命名空间
 	ErrEnvAlreadyExists = errors.New("environment already exists")
+	// ErrSharedNamespaceUnsupported 共用命名空间的环境不支持该操作（如 Helm 部署、使用组件）
+	ErrSharedNamespaceUnsupported = errors.New("not supported in environment sharing namespace")
 )
 
 // EnvironmentUpdateData represents the fields that can be updated for an environment.
@@ -85,9 +87,10 @@ type EnvironmentStore = store.GenericStore[Environment]
 // EnvMeta 环境的存储元信息：创建时补齐 kind 与 appIDs 的默认值，读出时根据集群信息计算 Status。
 //
 // 索引（由 golang-migrate 维护）：
-// - 唯一：workspaceID + name
-// - 唯一（partial）：cluster.clusterID + cluster.namespace（仅非空时生效）
-// - 查询提速：ownerAppID
+//   - 唯一：workspaceID + name
+//   - 唯一（partial）：cluster.clusterID + cluster.namespace + resourceKey（集群与命名空间非空时生效；
+//     resourceKey 缺失按 null 参与比较，因此独占命名空间的环境之间仍互斥）
+//   - 查询提速：ownerAppID
 var EnvMeta = store.Meta[Environment]{
 	Collection:   environmentCollectionName,
 	TenantScoped: true,
@@ -205,15 +208,21 @@ func RemoveApp(ctx context.Context, db *mongo.Database, envID bson.ObjectID, app
 	return errors.Wrapf(err, "remove app %s from environment %s", appID, envID.Hex())
 }
 
-// FindByClusterNamespace 查找已绑定到指定 clusterID + namespace 的环境，排除 excludeEnvID 自身（为零值时不排除）。
+// FindByClusterNamespace 查找已绑定到指定 clusterID + namespace + resourceKey 的环境，
+// 排除 excludeEnvID 自身（为零值时不排除）。resourceKey 为空时只匹配未设置 resourceKey 的环境，
+// 即独占该命名空间的环境；共用命名空间的特性环境只与同 resourceKey 的环境冲突。
 // 如果未找到匹配的环境，返回 nil, nil。
 func FindByClusterNamespace(
 	ctx context.Context,
 	db *mongo.Database,
-	clusterID, namespace string,
+	clusterID, namespace, resourceKey string,
 	excludeEnvID bson.ObjectID,
 ) (*Environment, error) {
-	opts := []store.Opt{store.Where("cluster.clusterID", clusterID), store.Where("cluster.namespace", namespace)}
+	opts := []store.Opt{
+		store.Where("cluster.clusterID", clusterID),
+		store.Where("cluster.namespace", namespace),
+		byResourceKey(resourceKey),
+	}
 	if !excludeEnvID.IsZero() {
 		opts = append(opts, store.Where("_id", bson.M{"$ne": excludeEnvID}))
 	}
@@ -221,7 +230,33 @@ func FindByClusterNamespace(
 	if errors.Is(err, ErrEnvNotFound) {
 		return nil, nil
 	}
-	return env, errors.Wrapf(err, "find environment by cluster %s namespace %s", clusterID, namespace)
+	return env, errors.Wrapf(
+		err, "find environment by cluster %s namespace %s resource key %q", clusterID, namespace, resourceKey,
+	)
+}
+
+// ListNamespaceSharers 列出复用 sourceEnvID 环境命名空间（同 clusterID + namespace 且带 resourceKey）的特性环境。
+func ListNamespaceSharers(
+	ctx context.Context,
+	db *mongo.Database,
+	sourceEnvID bson.ObjectID,
+	clusterID, namespace string,
+) ([]Environment, error) {
+	envs, err := store.Of(db, EnvMeta).List(ctx,
+		store.Where("sourceEnvID", sourceEnvID),
+		store.Where("cluster.clusterID", clusterID),
+		store.Where("cluster.namespace", namespace),
+		store.Where("resourceKey", bson.M{"$gt": ""}),
+	)
+	return envs, errors.Wrapf(err, "list feature environments sharing namespace of environment %s", sourceEnvID.Hex())
+}
+
+// byResourceKey 按 resourceKey 匹配；为空时匹配字段缺失或为空的记录，与唯一索引中缺失字段按 null 处理的语义一致。
+func byResourceKey(resourceKey string) store.Opt {
+	if resourceKey == "" {
+		return store.Where("resourceKey", bson.M{"$in": bson.A{nil, ""}})
+	}
+	return store.Where("resourceKey", resourceKey)
 }
 
 // GetAppEnvMap 查询应用可用的环境（全部标准环境与该应用的特性环境），返回 envName→Environment 映射。

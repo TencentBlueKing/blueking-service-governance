@@ -82,7 +82,27 @@ func (c *PreDeployChecker) Do(ctx context.Context, params *PreDeployCheckParams)
 	if err := c.checkIfImagePromoted(ctx, params); err != nil {
 		return errors.Wrapf(err, "check if image promoted")
 	}
+	// 检查应用类型是否支持部署到共用命名空间的环境
+	if err := c.checkSharedNamespaceSupported(ctx, params); err != nil {
+		return errors.Wrapf(err, "check shared namespace support")
+	}
 	// 通过所有检查
+	return nil
+}
+
+// checkSharedNamespaceSupported 共用命名空间的环境只支持 AppModel 应用：Helm Chart 内的资源名无法加 resourceKey 前缀，
+// 且 Helm 部署流程会同步、清理命名空间内的应用 Service，必须在下发任何资源前拒绝。
+func (c *PreDeployChecker) checkSharedNamespaceSupported(ctx context.Context, params *PreDeployCheckParams) error {
+	if params == nil || !appruntime.IsHelmBasedType(params.AppType) {
+		return nil
+	}
+	env, err := c.envStore.Get(ctx, envmodel.AppEnvByName(params.WorkspaceID, params.AppID, params.EnvName))
+	if err != nil {
+		return errors.Wrapf(err, "get env %s in workspace %s", params.EnvName, params.WorkspaceID)
+	}
+	if env.SharesNamespace() {
+		return errors.Wrapf(envmodel.ErrSharedNamespaceUnsupported, "helm app cannot deploy to env %s", env.Name)
+	}
 	return nil
 }
 

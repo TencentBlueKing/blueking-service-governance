@@ -235,7 +235,7 @@ func (s *Service) resolveStrategyWorkloads(
 		return []string{app.Name}, nil
 	}
 	// 4. 非 Helm 应用沿用名称规则生成 workload 名称列表。
-	workloads := fallbackWorkloads(app.Name, trafficLaneName)
+	workloads := fallbackWorkloads(env, app.Name, trafficLaneName)
 	log.Infof(
 		ctx,
 		"resolved non-helm fallback workloads for alert strategy, strategyID=%s appID=%s env=%s lane=%s workloads=%v",
@@ -290,12 +290,11 @@ func (s *Service) resolveHelmWorkloads(ctx context.Context, appID, envName, traf
 	return workloads
 }
 
-// fallbackWorkloads 在无法解析真实 workload 时回退到基于应用名/泳道名的匹配规则。
-func fallbackWorkloads(appName, trafficLaneName string) []string {
-	// 1. 泳道场景下优先拼接泳道前缀，保持与实际工作负载命名约定一致。
+// fallbackWorkloads 在无法解析真实 workload 时回退到与部署一致的命名规则（泳道、resourceKey 前缀 + 应用名）。
+func fallbackWorkloads(env envmodel.Environment, appName, trafficLaneName string) []string {
+	name := env.PrefixName(appName)
 	if trafficLaneName != "" {
-		return []string{trafficLaneName + "-" + appName}
+		return []string{trafficLaneName + "-" + name}
 	}
-	// 2. 非泳道场景直接使用应用名作为默认 workload 名称。
-	return []string{appName}
+	return []string{name}
 }

@@ -41,6 +41,7 @@ import (
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/batchrelease"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/ownership"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/releasestrategy"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/secret"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/hostport"
@@ -121,6 +122,10 @@ func (d *Deployer) Deploy(
 	)
 	if err != nil {
 		return "", err
+	}
+	// 同名对象属于其他环境或应用时，在创建部署记录、下发任何资源之前拒绝
+	if err = d.claimOwnership(ctx, env, buildResult, rollout); err != nil {
+		return "", errors.Wrap(err, "claim ownership of objects")
 	}
 
 	// 找出之前部署中下发、本次不再需要的资源；以最新的部署记录为准，必须在创建本次部署记录之前计算
@@ -576,14 +581,15 @@ func injectDeployIDAnno(meta *metav1.ObjectMeta, deployID string) {
 // setupAppModel 设置工作负载名称 & 镜像
 func (d *Deployer) setupAppModel(
 	appModel *appmodel.AppModel,
+	env *bkmsenv.Environment,
 	imageRegistry *registry.ImageRegistry,
 	trafficLaneName, imageTag, updateStrategy string,
 ) {
-	// 设置工作负载名称
-	appModel.Workload.Name = d.app.Name
+	// 设置工作负载名称，共用命名空间时带 resourceKey 前缀
+	appModel.Workload.Name = env.PrefixName(d.app.Name)
 	// 如果指定泳道，则将泳道名作为工作负载名称前缀以做区分
 	if trafficLaneName != "" {
-		appModel.Workload.Name = fmt.Sprintf("%s-%s", trafficLaneName, d.app.Name)
+		appModel.Workload.Name = fmt.Sprintf("%s-%s", trafficLaneName, appModel.Workload.Name)
 	}
 
 	// 根据目前用户选中的镜像仓库 + 镜像 tag 生成镜像地址
@@ -601,6 +607,88 @@ func (d *Deployer) validateAppModel(appModel *appmodel.AppModel) error {
 	return nil
 }
 
+// claimOwnership 为本次将下发的额外资源、主工作负载及 Rollout 打归属标签；命名空间与其他环境共用时，
+// 先校验集群中同名对象的归属。主工作负载的标签只打在对象 metadata 上，不修改 Pod 模板，避免触发滚动更新。
+func (d *Deployer) claimOwnership(
+	ctx context.Context,
+	env *bkmsenv.Environment,
+	buildResult *workload.BuildResult,
+	rollout *workloadRollout,
+) error {
+	owner, err := ownership.ForApp(ctx, d.db, env, d.app.ID)
+	if err != nil {
+		return err
+	}
+	if owner.NeedVerify() {
+		if err = d.verifyOwnership(ctx, env, owner, buildResult, rollout); err != nil {
+			return err
+		}
+	}
+
+	for idx := range buildResult.ExtraObjects {
+		owner.Stamp(&buildResult.ExtraObjects[idx])
+	}
+	owner.Stamp(buildResult.ObjectMeta())
+	if rollout.manifest != nil {
+		owner.StampManifest(rollout.manifest)
+	}
+	return nil
+}
+
+// verifyOwnership 逐个查询额外资源、主工作负载及 Rollout 在集群中的同名对象，校验其归属
+func (d *Deployer) verifyOwnership(
+	ctx context.Context,
+	env *bkmsenv.Environment,
+	owner ownership.Owner,
+	buildResult *workload.BuildResult,
+	rollout *workloadRollout,
+) error {
+	clusterCfg := cluster.NewConfig(env.Cluster.ClusterID)
+	namespace := env.Cluster.Namespace
+
+	for idx := range buildResult.ExtraObjects {
+		obj := &buildResult.ExtraObjects[idx]
+		client, err := newExtraObjectClient(clusterCfg, idx, obj)
+		if err != nil {
+			return err
+		}
+		if err = owner.Verify(ctx, client, namespace, obj.GetName()); err != nil {
+			return errors.Wrapf(err, "verify %s %s", obj.GetKind(), obj.GetName())
+		}
+	}
+
+	workloadClient := k8sclient.NewWithGVR(clusterCfg, buildResult.GVR())
+	if err := owner.Verify(ctx, workloadClient, namespace, buildResult.Name()); err != nil {
+		return errors.Wrapf(err, "verify main workload %s", buildResult.Name())
+	}
+
+	// Rollout 与主工作负载同名，一次更新全部时也可能删除遗留的 Rollout，因此只要涉及 Rollout 就要校验
+	if rollout.manager != nil {
+		rolloutClient := k8sclient.NewWithGVR(clusterCfg, batchrelease.GVR)
+		if err := owner.Verify(ctx, rolloutClient, namespace, rollout.name); err != nil {
+			return errors.Wrapf(err, "verify rollout %s", rollout.name)
+		}
+	}
+	return nil
+}
+
+// newExtraObjectClient 按额外资源的 apiVersion、kind 创建 K8s 客户端，idx 用于错误信息
+func newExtraObjectClient(
+	clusterCfg *cluster.Config, idx int, obj *unstructured.Unstructured,
+) (*k8sclient.Client, error) {
+	// 资源合法性检查
+	apiVersion, kind := obj.GetAPIVersion(), obj.GetKind()
+	if apiVersion == "" || kind == "" {
+		return nil, errors.Errorf("invalid extra object %d: %s", idx, obj.GetName())
+	}
+	// 动态获取资源 GVR（preferred version）
+	resGVR, err := discovery.GetGroupVersionResource(clusterCfg, kind, apiVersion)
+	if err != nil {
+		return nil, errors.Wrapf(err, "get GVR for kind %s", kind)
+	}
+	return k8sclient.NewWithGVR(clusterCfg, *resGVR), nil
+}
+
 // upsertExtraObjects 批量更新或创建额外资源（如 ConfigMap、Secret 等）
 func (d *Deployer) upsertExtraObjects(
 	ctx context.Context,
@@ -608,21 +696,17 @@ func (d *Deployer) upsertExtraObjects(
 	extraObjs []unstructured.Unstructured,
 ) error {
 	clusterCfg := cluster.NewConfig(clusterID)
-	for idx, obj := range extraObjs {
-		// 资源合法性检查
-		apiVersion, kind := obj.GetAPIVersion(), obj.GetKind()
-		if apiVersion == "" || kind == "" {
-			return errors.Errorf("invalid extra object %d: %s", idx, obj.GetName())
-		}
-		// 动态获取资源 GVR（preferred version）
-		resGVR, err := discovery.GetGroupVersionResource(clusterCfg, kind, apiVersion)
+	for idx := range extraObjs {
+		obj := &extraObjs[idx]
+		client, err := newExtraObjectClient(clusterCfg, idx, obj)
 		if err != nil {
-			return errors.Wrapf(err, "get GVR for kind %s", kind)
+			return err
 		}
 		// 创建或更新资源
-		client := k8sclient.NewWithGVR(clusterCfg, *resGVR)
 		if _, err = client.Upsert(ctx, namespace, obj.Object, metav1.PatchOptions{}); err != nil {
-			return errors.Wrapf(err, "upsert apiVersion %s kind %s resource %s", apiVersion, kind, obj.GetName())
+			return errors.Wrapf(
+				err, "upsert apiVersion %s kind %s resource %s", obj.GetAPIVersion(), obj.GetKind(), obj.GetName(),
+			)
 		}
 	}
 	return nil
@@ -926,7 +1010,7 @@ func (d *Deployer) buildWorkload(
 	if err := appspec.SetReplicas(ctx, d.db, d.app.ID, env.Name, replicas); err != nil {
 		return nil, errors.Wrap(err, "setting replicas for the env")
 	}
-	d.setupAppModel(appModel, imageRegistry, trafficLaneName, imageTag, updateStrategy)
+	d.setupAppModel(appModel, env, imageRegistry, trafficLaneName, imageTag, updateStrategy)
 	if err := d.validateAppModel(appModel); err != nil {
 		return nil, errors.Wrap(err, "validate app model")
 	}

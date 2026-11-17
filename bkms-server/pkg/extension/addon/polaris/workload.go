@@ -104,7 +104,7 @@ func buildExtraResources(
 	vars map[string]string,
 	collector *envvarrefs.Collector,
 ) ([]unstructured.Unstructured, error) {
-	crName, serviceName := PolarisResourceNames(app.Name, cfg.Name)
+	crName, serviceName := PolarisResourceNames(env, app.Name, cfg.Name)
 
 	serviceSpec := map[string]any{
 		"name":              serviceName,
@@ -164,7 +164,7 @@ func buildExtraResources(
 			Name: serviceName,
 		},
 		Spec: corev1.ServiceSpec{
-			Selector: map[string]string{"app.kubernetes.io/name": app.Name},
+			Selector: map[string]string{"app.kubernetes.io/name": env.PrefixName(app.Name)},
 			Ports: []corev1.ServicePort{{
 				Protocol:   corev1.ProtocolTCP,
 				Port:       cfg.ServicePort,
@@ -183,9 +183,10 @@ func buildExtraResources(
 	}, nil
 }
 
-// PolarisResourceNames 返回该配置在集群中的 PolarisConfig CR 名与配套 Service 名。
-func PolarisResourceNames(appName, configName string) (crName, serviceName string) {
-	baseName := strings.ToLower(fmt.Sprintf("%s-%s", appName, configName))
+// PolarisResourceNames 返回该配置在环境集群中的 PolarisConfig CR 名与配套 Service 名；
+// 共用命名空间的环境中带 resourceKey 前缀。
+func PolarisResourceNames(env *envmodel.Environment, appName, configName string) (crName, serviceName string) {
+	baseName := env.PrefixName(strings.ToLower(fmt.Sprintf("%s-%s", appName, configName)))
 	return baseName + "-polaris", baseName + "-polaris-service"
 }
 

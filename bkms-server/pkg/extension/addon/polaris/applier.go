@@ -25,12 +25,14 @@ import (
 	"encoding/json"
 
 	"github.com/pkg/errors"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/ownership"
 	k8sclient "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/client"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/cluster"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/discovery"
@@ -42,11 +44,13 @@ import (
 // on_deploy 模式下仅用于 patch 后的动态下发，其他情况通过正常部署流程下发及删除；
 // immediate 模式下还负责下发配套的 Service，以及配置离域或删除时清理集群资源，
 // 因为这类配置不依赖部署流程，无法借助部署时的资源差异清理。
-type CRApplier struct{}
+type CRApplier struct {
+	db *mongo.Database
+}
 
 // NewCRApplier 创建 PolarisConfig CR 下发器。
-func NewCRApplier() *CRApplier {
-	return &CRApplier{}
+func NewCRApplier(db *mongo.Database) *CRApplier {
+	return &CRApplier{db: db}
 }
 
 // Apply 向指定环境下发 Polaris 资源。
@@ -66,6 +70,10 @@ func (a *CRApplier) Apply(
 
 	wanted := applyKinds(config)
 	clusterCfg := cluster.NewConfig(env.Cluster.ClusterID)
+	owner, err := ownership.ForApp(ctx, a.db, env, app.ID)
+	if err != nil {
+		return err
+	}
 	for idx := range resources {
 		obj := resources[idx]
 		if _, ok := wanted[obj.GetKind()]; !ok {
@@ -74,6 +82,9 @@ func (a *CRApplier) Apply(
 		k8sClient, clientErr := newK8sClientForObject(clusterCfg, obj.GetAPIVersion(), obj.GetKind())
 		if clientErr != nil {
 			return clientErr
+		}
+		if err = owner.Claim(ctx, k8sClient, env.Cluster.Namespace, obj.Object); err != nil {
+			return errors.Wrapf(err, "claim polaris %s %s in env %s", obj.GetKind(), obj.GetName(), env.Name)
 		}
 		if _, err = k8sClient.Upsert(
 			ctx, env.Cluster.Namespace, obj.Object, metav1.PatchOptions{},
@@ -104,7 +115,7 @@ func (a *CRApplier) DeleteResources(
 	env *bkmsenv.Environment,
 	config *PolarisConfig,
 ) error {
-	crName, serviceName := PolarisResourceNames(app.Name, config.Name)
+	crName, serviceName := PolarisResourceNames(env, app.Name, config.Name)
 	targets := []struct {
 		apiVersion string
 		kind       string
@@ -159,7 +170,7 @@ func (a *CRApplier) PatchWeight(
 	weight int32,
 	dynamicWeight bool,
 ) error {
-	crName, serviceName := PolarisResourceNames(app.Name, config.Name)
+	crName, serviceName := PolarisResourceNames(env, app.Name, config.Name)
 	patch, err := buildWeightPatch(serviceName, weight, dynamicWeight)
 	if err != nil {
 		return errors.Wrap(err, "build polaris CR weight patch")

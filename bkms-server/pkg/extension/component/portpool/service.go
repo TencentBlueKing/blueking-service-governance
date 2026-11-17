@@ -26,10 +26,13 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/ownership"
 	k8sclient "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/client"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/cluster"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/discovery"
@@ -60,11 +63,13 @@ var (
 )
 
 // PortPoolService 端口池服务，直接操作 K8s ApiServer
-type PortPoolService struct{}
+type PortPoolService struct {
+	db *mongo.Database
+}
 
 // NewPortPoolService 创建端口池服务
-func NewPortPoolService() *PortPoolService {
-	return &PortPoolService{}
+func NewPortPoolService(db *mongo.Database) *PortPoolService {
+	return &PortPoolService{db: db}
 }
 
 // Create 创建端口池
@@ -79,12 +84,26 @@ func (s *PortPoolService) Create(ctx context.Context, config *PortPoolConfig, en
 		return errors.Wrap(err, "create k8s client for portpool")
 	}
 
-	manifest := buildPortPoolManifest(config)
+	manifest := buildEnvPortPoolManifest(env, config)
+	owner, err := ownership.ForEnv(ctx, s.db, env)
+	if err != nil {
+		return err
+	}
+	if err = owner.Claim(ctx, k8sClient, env.Cluster.Namespace, manifest); err != nil {
+		return errors.Wrapf(err, "claim portpool CR %s", config.Name)
+	}
 	if _, err = k8sClient.Upsert(ctx, env.Cluster.Namespace, manifest, metav1.PatchOptions{}); err != nil {
 		return errors.Wrap(err, "upsert portpool CR to k8s")
 	}
 
 	return nil
+}
+
+// buildEnvPortPoolManifest 生成下发到环境的 PortPool manifest；共用命名空间时 CR 名带 resourceKey 前缀。
+func buildEnvPortPoolManifest(env *bkmsenv.Environment, config *PortPoolConfig) map[string]any {
+	k8sConfig := *config
+	k8sConfig.Name = env.PrefixName(config.Name)
+	return buildPortPoolManifest(&k8sConfig)
 }
 
 // Get 获取端口池配置
@@ -93,16 +112,28 @@ func (s *PortPoolService) Get(ctx context.Context, env *bkmsenv.Environment, nam
 	if err != nil {
 		return nil, errors.Wrap(err, "create k8s client for portpool")
 	}
+	_, config, err := getLive(ctx, k8sClient, env, name)
+	return config, err
+}
 
-	obj, err := k8sClient.Get(ctx, env.Cluster.Namespace, name, metav1.GetOptions{})
+// getLive 读取集群中的 PortPool CR，同时返回解析后的配置（配置名为用户填写的原名）
+func getLive(
+	ctx context.Context, k8sClient *k8sclient.Client, env *bkmsenv.Environment, name string,
+) (*unstructured.Unstructured, *PortPoolConfig, error) {
+	obj, err := k8sClient.Get(ctx, env.Cluster.Namespace, env.PrefixName(name), metav1.GetOptions{})
 	if err != nil {
 		if errors.Is(err, k8sclient.ErrResourceNotFound) {
-			return nil, ErrConfigNotFound
+			return nil, nil, ErrConfigNotFound
 		}
-		return nil, errors.Wrap(err, "get portpool CR from k8s")
+		return nil, nil, errors.Wrap(err, "get portpool CR from k8s")
 	}
 
-	return parsePortPoolFromUnstructured(obj)
+	config, err := parsePortPoolFromUnstructured(obj)
+	if err != nil {
+		return nil, nil, err
+	}
+	config.Name = name
+	return obj, config, nil
 }
 
 // ListByEnv 获取指定环境下的端口池配置列表
@@ -121,7 +152,15 @@ func (s *PortPoolService) ListByEnv(ctx context.Context, env *bkmsenv.Environmen
 		return nil, errors.Wrap(err, "list portpool CRs from k8s")
 	}
 
-	return parsePortPoolListFromUnstructured(list)
+	configs, err := parsePortPoolListFromUnstructured(list)
+	if err != nil {
+		return nil, err
+	}
+	// 共用命名空间时 CR 名带 resourceKey 前缀，返回前还原为原名
+	for _, config := range configs {
+		config.Name = env.TrimPrefix(config.Name)
+	}
+	return configs, nil
 }
 
 // UpdateResult 更新端口池的返回结果
@@ -136,10 +175,21 @@ type UpdateResult struct {
 func (s *PortPoolService) Update(
 	ctx context.Context, env *bkmsenv.Environment, name string, newItems []PoolItem,
 ) (*UpdateResult, error) {
-	// 获取现有配置
-	existingConfig, err := s.Get(ctx, env, name)
+	k8sClient, err := s.newK8sClient(env.Cluster.ClusterID)
+	if err != nil {
+		return nil, errors.Wrap(err, "create k8s client for portpool")
+	}
+	// 获取现有配置，读到的 CR 同时用于归属校验，不必再查一次
+	live, existingConfig, err := getLive(ctx, k8sClient, env, name)
 	if err != nil {
 		return nil, errors.Wrap(err, "get portpool config for update")
+	}
+	owner, err := ownership.ForEnv(ctx, s.db, env)
+	if err != nil {
+		return nil, err
+	}
+	if err = owner.Check(live); err != nil {
+		return nil, errors.Wrapf(err, "check owner of portpool CR %s", name)
 	}
 
 	// 保存更新前的 poolItems 快照
@@ -163,12 +213,8 @@ func (s *PortPoolService) Update(
 	existingConfig.PoolItems = newItems
 
 	// Upsert 更新后的配置到 K8s
-	k8sClient, err := s.newK8sClient(env.Cluster.ClusterID)
-	if err != nil {
-		return nil, errors.Wrap(err, "create k8s client for portpool")
-	}
-
-	manifest := buildPortPoolManifest(existingConfig)
+	manifest := buildEnvPortPoolManifest(env, existingConfig)
+	owner.StampManifest(manifest)
 	if _, err = k8sClient.Upsert(ctx, env.Cluster.Namespace, manifest, metav1.PatchOptions{}); err != nil {
 		return nil, errors.Wrap(err, "upsert portpool CR to k8s")
 	}
@@ -190,7 +236,7 @@ func (s *PortPoolService) Delete(ctx context.Context, env *bkmsenv.Environment, 
 		return errors.Wrap(err, "create k8s client for portpool")
 	}
 
-	if err = k8sClient.Delete(ctx, env.Cluster.Namespace, name, metav1.DeleteOptions{}); err != nil {
+	if err = k8sClient.Delete(ctx, env.Cluster.Namespace, env.PrefixName(name), metav1.DeleteOptions{}); err != nil {
 		if errors.Is(err, k8sclient.ErrResourceNotFound) {
 			return ErrConfigNotFound
 		}

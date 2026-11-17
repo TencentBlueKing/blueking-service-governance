@@ -227,11 +227,12 @@ func (h *Handler) CreateFeatureEnv(c *gin.Context) {
 		bkmsenv.NewFeatureEnvNamespaceInitializer(),
 	)
 	featureEnv, err := svc.Create(ctx, bkmsenv.CreateFeatureEnvInput{
-		App:         app,
-		SourceEnv:   sourceEnv,
-		DisplayName: input.DisplayName,
-		Creator:     auth.MustGetUser(ctx).ID,
-		CopyEnvVars: input.CopyEnvVars,
+		App:                  app,
+		SourceEnv:            sourceEnv,
+		DisplayName:          input.DisplayName,
+		Creator:              auth.MustGetUser(ctx).ID,
+		CopyEnvVars:          input.CopyEnvVars,
+		ShareSourceNamespace: input.ShareSourceNamespace,
 	})
 	if err != nil {
 		if abortIfEnvClusterNamespaceOccupied(c, err) {
