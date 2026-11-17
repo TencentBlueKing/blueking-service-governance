@@ -284,4 +284,26 @@ var _ = Describe("PreDeployChecker", func() {
 			})
 		})
 	})
+
+	Describe("checkSharedNamespaceSupported", func() {
+		BeforeEach(func() {
+			params.TrafficLaneName = ""
+			persistEnv(ctx, &envmodel.Environment{
+				Name:        envName,
+				WorkspaceID: workspaceID,
+				Type:        "development",
+				ResourceKey: "fab12",
+			})
+		})
+
+		It("rejects a helm app deploying to an env sharing namespace", func() {
+			err := checker.Do(ctx, params)
+			Expect(errors.Is(err, envmodel.ErrSharedNamespaceUnsupported)).To(BeTrue())
+		})
+
+		It("allows an app model app deploying to an env sharing namespace", func() {
+			params.AppType = bkmsapp.AppTypeBKMSApp
+			Expect(checker.Do(ctx, params)).To(Succeed())
+		})
+	})
 })

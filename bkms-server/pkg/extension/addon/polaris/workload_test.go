@@ -96,6 +96,30 @@ var _ = Describe("WorkloadBuilder", func() {
 		return config
 	}
 
+	It("prefixes resource names and selects the prefixed workload in an env sharing namespace", func() {
+		config := createConfig("primary", []string{environment.Name}, 8080, nil)
+		environment.ResourceKey = "fab12"
+
+		result, err := builder.Build(ctx, app, environment, map[string]string{}, corev1.PodSpec{}, nil)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result.ExtraObjects).To(HaveLen(2))
+
+		expectedBaseName := "fab12-" + strings.ToLower(app.Name+"-"+config.Name)
+		crName, serviceName := polaris.PolarisResourceNames(environment, app.Name, config.Name)
+		Expect(crName).To(Equal(expectedBaseName + "-polaris"))
+		Expect(serviceName).To(Equal(expectedBaseName + "-polaris-service"))
+		for _, object := range result.ExtraObjects {
+			if object.GetKind() != k8skind.SVC {
+				Expect(object.GetName()).To(Equal(crName))
+				continue
+			}
+			Expect(object.GetName()).To(Equal(serviceName))
+			selector, _, err := unstructured.NestedStringMap(object.Object, "spec", "selector")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(selector).To(HaveKeyWithValue("app.kubernetes.io/name", "fab12-"+app.Name))
+		}
+	})
+
 	It("builds Polaris resources without touching the pod spec", func() {
 		config := createConfig("primary", []string{environment.Name}, 8080, map[string]string{
 			"environment": "${{env.ENV_NAME}}",

@@ -82,18 +82,21 @@ func GetEnvClusterNamespaceConflictInfo(err error) (*EnvClusterNamespaceConflict
 	return &target.info, true
 }
 
-// findClusterNamespaceOccupant 查询 clusterID+namespace 是否已被其他环境占用
+// findClusterNamespaceOccupant 查询 clusterID+namespace+resourceKey 是否已被其他环境占用
 func findClusterNamespaceOccupant(
 	ctx context.Context,
 	db *mongo.Database,
 	cluster model.BizCluster,
+	resourceKey string,
 	excludeEnvID bson.ObjectID,
 ) error {
 	if cluster.ClusterID == "" || cluster.Namespace == "" {
 		return nil
 	}
 
-	occupiedEnv, err := model.FindByClusterNamespace(ctx, db, cluster.ClusterID, cluster.Namespace, excludeEnvID)
+	occupiedEnv, err := model.FindByClusterNamespace(
+		ctx, db, cluster.ClusterID, cluster.Namespace, resourceKey, excludeEnvID,
+	)
 	if err != nil {
 		return errors.Wrap(err, "find env by cluster namespace conflict")
 	}
@@ -109,15 +112,16 @@ func findClusterNamespaceOccupant(
 }
 
 // rewriteWriteErrIfClusterOccupied 在 Create/Update 已经失败后调用。
-// 查 store 确认是否存在 clusterID+namespace 占用，是则返回结构化冲突错误，否则原样返回 originalErr。
+// 查 store 确认是否存在 clusterID+namespace+resourceKey 占用，是则返回结构化冲突错误，否则原样返回 originalErr。
 func rewriteWriteErrIfClusterOccupied(
 	ctx context.Context,
 	db *mongo.Database,
 	cluster model.BizCluster,
+	resourceKey string,
 	excludeEnvID bson.ObjectID,
 	originalErr error,
 ) error {
-	if conflictErr := findClusterNamespaceOccupant(ctx, db, cluster, excludeEnvID); conflictErr != nil {
+	if conflictErr := findClusterNamespaceOccupant(ctx, db, cluster, resourceKey, excludeEnvID); conflictErr != nil {
 		return conflictErr
 	}
 	return originalErr

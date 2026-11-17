@@ -77,7 +77,7 @@ func NewDynamicApplyService(
 		envStore:        store.Of(db, bkmsenv.EnvMeta),
 		envVarsReader:   envVarsReader,
 		envStateManager: envStateManager,
-		applier:         NewCRApplier(),
+		applier:         NewCRApplier(db),
 	}
 }
 

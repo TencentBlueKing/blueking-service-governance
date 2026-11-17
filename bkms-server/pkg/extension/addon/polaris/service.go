@@ -69,7 +69,7 @@ func NewPolarisConfigService(
 		db:                  db,
 		platformManager:     platformManager,
 		envStateManager:     envStateManager,
-		applier:             NewCRApplier(),
+		applier:             NewCRApplier(db),
 		envStore:            store.Of(db, bkmsenv.EnvMeta),
 		envVarsReader:       envVarsReader,
 		enqueueDynamicApply: enqueue,

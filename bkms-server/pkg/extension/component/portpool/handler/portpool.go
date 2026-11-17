@@ -70,7 +70,7 @@ func (h *Handler) ListPortPools(c *gin.Context) {
 		return
 	}
 
-	configs, err := portpool.NewPortPoolService().ListByEnv(ctx, env)
+	configs, err := portpool.NewPortPoolService(h.registry.DB).ListByEnv(ctx, env)
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list portpool configs"))
 		return
@@ -125,7 +125,7 @@ func (h *Handler) CreatePortPool(c *gin.Context) {
 		EnvName:     env.Name,
 	}
 
-	if err = portpool.NewPortPoolService().Create(ctx, config, env); err != nil {
+	if err = portpool.NewPortPoolService(h.registry.DB).Create(ctx, config, env); err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "create portpool config"))
 		return
 	}
@@ -178,7 +178,7 @@ func (h *Handler) UpdatePortPool(c *gin.Context) {
 		return item.ToModel()
 	})
 
-	result, err := portpool.NewPortPoolService().Update(ctx, env, uriInput.Name, poolItems)
+	result, err := portpool.NewPortPoolService(h.registry.DB).Update(ctx, env, uriInput.Name, poolItems)
 	if err != nil {
 		if errors.Is(err, portpool.ErrConfigNotFound) {
 			bkerrs.AbortWithErr(c, bkerrs.Errorf(
@@ -234,7 +234,7 @@ func (h *Handler) DeletePortPool(c *gin.Context) {
 		return
 	}
 
-	ppSvc := portpool.NewPortPoolService()
+	ppSvc := portpool.NewPortPoolService(h.registry.DB)
 	existingConfig, err := ppSvc.Get(ctx, env, uriInput.Name)
 	if err != nil {
 		if errors.Is(err, portpool.ErrConfigNotFound) {

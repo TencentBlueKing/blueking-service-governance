@@ -20,8 +20,10 @@ package env
 
 import (
 	"context"
+	"strings"
 
 	"github.com/pkg/errors"
+	"github.com/samber/lo"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 
@@ -29,6 +31,9 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
+
+// ErrEnvHasNamespaceSharers 仍有特性环境共用该环境的命名空间，不能修改集群或命名空间
+var ErrEnvHasNamespaceSharers = errors.New("environment namespace is shared by feature environments")
 
 // EnvService 环境基础配置服务
 type EnvService struct {
@@ -52,12 +57,16 @@ type ImageRegistryInfoInput struct {
 
 // Create 创建环境数据，成功后 environment.ID 为新环境的 ID.
 func (s *EnvService) Create(ctx context.Context, environment *model.Environment) error {
-	if err := findClusterNamespaceOccupant(ctx, s.db, environment.Cluster, bson.NilObjectID); err != nil {
+	if err := findClusterNamespaceOccupant(
+		ctx, s.db, environment.Cluster, environment.ResourceKey, bson.NilObjectID,
+	); err != nil {
 		return errors.Wrap(err, "check environment cluster namespace conflict")
 	}
 
 	if err := store.Of(s.db, model.EnvMeta).Create(ctx, environment); err != nil {
-		err = rewriteWriteErrIfClusterOccupied(ctx, s.db, environment.Cluster, bson.NilObjectID, err)
+		err = rewriteWriteErrIfClusterOccupied(
+			ctx, s.db, environment.Cluster, environment.ResourceKey, bson.NilObjectID, err,
+		)
 		return errors.Wrapf(err, "create environment %s", environment.Name)
 	}
 	return nil
@@ -83,14 +92,17 @@ func (s *EnvService) Update(
 			return errors.Errorf("environment has %d apps, cannot update cluster", appCount)
 		}
 
-		if err = findClusterNamespaceOccupant(ctx, s.db, finalCluster, envID); err != nil {
+		if err = s.checkNoNamespaceSharers(ctx, environment, finalCluster); err != nil {
+			return err
+		}
+		if err = findClusterNamespaceOccupant(ctx, s.db, finalCluster, environment.ResourceKey, envID); err != nil {
 			return errors.Wrap(err, "check environment cluster namespace conflict")
 		}
 	}
 
 	if err = model.UpdateEnv(ctx, s.db, envID, updateData); err != nil {
 		if updateData.ClusterID != nil || updateData.Namespace != nil {
-			err = rewriteWriteErrIfClusterOccupied(ctx, s.db, finalCluster, envID, err)
+			err = rewriteWriteErrIfClusterOccupied(ctx, s.db, finalCluster, environment.ResourceKey, envID, err)
 		}
 		return errors.Wrap(err, "update environment")
 	}
@@ -114,6 +126,29 @@ func (s *EnvService) Update(
 	}(*environment, *updatedEnv)
 
 	return nil
+}
+
+// checkNoNamespaceSharers 来源环境的集群或命名空间实际发生变化时，若仍有特性环境共用其命名空间则拒绝：
+// 这些特性环境的资源留在原命名空间，来源环境迁走后二者就不再共用。
+func (s *EnvService) checkNoNamespaceSharers(
+	ctx context.Context, environment *model.Environment, finalCluster model.BizCluster,
+) error {
+	current := environment.Cluster
+	if current.ClusterID == finalCluster.ClusterID && current.Namespace == finalCluster.Namespace {
+		return nil
+	}
+	sharers, err := model.ListNamespaceSharers(ctx, s.db, environment.ID, current.ClusterID, current.Namespace)
+	if err != nil {
+		return errors.Wrap(err, "list feature environments sharing namespace")
+	}
+	if len(sharers) == 0 {
+		return nil
+	}
+	names := lo.Map(sharers, func(e model.Environment, _ int) string { return e.Name })
+	return errors.Wrapf(
+		ErrEnvHasNamespaceSharers,
+		"feature environments [%s] share namespace %s", strings.Join(names, ", "), current.Namespace,
+	)
 }
 
 // applyClusterUpdate 将 partial update 中的集群字段合并到现有 BizCluster，返回合并后的结果。

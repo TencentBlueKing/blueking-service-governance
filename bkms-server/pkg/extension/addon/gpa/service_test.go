@@ -32,6 +32,7 @@ import (
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/ownership"
 	k8sclient "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/client"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/cluster"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/discovery"
@@ -56,7 +57,7 @@ var _ = Describe("GPAService K8s interactions", func() {
 	)
 
 	BeforeEach(func() {
-		svc = &GPAService{}
+		svc = NewGPAService(testutil.NewDB(GinkgoT()))
 		ctx = testutil.NewDefaultTenantContext()
 		env = newTestEnv()
 	})
@@ -73,12 +74,18 @@ var _ = Describe("GPAService K8s interactions", func() {
 		mockey.Mock(k8sclient.NewWithGVR).Return(&k8sclient.Client{}).Build()
 	}
 
+	// mockNoLiveCR mock 下发前的归属校验：集群中不存在同名 CR
+	mockNoLiveCR := func() {
+		mockey.Mock((*k8sclient.Client).Get).Return(nil, k8sclient.ErrResourceNotFound).Build()
+	}
+
 	Describe("Apply", func() {
 		It("should upsert the gpa manifest after passing validation", func() {
 			mockey.PatchConvey("apply-success", GinkgoT(), func() {
 				// 跳过工作负载名解析，聚焦 K8s 下发编排
 				mockey.Mock((*GPAService).resolveScaleTargetName).Return("web", nil).Build()
 				mockK8sClientChain()
+				mockNoLiveCR()
 
 				var capturedNamespace string
 				var capturedManifest map[string]any
@@ -200,6 +207,7 @@ var _ = Describe("GPAService K8s interactions", func() {
 			mockey.PatchConvey("apply-upsert-notfound-not-component", GinkgoT(), func() {
 				mockey.Mock((*GPAService).resolveScaleTargetName).Return("web", nil).Build()
 				mockK8sClientChain()
+				mockNoLiveCR()
 				k8sNotFound := k8serrors.NewNotFound(
 					schema.GroupResource{Resource: "namespaces"}, "ns-1",
 				)
@@ -221,6 +229,7 @@ var _ = Describe("GPAService K8s interactions", func() {
 			mockey.PatchConvey("apply-upsert-manifest-invalid", GinkgoT(), func() {
 				mockey.Mock((*GPAService).resolveScaleTargetName).Return("web", nil).Build()
 				mockK8sClientChain()
+				mockNoLiveCR()
 				// manifest 校验错误文本含 "not found"（metadata.name not found），不应误判为组件未安装
 				mockey.Mock((*k8sclient.Client).Upsert).Return(
 					nil, errors.New("validate manifest: metadata.name not found"),
@@ -233,6 +242,65 @@ var _ = Describe("GPAService K8s interactions", func() {
 				err := svc.Apply(ctx, env, config)
 				Expect(err).To(HaveOccurred())
 				Expect(err).NotTo(MatchError(ErrComponentNotInstalled))
+			})
+		})
+
+		It("prefixes the CR name with the resource key in an env sharing namespace", func() {
+			mockey.PatchConvey("apply-shared-namespace", GinkgoT(), func() {
+				env.ResourceKey = "fab12"
+				mockey.Mock((*GPAService).resolveScaleTargetName).Return("fab12-web", nil).Build()
+				mockK8sClientChain()
+
+				var gotName string
+				mockey.Mock((*k8sclient.Client).Get).To(func(
+					_ *k8sclient.Client, _ context.Context, _, name string, _ metav1.GetOptions,
+				) (*unstructured.Unstructured, error) {
+					gotName = name
+					return nil, k8sclient.ErrResourceNotFound
+				}).Build()
+				var capturedManifest map[string]any
+				mockey.Mock((*k8sclient.Client).Upsert).To(func(
+					_ *k8sclient.Client, _ context.Context, _ string,
+					manifest map[string]any, _ metav1.PatchOptions,
+				) (*unstructured.Unstructured, error) {
+					capturedManifest = manifest
+					return &unstructured.Unstructured{Object: manifest}, nil
+				}).Build()
+
+				config := &GPAConfig{
+					Name: "web-autoscale", AppID: "app-1", MinReplicas: 2, MaxReplicas: 10,
+					Metrics: []GPAMetric{{Resource: ResourceCPU, AverageUtilization: 60}},
+				}
+				Expect(svc.Apply(ctx, env, config)).To(Succeed())
+
+				obj := unstructured.Unstructured{Object: capturedManifest}
+				Expect(gotName).To(Equal("fab12-web-autoscale"))
+				Expect(obj.GetName()).To(Equal("fab12-web-autoscale"))
+				Expect(obj.GetLabels()).To(HaveKeyWithValue(LabelKeyEnvName, "dev"))
+				Expect(obj.GetLabels()).To(HaveKeyWithValue(LabelKeyAppID, "app-1"))
+				// 调用方传入的配置保持原名
+				Expect(config.Name).To(Equal("web-autoscale"))
+			})
+		})
+
+		It("rejects overwriting a CR owned by another env in an env sharing namespace", func() {
+			mockey.PatchConvey("apply-not-owned", GinkgoT(), func() {
+				env.ResourceKey = "fab12"
+				mockey.Mock((*GPAService).resolveScaleTargetName).Return("fab12-web", nil).Build()
+				mockK8sClientChain()
+				live := &unstructured.Unstructured{}
+				live.SetName("fab12-web-autoscale")
+				live.SetLabels(map[string]string{LabelKeyEnvName: "prod", LabelKeyAppID: "app-1"})
+				mockey.Mock((*k8sclient.Client).Get).Return(live, nil).Build()
+				upsertMock := mockey.Mock((*k8sclient.Client).Upsert).Return(nil, nil).Build()
+
+				config := &GPAConfig{
+					Name: "web-autoscale", AppID: "app-1", MinReplicas: 2, MaxReplicas: 10,
+					Metrics: []GPAMetric{{Resource: ResourceCPU, AverageUtilization: 60}},
+				}
+				err := svc.Apply(ctx, env, config)
+				Expect(errors.Is(err, ownership.ErrNotOwned)).To(BeTrue())
+				Expect(upsertMock.Times()).To(Equal(0))
 			})
 		})
 	})
