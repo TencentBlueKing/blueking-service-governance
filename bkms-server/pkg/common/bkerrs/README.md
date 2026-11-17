@@ -13,7 +13,7 @@ i18n 的通用规则（语言协商、文案资源、非错误文案）见 [`pkg
 | - | - | - |
 | 定码 | `bkerrs.Define` 定义，`With` 附加参数后返回 | 第一个知道错误业务含义的层，通常是 service / 领域包 |
 | 加上下文 | `github.com/pkg/errors` 的 `Wrap` / `Wrapf` | 任何一层，不带错误码 |
-| 改判 | `ErrXxx.With(...).WithCause(err)` | 外层知道下层错误在当前场景下的真实含义时 |
+| 改判 | 改为另一种 4xx：`ErrXxx.With(...).WithCause(err)`；改为 5xx：`bkerrs.Wrapf(err, bkerrs.ErrCodeInternalServerError, ...)` | 外层知道下层错误在当前场景下的真实含义时 |
 
 - 定码与加上下文是两件事：**加上下文时不要用 `bkerrs.Wrap` / `Wrapf`**，它会新建一个带码错误盖住内层的错误码
 - 出口用 `errors.As` 取错误链上**第一个** `*bkerrs.Error`：外层没有新建带码错误时，内层定的码会原样返回；`WithCause` 新建的错误排在最前，因此改判生效
@@ -24,7 +24,6 @@ i18n 的通用规则（语言协商、文案资源、非错误文案）见 [`pkg
 ## 什么时候需要 Define
 
 - **需要**：用户可能触发、需要返回 4xx 或特定提示的业务错误（重名、参数不合法、状态不允许、资源不存在等），以及上层需要 `errors.Is` 区分处理的业务错误
-- **需要**：把链上已有的 4xx 错误改判为 5xx 时（见下文改判）。只用 `errors.Wrap` 会保留内层的 4xx
 - **不需要**：系统故障类错误（数据库超时、外部系统调用失败等），保持普通错误并用 `errors.Wrap` 加上下文，出口自动按 500 处理并记日志
 
 ## 用法
@@ -69,15 +68,23 @@ params := bkerrs.FromError(err).Params()
 
 ### 改判
 
-同一个下层错误在不同场景含义不同时，才由外层改判。例如应用记录里引用的环境查不到，并非用户请求的资源不存在，而是数据不一致，应返回 500 而非 404：
+同一个下层错误在不同场景含义不同时，才由外层改判。下层定的码按"用户直接请求"的场景给出，以下调用方需要检查是否改判：
+
+- **参数由系统构造**：下层的 4xx 是针对用户输入定的，系统自己构造的参数出现同样的错误，说明是并发、数据不一致或代码缺陷，应改判为 500。例如创建工作空间时创建默认环境（环境名固定）、创建特性环境时名称由平台生成，二者遇到 `ENV_ALREADY_EXISTS` 都改判为 500
+- **引用来自数据库**：例如应用记录里引用的环境查不到，并非用户请求的资源不存在，而是数据不一致，应返回 500 而非 404
+
+改判为 5xx 时用 `bkerrs.Wrapf` 显式定码（5xx 只展示通用文案，不需要 Define）；改判为另一种 4xx 时用 Define 的错误 + `WithCause`：
 
 ```go
-// ErrAppEnvInconsistent 为示意，实际使用时按场景 Define
-env, err := envs.Get(ctx, store.ByID(app.EnvID))
-if errors.Is(err, envmodel.ErrEnvNotFound) {
-	return ErrAppEnvInconsistent.With("envID", app.EnvID).WithCause(err)
+if err = store.Of(s.db, model.EnvMeta).Create(ctx, env); err != nil {
+	if errors.Is(err, model.ErrEnvAlreadyExists) {
+		return nil, bkerrs.Wrapf(err, bkerrs.ErrCodeInternalServerError, "feature environment name %s conflict", name)
+	}
+	return nil, errors.Wrap(err, "create feature environment")
 }
 ```
+
+把存量 handler 的 `bkerrs.Wrap` 迁移为 `errors.Wrap` 时，也要按上面两条检查下层可能返回的 `Define` 错误：存量写法的外层码会盖住内层，迁移后内层的 4xx 会原样透传。
 
 下层已经返回了正确的错误时，handler 不需要再判断，直接加上下文返回即可：
 
@@ -106,7 +113,10 @@ store 不依赖 `bkerrs`，不感知错误码。它的通用错误通过 `IsNotF
 
 - 错误的 i18n key 即错误详情码（大写下划线，模块前缀），文案放在所属业务域的语言文件中（如 `core_env.yaml`）；
   `errors.yaml` 只放错误码通用文案、`RESOURCE_*` 类别文案，以及 `bkerrs` 包内定义的错误
-- 模板参数名与 `With` 的 key 一致
+- 新增 `Define` 必须同时新增文案；可执行 `make i18n` 把源码中缺失的 key 以骨架（英文预填 `Define` 的描述、中文留空）
+  追加到所属模块的文件，再补全翻译
+- 模板参数名与 `With` 的 key 一致。`pkg/common/i18n` 的单测会静态检查：各语言占位符一致、
+  模板不引用调用处未传入的参数（`With` 的参数同时进入错误详情，允许只传不用）
 - 业务代码只返回错误，翻译统一在出口完成
 
 ```yaml

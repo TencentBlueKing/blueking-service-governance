@@ -81,7 +81,8 @@ func Errorf(code ErrCode, format string, args ...any) *Error {
 
 // Wrap 错误包装
 // 需注意：bkerrs.Wrap() 会覆盖原 bkerrs.Error 的错误码 & 错误详情，若希望避免该行为，则应使用 pkg/errors.Wrap()
-// 按场景改用：仅补充上下文用 pkg/errors.Wrap()；需要定码用 Define 定义的错误；在边界上改判用 WithCause
+// 按场景改用：仅补充上下文用 pkg/errors.Wrap()；需要定码用 Define 定义的错误；在边界上改判为 4xx 用 WithCause；
+// 把下层的 4xx 改判为 5xx 时仍使用本函数
 //
 // 使用示例:
 //
@@ -97,7 +98,8 @@ func Wrap(cause error, code ErrCode, msg string) *Error {
 
 // Wrapf 错误包装（支持字符串 format）
 // 需注意：bkerrs.Wrapf() 会覆盖原 bkerrs.Error 的错误码 & 错误详情，若希望避免该行为，则应使用 pkg/errors.Wrapf()
-// 按场景改用：仅补充上下文用 pkg/errors.Wrapf()；需要定码用 Define 定义的错误；在边界上改判用 WithCause
+// 按场景改用：仅补充上下文用 pkg/errors.Wrapf()；需要定码用 Define 定义的错误；在边界上改判为 4xx 用 WithCause；
+// 把下层的 4xx 改判为 5xx 时仍使用本函数
 //
 // 使用示例:
 //

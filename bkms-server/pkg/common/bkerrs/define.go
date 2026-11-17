@@ -103,8 +103,9 @@ func (e *Error) With(key, value string) *Error {
 //
 // 使用示例:
 //
+//	// 请求体引用的环境不存在：不是请求路径上的资源不存在，改判为 400
 //	if errors.Is(err, envmodel.ErrEnvNotFound) {
-//		return ErrAppEnvInconsistent.With("envID", app.EnvID).WithCause(err)
+//		return ErrReferencedEnvNotFound.With("envID", input.EnvID).WithCause(err)
 //	}
 func (e *Error) WithCause(cause error) *Error {
 	ne := e.clone()

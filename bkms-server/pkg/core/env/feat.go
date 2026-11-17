@@ -248,6 +248,12 @@ func (s *FeatureEnvService) Create(ctx context.Context, input CreateFeatureEnvIn
 
 	if err = store.Of(s.db, model.EnvMeta).Create(ctx, env); err != nil {
 		err = rewriteWriteErrIfClusterOccupied(ctx, s.db, env.Cluster, bson.NilObjectID, err)
+		// name 由平台生成，重名说明序号分配异常，不是用户请求的问题
+		if errors.Is(err, model.ErrEnvAlreadyExists) {
+			return nil, bkerrs.Wrapf(
+				err, bkerrs.ErrCodeInternalServerError, "feature environment name %s conflict", name,
+			)
+		}
 		return nil, errors.Wrap(err, "create feature environment")
 	}
 

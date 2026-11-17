@@ -49,6 +49,10 @@ endif
 test-multi-tenant:  ## Run the tests in multi-tenant mode (platform tenant is system)
 	BKMS_TEST_MULTI_TENANT=true $(MAKE) test
 
+.PHONY: i18n
+i18n:  ## Append missing translation keys to locale files
+	go run ./scripts/i18n-extract
+
 .PHONY: apidocs
 apidocs: swag  ## Generate Swagger docs for Gin APIs
 	$(SWAG) init -g main.go -o ./docs/apis --parseInternal --outputTypes go,json,yaml

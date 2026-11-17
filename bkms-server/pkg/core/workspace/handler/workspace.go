@@ -620,7 +620,10 @@ func (h *Handler) CreateWorkspace(c *gin.Context) {
 	defaultEnvs := workspace.BuildDefaultEnvs(auth.MustGetUser(ctx).ID, ws.ID, bkSystem.BkBCSProjectCode)
 	for _, env := range defaultEnvs {
 		if envErr := envSvc.Create(ctx, &env); envErr != nil {
-			bkerrs.AbortWithErr(c, errors.Wrapf(envErr, "create default env %s", env.Name))
+			bkerrs.AbortWithErr(
+				c,
+				bkerrs.Wrapf(envErr, bkerrs.ErrCodeInternalServerError, "create default env %s", env.Name),
+			)
 			return
 		}
 	}
