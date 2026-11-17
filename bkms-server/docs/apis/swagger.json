@@ -12446,6 +12446,48 @@
                         }
                     }
                 }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "description": "删除后应用回到未配置状态；未配置时调用同样返回成功；应用所在空间未开启七彩石配置开关时不可用",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "rainbowtconf"
+                ],
+                "summary": "删除应用的七彩石入口",
+                "operationId": "DeleteRainbowTConf",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "应用 ID",
+                        "name": "appID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.RainbowTConfEmptyOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
             }
         },
         "/apps/{appID}/recommended-image-tag": {
@@ -27733,7 +27775,7 @@
                     "type": "integer"
                 },
                 "bkCIProjectID": {
-                    "description": "蓝盾项目 ID;\n创建时，新建容器项目，无需填写\n创建时，绑定已有容器项目，必填.",
+                    "description": "蓝盾项目 ID / 绑定容器项目时的 BCS 项目 code。\n创建时，新建容器项目，无需填写。\n创建时，绑定已有容器项目，必填。",
                     "type": "string"
                 },
                 "description": {
@@ -34055,6 +34097,9 @@
                     "type": "string"
                 }
             }
+        },
+        "serializer.RainbowTConfEmptyOutput": {
+            "type": "object"
         },
         "serializer.RainbowTConfOutput": {
             "type": "object",
