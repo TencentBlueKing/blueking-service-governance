@@ -159,34 +159,28 @@ var _ = Describe("Error", func() {
 		})
 	})
 
-	Describe("WrapBSCPNotFullyReleased", func() {
-		It("should wrap not fully released error with detail code", func() {
-			err := bkerrs.WrapBSCPNotFullyReleased(
-				bkerrs.New(bkerrs.ErrCodeNotFound, "no fully released version"),
-				"biz-1",
-				"service-1",
-			)
+	Describe("ErrBSCPNotFullyReleased", func() {
+		It("should carry the detail code and the biz and service params", func() {
+			bkErr := bkerrs.ErrBSCPNotFullyReleased.With("bizID", "biz-1").With("serviceID", "service-1")
 
-			var bkErr *bkerrs.Error
-			Expect(errors.As(err, &bkErr)).To(BeTrue())
 			Expect(bkErr.Code()).To(Equal(bkerrs.ErrCodeNotFound))
 			details := bkErr.Details()
 			Expect(details).To(HaveLen(1))
-			Expect((&details).AsMaps()[0]["code"]).To(Equal(bkerrs.ErrDetailCodeNotFullyReleased))
+			detail := (&details).AsMaps()[0]
+			Expect(detail["code"]).To(Equal(bkerrs.ErrDetailCodeNotFullyReleased))
+			Expect(detail["extras"]).To(Equal(map[string]string{"bizID": "biz-1", "serviceID": "service-1"}))
 		})
 	})
 
-	Describe("WrapBSCPNoPermission", func() {
-		It("should wrap BSCP permission error with detail code", func() {
-			err := bkerrs.WrapBSCPNoPermission(
-				errors.New("bscp forbidden"),
-				"list bscp service configs",
-			)
+	Describe("ErrBSCPNoPermission", func() {
+		It("should carry the detail code and keep the cause", func() {
+			cause := errors.New("bscp forbidden")
+			err := bkerrs.ErrBSCPNoPermission.WithCause(cause)
 
-			var bkErr *bkerrs.Error
-			Expect(errors.As(err, &bkErr)).To(BeTrue())
-			Expect(bkErr.Code()).To(Equal(bkerrs.ErrCodeNoPermission))
-			details := bkErr.Details()
+			Expect(errors.Is(err, bkerrs.ErrBSCPNoPermission)).To(BeTrue())
+			Expect(errors.Is(err, cause)).To(BeTrue())
+			Expect(err.Code()).To(Equal(bkerrs.ErrCodeNoPermission))
+			details := err.Details()
 			Expect(details).To(HaveLen(1))
 			Expect((&details).AsMaps()[0]["code"]).To(Equal(bkerrs.ErrDetailCodeBSCPNoPermission))
 		})

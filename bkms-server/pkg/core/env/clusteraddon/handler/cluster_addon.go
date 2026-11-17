@@ -107,7 +107,7 @@ func (h *Handler) ListClusterAddons(c *gin.Context) {
 
 	ginutils.OK(c, &serializer.ListClusterAddonsOutput{
 		Addons: lo.Map(addons, func(addon *clusteraddon.ClusterAddonInfo, _ int) *serializer.ClusterAddonInfoOutput {
-			return new(serializer.ClusterAddonInfoOutput).FromModel(*addon)
+			return new(serializer.ClusterAddonInfoOutput).FromModel(ctx, *addon)
 		}),
 	})
 }

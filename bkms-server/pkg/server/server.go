@@ -40,6 +40,7 @@ import (
 	buildtriggerhandler "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/trigger/handler"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/i18n"
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
@@ -143,6 +144,7 @@ func RegisterRouter(ctx context.Context, cfg config.Config, serverRole string) (
 		gin.Recovery(),
 		apm.ResponseTraceMiddleware(),
 		metrics.Middleware(),
+		i18n.Middleware(),
 	)
 
 	// Enable the Swagger UI if configured to do so.

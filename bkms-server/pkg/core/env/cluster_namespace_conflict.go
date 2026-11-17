@@ -20,12 +20,12 @@ package env
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 )
 
@@ -38,49 +38,11 @@ import (
 // 第 2 步存在的原因：并发时第 1 步可能漏过，unique index 拦住写入后，store 把所有
 // DuplicateKey 都收成「环境名已存在」，丢失了冲突类型信息，需要归因。
 
-// ErrEnvClusterNamespaceOccupied 表示某个 clusterID + namespace 已被其他环境占用。
-var ErrEnvClusterNamespaceOccupied = errors.New("env cluster namespace occupied")
-
-// EnvClusterNamespaceConflictInfo 描述 cluster+namespace 冲突详情。
-type EnvClusterNamespaceConflictInfo struct {
-	ClusterID             string
-	Namespace             string
-	OccupiedByEnvName     string
-	OccupiedByWorkspaceID string
-}
-
-type envClusterNamespaceOccupiedError struct {
-	info EnvClusterNamespaceConflictInfo
-}
-
-// Error 实现 error 接口。
-func (e *envClusterNamespaceOccupiedError) Error() string {
-	return fmt.Sprintf(
-		"cluster %s namespace %s is already bound to environment %q in workspace %s",
-		e.info.ClusterID,
-		e.info.Namespace,
-		e.info.OccupiedByEnvName,
-		e.info.OccupiedByWorkspaceID,
-	)
-}
-
-func (e *envClusterNamespaceOccupiedError) Unwrap() error {
-	return ErrEnvClusterNamespaceOccupied
-}
-
-// IsErrEnvClusterNamespaceOccupied 判断 error 链中是否包含 cluster+namespace 占用错误。
-func IsErrEnvClusterNamespaceOccupied(err error) bool {
-	return errors.Is(err, ErrEnvClusterNamespaceOccupied)
-}
-
-// GetEnvClusterNamespaceConflictInfo 从 error 链中提取 cluster+namespace 冲突详情。
-func GetEnvClusterNamespaceConflictInfo(err error) (*EnvClusterNamespaceConflictInfo, bool) {
-	var target *envClusterNamespaceOccupiedError
-	if !errors.As(err, &target) {
-		return nil, false
-	}
-	return &target.info, true
-}
+// ErrEnvClusterNamespaceOccupied 表示某个 clusterID + namespace 已被其他环境占用，
+// 附带参数 clusterID、namespace、occupiedByEnvName、occupiedByWorkspaceID（前端据此展示占用方）
+var ErrEnvClusterNamespaceOccupied = bkerrs.Define(
+	bkerrs.ErrCodeAlreadyExists, "ENV_CLUSTER_NAMESPACE_OCCUPIED", "env cluster namespace occupied",
+)
 
 // findClusterNamespaceOccupant 查询 clusterID+namespace 是否已被其他环境占用
 func findClusterNamespaceOccupant(
@@ -100,12 +62,11 @@ func findClusterNamespaceOccupant(
 	if occupiedEnv == nil {
 		return nil
 	}
-	return &envClusterNamespaceOccupiedError{info: EnvClusterNamespaceConflictInfo{
-		ClusterID:             cluster.ClusterID,
-		Namespace:             cluster.Namespace,
-		OccupiedByEnvName:     occupiedEnv.Name,
-		OccupiedByWorkspaceID: occupiedEnv.WorkspaceID,
-	}}
+	return ErrEnvClusterNamespaceOccupied.
+		With("clusterID", cluster.ClusterID).
+		With("namespace", cluster.Namespace).
+		With("occupiedByEnvName", occupiedEnv.Name).
+		With("occupiedByWorkspaceID", occupiedEnv.WorkspaceID)
 }
 
 // rewriteWriteErrIfClusterOccupied 在 Create/Update 已经失败后调用。

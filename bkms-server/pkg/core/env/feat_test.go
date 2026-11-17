@@ -31,6 +31,7 @@ import (
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil/dbfactory"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
@@ -405,14 +406,13 @@ var _ = Describe("FeatureEnvService", func() {
 			DisplayName: "联调",
 			Creator:     "alice",
 		})
-		Expect(bkmsenv.IsErrEnvClusterNamespaceOccupied(err)).To(BeTrue())
-
-		occupiedErr, ok := bkmsenv.GetEnvClusterNamespaceConflictInfo(err)
-		Expect(ok).To(BeTrue())
-		Expect(occupiedErr.ClusterID).To(Equal(sourceEnv.Cluster.ClusterID))
-		Expect(occupiedErr.Namespace).To(Equal(occupiedNamespace))
-		Expect(occupiedErr.OccupiedByEnvName).To(Equal(occupiedEnvName))
-		Expect(occupiedErr.OccupiedByWorkspaceID).To(Equal(occupiedWorkspaceID))
+		Expect(errors.Is(err, bkmsenv.ErrEnvClusterNamespaceOccupied)).To(BeTrue())
+		Expect(bkerrs.FromError(err).Params()).To(Equal(map[string]string{
+			"clusterID":             sourceEnv.Cluster.ClusterID,
+			"namespace":             occupiedNamespace,
+			"occupiedByEnvName":     occupiedEnvName,
+			"occupiedByWorkspaceID": occupiedWorkspaceID,
+		}))
 	})
 
 	It("rejects creating a feature environment after its source is hidden", func() {

@@ -195,7 +195,7 @@ serializer 只用 binding 校验必填。地址格式、数量上限、名称重
 - 前端可以通过 `/frontend-features` 隐藏入口、通过环境的 `polarisAccessPointID` 过滤可选环境，
   因此 `CLUSTER_NOT_BOUND` 不需要详情码。
 - 两个 `IN_USE` 详情码需要在 `extras` 中列出占用的应用与配置供前端展示，由 02、03 实现删除与换绑时
-  参照 `bkerrs.WrapEnvClusterNamespaceOccupied` 单独包装。
+  参照 `env.ErrEnvClusterNamespaceOccupied` 用 `bkerrs.Define` 定义，并通过 `With` 附带参数。
 
 ## 7. SDK 适配层
 

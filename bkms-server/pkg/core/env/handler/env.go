@@ -119,10 +119,7 @@ func (h *Handler) CreateEnv(c *gin.Context) {
 
 	if err = svc.Create(ctx, envData); err != nil {
 		metrics.CreateEnvFailed(ws.ID, input.Name)
-		if abortIfEnvClusterNamespaceOccupied(c, err) {
-			return
-		}
-		bkerrs.AbortWithErr(c, bkerrs.Wrapf(err, bkerrs.ErrCodeInvalidRequest, "create env %s", input.Name))
+		bkerrs.AbortWithErr(c, errors.Wrapf(err, "create env %s", input.Name))
 		return
 	}
 
@@ -234,14 +231,7 @@ func (h *Handler) CreateFeatureEnv(c *gin.Context) {
 		CopyEnvVars: input.CopyEnvVars,
 	})
 	if err != nil {
-		if abortIfEnvClusterNamespaceOccupied(c, err) {
-			return
-		}
-		code := bkerrs.ErrCodeInternalServerError
-		if errors.Is(err, bkmsenv.ErrInvalidFeatureEnvInput) {
-			code = bkerrs.ErrCodeInvalidRequest
-		}
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, code, "create feature environment"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "create feature environment"))
 		return
 	}
 
@@ -464,7 +454,7 @@ func (h *Handler) GetEnvByName(c *gin.Context) {
 
 	env, err := h.envs().Get(ctx, envmodel.ByName(uriInput.WorkspaceID, uriInput.EnvName))
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, "get env by workspace and name"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "get env by workspace and name"))
 		return
 	}
 
@@ -512,7 +502,7 @@ func (h *Handler) UpdateEnvBasicInfo(c *gin.Context) {
 
 	svc := bkmsenv.NewEnvService(h.registry.DB)
 	if err = svc.Update(ctx, env.ID, updateData); err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, "update env basic info"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "update env basic info"))
 		return
 	}
 
@@ -573,10 +563,7 @@ func (h *Handler) UpdateEnvCluster(c *gin.Context) {
 
 	svc := bkmsenv.NewEnvService(h.registry.DB)
 	if err = svc.Update(ctx, env.ID, updateData); err != nil {
-		if abortIfEnvClusterNamespaceOccupied(c, err) {
-			return
-		}
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, "update env cluster"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "update env cluster"))
 		return
 	}
 
@@ -628,7 +615,7 @@ func (h *Handler) DeleteEnv(c *gin.Context) {
 
 	svc := bkmsenv.NewEnvService(h.registry.DB)
 	if err = svc.Delete(ctx, envID); err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "delete environment"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "delete environment"))
 		return
 	}
 
@@ -688,15 +675,4 @@ func (h *Handler) ListEnvTrafficLanes(c *gin.Context) {
 		}),
 	},
 	)
-}
-
-func abortIfEnvClusterNamespaceOccupied(c *gin.Context, err error) bool {
-	info, ok := bkmsenv.GetEnvClusterNamespaceConflictInfo(err)
-	if !ok {
-		return false
-	}
-	bkerrs.AbortWithErr(c, bkerrs.WrapEnvClusterNamespaceOccupied(
-		info.ClusterID, info.Namespace, info.OccupiedByEnvName, info.OccupiedByWorkspaceID,
-	))
-	return true
 }

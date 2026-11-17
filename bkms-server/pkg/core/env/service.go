@@ -20,14 +20,30 @@ package env
 
 import (
 	"context"
+	"strconv"
 
 	"github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
+)
+
+// ErrEnvHasDeployedAppsCannotUpdateCluster 表示环境已有已部署应用，不允许修改集群配置。
+var ErrEnvHasDeployedAppsCannotUpdateCluster = bkerrs.Define(
+	bkerrs.ErrCodeInvalidRequest,
+	"CORE_ENV_HAS_APPS_CANNOT_UPDATE_CLUSTER",
+	"environment has deployed apps, cannot update cluster",
+)
+
+// ErrEnvHasAppsCannotDelete 表示环境下仍有应用，不允许删除。
+var ErrEnvHasAppsCannotDelete = bkerrs.Define(
+	bkerrs.ErrCodeInvalidRequest,
+	"CORE_ENV_HAS_APPS_CANNOT_DELETE",
+	"environment has apps, cannot delete",
 )
 
 // EnvService 环境基础配置服务
@@ -80,7 +96,7 @@ func (s *EnvService) Update(
 	if updateData.ClusterID != nil || updateData.Namespace != nil {
 		appCount := len(environment.AppIDs)
 		if appCount != 0 {
-			return errors.Errorf("environment has %d apps, cannot update cluster", appCount)
+			return ErrEnvHasDeployedAppsCannotUpdateCluster.With("appCount", strconv.Itoa(appCount))
 		}
 
 		if err = findClusterNamespaceOccupant(ctx, s.db, finalCluster, envID); err != nil {
@@ -143,7 +159,7 @@ func (s *EnvService) Delete(ctx context.Context, envID bson.ObjectID) error {
 
 	appCount := len(environment.AppIDs)
 	if appCount != 0 {
-		return errors.Errorf("environment has %d apps, cannot delete", appCount)
+		return ErrEnvHasAppsCannotDelete.With("appCount", strconv.Itoa(appCount))
 	}
 
 	// 删除环境往往意味着下游模块中的环境级资源也必须一起清理。这里在物理删除环境记录前执行 Hook：

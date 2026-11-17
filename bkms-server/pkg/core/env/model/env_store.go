@@ -26,6 +26,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
@@ -34,9 +35,11 @@ const environmentCollectionName = "environments"
 
 var (
 	// ErrEnvNotFound represents the error of environment not found.
-	ErrEnvNotFound = errors.New("environment not found")
+	ErrEnvNotFound = bkerrs.Define(bkerrs.ErrCodeNotFound, "ENV_NOT_FOUND", "environment not found")
 	// ErrEnvAlreadyExists 环境与已有环境冲突：同一工作空间内重名，或绑定了已被占用的集群命名空间
-	ErrEnvAlreadyExists = errors.New("environment already exists")
+	ErrEnvAlreadyExists = bkerrs.Define(
+		bkerrs.ErrCodeAlreadyExists, "ENV_ALREADY_EXISTS", "environment already exists",
+	)
 )
 
 // EnvironmentUpdateData represents the fields that can be updated for an environment.

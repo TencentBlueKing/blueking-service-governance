@@ -20,6 +20,9 @@
 package serializer
 
 import (
+	"context"
+
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/i18n"
 	clusteraddon "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/clusteraddon"
 )
 
@@ -104,11 +107,13 @@ type ClusterInstallInfoOutput struct {
 }
 
 // FromModel fills output fields from a ClusterAddonInfo domain model.
-func (o *ClusterAddonInfoOutput) FromModel(info clusteraddon.ClusterAddonInfo) *ClusterAddonInfoOutput {
+func (o *ClusterAddonInfoOutput) FromModel(
+	ctx context.Context, info clusteraddon.ClusterAddonInfo,
+) *ClusterAddonInfoOutput {
 	*o = ClusterAddonInfoOutput{
 		Name:                info.Name,
 		DisplayName:         info.DisplayName,
-		Description:         info.Description,
+		Description:         i18n.T(ctx, "cluster_addon.addon."+info.Name+".description"),
 		RequiredForAppTypes: info.RequiredForAppTypes,
 		OptionalForAppTypes: info.OptionalForAppTypes,
 		SupportedActions:    info.SupportedActions,

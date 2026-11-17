@@ -26,4 +26,6 @@ const (
 	AuthUser ctxKey = "authUser"
 	// TenantID 当前请求对应的租户 ID
 	TenantID ctxKey = "tenantID"
+	// Lang 当前请求使用的语言
+	Lang ctxKey = "lang"
 )
