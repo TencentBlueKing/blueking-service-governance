@@ -3,22 +3,34 @@
 package appdefaults
 
 import (
-	"errors"
 	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appspec"
 )
 
 var (
 	// ErrRuleNotFound is returned when a workspace default rule does not exist.
-	ErrRuleNotFound = errors.New("application default rule not found")
+	ErrRuleNotFound = bkerrs.Define(
+		bkerrs.ErrCodeNotFound,
+		"WORKLOAD_APPDEFAULTS_RULE_NOT_FOUND",
+		"application default rule not found",
+	)
 	// ErrRuleConflict is returned when the section already has a rule that
 	// occupies one of the requested environment types.
-	ErrRuleConflict = errors.New("application default rule already exists for this environment type")
+	ErrRuleConflict = bkerrs.Define(
+		bkerrs.ErrCodeInvalidRequest,
+		"WORKLOAD_APPDEFAULTS_RULE_CONFLICT",
+		"application default rule already exists for this environment type",
+	)
 	// ErrInvalidRule is returned when a rule is incomplete or invalid.
-	ErrInvalidRule = errors.New("invalid application default rule")
+	ErrInvalidRule = bkerrs.Define(
+		bkerrs.ErrCodeInvalidRequest,
+		"WORKLOAD_APPDEFAULTS_INVALID_RULE",
+		"invalid application default rule",
+	)
 )
 
 // ConfigType identifies the AppSpec section controlled by a rule.

@@ -23,6 +23,7 @@ import (
 	"context"
 
 	"github.com/gin-gonic/gin"
+	"github.com/pkg/errors"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
@@ -50,7 +51,7 @@ func (h *Handler) newManager(c *gin.Context) (*svc.Manager, error) {
 	user := auth.MustGetUser(ctx)
 	mgr, err := svc.NewManager(user, h.registry.DB)
 	if err != nil {
-		return nil, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "create bscp cfg service manager")
+		return nil, errors.Wrap(err, "create bscp cfg service manager")
 	}
 	return mgr, nil
 }

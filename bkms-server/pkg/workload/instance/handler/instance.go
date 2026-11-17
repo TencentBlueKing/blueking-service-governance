@@ -26,6 +26,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/hibiken/asynq"
+	"github.com/pkg/errors"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
@@ -34,7 +35,6 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	appmodeldeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/appmodel"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/batchrelease"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/hostport"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/perm"
@@ -206,7 +206,7 @@ func (h *Handler) UpdateAppInstances(c *gin.Context) {
 		input.InstanceIDs,
 	)
 	if err != nil {
-		bkerrs.AbortWithErr(c, batchrelease.APIError(err, "update app "+app.ID+" instances"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "update app "+app.ID+" instances"))
 		return
 	}
 
@@ -227,8 +227,8 @@ func (h *Handler) UpdateAppInstances(c *gin.Context) {
 		)
 		if err != nil {
 			h.markDeployPollingBroken(ctx, app.ID, deployID, err)
-			bkerrs.AbortWithErr(c, bkerrs.Wrapf(
-				err, bkerrs.ErrCodeInternalServerError, "enqueue polling deploy %s status task", deployID,
+			bkerrs.AbortWithErr(c, errors.Wrapf(
+				err, "enqueue polling deploy %s status task", deployID,
 			))
 			return
 		}
@@ -294,7 +294,7 @@ func (h *Handler) ScaleAppInstances(c *gin.Context) {
 		uriInput.EnvName,
 	)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get env effective app spec"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "get env effective app spec"))
 		return
 	}
 	oldReplicas := *spec.Resources.Replicas
@@ -302,7 +302,7 @@ func (h *Handler) ScaleAppInstances(c *gin.Context) {
 	// 获取应用部署器，执行实例扩缩容操作
 	deployer := h.newDeployer(app)
 	if err = deployer.Scale(ctx, uriInput.EnvName, input.TrafficLaneName, input.TargetReplicas); err != nil {
-		bkerrs.AbortWithErr(c, batchrelease.APIError(err, "scale app "+app.ID+" instances"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "scale app "+app.ID+" instances"))
 		return
 	}
 
@@ -362,7 +362,7 @@ func (h *Handler) BatchDeleteAppInstances(c *gin.Context) {
 	deployer := h.newDeployer(app)
 	err = deployer.BatchDeleteInstances(ctx, uriInput.EnvName, input.TrafficLaneName, input.InstanceIDs)
 	if err != nil {
-		bkerrs.AbortWithErr(c, batchrelease.APIError(err, "batch delete app "+app.ID+" instances"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "batch delete app "+app.ID+" instances"))
 		return
 	}
 
@@ -431,7 +431,7 @@ func (h *Handler) UpdateAppInstancePolaris(c *gin.Context) {
 		input.Isolate,
 	); err != nil {
 		bkerrs.AbortWithErr(
-			c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "update instance polaris annotations"),
+			c, errors.Wrap(err, "update instance polaris annotations"),
 		)
 		return
 	}

@@ -27,13 +27,18 @@ import (
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bcs"
 )
 
-// ErrNoActiveUserToken 用户没有有效的 BCS Token
-var ErrNoActiveUserToken = errors.New("no active BCS user token")
+// ErrNoActiveUserToken 用户没有有效的 BCS Token；能确定 BCS 项目时带参数 createURL（Token 创建页地址）
+var ErrNoActiveUserToken = bkerrs.Define(
+	bkerrs.ErrCodeNotFound,
+	"ACCOUNT_BCS_USER_TOKEN_NOT_FOUND",
+	"no active BCS user token, please create one in BCS",
+)
 
 // GetActiveUserToken 获取当前用户状态为 active 的 BCS Token
 func GetActiveUserToken(ctx context.Context) (string, error) {
@@ -60,13 +65,11 @@ func GetActiveUserToken(ctx context.Context) (string, error) {
 	return active.Token, nil
 }
 
-// FetchActiveUserToken 获取当前用户的 active BCS Token，并在缺失时提示创建地址
+// FetchActiveUserToken 获取当前用户的 active BCS Token，并在缺失时附带创建地址
 func FetchActiveUserToken(ctx context.Context, bcsProjectCode string) (string, error) {
 	token, err := GetActiveUserToken(ctx)
 	if errors.Is(err, ErrNoActiveUserToken) {
-		return "", errors.Wrapf(
-			ErrNoActiveUserToken, "please create a token in BCS at %s", UserTokenURL(bcsProjectCode),
-		)
+		return "", ErrNoActiveUserToken.With("createURL", UserTokenURL(bcsProjectCode))
 	}
 	return token, err
 }

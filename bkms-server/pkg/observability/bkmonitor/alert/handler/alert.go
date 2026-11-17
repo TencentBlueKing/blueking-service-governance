@@ -64,7 +64,7 @@ func (h *Handler) ListAlertStrategies(c *gin.Context) {
 
 	rules, err := h.alertStrategyService().ListByApp(ctx, app.WorkspaceID, app.ID)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list alert strategies"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "list alert strategies"))
 		return
 	}
 
@@ -115,7 +115,7 @@ func (h *Handler) GetAlertStrategy(c *gin.Context) {
 
 	rule, err := getAlertStrategyInApp(ctx, h.registry, strategyObjID, uriInput.WorkspaceID, uriInput.AppID)
 	if err != nil {
-		bkerrs.AbortWithErr(c, wrapAlertStrategyLookupErr(err))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "get alert strategy"))
 		return
 	}
 
@@ -154,7 +154,7 @@ func (h *Handler) CreateAlertStrategy(c *gin.Context) {
 
 	ws, err := h.workspaces().Get(ctx, workspace.ByWorkspaceID(app.WorkspaceID))
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get workspace"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "get workspace"))
 		return
 	}
 
@@ -167,11 +167,7 @@ func (h *Handler) CreateAlertStrategy(c *gin.Context) {
 	}
 	rule, err := svc.CreateAndSync(ctx, ws, createReq)
 	if err != nil {
-		if errors.Is(err, alertstrategy.ErrDisplayNameAlreadyExists) {
-			bkerrs.AbortWithErr(c, errAlertStrategyDisplayNameExists.WithCause(err))
-			return
-		}
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "create alert strategy"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "create alert strategy"))
 		return
 	}
 
@@ -233,11 +229,7 @@ func (h *Handler) UpdateAlertStrategy(c *gin.Context) {
 	svc := h.alertStrategyService()
 	changed, err := svc.UpdateAndSync(ctx, ws, strategyObjID, updateReq)
 	if err != nil {
-		if errors.Is(err, alertstrategy.ErrDisplayNameAlreadyExists) {
-			bkerrs.AbortWithErr(c, errAlertStrategyDisplayNameExists.WithCause(err))
-			return
-		}
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "update alert strategy"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "update alert strategy"))
 		return
 	}
 
@@ -286,7 +278,7 @@ func (h *Handler) DeleteAlertStrategy(c *gin.Context) {
 	}
 
 	if err = h.alertStrategyService().Delete(ctx, ws, strategyObjID, auth.MustGetUser(ctx).ID); err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "delete alert strategy"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "delete alert strategy"))
 		return
 	}
 
@@ -334,7 +326,7 @@ func (h *Handler) SyncAlertStrategy(c *gin.Context) {
 
 	operator := auth.MustGetUser(ctx).ID
 	if err = h.alertStrategyService().SyncToRemote(ctx, ws, strategyObjID, operator); err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "sync alert strategy"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "sync alert strategy"))
 		return
 	}
 
@@ -380,7 +372,7 @@ func (h *Handler) SwitchAlertStrategy(c *gin.Context) {
 
 	operator := auth.MustGetUser(ctx).ID
 	if err = h.alertStrategyService().SwitchEnabled(ctx, ws, strategyObjID, body.Enabled, operator); err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "switch alert strategy"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "switch alert strategy"))
 		return
 	}
 

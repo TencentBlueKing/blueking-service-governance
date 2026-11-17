@@ -20,10 +20,10 @@
 package handler
 
 import (
-	"errors"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"github.com/pkg/errors"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component"
@@ -38,9 +38,6 @@ import (
 var (
 	errComponentDefAlreadyExists = bkerrs.Define(
 		bkerrs.ErrCodeAlreadyExists, "EXTENSION_COMPONENT_DEF_ALREADY_EXISTS", "component def already exists",
-	)
-	errComponentDefNotFound = bkerrs.Define(
-		bkerrs.ErrCodeNotFound, "EXTENSION_COMPONENT_DEF_NOT_FOUND", "component def not found",
 	)
 	errBuiltinUpdateForbidden = bkerrs.Define(
 		bkerrs.ErrCodeInvalidRequest,
@@ -104,12 +101,12 @@ func (h *Handler) ListComponentDefs(c *gin.Context) {
 		ctx, queryInput.ToListOpt(), store.TenantWithPlatform(component.BuiltinShared()),
 	)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list component defs"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "list component defs"))
 		return
 	}
 	counts, err := component.ListInstanceCounts(ctx, h.instanceCounts(), compDefs)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list component defs"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "list component defs"))
 		return
 	}
 
@@ -150,7 +147,7 @@ func (h *Handler) CreateComponentDef(c *gin.Context) {
 	alreadyExists := errComponentDefAlreadyExists.With("name", compDef.Name).With("version", compDef.Version)
 	builtinExists, err := component.BuiltinDefExists(ctx, defs, compDef.Name, compDef.Version)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "create component def"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "create component def"))
 		return
 	}
 	if builtinExists {
@@ -163,7 +160,7 @@ func (h *Handler) CreateComponentDef(c *gin.Context) {
 			bkerrs.AbortWithErr(c, alreadyExists)
 			return
 		}
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "create component def"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "create component def"))
 		return
 	}
 
@@ -203,16 +200,9 @@ func (h *Handler) PatchComponentDef(c *gin.Context) {
 	ctx := c.Request.Context()
 	defs := h.componentDefs()
 	// 带上内置定义，同名的内置定义要明确拒绝，而不是当作不存在
-	existingCompDef, err := defs.Get(
-		ctx, component.ByNameVersion(uriInput.CompDefName, component.DefaultComponentDefVersion),
-		store.TenantWithPlatform(component.BuiltinShared()),
-	)
+	existingCompDef, err := component.GetDef(ctx, defs, uriInput.CompDefName, component.DefaultComponentDefVersion)
 	if err != nil {
-		if errors.Is(err, component.ErrComponentDefNotFound) {
-			bkerrs.AbortWithErr(c, errComponentDefNotFound.With("name", uriInput.CompDefName).WithCause(err))
-			return
-		}
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get component def"))
+		bkerrs.AbortWithErr(c, err)
 		return
 	}
 	if existingCompDef.IsBuiltin {
@@ -230,7 +220,7 @@ func (h *Handler) PatchComponentDef(c *gin.Context) {
 	}
 
 	if err = component.UpsertDef(ctx, defs, nextCompDef); err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "update component def"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "update component def"))
 		return
 	}
 
@@ -268,14 +258,13 @@ func (h *Handler) DeleteComponentDef(c *gin.Context) {
 	ctx := c.Request.Context()
 	defs := h.componentDefs()
 	name, version := uriInput.CompDefName, component.DefaultComponentDefVersion
-	existingCompDef, err := defs.Get(ctx, component.ByNameVersion(name, version),
-		store.TenantWithPlatform(component.BuiltinShared()))
+	existingCompDef, err := component.GetDef(ctx, defs, name, version)
 	if err != nil {
 		if errors.Is(err, component.ErrComponentDefNotFound) {
 			ginutils.OK(c, serializer.EmptyOutput{})
 			return
 		}
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get component def"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "get component def"))
 		return
 	}
 	if existingCompDef.IsBuiltin {
@@ -285,7 +274,7 @@ func (h *Handler) DeleteComponentDef(c *gin.Context) {
 	counts := h.instanceCounts()
 	countsByKey, err := component.ListInstanceCounts(ctx, counts, []component.ComponentDef{*existingCompDef})
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get component instance count"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "get component instance count"))
 		return
 	}
 	count := countsByKey[existingCompDef.Key()]
@@ -301,11 +290,11 @@ func (h *Handler) DeleteComponentDef(c *gin.Context) {
 	}
 
 	if err = defs.DeleteIfExists(ctx, component.ByNameVersion(name, version)); err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "delete component def"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "delete component def"))
 		return
 	}
 	if err = counts.DeleteIfExists(ctx, component.ByDef(name, version)); err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "delete component instance count"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "delete component instance count"))
 		return
 	}
 

@@ -33,19 +33,6 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
-var (
-	errFederationNotSupported = bkerrs.Define(
-		bkerrs.ErrCodeInvalidRequest,
-		"EXTENSION_GPA_FEDERATION_NOT_SUPPORTED",
-		"gpa is not supported in federation environment",
-	)
-	errConfigNotFound = bkerrs.Define(
-		bkerrs.ErrCodeNotFound,
-		"EXTENSION_GPA_CONFIG_NOT_FOUND",
-		"gpa config not found",
-	)
-)
-
 // Handler handles Gin GPA config API requests.
 type Handler struct {
 	registry *storereg.Registry
@@ -63,21 +50,6 @@ func (h *Handler) gpaService() *gpa.GPAService {
 
 func (h *Handler) gpaConfigs() *gpa.ConfigStore {
 	return store.Of(h.registry.DB, gpa.ConfigMeta)
-}
-
-// abortWithGPAApplyError 统一处理 gpaService().Apply 返回的错误并中止请求。
-func abortWithGPAApplyError(c *gin.Context, clusterID string, err error) {
-	if err == nil {
-		return
-	}
-	switch {
-	case errors.Is(err, gpa.ErrFederationNotSupported):
-		bkerrs.AbortWithErr(c, errFederationNotSupported.WithCause(err))
-	case errors.Is(err, gpa.ErrComponentNotInstalled):
-		bkerrs.AbortWithErr(c, bkerrs.WrapComponentsNotInstalled(err, []string{gpa.ClusterAddonName}, clusterID))
-	default:
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "apply gpa CR"))
-	}
 }
 
 // GetAppEnvGPAConfig 查询应用在指定环境的 GPA 配置（含 K8s 运行状态）。
@@ -110,13 +82,7 @@ func (h *Handler) GetAppEnvGPAConfig(c *gin.Context) {
 
 	config, err := h.gpaConfigs().Get(ctx, gpa.ByAppAndEnv(uriInput.AppID, uriInput.EnvName))
 	if err != nil {
-		if errors.Is(err, gpa.ErrConfigNotFound) {
-			bkerrs.AbortWithErr(
-				c, errConfigNotFound.With("appID", uriInput.AppID).With("envName", uriInput.EnvName).WithCause(err),
-			)
-			return
-		}
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get gpa config"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "get gpa config"))
 		return
 	}
 
@@ -124,7 +90,7 @@ func (h *Handler) GetAppEnvGPAConfig(c *gin.Context) {
 	var status *gpa.GPAStatus
 	if s, sErr := h.gpaService().Get(ctx, env, config.Name); sErr != nil {
 		if !errors.Is(sErr, gpa.ErrCRNotFound) {
-			bkerrs.AbortWithErr(c, bkerrs.Wrap(sErr, bkerrs.ErrCodeInternalServerError, "get gpa status"))
+			bkerrs.AbortWithErr(c, errors.Wrap(sErr, "get gpa status"))
 			return
 		}
 	} else {
@@ -166,7 +132,7 @@ func (h *Handler) UpsertAppEnvGPAConfig(c *gin.Context) {
 		return
 	}
 	if env.Cluster.IsFederation {
-		bkerrs.AbortWithErr(c, errFederationNotSupported.WithCause(gpa.ErrFederationNotSupported))
+		bkerrs.AbortWithErr(c, gpa.ErrFederationNotSupported)
 		return
 	}
 
@@ -175,7 +141,7 @@ func (h *Handler) UpsertAppEnvGPAConfig(c *gin.Context) {
 	if existing, gErr := h.gpaConfigs().Get(ctx, gpa.ByAppAndEnv(uriInput.AppID, uriInput.EnvName)); gErr == nil {
 		before = existing
 	} else if !errors.Is(gErr, gpa.ErrConfigNotFound) {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(gErr, bkerrs.ErrCodeInternalServerError, "get gpa config"))
+		bkerrs.AbortWithErr(c, errors.Wrap(gErr, "get gpa config"))
 		return
 	}
 
@@ -193,7 +159,7 @@ func (h *Handler) UpsertAppEnvGPAConfig(c *gin.Context) {
 	shouldApply := before == nil || before.Enabled
 	if shouldApply {
 		if err = h.gpaService().Apply(ctx, env, config); err != nil {
-			abortWithGPAApplyError(c, env.Cluster.ClusterID, err)
+			bkerrs.AbortWithErr(c, errors.Wrap(err, "apply gpa CR"))
 			return
 		}
 	}
@@ -204,7 +170,7 @@ func (h *Handler) UpsertAppEnvGPAConfig(c *gin.Context) {
 		err = gpa.UpdateConfig(ctx, h.gpaConfigs(), uriInput.AppID, uriInput.EnvName, jsonInput.ToUpdateData())
 	}
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "save gpa config"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "save gpa config"))
 		return
 	}
 
@@ -254,24 +220,18 @@ func (h *Handler) DeleteAppEnvGPAConfig(c *gin.Context) {
 
 	before, err := h.gpaConfigs().Get(ctx, gpa.ByAppAndEnv(uriInput.AppID, uriInput.EnvName))
 	if err != nil {
-		if errors.Is(err, gpa.ErrConfigNotFound) {
-			bkerrs.AbortWithErr(
-				c, errConfigNotFound.With("appID", uriInput.AppID).With("envName", uriInput.EnvName).WithCause(err),
-			)
-			return
-		}
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get gpa config"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "get gpa config"))
 		return
 	}
 
 	// 清理集群中的 CR（幂等，CR 不存在视为已清理）
 	if dErr := h.gpaService().Delete(ctx, env, before.Name); dErr != nil && !errors.Is(dErr, gpa.ErrCRNotFound) {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(dErr, bkerrs.ErrCodeInternalServerError, "delete gpa CR"))
+		bkerrs.AbortWithErr(c, errors.Wrap(dErr, "delete gpa CR"))
 		return
 	}
 
 	if err = h.gpaConfigs().Delete(ctx, gpa.ByAppAndEnv(uriInput.AppID, uriInput.EnvName)); err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "delete gpa config"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "delete gpa config"))
 		return
 	}
 
@@ -323,13 +283,7 @@ func (h *Handler) ToggleAppEnvGPAConfig(c *gin.Context) {
 
 	before, err := h.gpaConfigs().Get(ctx, gpa.ByAppAndEnv(uriInput.AppID, uriInput.EnvName))
 	if err != nil {
-		if errors.Is(err, gpa.ErrConfigNotFound) {
-			bkerrs.AbortWithErr(
-				c, errConfigNotFound.With("appID", uriInput.AppID).With("envName", uriInput.EnvName).WithCause(err),
-			)
-			return
-		}
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get gpa config"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "get gpa config"))
 		return
 	}
 
@@ -342,13 +296,13 @@ func (h *Handler) ToggleAppEnvGPAConfig(c *gin.Context) {
 	if jsonInput.Enabled {
 		// 开启：按 DB 中最新配置重新下发 CR
 		if err = h.gpaService().Apply(ctx, env, before); err != nil {
-			abortWithGPAApplyError(c, env.Cluster.ClusterID, err)
+			bkerrs.AbortWithErr(c, errors.Wrap(err, "apply gpa CR"))
 			return
 		}
 	} else {
 		// 关闭：删除集群中的 CR（不存在视为已清理）
 		if dErr := h.gpaService().Delete(ctx, env, before.Name); dErr != nil && !errors.Is(dErr, gpa.ErrCRNotFound) {
-			bkerrs.AbortWithErr(c, bkerrs.Wrap(dErr, bkerrs.ErrCodeInternalServerError, "delete gpa CR"))
+			bkerrs.AbortWithErr(c, errors.Wrap(dErr, "delete gpa CR"))
 			return
 		}
 	}
@@ -357,7 +311,7 @@ func (h *Handler) ToggleAppEnvGPAConfig(c *gin.Context) {
 	if err = gpa.UpdateConfig(ctx, h.gpaConfigs(), uriInput.AppID, uriInput.EnvName, &gpa.ConfigUpdateData{
 		Enabled: &enabled,
 	}); err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "update gpa config"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "update gpa config"))
 		return
 	}
 

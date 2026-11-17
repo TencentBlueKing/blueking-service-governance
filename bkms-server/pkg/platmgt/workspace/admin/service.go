@@ -26,6 +26,7 @@ import (
 	"github.com/samber/lo"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	bkmsworkspace "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/perm"
@@ -39,11 +40,23 @@ const (
 
 var (
 	// ErrWorkspaceAdminAlreadyExists 表示当前用户已经拥有空间管理员权限。
-	ErrWorkspaceAdminAlreadyExists = errors.New("workspace admin already exists")
+	ErrWorkspaceAdminAlreadyExists = bkerrs.Define(
+		bkerrs.ErrCodeInvalidRequest,
+		"PLATMGT_WORKSPACE_ADMIN_ALREADY_EXISTS",
+		"workspace admin already exists",
+	)
 	// ErrWorkspaceAdminNotFound 表示当前用户并不拥有空间管理员权限。
-	ErrWorkspaceAdminNotFound = errors.New("workspace admin not found")
+	ErrWorkspaceAdminNotFound = bkerrs.Define(
+		bkerrs.ErrCodeNotFound,
+		"PLATMGT_WORKSPACE_ADMIN_NOT_FOUND",
+		"workspace admin not found",
+	)
 	// ErrTempAdminAlreadyExists 表示已存在未回收的临时管理员授权。
-	ErrTempAdminAlreadyExists = errors.New("temporary admin already exists")
+	ErrTempAdminAlreadyExists = bkerrs.Define(
+		bkerrs.ErrCodeAlreadyExists,
+		"PLATMGT_TEMP_ADMIN_ALREADY_EXISTS",
+		"temporary admin already exists",
+	)
 )
 
 // Service 提供平台管理页下统一的 workspace admin 能力。

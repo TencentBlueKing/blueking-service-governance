@@ -211,7 +211,7 @@ func (m *PolarisPlatformManager) GetImportedService(
 	}
 	svc, err := p.GetAndValidateService(ctx, name, namespace, token)
 	if err != nil {
-		return nil, errors.Wrap(err, "get imported polaris service")
+		return nil, errors.Wrap(classifyImportedServiceErr(err), "get imported polaris service")
 	}
 	return toRemotePolarisService(svc), nil
 }
@@ -237,7 +237,7 @@ func (m *PolarisPlatformManager) UpdateImportedService(
 		},
 		toPolarisUpdateParams(params),
 	); err != nil {
-		return errors.Wrap(err, "update imported polaris service")
+		return errors.Wrap(classifyImportedServiceErr(err), "update imported polaris service")
 	}
 	return nil
 }

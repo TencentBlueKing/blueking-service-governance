@@ -29,7 +29,11 @@ var (
 	// ErrRoleBindingNotFound indicates the target platform administrator role binding does not exist.
 	ErrRoleBindingNotFound = errors.New("platform administrator role binding not found")
 	// ErrRoleBindingAlreadyExists indicates the target platform administrator role binding already exists.
-	ErrRoleBindingAlreadyExists = errors.New("platform administrator role binding already exists")
+	ErrRoleBindingAlreadyExists = bkerrs.Define(
+		bkerrs.ErrCodeAlreadyExists,
+		"PLATMGT_ADMIN_ROLE_BINDING_EXISTS",
+		"platform administrator role binding already exists",
+	)
 	// ErrPermissionDenied indicates the current user is not a platform administrator.
 	ErrPermissionDenied = bkerrs.Define(
 		bkerrs.ErrCodeNoPermission, "PLATMGT_ADMIN_PERMISSION_REQUIRED", "platform administrator permission required",

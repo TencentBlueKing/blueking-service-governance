@@ -24,14 +24,23 @@ import (
 	"github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/v2/bson"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 var (
 	// ErrBindingNameExists 应用内同服务下绑定名已存在
-	ErrBindingNameExists = errors.New("service binding name already exists")
+	ErrBindingNameExists = bkerrs.Define(
+		bkerrs.ErrCodeAlreadyExists,
+		"EXTENSION_DEPSERVICE_BINDING_ALREADY_EXISTS",
+		"service binding already exists",
+	)
 	// ErrBindingNotFound 服务绑定不存在，AsNotFoundError 同样将其视为未找到
-	ErrBindingNotFound = errors.New("service binding not found")
+	ErrBindingNotFound = bkerrs.Define(
+		bkerrs.ErrCodeNotFound,
+		"EXTENSION_DEPSERVICE_BINDING_NOT_FOUND",
+		"service binding not found",
+	)
 )
 
 // ServiceBindingStore 服务绑定存储

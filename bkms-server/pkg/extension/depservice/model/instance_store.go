@@ -29,6 +29,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/utils/crypto"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
@@ -40,9 +41,17 @@ const configValueKey = "value"
 
 var (
 	// ErrInstanceNameExists 同一 workspace / serviceName 下实例名已存在
-	ErrInstanceNameExists = errors.New("service instance name already exists")
+	ErrInstanceNameExists = bkerrs.Define(
+		bkerrs.ErrCodeAlreadyExists,
+		"EXTENSION_DEPSERVICE_INSTANCE_ALREADY_EXISTS",
+		"service instance already exists",
+	)
 	// ErrInstanceNotFound 服务实例不存在，AsNotFoundError 同样将其视为未找到
-	ErrInstanceNotFound = errors.New("service instance not found")
+	ErrInstanceNotFound = bkerrs.Define(
+		bkerrs.ErrCodeNotFound,
+		"EXTENSION_DEPSERVICE_INSTANCE_NOT_FOUND",
+		"service instance not found",
+	)
 )
 
 // use a single instance of Validate, it caches struct info

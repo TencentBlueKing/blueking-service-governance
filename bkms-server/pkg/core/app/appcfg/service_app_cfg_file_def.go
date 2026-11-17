@@ -124,7 +124,11 @@ func (s *AppCfgFileDefService) createDef(
 		Creator:            params.Creator,
 	}
 	if err := s.DefStore.Create(ctx, &def); err != nil {
-		return nil, errors.Wrap(err, "creating def record")
+		err = errors.Wrap(err, "creating def record")
+		if errors.Is(err, ErrAppConfigFileDefAlreadyExists) {
+			return nil, mountIdentityConflict(err, def.AppID, def.Name, def.MountDir)
+		}
+		return nil, err
 	}
 	return &def, nil
 }
@@ -410,9 +414,8 @@ func (s *AppCfgFileDefService) ensureMountIdentityAvailable(
 		return errors.Wrapf(err, "checking config file identity for app %s", def.AppID)
 	}
 	if taken {
-		return errors.Wrapf(
-			ErrAppConfigFileDefAlreadyExists,
-			"app %s already has config file %s in %q",
+		return mountIdentityConflict(
+			errors.Errorf("app %s already has config file %s in %q", def.AppID, name, mountDir),
 			def.AppID, name, mountDir,
 		)
 	}

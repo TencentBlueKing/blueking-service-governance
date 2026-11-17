@@ -18,8 +18,3 @@ BKINTEGRATIONS_BKMONITOR_ENV_CLUSTER_NOT_CONFIGURED:
 BKINTEGRATIONS_KUBEINSIGHT_REPORT_NOT_FOUND:
   zh: "未找到集群巡检报告"
   en: "Cluster inspection report not found"
-
-# BCS（蓝鲸容器服务）
-BKINTEGRATIONS_BCS_NO_ACTIVE_AUTH_INFO:
-  zh: "未找到有效的 BCS 认证信息，请先在 BCS 平台创建"
-  en: "No active BCS auth info found, please create one in BCS platform"

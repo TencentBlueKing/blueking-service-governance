@@ -20,9 +20,9 @@ package handler
 
 import (
 	"context"
-	"errors"
 
 	"github.com/gin-gonic/gin"
+	"github.com/pkg/errors"
 	"k8s.io/apimachinery/pkg/labels"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
@@ -40,11 +40,6 @@ import (
 // Watch 基础层通过 PodSource 读集群 Pod；断言放在组装处，避免 infras 反向依赖 workload
 var (
 	_ watch.PodSource = (*k8sclient.PodClient)(nil)
-
-	errResourceVersionExpired = bkerrs.Define(
-		bkerrs.ErrCodeAborted, "WORKLOAD_INSTANCE_RESOURCE_VERSION_EXPIRED",
-		"resourceVersion expired, re-list required",
-	)
 )
 
 // WatchAppInstances 订阅应用实例投影变更（SSE）
@@ -114,13 +109,7 @@ func (h *Handler) WatchAppInstances(c *gin.Context) {
 		DeployID:        record.ID.Hex(),
 	})
 	if err != nil {
-		// 位点过期必须与其他集群故障分开：前端据此重新 List，而不是当 500 重试旧位点
-		if errors.Is(err, watch.ErrResourceVersionGone) {
-			bkerrs.AbortWithErr(c, errResourceVersionExpired.WithCause(err))
-			return
-		}
-
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "watch app instances"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "watch app instances"))
 	}
 }
 

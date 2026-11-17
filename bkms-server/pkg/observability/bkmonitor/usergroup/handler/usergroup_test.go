@@ -445,7 +445,7 @@ var _ = Describe("Usergroup Handler", func() {
 			Expect(rec.Code).To(Equal(http.StatusInternalServerError))
 			var resp bkerrs.GinErrorOutput
 			Expect(json.Unmarshal(rec.Body.Bytes(), &resp)).To(Succeed())
-			Expect(resp.Error.Code).To(Equal(bkerrs.ErrCodeInternalServerError))
+			Expect(resp.Error.Code).To(Equal(bkerrs.ErrCodeInternalError))
 		})
 
 		It("maps user groups outside workspace to not found", func() {

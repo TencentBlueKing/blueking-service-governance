@@ -19,15 +19,13 @@
 package handler
 
 import (
-	"errors"
-
 	"github.com/gin-gonic/gin"
+	"github.com/pkg/errors"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component/serializer"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 var (
@@ -97,21 +95,9 @@ func (h *Handler) PreviewComponentInst(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	compDef, err := h.componentDefs().
-		Get(ctx, component.ByNameVersion(input.Type, component.DefaultComponentDefVersion),
-			store.TenantWithPlatform(component.BuiltinShared()))
+	compDef, err := component.GetDef(ctx, h.componentDefs(), input.Type, component.DefaultComponentDefVersion)
 	if err != nil {
-		if errors.Is(err, component.ErrComponentDefNotFound) {
-			bkerrs.AbortWithErr(
-				c,
-				errComponentDefNotFound.
-					With("name", input.Type).
-					With("version", component.DefaultComponentDefVersion).
-					WithCause(err),
-			)
-			return
-		}
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get component def"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "get component def"))
 		return
 	}
 

@@ -57,45 +57,10 @@ var (
 		"EXTENSION_DEPSERVICE_REDIS_INSTANCE_NOT_FOUND",
 		"redis instance not found",
 	)
-	errServiceNotFound = bkerrs.Define(
-		bkerrs.ErrCodeNotFound,
-		"EXTENSION_DEPSERVICE_SERVICE_NOT_FOUND",
-		"service not found",
-	)
-	errInstanceNotFound = bkerrs.Define(
-		bkerrs.ErrCodeNotFound,
-		"EXTENSION_DEPSERVICE_INSTANCE_NOT_FOUND",
-		"service instance not found",
-	)
-	errBindingNotFound = bkerrs.Define(
-		bkerrs.ErrCodeNotFound,
-		"EXTENSION_DEPSERVICE_BINDING_NOT_FOUND",
-		"service binding not found",
-	)
 	errPlanNotFound = bkerrs.Define(
 		bkerrs.ErrCodeNotFound,
 		"EXTENSION_DEPSERVICE_PLAN_NOT_FOUND",
 		"service plan not found",
-	)
-	errDepServiceNotFound = bkerrs.Define(
-		bkerrs.ErrCodeNotFound,
-		"EXTENSION_DEPSERVICE_NOT_FOUND",
-		"dependency service resource not found",
-	)
-	errBindingAlreadyExists = bkerrs.Define(
-		bkerrs.ErrCodeAlreadyExists,
-		"EXTENSION_DEPSERVICE_BINDING_ALREADY_EXISTS",
-		"service binding already exists",
-	)
-	errInstanceAlreadyExists = bkerrs.Define(
-		bkerrs.ErrCodeAlreadyExists,
-		"EXTENSION_DEPSERVICE_INSTANCE_ALREADY_EXISTS",
-		"service instance already exists",
-	)
-	errDepServiceInvalidArgument = bkerrs.Define(
-		bkerrs.ErrCodeInvalidRequest,
-		"EXTENSION_DEPSERVICE_INVALID_ARGUMENT",
-		"invalid dependency service argument",
 	)
 )
 
@@ -356,29 +321,9 @@ func mapManagerErr(err error, message string) error {
 	if bkErr := bkerrs.FromError(err); bkErr != nil {
 		return err
 	}
-	if model.AsNotFoundError(err) {
-		var notFoundErr *model.NotFoundError
-		switch {
-		case errors.Is(err, model.ErrServiceNotFound):
-			return errServiceNotFound.WithCause(err)
-		case errors.Is(err, model.ErrInstanceNotFound):
-			return errInstanceNotFound.WithCause(err)
-		case errors.Is(err, model.ErrBindingNotFound):
-			return errBindingNotFound.WithCause(err)
-		case errors.As(err, &notFoundErr):
-			return errPlanNotFound.WithCause(err)
-		default:
-			return errDepServiceNotFound.WithCause(err)
-		}
+	var notFoundErr *model.NotFoundError
+	if errors.As(err, &notFoundErr) {
+		return errPlanNotFound.WithCause(err)
 	}
-	if errors.Is(err, model.ErrBindingNameExists) {
-		return errBindingAlreadyExists.WithCause(err)
-	}
-	if errors.Is(err, model.ErrInstanceNameExists) {
-		return errInstanceAlreadyExists.WithCause(err)
-	}
-	if errors.Is(err, depservice.ErrInvalidArgument) {
-		return errDepServiceInvalidArgument.WithCause(err)
-	}
-	return bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, message)
+	return errors.Wrap(err, message)
 }

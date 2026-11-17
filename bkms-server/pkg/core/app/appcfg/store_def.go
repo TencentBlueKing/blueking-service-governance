@@ -20,10 +20,12 @@ package appcfg
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/v2/bson"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
@@ -31,8 +33,33 @@ var (
 	// ErrAppConfigFileDefNotFound 配置文件 def 不存在
 	ErrAppConfigFileDefNotFound = errors.New("app config file def not found")
 	// ErrAppConfigFileDefAlreadyExists 应用下已存在同名（或同挂载目录）的配置文件 def
-	ErrAppConfigFileDefAlreadyExists = errors.New("app config file def already exists")
+	ErrAppConfigFileDefAlreadyExists = bkerrs.Define(
+		bkerrs.ErrCodeAlreadyExists,
+		bkerrs.ErrDetailCodeAppConfigFileMountIdentityConflict,
+		"app config file already exists at mount dir",
+	)
 )
+
+// mountIdentityConflict 返回带冲突文件名与挂载目录的 ErrAppConfigFileDefAlreadyExists，供前端单独提示。
+// mountDir 为空表示该文件不挂载目录（如 Helm values），冲突只按文件名判断。
+func mountIdentityConflict(cause error, appID, name, mountDir string) error {
+	return ErrAppConfigFileDefAlreadyExists.
+		With("appID", appID).With("name", name).With("mountDir", mountDir).
+		WithCause(cause).
+		SetDetails(
+			bkerrs.NewDetail(
+				bkerrs.ErrDetailCodeAppConfigFileMountIdentityConflict,
+				fmt.Sprintf("config file %q already exists at mount dir %q", name, mountDir),
+				bkerrs.WithSystem(bkerrs.SystemName),
+				bkerrs.WithModule("app-config-file"),
+				bkerrs.WithExtras(map[string]string{
+					"appID":    appID,
+					"name":     name,
+					"mountDir": mountDir,
+				}),
+			),
+		)
+}
 
 // AppConfigFileDefStore 配置文件 def 存储
 type AppConfigFileDefStore = store.GenericStore[AppConfigFileDef]
@@ -99,7 +126,11 @@ func UpdateDef(ctx context.Context, defs *AppConfigFileDefStore, def *AppConfigF
 		"name", "mountDir", "isUnifiedConfig", "mountedEnvNames", "enableEnvVarRender", "envContentStrategy",
 	)
 	if err := defs.Update(ctx, def, mutable, store.ByID(def.ID)); err != nil {
-		return errors.Wrapf(err, "update app config file def %s", def.ID.Hex())
+		err = errors.Wrapf(err, "update app config file def %s", def.ID.Hex())
+		if errors.Is(err, ErrAppConfigFileDefAlreadyExists) {
+			return mountIdentityConflict(err, def.AppID, def.Name, def.MountDir)
+		}
+		return err
 	}
 	return nil
 }

@@ -20,6 +20,7 @@ package handler
 
 import (
 	"github.com/gin-gonic/gin"
+	"github.com/pkg/errors"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
@@ -57,7 +58,7 @@ func (h *Handler) GetAppSpecOverview(c *gin.Context) {
 
 	envNames, err := appspec.ListEnvNamesByApp(ctx, h.registry.DB, app.ID)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list app spec overview"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "list app spec overview"))
 		return
 	}
 	ginutils.OK(c, serializer.GetAppSpecOverviewOutput{

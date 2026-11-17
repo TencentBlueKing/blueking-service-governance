@@ -191,7 +191,7 @@ func (h *Handler) checkAppCreatable(ctx context.Context, workspaceID, name strin
 		return errAppAlreadyExists.With("appName", name)
 	}
 	if err != nil && !errors.Is(err, bkmsapp.ErrAppNotFound) {
-		return bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "check app existence")
+		return errors.Wrap(err, "check app existence")
 	}
 	return nil
 }
@@ -210,11 +210,7 @@ func (h *Handler) createBuildConfig(
 	if err = build.ValidatePlatformBuildImages(
 		ctx, imageReferenceValidator, h.persistMgr, buildConfig, app.WorkspaceID,
 	); err != nil {
-		// 镜像源鉴权失败或不可达时改镜像引用也没用，按内部错误上报；其余按参数问题
-		if build.IsImageRegistryFailure(err) {
-			return nil, errors.Wrap(err, "validate platform build images")
-		}
-		return nil, errInvalidPlatformBuildImages.WithCause(err)
+		return nil, errors.Wrap(err, "validate platform build images")
 	}
 	if err = bkci.EnsureWorkspaceRepositories(
 		ctx,
@@ -222,10 +218,10 @@ func (h *Handler) createBuildConfig(
 		app.WorkspaceID,
 		collectBKCIRepositoriesForCreateApp(app.Type, app.HelmSpec, buildConfig),
 	); err != nil {
-		return nil, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "ensure bkci repositories")
+		return nil, errors.Wrap(err, "ensure bkci repositories")
 	}
 	if err = h.buildConfigs().Create(ctx, buildConfig); err != nil {
-		return nil, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "create build config")
+		return nil, errors.Wrap(err, "create build config")
 	}
 	return buildConfig, nil
 }
@@ -341,7 +337,7 @@ func (h *Handler) ResolveApp(c *gin.Context) {
 
 	app, err := h.apps().Get(ctx, bkmsapp.ByID(input))
 	if err != nil && !errors.Is(err, bkmsapp.ErrAppNotFound) {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "resolve app by id"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "resolve app by id"))
 		return
 	}
 	if app == nil {
@@ -351,7 +347,7 @@ func (h *Handler) ResolveApp(c *gin.Context) {
 				bkerrs.AbortWithErr(c, bkmsapp.ErrAppNotFound.With("app", input).WithCause(err))
 				return
 			}
-			bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "resolve app by name"))
+			bkerrs.AbortWithErr(c, errors.Wrap(err, "resolve app by name"))
 			return
 		}
 	}
@@ -397,7 +393,7 @@ func (h *Handler) GetApp(c *gin.Context) {
 
 	buildConfig, err := h.buildConfigs().Get(ctx, imagebuild.ByApp(app.ID))
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get build config"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "get build config"))
 		return
 	}
 
@@ -406,7 +402,7 @@ func (h *Handler) GetApp(c *gin.Context) {
 	if appruntime.IsAppModelType(app.Type) {
 		appModel, err = store.Of(h.registry.DB, appmodel.AppModelMeta).Get(ctx, appmodel.ByApp(app.ID))
 		if err != nil {
-			bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get app model"))
+			bkerrs.AbortWithErr(c, errors.Wrap(err, "get app model"))
 			return
 		}
 
@@ -414,14 +410,14 @@ func (h *Handler) GetApp(c *gin.Context) {
 		// 为了前端能够显示引用组件的相关信息，需要额外处理将空间组件的信息填入应用组件后再返回
 		components, err = h.convertAppComponentsForOutput(ctx, app.WorkspaceID, appModel.Components)
 		if err != nil {
-			bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "convert components"))
+			bkerrs.AbortWithErr(c, errors.Wrap(err, "convert components"))
 			return
 		}
 	}
 
 	fileName, filePath, err := h.frameworkFileLocation(ctx, app)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "load framework config file"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "load framework config file"))
 		return
 	}
 	outputObj := new(serializer.AppDetailOutputObj).FromModel(
@@ -484,7 +480,7 @@ func (h *Handler) ListApps(c *gin.Context) {
 	}
 	listed, err := h.apps().List(ctx, opts...)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list apps"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "list apps"))
 		return
 	}
 	apps := lo.ToSlicePtr(listed)
@@ -502,7 +498,7 @@ func (h *Handler) ListApps(c *gin.Context) {
 
 	hasPermApps, err := perm.NewManager().FilterViewableApps(ctx, uriInput.WorkspaceID, appIDs)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "filter apps perm"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "filter apps perm"))
 		return
 	}
 
@@ -527,7 +523,7 @@ func (h *Handler) ListApps(c *gin.Context) {
 	deployStatusService := deploystatus.NewDeployStatusService(h.registry.DB)
 	deployStatusMap, err := deployStatusService.ListForAppsInWorkspace(ctx, uriInput.WorkspaceID, filteredApps)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list apps deploy statuses"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "list apps deploy statuses"))
 		return
 	}
 
@@ -572,7 +568,7 @@ func (h *Handler) DeleteApp(c *gin.Context) {
 	if appruntime.IsAppModelType(app.Type) {
 		hasActive, iErr := appmodeldeploy.HasActiveDeployments(ctx, h.registry.DB, app.ID)
 		if iErr != nil {
-			bkerrs.AbortWithErr(c, bkerrs.Wrap(iErr, bkerrs.ErrCodeInternalServerError, "check active deployments"))
+			bkerrs.AbortWithErr(c, errors.Wrap(iErr, "check active deployments"))
 			return
 		}
 		if hasActive {
@@ -582,7 +578,7 @@ func (h *Handler) DeleteApp(c *gin.Context) {
 	} else if appruntime.IsHelmBasedType(app.Type) {
 		hasActive, iErr := helmdeploy.HasActiveDeployments(ctx, h.registry.DB, app.ID)
 		if iErr != nil {
-			bkerrs.AbortWithErr(c, bkerrs.Wrap(iErr, bkerrs.ErrCodeInternalServerError, "check active deployments"))
+			bkerrs.AbortWithErr(c, errors.Wrap(iErr, "check active deployments"))
 			return
 		}
 		if hasActive {
@@ -593,7 +589,7 @@ func (h *Handler) DeleteApp(c *gin.Context) {
 
 	// 清理应用关联资源
 	if err = h.cleanupAppResources(ctx, app.ID); err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "cleanup app resources"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "cleanup app resources"))
 		return
 	}
 	// 根据应用类型删除特定资源
@@ -601,20 +597,20 @@ func (h *Handler) DeleteApp(c *gin.Context) {
 		if err = h.deleteAppModelApp(ctx, app); err != nil {
 			bkerrs.AbortWithErr(
 				c,
-				bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "delete appmodel app resources"),
+				errors.Wrap(err, "delete appmodel app resources"),
 			)
 			return
 		}
 	} else if appruntime.IsHelmBasedType(app.Type) {
 		if err = h.deleteHelmApp(ctx, app); err != nil {
-			bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "delete helm app resources"))
+			bkerrs.AbortWithErr(c, errors.Wrap(err, "delete helm app resources"))
 			return
 		}
 	}
 
 	// 删除应用基础数据
 	if err = h.apps().DeleteIfExists(ctx, bkmsapp.ByName(app.WorkspaceID, app.Name)); err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "delete app"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "delete app"))
 		return
 	}
 	h.cleanupAlertStrategiesAsync(ctx, app, operator)
@@ -667,7 +663,7 @@ func (h *Handler) UpdateAppDisplayName(c *gin.Context) {
 			bkerrs.AbortWithErr(c, bkmsapp.ErrAppNotFound.With("appID", uriInput.AppID).WithCause(err))
 			return
 		}
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "update app display name"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "update app display name"))
 		return
 	}
 
@@ -721,7 +717,7 @@ func (h *Handler) UpdateAppVisibleEnvs(c *gin.Context) {
 	envs, err := store.Of(h.registry.DB, envmodel.EnvMeta).
 		List(ctx, envmodel.InWorkspace(app.WorkspaceID), envmodel.AvailableToApp(app.ID), envmodel.NewestFirst())
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list app envs"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "list app envs"))
 		return
 	}
 	names := *input.VisibleEnvNames
@@ -735,7 +731,7 @@ func (h *Handler) UpdateAppVisibleEnvs(c *gin.Context) {
 			bkerrs.AbortWithErr(c, bkmsapp.ErrAppNotFound.With("appID", uriInput.AppID).WithCause(err))
 			return
 		}
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "update app visible envs"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "update app visible envs"))
 		return
 	}
 
@@ -836,7 +832,7 @@ func (h *Handler) GetAppDeployStatuses(c *gin.Context) {
 		[]*bkmsapp.Application{app},
 	)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list app deploy statuses"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "list app deploy statuses"))
 		return
 	}
 
@@ -884,7 +880,7 @@ func (h *Handler) GetAppDeployOverview(c *gin.Context) {
 	svc := overview.NewService(h.registry.DB)
 	result, err := svc.GetOverview(ctx, app)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "build app deploy overview"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "build app deploy overview"))
 		return
 	}
 
@@ -900,16 +896,16 @@ func (h *Handler) createAppByType(
 	switch app.Type {
 	case bkmsapp.AppTypeTRPC:
 		if err := h.createTrpcApp(ctx, app, input.AppModelSpec); err != nil {
-			return bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "create trpc app resources")
+			return errors.Wrap(err, "create trpc app resources")
 		}
 	case bkmsapp.AppTypeTAF:
 		if err := h.createTafApp(ctx, app, input.AppModelSpec); err != nil {
-			return bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "create taf app resources")
+			return errors.Wrap(err, "create taf app resources")
 		}
 	// Helm，Agones 底层实现都是基于 Helm Chart
 	case bkmsapp.AppTypeHelm, bkmsapp.AppTypeAgones:
 		if err := h.createHelmApp(ctx, app); err != nil {
-			return bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "create helm app resources")
+			return errors.Wrap(err, "create helm app resources")
 		}
 	default:
 		return errUnsupportedAppType.With("appType", app.Type)
@@ -926,7 +922,8 @@ func (h *Handler) deleteAppModelApp(ctx context.Context, app *bkmsapp.Applicatio
 	}
 
 	// 2. 删除所有关联的配置文件、def 及版本记录
-	if _, err := store.Of(h.registry.DB, appcfg.AppConfigFileMeta).DeleteMany(ctx, appcfg.FilesByApp(app.ID)); err != nil {
+	if _, err := store.Of(h.registry.DB, appcfg.AppConfigFileMeta).
+		DeleteMany(ctx, appcfg.FilesByApp(app.ID)); err != nil {
 		return errors.Wrapf(err, "delete app(%s) config files", app.Name)
 	}
 	if _, err := store.Of(h.registry.DB, appcfg.AppConfigFileDefMeta).DeleteMany(

@@ -30,8 +30,8 @@ CLUSTER_ADDON_ENV_CLUSTER_NOT_CONFIGURED:
   zh: "环境 {{.envID}} 尚未配置集群"
   en: "Environment {{.envID}} has no cluster configured"
 CLUSTER_ADDON_NOT_FOUND:
-  zh: "集群插件 {{.addonName}} 不存在"
-  en: "Cluster add-on {{.addonName}} not found"
+  zh: "集群插件不存在"
+  en: "Cluster add-on not found"
 CLUSTER_ADDON_CONCURRENT_INSTALL_CONFLICT:
   zh: "存在并发安装或更新冲突，请稍后重试"
   en: "Concurrent install or update conflict occurred, please retry later"

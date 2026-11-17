@@ -27,6 +27,7 @@ import (
 	"github.com/pkg/errors"
 
 	imagebuild "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/customruntime"
 	workloadruntime "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/runtime"
 )
@@ -270,9 +271,9 @@ var _ = Describe("ValidatePlatformBuildImages", func() {
 			Expect(err).To(MatchError(ContainSubstring(
 				"buildConfig.repoBuildConfig.platformBuildConfig.builderImage custom image docker.bkrepo.example.com/demo/repo/missing does not exist in workspace registry",
 			)))
-			// 用户填错镜像名，handler 应按参数问题处理
-			Expect(IsImageReferenceInvalid(err)).To(BeTrue())
-			Expect(IsImageRegistryFailure(err)).To(BeFalse())
+			// 用户填错镜像名，属于参数问题
+			Expect(errors.Is(err, ErrImageReferenceInvalid)).To(BeTrue())
+			Expect(bkerrs.FromError(err).Code()).To(Equal(bkerrs.ErrCodeInvalidArgument))
 		})
 	})
 
@@ -297,8 +298,8 @@ var _ = Describe("ValidatePlatformBuildImages", func() {
 			Expect(err).To(MatchError(ContainSubstring(
 				"buildConfig.repoBuildConfig.platformBuildConfig.builderImage workspace registry access failed",
 			)))
-			// 仓库不可达不是用户能改的，handler 应按内部错误上报
-			Expect(IsImageRegistryFailure(err)).To(BeTrue())
+			// 仓库不可达不是用户能改的，不定码，由出口按内部错误上报
+			Expect(bkerrs.FromError(err)).To(BeNil())
 			Expect(IsImageReferenceInvalid(err)).To(BeFalse())
 		})
 	})
@@ -324,7 +325,7 @@ var _ = Describe("ValidatePlatformBuildImages", func() {
 			Expect(err).To(MatchError(ContainSubstring(
 				"buildConfig.repoBuildConfig.platformBuildConfig.builderImage workspace registry auth failed",
 			)))
-			Expect(IsImageRegistryFailure(err)).To(BeTrue())
+			Expect(bkerrs.FromError(err)).To(BeNil())
 			Expect(IsImageReferenceInvalid(err)).To(BeFalse())
 		})
 	})

@@ -34,12 +34,6 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
 )
 
-var errBCSNoActiveAuthInfo = bkerrs.Define(
-	bkerrs.ErrCodeNotFound,
-	"BKINTEGRATIONS_BCS_NO_ACTIVE_AUTH_INFO",
-	"no active bcs auth info",
-)
-
 // ListBCSAuthorizedProjects 获取有权限的 BCS 项目列表
 //
 //	@ID			ListBCSAuthorizedProjects
@@ -55,13 +49,13 @@ func (h *Handler) ListBCSAuthorizedProjects(c *gin.Context) {
 	ctx := c.Request.Context()
 	client, err := bcs.New(auth.MustGetUser(ctx))
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "initial bcs client"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "initial bcs client"))
 		return
 	}
 
 	bcsProjects, err := client.ListAuthorizedProjects(ctx)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list bcs authorized projects"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "list bcs authorized projects"))
 		return
 	}
 
@@ -71,13 +65,13 @@ func (h *Handler) ListBCSAuthorizedProjects(c *gin.Context) {
 		var bkciClient bkci.Client
 		bkciClient, err = bkci.New(auth.MustGetUser(ctx))
 		if err != nil {
-			bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "initial bkci client"))
+			bkerrs.AbortWithErr(c, errors.Wrap(err, "initial bkci client"))
 			return
 		}
 		var bkciProjects []bkci.Project
 		bkciProjects, err = bkciClient.ListProjects(ctx)
 		if err != nil {
-			bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list bkci managed projects"))
+			bkerrs.AbortWithErr(c, errors.Wrap(err, "list bkci managed projects"))
 			return
 		}
 		bkciProjects = lo.Filter(bkciProjects, func(item bkci.Project, _ int) bool {
@@ -90,7 +84,7 @@ func (h *Handler) ListBCSAuthorizedProjects(c *gin.Context) {
 
 	workspaces, err := h.workspaces().List(ctx)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list workspaces"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "list workspaces"))
 		return
 	}
 	boundProjectsMap := lo.SliceToMap(workspaces, func(item workspace.Workspace) (string, bool) {
@@ -139,19 +133,19 @@ func (h *Handler) GetBCSProject(c *gin.Context) {
 	ctx := c.Request.Context()
 	client, err := bcs.New(auth.MustGetUser(ctx))
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "initial bcs client"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "initial bcs client"))
 		return
 	}
 
 	project, err := client.GetProject(ctx, uriInput.ProjectID)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get bcs project"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "get bcs project"))
 		return
 	}
 
 	projectObj := new(slz.BCSProjectOutput)
 	if err = mapstructure.Decode(project, projectObj); err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "decode bcs project"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "decode bcs project"))
 		return
 	}
 
@@ -180,13 +174,13 @@ func (h *Handler) ListClustersByProject(c *gin.Context) {
 	ctx := c.Request.Context()
 	client, err := bcs.New(auth.MustGetUser(ctx))
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "initial bcs client"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "initial bcs client"))
 		return
 	}
 
 	clusters, err := client.ListClustersByProject(ctx, uriInput.ProjectID)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list clusters by bcs project"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "list clusters by bcs project"))
 		return
 	}
 
@@ -231,13 +225,13 @@ func (h *Handler) ListNamespacesByCluster(c *gin.Context) {
 	ctx := c.Request.Context()
 	client, err := bcs.New(auth.MustGetUser(ctx))
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "initial bcs client"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "initial bcs client"))
 		return
 	}
 
 	namespaces, err := client.ListNamespacesByCluster(ctx, uriInput.ProjectID, uriInput.ClusterID)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list namespaces by cluster"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "list namespaces by cluster"))
 		return
 	}
 
@@ -270,11 +264,7 @@ func (h *Handler) GetBCSUserToken(c *gin.Context) {
 
 	token, err := bcstoken.GetActiveUserToken(ctx)
 	if err != nil {
-		if errors.Is(err, bcstoken.ErrNoActiveUserToken) {
-			bkerrs.AbortWithErr(c, errBCSNoActiveAuthInfo.WithCause(err))
-			return
-		}
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get bcs auth info"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "get bcs auth info"))
 		return
 	}
 

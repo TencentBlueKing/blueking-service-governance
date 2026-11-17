@@ -26,12 +26,17 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	deploytypes "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/types"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 // ErrDeployRecordNotFound 部署记录不存在
-var ErrDeployRecordNotFound = errors.New("app model deploy record not found")
+var ErrDeployRecordNotFound = bkerrs.Define(
+	bkerrs.ErrCodeNotFound,
+	"DEPLOY_RECORD_NOT_FOUND",
+	"deploy record not found",
+)
 
 // RecordStore 应用部署记录存储
 type RecordStore = store.GenericStore[Record]

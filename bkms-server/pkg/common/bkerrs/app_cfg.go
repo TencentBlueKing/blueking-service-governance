@@ -20,37 +20,9 @@ package bkerrs
 
 import "fmt"
 
-var (
-	errAppConfigFileMountIdentityConflict = Define(
-		ErrCodeAlreadyExists,
-		ErrDetailCodeAppConfigFileMountIdentityConflict,
-		"app config file already exists at mount dir",
-	)
-	errAppConfigFileVersionConflict = Define(
-		ErrCodeAborted, ErrDetailCodeAppConfigFileVersionConflict, "app config file version conflict",
-	)
+var errAppConfigFileVersionConflict = Define(
+	ErrCodeAborted, ErrDetailCodeAppConfigFileVersionConflict, "app config file version conflict",
 )
-
-// WrapAppConfigFileMountIdentityConflict 包装为「同应用下文件名 + 挂载目录已存在」错误。
-// mountDir 为空表示该文件不挂载目录（如 Helm values），冲突只按文件名判断。
-func WrapAppConfigFileMountIdentityConflict(err error, appID, name, mountDir string) error {
-	return errAppConfigFileMountIdentityConflict.
-		With("appID", appID).With("name", name).With("mountDir", mountDir).
-		WithCause(err).
-		SetDetails(
-			NewDetail(
-				ErrDetailCodeAppConfigFileMountIdentityConflict,
-				fmt.Sprintf("config file %q already exists at mount dir %q", name, mountDir),
-				WithSystem(SystemName),
-				WithModule("app-config-file"),
-				WithExtras(map[string]string{
-					"appID":    appID,
-					"name":     name,
-					"mountDir": mountDir,
-				}),
-			),
-		)
-}
 
 // WrapAppConfigFileVersionConflict 包装为应用配置文件版本冲突错误
 func WrapAppConfigFileVersionConflict(err error, appID, configFileID string) error {

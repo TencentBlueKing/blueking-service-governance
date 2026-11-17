@@ -77,7 +77,7 @@ func (h *Handler) ListAppConfigFileVersions(c *gin.Context) {
 	acfService := appcfg.NewAppConfigFileService(h.registry.DB)
 	versions, err := acfService.ListVersions(ctx, app.ID, queryInput.Page, queryInput.PageSize, filter)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list app config file versions"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "list app config file versions"))
 		return
 	}
 
@@ -197,7 +197,7 @@ func (h *Handler) CompareAppConfigFileVersions(c *gin.Context) {
 			bkerrs.AbortWithErr(c, errCompareVersionsDifferentFiles.WithCause(err))
 			return
 		}
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "compare app config file versions"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "compare app config file versions"))
 		return
 	}
 	ginutils.OK(c, serializer.CompareAppConfigFileVersionsOutput{
@@ -256,7 +256,7 @@ func (h *Handler) RollbackAppConfigFileVersion(c *gin.Context) {
 	}
 	acf, err := h.configFiles().GetByID(ctx, targetVersion.AppConfigFileID)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get app config file"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "get app config file"))
 		return
 	}
 	oldAcf := *acf
@@ -282,7 +282,7 @@ func (h *Handler) RollbackAppConfigFileVersion(c *gin.Context) {
 			bkerrs.AbortWithErr(c, bkerrs.WrapAppConfigFileVersionConflict(err, app.ID, id.Hex()))
 			return
 		}
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "create rollback version"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "create rollback version"))
 		return
 	}
 
@@ -346,7 +346,7 @@ func (h *Handler) DeleteAppConfigFileVersion(c *gin.Context) {
 			bkerrs.AbortWithErr(c, errActiveVersionCannotBeDeleted.WithCause(err))
 			return
 		}
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "delete app config file version"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "delete app config file version"))
 		return
 	}
 

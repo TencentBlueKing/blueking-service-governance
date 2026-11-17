@@ -36,7 +36,6 @@ import (
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	appmodeldeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/appmodel"
-	deploystatus "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/status"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	bkmapi "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bkmonitor"
 	bkmmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/bkmonitor"
@@ -103,14 +102,14 @@ func (h *Handler) GetApmServiceName(c *gin.Context) {
 
 	appModel, err := store.Of(h.registry.DB, appmodel.AppModelMeta).Get(ctx, appmodel.ByApp(app.ID))
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "getting app model"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "getting app model"))
 		return
 	}
 	appModel, _, err = appspec.ModelForEnv(
 		ctx, h.registry.DB, app.ID, env.Name, appModel,
 	)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "applying env app spec"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "applying env app spec"))
 		return
 	}
 
@@ -119,7 +118,7 @@ func (h *Handler) GetApmServiceName(c *gin.Context) {
 	)
 	frameworkFile, err := cfgProvider.GetFrameworkMountableFile(ctx, app.ID, env.Name)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "getting env content"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "getting env content"))
 		return
 	}
 
@@ -132,7 +131,7 @@ func (h *Handler) GetApmServiceName(c *gin.Context) {
 		),
 	)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "building app env vars"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "building app env vars"))
 		return
 	}
 
@@ -143,8 +142,7 @@ func (h *Handler) GetApmServiceName(c *gin.Context) {
 			bkerrs.AbortWithErr(c, bkerrs.WrapAPMConfigMissing(svcErr, app.ID, env.Name))
 			return
 		}
-		bkerrs.AbortWithErr(c, bkerrs.Wrapf(svcErr, bkerrs.ErrCodeInternalServerError,
-			"resolve apm service name for app %s env %s", app.ID, env.Name))
+		bkerrs.AbortWithErr(c, errors.Wrapf(svcErr, "resolve apm service name for app %s env %s", app.ID, env.Name))
 		return
 	}
 
@@ -182,13 +180,13 @@ func (h *Handler) ListApms(c *gin.Context) {
 
 	client, err := bkmapi.NewMonitorClient(auth.MustGetUser(ctx).ID)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrapf(err, bkerrs.ErrCodeInternalServerError, "new bkmonitor client"))
+		bkerrs.AbortWithErr(c, errors.Wrapf(err, "new bkmonitor client"))
 		return
 	}
 
 	resp, err := client.ListApmApp(ctx, cast.ToInt64(ws.BkSystems.BkMonitorProjectID))
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrapf(err, bkerrs.ErrCodeInternalServerError, "list apm app"))
+		bkerrs.AbortWithErr(c, errors.Wrapf(err, "list apm app"))
 		return
 	}
 
@@ -204,7 +202,7 @@ func (h *Handler) ListApms(c *gin.Context) {
 
 	apmMap, err := bkmmodel.GetApmIDMap(ctx, h.registry.DB, ws.ID)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrapf(err, bkerrs.ErrCodeInternalServerError, "list apm from store"))
+		bkerrs.AbortWithErr(c, errors.Wrapf(err, "list apm from store"))
 		return
 	}
 
@@ -282,7 +280,7 @@ func (h *Handler) CreateEnvApm(c *gin.Context) {
 
 	ws, err := h.workspaces().Get(ctx, workspace.ByWorkspaceID(env.WorkspaceID))
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get workspace"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "get workspace"))
 		return
 	}
 	if ws.BkSystems.BkMonitorProjectID == "" {
@@ -303,7 +301,7 @@ func (h *Handler) CreateEnvApm(c *gin.Context) {
 		},
 	)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "create and bind apm to env"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "create and bind apm to env"))
 		return
 	}
 
@@ -351,7 +349,7 @@ func (h *Handler) BindApmToEnv(c *gin.Context) {
 
 	ws, err := h.workspaces().Get(ctx, workspace.ByWorkspaceID(env.WorkspaceID))
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get workspace"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "get workspace"))
 		return
 	}
 
@@ -366,12 +364,12 @@ func (h *Handler) BindApmToEnv(c *gin.Context) {
 		},
 	)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get or create apm"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "get or create apm"))
 		return
 	}
 
 	if err = apmSvc.BindToEnv(ctx, apm, env.ID, env.Name); err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "bind apm to env"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "bind apm to env"))
 		return
 	}
 
@@ -411,7 +409,7 @@ func (h *Handler) GetEnvApm(c *gin.Context) {
 			bkerrs.AbortWithErr(c, errEnvAPMNotFound.With("envID", uriInput.EnvID).WithCause(err))
 			return
 		}
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get apm by env id"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "get apm by env id"))
 		return
 	}
 
@@ -463,7 +461,7 @@ func (h *Handler) GetInstanceTimeSeries(c *gin.Context) {
 		Username:   auth.MustGetUser(ctx).ID,
 	})
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "query instance metrics"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "query instance metrics"))
 		return
 	}
 
@@ -552,7 +550,7 @@ func (h *Handler) RankInstances(c *gin.Context) {
 		Username:     auth.MustGetUser(ctx).ID,
 	})
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "rank instances"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "rank instances"))
 		return
 	}
 
@@ -571,12 +569,6 @@ func (h *Handler) getRankWorkload(ctx context.Context, target *instanceMonitorTa
 	}
 	kind, name, err := appmodeldeploy.GetLatestWorkload(ctx, h.registry.DB, target.app.ID, target.env.Name, "")
 	if err != nil {
-		if errors.Is(err, appmodeldeploy.ErrDeployRecordNotFound) {
-			return "", "", deploystatus.ErrDeployRecordNotFound.
-				With("appID", target.app.ID).
-				With("envName", target.env.Name).
-				WithCause(err)
-		}
 		return "", "", errors.Wrap(err, "get deployed workload")
 	}
 	return kind, name, nil
@@ -599,7 +591,7 @@ func (h *Handler) validateInstanceMonitorTarget(
 	}
 	ws, err := h.workspaces().Get(ctx, workspace.ByWorkspaceID(app.WorkspaceID))
 	if err != nil {
-		return nil, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get workspace")
+		return nil, errors.Wrap(err, "get workspace")
 	}
 	if ws.BkSystems.BkMonitorProjectID == "" {
 		return nil, errBkMonitorProjectNotReady.With("workspaceID", ws.ID)
@@ -648,13 +640,13 @@ func (h *Handler) ListDashboardDirectoryTree(c *gin.Context) {
 
 	client, err := bkmapi.NewMonitorClient(auth.MustGetUser(ctx).ID)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrapf(err, bkerrs.ErrCodeInternalServerError, "new bkmonitor client"))
+		bkerrs.AbortWithErr(c, errors.Wrapf(err, "new bkmonitor client"))
 		return
 	}
 
 	tree, err := client.GetDashboardDirectoryTree(ctx, bkMonitorProjectID)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrapf(err, bkerrs.ErrCodeInternalServerError, "list dashboard directory tree"))
+		bkerrs.AbortWithErr(c, errors.Wrapf(err, "list dashboard directory tree"))
 		return
 	}
 

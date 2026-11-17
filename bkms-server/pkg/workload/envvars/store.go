@@ -29,6 +29,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/utils/crypto"
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
@@ -41,12 +42,18 @@ import (
 const ScopedEnvVarCollectionName = "scoped_env_vars"
 
 // ErrScopedEnvVarNotFound is returned when the target scoped env var does not exist.
-var ErrScopedEnvVarNotFound = errors.New("scoped env var not found")
+var ErrScopedEnvVarNotFound = bkerrs.Define(
+	bkerrs.ErrCodeNotFound, "WORKLOAD_ENVVARS_SCOPED_ENV_VAR_NOT_FOUND", "scoped env var not found",
+)
 
 // ErrScopedEnvVarKeyConflict is returned when creating or updating a scoped env var would cause
 // a duplicate key within the same scope. The unique index is on
 // (workspaceID, scopeType, scopeValue, key), so currently only key collisions trigger this.
-var ErrScopedEnvVarKeyConflict = errors.New("an env var with the same key already exists in this scope")
+var ErrScopedEnvVarKeyConflict = bkerrs.Define(
+	bkerrs.ErrCodeAlreadyExists,
+	bkerrs.ErrDetailCodeScopedEnvVarKeyConflict,
+	"an env var with the same key already exists in this scope",
+)
 
 // ScopedEnvVarStore is the store of scoped env vars.
 type ScopedEnvVarStore = store.GenericStore[ScopedEnvVar]
@@ -348,7 +355,21 @@ func UpdateByID(
 	if updateData.IsSensitive != nil {
 		fields["isSensitive"] = *updateData.IsSensitive
 	}
-	return store.Of(db, ScopedEnvVarMeta).Update(ctx, fields, ByID(workspaceID, id))
+	return withConflictKey(store.Of(db, ScopedEnvVarMeta).Update(ctx, fields, ByID(workspaceID, id)), updateData.Key)
+}
+
+// Create creates a scoped env var. A key collision within the scope returns ErrScopedEnvVarKeyConflict
+// carrying the key.
+func Create(ctx context.Context, db *mongo.Database, envVar *ScopedEnvVar) error {
+	return withConflictKey(store.Of(db, ScopedEnvVarMeta).Create(ctx, envVar), envVar.Key)
+}
+
+// withConflictKey 为 Key 冲突错误补充冲突的 Key，供出口渲染错误文案
+func withConflictKey(err error, key string) error {
+	if errors.Is(err, ErrScopedEnvVarKeyConflict) {
+		return ErrScopedEnvVarKeyConflict.With("key", key).WithCause(err)
+	}
+	return err
 }
 
 // DeleteByEnv deletes all scoped env vars defined in the target environment scope.

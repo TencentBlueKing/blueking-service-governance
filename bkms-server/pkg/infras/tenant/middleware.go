@@ -30,15 +30,8 @@ import (
 
 var (
 	errTenantIDRequired   = bkerrs.Define(bkerrs.ErrCodeInvalidArgument, "TENANT_ID_REQUIRED", "tenant id is required")
-	errTenantIDInvalid    = bkerrs.Define(bkerrs.ErrCodeInvalidArgument, "TENANT_ID_INVALID", "tenant id is invalid")
 	errTenantUserRequired = bkerrs.Define(
 		bkerrs.ErrCodeUnauthenticated, "TENANT_USER_REQUIRED", "authenticated user is required",
-	)
-	errTenantAccessDenied = bkerrs.Define(bkerrs.ErrCodeNoPermission, "TENANT_ACCESS_DENIED", "tenant access denied")
-	errTenantUserDisabled = bkerrs.Define(
-		bkerrs.ErrCodeNoPermission,
-		"TENANT_USER_DISABLED",
-		"tenant user is disabled",
 	)
 )
 
@@ -102,17 +95,11 @@ func verifyTenantAccess(ctx context.Context, user auth.User, tenantID string, ve
 	return verifier.Verify(ctx, user.ID, tenantID)
 }
 
-// toAPIError 将租户校验的哨兵错误改判为对外的 API 错误，其他错误按内部错误处理
+// toAPIError 把请求未带租户改判为参数错误。ErrTenantIDRequired 在业务代码中意味着内部缺陷，因此不在定义处定码
 func toAPIError(err error) error {
 	switch {
 	case errors.Is(err, ErrTenantIDRequired):
 		return errTenantIDRequired.WithCause(err)
-	case errors.Is(err, ErrTenantIDInvalid):
-		return errTenantIDInvalid.WithCause(err)
-	case errors.Is(err, ErrTenantAccessDenied):
-		return errTenantAccessDenied.WithCause(err)
-	case errors.Is(err, ErrTenantUserDisabled):
-		return errTenantUserDisabled.WithCause(err)
 	default:
 		return err
 	}

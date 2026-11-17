@@ -25,11 +25,14 @@ import (
 	"github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/v2/bson"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 // ErrComponentDefNotFound is returned when a component-def is not found in the store.
-var ErrComponentDefNotFound = errors.New("component def not found")
+var ErrComponentDefNotFound = bkerrs.Define(
+	bkerrs.ErrCodeNotFound, "EXTENSION_COMPONENT_DEF_NOT_FOUND", "component def not found",
+)
 
 // ErrComponentDefAlreadyExists is returned when creating a component-def whose name and version already exist.
 var ErrComponentDefAlreadyExists = errors.New("component def already exists")
@@ -107,6 +110,15 @@ func ManagedByWorkspace(workspaceID string) store.Opt {
 // KeywordMatches 按名称、展示名称模糊匹配组件定义，keyword 为空时不过滤
 func KeywordMatches(keyword string) store.Opt {
 	return store.ContainsIgnoreCase(keyword, "name", "displayName")
+}
+
+// GetDef 按名称与版本获取当前租户可用的组件定义（含内置定义），不存在时返回带 name、version 的 ErrComponentDefNotFound
+func GetDef(ctx context.Context, defs *ComponentDefStore, name, version string) (*ComponentDef, error) {
+	compDef, err := defs.Get(ctx, ByNameVersion(name, version), store.TenantWithPlatform(BuiltinShared()))
+	if errors.Is(err, ErrComponentDefNotFound) {
+		return nil, ErrComponentDefNotFound.With("name", name).With("version", version).WithCause(err)
+	}
+	return compDef, errors.Wrapf(err, "get component def %s:%s", name, version)
 }
 
 // BuiltinDefExists 判断是否存在同名的平台内置定义，租户新建定义时不能与之重名

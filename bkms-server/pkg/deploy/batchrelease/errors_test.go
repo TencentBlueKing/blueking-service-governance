@@ -30,20 +30,15 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/releasestrategy"
 )
 
-var _ = Describe("APIError", func() {
-	DescribeTable("maps domain errors to existing API error codes",
+var _ = Describe("domain errors", func() {
+	DescribeTable("carry their API error codes through wrapping",
 		func(cause error, code bkerrs.ErrCode) {
-			err := batchrelease.APIError(pkgerrors.Wrap(cause, "context"), "operate batch release")
+			err := pkgerrors.Wrap(cause, "context")
 
-			var apiErr *bkerrs.Error
-			Expect(errors.As(err, &apiErr)).To(BeTrue())
+			apiErr := bkerrs.FromError(err)
+			Expect(apiErr).NotTo(BeNil())
 			Expect(apiErr.Code()).To(Equal(code))
-			if code == bkerrs.ErrCodeInternalServerError {
-				Expect(apiErr.DetailCode()).To(BeEmpty())
-				Expect(apiErr.Details()).To(BeEmpty())
-			} else {
-				Expect(apiErr.DetailCode()).NotTo(BeEmpty())
-			}
+			Expect(apiErr.DetailCode()).NotTo(BeEmpty())
 			Expect(errors.Is(err, cause)).To(BeTrue())
 		},
 		Entry("strategy name conflict", releasestrategy.ErrStrategyNameConflict, bkerrs.ErrCodeInvalidRequest),
@@ -58,11 +53,11 @@ var _ = Describe("APIError", func() {
 		Entry("no batch release in progress", batchrelease.ErrNoBatchReleaseInProgress, bkerrs.ErrCodeInvalidRequest),
 		Entry("release switching", batchrelease.ErrReleaseSwitching, bkerrs.ErrCodeAborted),
 		Entry("rollout changed", batchrelease.ErrRolloutChanged, bkerrs.ErrCodeAborted),
-		Entry("cluster error", errors.New("apiserver: connection refused"), bkerrs.ErrCodeInternalServerError),
 	)
 
-	It("keeps the cluster message for errors passed through", func() {
-		err := batchrelease.APIError(errors.New("admission webhook denied the request"), "apply rollout")
+	It("leaves cluster errors uncoded so they surface as internal errors", func() {
+		err := pkgerrors.Wrap(errors.New("admission webhook denied the request"), "apply rollout")
+		Expect(bkerrs.FromError(err)).To(BeNil())
 		Expect(err.Error()).To(ContainSubstring("admission webhook denied the request"))
 	})
 })

@@ -24,11 +24,16 @@ import (
 	"github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/v2/bson"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 // ErrNotFound 告警策略未找到
-var ErrNotFound = errors.New("AlertStrategy not found")
+var ErrNotFound = bkerrs.Define(
+	bkerrs.ErrCodeNotFound,
+	"OBSERVABILITY_BKMONITOR_ALERT_STRATEGY_NOT_FOUND",
+	"alert strategy not found",
+)
 
 // Store 告警策略存储
 type Store = store.GenericStore[AlertStrategy]

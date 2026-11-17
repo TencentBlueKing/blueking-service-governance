@@ -24,6 +24,7 @@ import (
 
 	"github.com/pkg/errors"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	bkmapi "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bkmonitor"
 )
@@ -32,7 +33,11 @@ import (
 const saveUserGroupDefaultTimezone = "Asia/Shanghai"
 
 // ErrUserGroupNotInWorkspace 表示告警组不属于当前 workspace 对应的监控空间。
-var ErrUserGroupNotInWorkspace = errors.New("user group does not belong to workspace")
+var ErrUserGroupNotInWorkspace = bkerrs.Define(
+	bkerrs.ErrCodeNotFound,
+	"OBSERVABILITY_BKMONITOR_USER_GROUP_NOT_FOUND",
+	"user group not found or does not belong to current workspace",
+)
 
 // Service 提供告警组管理能力，不影响既有 APM 告警组同步链路。
 type Service struct {

@@ -21,13 +21,18 @@ package model
 import (
 	"github.com/pkg/errors"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 const serviceCollName = "depservice_services"
 
 // ErrServiceNotFound 依赖服务不存在，AsNotFoundError 同样将其视为未找到
-var ErrServiceNotFound = errors.New("service not found")
+var ErrServiceNotFound = bkerrs.Define(
+	bkerrs.ErrCodeNotFound,
+	"EXTENSION_DEPSERVICE_SERVICE_NOT_FOUND",
+	"service not found",
+)
 
 // ServiceStore 依赖服务存储，name 是服务的唯一标识
 type ServiceStore = store.GenericStore[Service]

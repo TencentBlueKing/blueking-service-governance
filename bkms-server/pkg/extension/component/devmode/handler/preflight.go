@@ -38,7 +38,6 @@ import (
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	appmodeldeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/appmodel"
-	deploystatus "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/status"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component/devmode"
 	slz "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component/devmode/serializer"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/bcstoken"
@@ -76,11 +75,6 @@ var (
 		bkerrs.ErrCodeInvalidRequest,
 		"EXTENSION_DEVMODE_APP_TYPE_UNSUPPORTED",
 		"application type does not support devmode",
-	)
-	errBCSTokenNotFound = bkerrs.Define(
-		bkerrs.ErrCodeNotFound,
-		"EXTENSION_DEVMODE_BCS_TOKEN_NOT_FOUND",
-		"active BCS user token not found",
 	)
 	errNoRunningInstances = bkerrs.Define(
 		bkerrs.ErrCodeNotFound,
@@ -234,7 +228,7 @@ func (h *Handler) getEffectiveDevMode(
 		app.ID, envName, appspec.DevModeSection,
 	)
 	if err != nil {
-		return nil, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "failed to get devmode configuration")
+		return nil, errors.Wrap(err, "failed to get devmode configuration")
 	}
 
 	if devModeSpec == nil || devModeSpec.Enabled == nil || !*devModeSpec.Enabled {
@@ -253,7 +247,7 @@ func (h *Handler) getEffectiveDevMode(
 func (h *Handler) getBCSProjectCode(ctx context.Context, workspaceID string) (string, error) {
 	ws, err := store.Of(h.registry.DB, workspace.Meta).Get(ctx, workspace.ByWorkspaceID(workspaceID))
 	if err != nil {
-		return "", bkerrs.Wrapf(err, bkerrs.ErrCodeInternalServerError, "get workspace %s", workspaceID)
+		return "", errors.Wrapf(err, "get workspace %s", workspaceID)
 	}
 	return ws.BkSystems.BkBCSProjectCode, nil
 }
@@ -262,10 +256,7 @@ func (h *Handler) getBCSProjectCode(ctx context.Context, workspaceID string) (st
 func (h *Handler) fetchActiveToken(ctx context.Context, bcsProjectCode string) (string, error) {
 	token, err := bcstoken.FetchActiveUserToken(ctx, bcsProjectCode)
 	if err != nil {
-		if errors.Is(err, bcstoken.ErrNoActiveUserToken) {
-			return "", errBCSTokenNotFound.WithCause(err)
-		}
-		return "", bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "fetch active BCS user token")
+		return "", errors.Wrap(err, "fetch active BCS user token")
 	}
 	return token, nil
 }
@@ -278,14 +269,8 @@ func (h *Handler) resolveInstanceIDs(
 	// 获取最新部署记录
 	record, err := appmodeldeploy.GetLatest(ctx, h.registry.DB, appID, envName, "")
 	if err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			return nil, deploystatus.ErrDeployRecordNotFound.
-				With("appID", appID).
-				With("envName", envName).
-				WithCause(err)
-		}
-		return nil, bkerrs.Wrapf(
-			err, bkerrs.ErrCodeInternalServerError, "get latest deploy record of app %s env %s", appID, envName,
+		return nil, errors.Wrapf(
+			err, "get latest deploy record of app %s env %s", appID, envName,
 		)
 	}
 
@@ -294,8 +279,8 @@ func (h *Handler) resolveInstanceIDs(
 	labelSelector := labels.SelectorFromSet(record.LabelSelector).String()
 	pods, err := podClient.List(ctx, record.Namespace, metav1.ListOptions{LabelSelector: labelSelector})
 	if err != nil {
-		return nil, bkerrs.Wrapf(
-			err, bkerrs.ErrCodeInternalServerError,
+		return nil, errors.Wrapf(
+			err,
 			"failed to list pods in namespace %s", record.Namespace,
 		)
 	}

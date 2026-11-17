@@ -25,12 +25,17 @@ import (
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/snapshot"
 )
 
 // ErrImageTagNotFound 待晋级的镜像标签不在当前仓库的镜像快照中
-var ErrImageTagNotFound = errors.New("image tag not found")
+var ErrImageTagNotFound = bkerrs.Define(
+	bkerrs.ErrCodeNotFound,
+	"WORKLOAD_IMAGE_PROMOTE_TAG_NOT_FOUND",
+	"image tag not found in app images",
+)
 
 // Store 镜像晋级记录存储
 type Store = store.GenericStore[Image]
@@ -69,7 +74,8 @@ func Promote(
 		return errors.Wrapf(err, "check snapshot exists for repo %s, tag %s", repoKey, tag)
 	}
 	if !exists {
-		return errors.Wrapf(ErrImageTagNotFound, "repo %s, tag %s", repoKey, tag)
+		return ErrImageTagNotFound.With("appID", appID).With("tag", tag).
+			WithCause(errors.Errorf("repo %s, tag %s", repoKey, tag))
 	}
 
 	img := &Image{AppID: appID, RepoKey: repoKey, Tag: tag, PromotedAt: time.Now(), PromotedBy: operator}

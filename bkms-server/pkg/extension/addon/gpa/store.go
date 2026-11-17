@@ -24,13 +24,14 @@ import (
 	"github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/v2/bson"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 // 错误定义
 var (
 	// ErrConfigNotFound GPA 配置不存在
-	ErrConfigNotFound = errors.New("gpa config not found")
+	ErrConfigNotFound = bkerrs.Define(bkerrs.ErrCodeNotFound, "EXTENSION_GPA_CONFIG_NOT_FOUND", "gpa config not found")
 	// ErrConfigEnvExists 该环境已存在 GPA 配置
 	ErrConfigEnvExists = errors.New("gpa config for this environment already exists")
 )

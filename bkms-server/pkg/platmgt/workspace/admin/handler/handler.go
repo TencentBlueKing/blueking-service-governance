@@ -20,12 +20,10 @@
 package handler
 
 import (
-	"errors"
-
 	"github.com/gin-gonic/gin"
+	"github.com/pkg/errors"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
-	bkmsworkspace "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/perm"
 	workspaceadmin "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/platmgt/workspace/admin"
@@ -71,7 +69,7 @@ func (h *Handler) GetWorkspaceRoleStatus(c *gin.Context) {
 	status, err := h.workspaceAdminService().
 		GetRoleStatus(c.Request.Context(), path.WorkspaceID, query.RoleCode, query.Username)
 	if err != nil {
-		bkerrs.AbortWithErr(c, toAPIError(err, "get platform workspace role status"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "get platform workspace role status"))
 		return
 	}
 
@@ -104,7 +102,7 @@ func (h *Handler) GrantWorkspaceAdmin(c *gin.Context) {
 	_, err := h.workspaceAdminService().
 		GrantAdmin(c.Request.Context(), path.WorkspaceID, auth.MustGetUser(c.Request.Context()).ID, input.Temporary())
 	if err != nil {
-		bkerrs.AbortWithErr(c, toAPIError(err, "grant platform workspace admin"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "grant platform workspace admin"))
 		return
 	}
 
@@ -136,7 +134,7 @@ func (h *Handler) RevokeWorkspaceAdmin(c *gin.Context) {
 	_, err := h.workspaceAdminService().
 		RevokeAdmin(c.Request.Context(), path.WorkspaceID, auth.MustGetUser(c.Request.Context()).ID)
 	if err != nil {
-		bkerrs.AbortWithErr(c, toAPIError(err, "revoke platform workspace admin"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "revoke platform workspace admin"))
 		return
 	}
 
@@ -145,31 +143,4 @@ func (h *Handler) RevokeWorkspaceAdmin(c *gin.Context) {
 
 func (h *Handler) workspaceAdminService() *workspaceadmin.Service {
 	return workspaceadmin.NewService(h.registry.DB, perm.NewManager())
-}
-
-var (
-	errWorkspaceAdminAlreadyExists = bkerrs.Define(
-		bkerrs.ErrCodeInvalidRequest, "PLATMGT_WORKSPACE_ADMIN_ALREADY_EXISTS", "workspace admin already exists",
-	)
-	errWorkspaceAdminNotFound = bkerrs.Define(
-		bkerrs.ErrCodeNotFound, "PLATMGT_WORKSPACE_ADMIN_NOT_FOUND", "workspace admin not found",
-	)
-	errTempAdminAlreadyExists = bkerrs.Define(
-		bkerrs.ErrCodeAlreadyExists, "PLATMGT_TEMP_ADMIN_ALREADY_EXISTS", "temporary admin already exists",
-	)
-)
-
-func toAPIError(err error, internalMessage string) error {
-	switch {
-	case errors.Is(err, bkmsworkspace.ErrWorkspaceNotFound):
-		return bkmsworkspace.ErrWorkspaceNotFound.WithCause(err)
-	case errors.Is(err, workspaceadmin.ErrWorkspaceAdminAlreadyExists):
-		return errWorkspaceAdminAlreadyExists.WithCause(err)
-	case errors.Is(err, workspaceadmin.ErrWorkspaceAdminNotFound):
-		return errWorkspaceAdminNotFound.WithCause(err)
-	case errors.Is(err, workspaceadmin.ErrTempAdminAlreadyExists):
-		return errTempAdminAlreadyExists.WithCause(err)
-	default:
-		return bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, internalMessage)
-	}
 }

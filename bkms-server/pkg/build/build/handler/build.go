@@ -49,35 +49,10 @@ import (
 var _ build.Handler = (*Handler)(nil)
 
 var (
-	errInvalidCodeRevision = bkerrs.Define(
-		bkerrs.ErrCodeInvalidArgument,
-		"BUILD_BUILD_INVALID_CODE_REVISION",
-		"invalid code revision",
-	)
 	errBuildConfigNotFound = bkerrs.Define(
 		bkerrs.ErrCodeNotFound,
 		"BUILD_BUILD_CONFIG_NOT_FOUND",
 		"build config not found",
-	)
-	errImageReferenceInvalid = bkerrs.Define(
-		bkerrs.ErrCodeInvalidArgument,
-		"BUILD_BUILD_INVALID_IMAGE_REFERENCE",
-		"invalid platform build image reference",
-	)
-	errPlatformBuildImagesInvalid = bkerrs.Define(
-		bkerrs.ErrCodeInvalidArgument,
-		"BUILD_BUILD_PLATFORM_IMAGES_INVALID",
-		"invalid platform build image configuration",
-	)
-	errWorkspaceImageCredentialMissing = bkerrs.Define(
-		bkerrs.ErrCodeInvalidArgument,
-		"BUILD_BUILD_IMAGE_CREDENTIAL_MISSING",
-		"workspace image registry credential is missing",
-	)
-	errCodeRevisionRequired = bkerrs.Define(
-		bkerrs.ErrCodeInvalidRequest,
-		"BUILD_BUILD_CODE_REVISION_REQUIRED",
-		"code revision is required",
 	)
 	errCustomTagPrefixTooLong = bkerrs.Define(
 		bkerrs.ErrCodeInvalidArgument,
@@ -118,11 +93,6 @@ var (
 		bkerrs.ErrCodeInvalidArgument,
 		"BUILD_BUILD_INVALID_SOURCE_TYPE",
 		"invalid source type",
-	)
-	errBuildRecordNotFound = bkerrs.Define(
-		bkerrs.ErrCodeNotFound,
-		"BUILD_BUILD_RECORD_NOT_FOUND",
-		"build record not found",
 	)
 	errBKCIProjectNotFound = bkerrs.Define(
 		bkerrs.ErrCodeNotFound,
@@ -193,7 +163,7 @@ func (h *Handler) UpdateBuildConfig(c *gin.Context) {
 
 	dataBefore, err := h.buildConfigs().Get(ctx, imagebuild.ByApp(app.ID))
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrapf(err, bkerrs.ErrCodeInternalServerError, "get app %s build config", app.ID))
+		bkerrs.AbortWithErr(c, pkgerrors.Wrapf(err, "get app %s build config", app.ID))
 		return
 	}
 
@@ -217,7 +187,7 @@ func (h *Handler) UpdateBuildConfig(c *gin.Context) {
 
 	if err = imagebuild.UpdateConfig(ctx, h.buildConfigs(), cfg); err != nil {
 		bkerrs.AbortWithErr(
-			c, bkerrs.Wrapf(err, bkerrs.ErrCodeInternalServerError, "update app %s build config", app.ID),
+			c, pkgerrors.Wrapf(err, "update app %s build config", app.ID),
 		)
 		return
 	}
@@ -230,23 +200,13 @@ func (h *Handler) UpdateBuildConfig(c *gin.Context) {
 	})
 }
 
-// validatePlatformBuildImages 校验平台构建的 builder / runner 镜像，镜像源故障报内部错误，其余报参数错误
+// validatePlatformBuildImages 校验平台构建的 builder / runner 镜像
 func (h *Handler) validatePlatformBuildImages(
 	ctx context.Context, workspaceID string, cfg *imagebuild.Config,
 ) error {
 	imageReferenceValidator := workloadruntime.NewImageReferenceValidator(h.registry.DB)
 	err := build.ValidatePlatformBuildImages(ctx, imageReferenceValidator, h.persistMgr, cfg, workspaceID)
-	if err == nil {
-		return nil
-	}
-
-	if build.IsImageRegistryFailure(err) {
-		return pkgerrors.Wrap(err, "validate platform build images")
-	}
-	if build.IsImageReferenceInvalid(err) {
-		return errImageReferenceInvalid.WithCause(err)
-	}
-	return errPlatformBuildImagesInvalid.WithCause(err)
+	return pkgerrors.Wrap(err, "validate platform build images")
 }
 
 // ensureCodeRepositoryRegistered 把代码库来源的构建配置登记到蓝盾，登记幂等，其余来源直接跳过
@@ -260,7 +220,7 @@ func (h *Handler) ensureCodeRepositoryRegistered(
 		URL:   cfg.CodeRepo.RepoURL,
 		Alias: cfg.CodeRepo.RepoAlias,
 	}}); err != nil {
-		return bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "ensure bkci repositories")
+		return pkgerrors.Wrap(err, "ensure bkci repositories")
 	}
 	return nil
 }
@@ -341,7 +301,7 @@ func (h *Handler) ListBuildRecords(c *gin.Context) {
 	if err != nil {
 		bkerrs.AbortWithErr(
 			c,
-			bkerrs.Wrapf(err, bkerrs.ErrCodeInternalServerError, "list app %s build records", app.ID),
+			pkgerrors.Wrapf(err, "list app %s build records", app.ID),
 		)
 		return
 	}
@@ -384,7 +344,7 @@ func (h *Handler) CreateBuild(c *gin.Context) {
 	}
 	rev, err := revision.Resolve(input.RevisionType, input.Revision, input.Branch)
 	if err != nil {
-		bkerrs.AbortWithErr(c, errInvalidCodeRevision.WithCause(err))
+		bkerrs.AbortWithErr(c, err)
 		return
 	}
 
@@ -397,7 +357,7 @@ func (h *Handler) CreateBuild(c *gin.Context) {
 
 	buildService, err := h.newBuildService()
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "init build service"))
+		bkerrs.AbortWithErr(c, pkgerrors.Wrap(err, "init build service"))
 		return
 	}
 
@@ -410,18 +370,7 @@ func (h *Handler) CreateBuild(c *gin.Context) {
 		build.StartOptions{},
 	)
 	if err != nil {
-		// StartAndScheduleBuild 内部会跑构建前置校验，镜像引用填错或缺凭证属参数问题，
-		// 与保存构建配置时的错误码保持一致；其余失败仍按内部错误上报
-		switch {
-		case build.IsImageReferenceInvalid(err):
-			bkerrs.AbortWithErr(c, errImageReferenceInvalid.WithCause(err))
-		case pkgerrors.Is(err, build.ErrWorkspaceImageCredentialMissing):
-			bkerrs.AbortWithErr(c, errWorkspaceImageCredentialMissing.WithCause(err))
-		case pkgerrors.Is(err, revision.ErrRequired):
-			bkerrs.AbortWithErr(c, errCodeRevisionRequired.WithCause(err))
-		default:
-			bkerrs.AbortWithErr(c, pkgerrors.Wrap(err, "start and schedule build"))
-		}
+		bkerrs.AbortWithErr(c, pkgerrors.Wrap(err, "start and schedule build"))
 		return
 	}
 
@@ -479,7 +428,7 @@ func (h *Handler) GetRecommendedImageTag(c *gin.Context) {
 		if repoErr != nil {
 			bkerrs.AbortWithErr(
 				c,
-				bkerrs.Wrapf(repoErr, bkerrs.ErrCodeInternalServerError, "resolve image repo info for app %s", app.ID),
+				pkgerrors.Wrapf(repoErr, "resolve image repo info for app %s", app.ID),
 			)
 			return
 		}
@@ -487,7 +436,7 @@ func (h *Handler) GetRecommendedImageTag(c *gin.Context) {
 		tags, listErr := client.ListAllTags(ctx, repoInfo.RepoName)
 		if listErr != nil {
 			bkerrs.AbortWithErr(
-				c, bkerrs.Wrapf(listErr, bkerrs.ErrCodeInternalServerError, "list tags for %s", repoInfo.RepoName),
+				c, pkgerrors.Wrapf(listErr, "list tags for %s", repoInfo.RepoName),
 			)
 			return
 		}

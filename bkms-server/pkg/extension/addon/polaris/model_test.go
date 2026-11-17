@@ -23,6 +23,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/pkg/errors"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris"
 	polarisprovider "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/provider/polaris"
 )
@@ -137,17 +138,23 @@ var _ = Describe("enableWeightFactorFromMetadata", func() {
 	})
 })
 
-var _ = Describe("IsClientRequestError", func() {
-	DescribeTable("classifies imported client errors",
-		func(err error, want bool) {
-			Expect(polaris.IsClientRequestError(err)).To(Equal(want))
+var _ = Describe("ClassifyImportedServiceErr", func() {
+	DescribeTable("classifies imported service errors as client input problems",
+		func(err error, want *bkerrs.Error) {
+			got := polaris.ClassifyImportedServiceErr(err)
+			Expect(got).To(MatchError(err))
+			if want == nil {
+				Expect(bkerrs.FromError(got)).To(BeNil())
+				return
+			}
+			Expect(got).To(MatchError(want))
+			Expect(bkerrs.FromError(got).Code()).To(Equal(bkerrs.ErrCodeInvalidRequest))
 		},
-		Entry("unauthorized", polarisprovider.ErrUnauthorized, true),
-		Entry("service not found", polarisprovider.ErrServiceNotFound, true),
-		Entry("operator empty", polaris.ErrOperatorEmpty, true),
-		Entry("not managed", polaris.ErrNotManaged, true),
-		Entry("wrapped unauthorized", errors.Wrap(polarisprovider.ErrUnauthorized, "update imported"), true),
-		Entry("timeout is not a client error", errors.New("context deadline exceeded"), false),
-		Entry("generic polaris failure", errors.New("polaris api error: status 500"), false),
+		Entry("unauthorized", polarisprovider.ErrUnauthorized, polaris.ErrImportedTokenUnauthorized),
+		Entry("service not found", polarisprovider.ErrServiceNotFound, polaris.ErrImportedServiceNotFound),
+		Entry("wrapped unauthorized",
+			errors.Wrap(polarisprovider.ErrUnauthorized, "update imported"), polaris.ErrImportedTokenUnauthorized),
+		Entry("timeout stays uncoded", errors.New("context deadline exceeded"), nil),
+		Entry("generic polaris failure stays uncoded", errors.New("polaris api error: status 500"), nil),
 	)
 })

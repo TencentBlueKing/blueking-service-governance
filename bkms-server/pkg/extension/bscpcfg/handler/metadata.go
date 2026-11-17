@@ -45,9 +45,6 @@ var (
 		"EXTENSION_BSCPCFG_WORKSPACE_PROJECT_MISSING",
 		"workspace missing bscp project",
 	)
-	errMetadataNotFound = bkerrs.Define(
-		bkerrs.ErrCodeNotFound, "EXTENSION_BSCPCFG_METADATA_NOT_FOUND", "bscpcfg metadata not found",
-	)
 )
 
 // InitMetadata 初始化配置管理（幂等）。
@@ -79,7 +76,7 @@ func (h *Handler) InitMetadata(c *gin.Context) {
 
 	ws, err := store.Of(h.registry.DB, workspace.Meta).Get(ctx, workspace.ByWorkspaceID(app.WorkspaceID))
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrapf(err, bkerrs.ErrCodeInternalServerError, "get workspace"))
+		bkerrs.AbortWithErr(c, errors.Wrapf(err, "get workspace"))
 		return
 	}
 	if ws.BkSystems.BkCCBizID == "" {
@@ -115,7 +112,7 @@ func (h *Handler) InitMetadata(c *gin.Context) {
 		Operator:      auth.MustGetUser(ctx).ID,
 	})
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "init metadata"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "init metadata"))
 		return
 	}
 
@@ -165,17 +162,13 @@ func (h *Handler) PatchMetadata(c *gin.Context) {
 	}
 
 	if err = mgr.PatchMetadata(ctx, app.ID, fields); err != nil {
-		if errors.Is(err, cfgmodel.ErrMetadataNotFound) {
-			bkerrs.AbortWithErr(c, errMetadataNotFound.With("appID", app.ID).WithCause(err))
-			return
-		}
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "update metadata"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "update metadata"))
 		return
 	}
 
 	appConfig, err := store.Of(h.registry.DB, cfgmodel.MetadataMeta).Get(ctx, cfgmodel.ByApp(app.ID))
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get bscpcfg metadata"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "get bscpcfg metadata"))
 		return
 	}
 	ginutils.OK(c, &slz.MetadataResponse{Data: new(slz.MetadataOutput).FromModel(appConfig)})
@@ -215,7 +208,7 @@ func (h *Handler) DeleteMetadata(c *gin.Context) {
 	}
 
 	if err = mgr.DeleteByApp(ctx, app.ID); err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "delete bscpcfg metadata"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "delete bscpcfg metadata"))
 		return
 	}
 
@@ -251,11 +244,7 @@ func (h *Handler) GetMetadata(c *gin.Context) {
 
 	appConfig, err := store.Of(h.registry.DB, cfgmodel.MetadataMeta).Get(ctx, cfgmodel.ByApp(app.ID))
 	if err != nil {
-		if errors.Is(err, cfgmodel.ErrMetadataNotFound) {
-			bkerrs.AbortWithErr(c, errMetadataNotFound.With("appID", app.ID).WithCause(err))
-			return
-		}
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get bscpcfg metadata"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "get bscpcfg metadata"))
 		return
 	}
 

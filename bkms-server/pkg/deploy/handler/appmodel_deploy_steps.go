@@ -21,11 +21,11 @@ package handler
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/hibiken/asynq"
+	"github.com/pkg/errors"
 	"github.com/samber/lo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/autodeploy"
@@ -38,7 +38,6 @@ import (
 	deploypkg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy"
 	appmodeldeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/appmodel"
 	appmodeldeploysvc "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/appmodel/service"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/batchrelease"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/releasestrategy"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/serializer"
 	deploytypes "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/types"
@@ -69,11 +68,6 @@ var (
 		"DEPLOY_INVALID_APP_TYPE",
 		"invalid app type",
 	)
-	errResourceSnapshotNotFound = bkerrs.Define(
-		bkerrs.ErrCodeNotFound,
-		"DEPLOY_RESOURCE_SNAPSHOT_NOT_FOUND",
-		"resource snapshot not found",
-	)
 )
 
 // listAppModelDeployRecords 获取 AppModel 应用部署记录列表
@@ -101,8 +95,8 @@ func (h *Handler) listAppModelDeployRecords(c *gin.Context) {
 		deploytypes.NewestFirst(),
 	)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrapf(
-			err, bkerrs.ErrCodeInternalServerError, "list deploy records for %s",
+		bkerrs.AbortWithErr(c, errors.Wrapf(
+			err, "list deploy records for %s",
 			genDeployInfo(app.WorkspaceID, app.ID, uriInput.EnvName, input.TrafficLaneName),
 		))
 		return
@@ -151,7 +145,7 @@ func (h *Handler) preCheckDeploy(c *gin.Context, expectedFramework string) {
 	checker := h.newDeployPreChecker()
 	result, err := checker.Check(ctx, app, environment)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "pre-check deployment"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "pre-check deployment"))
 		return
 	}
 	ginutils.OK(c, new(serializer.DeployPreCheckOutput).FromModel(result))
@@ -196,14 +190,14 @@ func (h *Handler) createAppModelDeploy(c *gin.Context) {
 			ctx, store.Of(h.registry.DB, releasestrategy.Meta), app.WorkspaceID, input.ReleaseStrategyID,
 		)
 		if err != nil {
-			bkerrs.AbortWithErr(c, batchrelease.APIError(err, "get release strategy"))
+			bkerrs.AbortWithErr(c, errors.Wrap(err, "get release strategy"))
 			return
 		}
 	}
 
 	deployService, err := h.newAppModelDeployService()
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "init appmodel deploy service"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "init appmodel deploy service"))
 		return
 	}
 	deploypkg.TrackEnvAddApp(ctx, h.registry.DB, app.WorkspaceID, uriInput.EnvName, app.ID)
@@ -233,8 +227,8 @@ func (h *Handler) createAppModelDeploy(c *gin.Context) {
 		}), asynq.ProcessIn(appmodeldeploypoll.PollingInterval()),
 	)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(
-			err, bkerrs.ErrCodeInternalServerError, "enqueue polling deploy status task",
+		bkerrs.AbortWithErr(c, errors.Wrap(
+			err, "enqueue polling deploy status task",
 		))
 		return
 	}
@@ -269,7 +263,7 @@ func (h *Handler) deleteAppModelDeploy(c *gin.Context) {
 	if err = deployer.Uninstall(ctx, env, input.TrafficLaneName); err != nil {
 		metricStatus = metrics.StatusErr
 		deployInfo := genDeployInfo(app.WorkspaceID, app.ID, uriInput.EnvName, input.TrafficLaneName)
-		bkerrs.AbortWithErr(c, batchrelease.APIError(err, "uninstall app model app: "+deployInfo))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "uninstall app model app: "+deployInfo))
 		return
 	}
 
@@ -360,8 +354,8 @@ func (h *Handler) listAppModelResourceSnapshots(c *gin.Context) {
 		ctx, snapshots, app.ID, uriInput.DeployID, input.Page, input.PageSize,
 	)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(
-			err, bkerrs.ErrCodeInternalServerError, "list app model resource snapshots",
+		bkerrs.AbortWithErr(c, errors.Wrap(
+			err, "list app model resource snapshots",
 		))
 		return
 	}
@@ -394,12 +388,8 @@ func (h *Handler) getAppModelResourceSnapshot(c *gin.Context) {
 	snapshots := store.Of(h.registry.DB, appmodeldeploy.ResourceSnapshotMeta)
 	row, err := appmodeldeploy.GetSnapshot(ctx, snapshots, app.ID, uriInput.DeployID, uriInput.SnapshotID)
 	if err != nil {
-		if errors.Is(err, appmodeldeploy.ErrResourceSnapshotRowNotFound) {
-			bkerrs.AbortWithErr(c, errResourceSnapshotNotFound.WithCause(err))
-			return
-		}
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(
-			err, bkerrs.ErrCodeInternalServerError, "get app model resource snapshot",
+		bkerrs.AbortWithErr(c, errors.Wrap(
+			err, "get app model resource snapshot",
 		))
 		return
 	}
@@ -444,7 +434,7 @@ func (h *Handler) latestAppModelDeployStatus(
 	// 获取最新一次构建自动部署结果
 	latestBuildAutoDeploy, err := autodeploy.GetLatest(ctx, h.registry.DB, appID, envName, trafficLaneName)
 	if err != nil && !errors.Is(err, autodeploy.ErrRecordNotFound) {
-		return nil, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get latest build auto deploy record")
+		return nil, errors.Wrap(err, "get latest build auto deploy record")
 	}
 	if errors.Is(err, autodeploy.ErrRecordNotFound) {
 		latestBuildAutoDeploy = nil
@@ -453,7 +443,7 @@ func (h *Handler) latestAppModelDeployStatus(
 	// 获取最新一次应用部署结果
 	latestDeploy, err := appmodeldeploy.GetLatest(ctx, h.registry.DB, appID, envName, trafficLaneName)
 	if err != nil && !errors.Is(err, appmodeldeploy.ErrDeployRecordNotFound) {
-		return nil, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get latest app model deploy record")
+		return nil, errors.Wrap(err, "get latest app model deploy record")
 	}
 	if errors.Is(err, appmodeldeploy.ErrDeployRecordNotFound) {
 		latestDeploy = nil
@@ -541,11 +531,7 @@ func toAppModelDeployAPIError(
 		return bkerrs.WrapComponentsNotInstalled(err, components, env.Cluster.ClusterID)
 	}
 	deployInfo := genDeployInfo(app.WorkspaceID, app.ID, env.Name, trafficLaneName)
-	if errors.Is(err, batchrelease.ErrWorkloadNotSupported) ||
-		errors.Is(err, batchrelease.ErrRolloutNotInstalled) {
-		return batchrelease.APIError(err, "batch release app model app: "+deployInfo)
-	}
-	return bkerrs.Wrapf(err, bkerrs.ErrCodeInternalServerError, "deploy app model app: %s", deployInfo)
+	return errors.Wrapf(err, "deploy app model app: %s", deployInfo)
 }
 
 // recordBatchDeployAudit 记录按策略分批部署的操作记录（含策略名称）。

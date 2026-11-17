@@ -30,6 +30,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/releasestrategy"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/gvr"
 	k8skind "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/kind"
@@ -61,7 +62,11 @@ const (
 )
 
 // ErrWorkloadNotSupported 主工作负载不支持分批发布（目前仅支持 GameDeployment）
-var ErrWorkloadNotSupported = errors.New("workload does not support batch release")
+var ErrWorkloadNotSupported = bkerrs.Define(
+	bkerrs.ErrCodeInvalidRequest,
+	"DEPLOY_BATCH_RELEASE_WORKLOAD_NOT_SUPPORTED",
+	"workload does not support batch release",
+)
 
 // BuildManifest 由主工作负载与发布策略的批次生成 Rollout CR，CR 与主工作负载同名。
 //

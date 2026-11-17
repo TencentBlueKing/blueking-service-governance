@@ -21,6 +21,9 @@ ACCOUNT_REFRESH_TOKEN_FAILED:
 ACCOUNT_VALIDATE_TOKEN_FAILED:
   zh: "访问令牌校验失败"
   en: "Failed to validate access token"
+ACCOUNT_BCS_USER_TOKEN_NOT_FOUND:
+  zh: "未找到有效的 BCS 用户访问令牌，请先在 BCS 平台创建"
+  en: "No active BCS user token found, please create one in BCS platform"
 
 # 租户
 TENANT_ID_REQUIRED:

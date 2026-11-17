@@ -21,13 +21,18 @@ package releasestrategy
 import (
 	"slices"
 
-	"github.com/pkg/errors"
 	"github.com/samber/lo"
 	"go.mongodb.org/mongo-driver/v2/bson"
+
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 )
 
 // ErrBuiltinStrategyReadOnly 平台内置发布策略不可修改或删除
-var ErrBuiltinStrategyReadOnly = errors.New("builtin release strategy cannot be modified or deleted")
+var ErrBuiltinStrategyReadOnly = bkerrs.Define(
+	bkerrs.ErrCodeInvalidRequest,
+	"DEPLOY_RELEASE_STRATEGY_BUILTIN_READ_ONLY",
+	"builtin release strategy cannot be modified or deleted",
+)
 
 // builtinStrategies 平台内置发布策略，所有空间可见且只读，按批次数升序。
 //

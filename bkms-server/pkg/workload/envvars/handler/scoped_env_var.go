@@ -21,10 +21,10 @@ package handler
 
 import (
 	"context"
-	"errors"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/pkg/errors"
 	"github.com/samber/lo"
 	"go.mongodb.org/mongo-driver/v2/bson"
 
@@ -50,19 +50,6 @@ var (
 	)
 	errInvalidScopedEnvVarID = bkerrs.Define(
 		bkerrs.ErrCodeInvalidArgument, "WORKLOAD_ENVVARS_INVALID_SCOPED_ENV_VAR_ID", "invalid scoped env var id",
-	)
-	errScopedEnvVarNotFound = bkerrs.Define(
-		bkerrs.ErrCodeNotFound, "WORKLOAD_ENVVARS_SCOPED_ENV_VAR_NOT_FOUND", "scoped env var not found",
-	)
-	errSensitiveEnvVarImmutable = bkerrs.Define(
-		bkerrs.ErrCodeInvalidRequest, "WORKLOAD_ENVVARS_SENSITIVE_IMMUTABLE",
-		"sensitive env var cannot be changed to non-sensitive",
-	)
-	errAppEnvVarKeyExists = bkerrs.Define(
-		bkerrs.ErrCodeAlreadyExists, "WORKLOAD_ENVVARS_APP_ENV_VAR_KEY_EXISTS", "app env var key already exists",
-	)
-	errAppEnvVarNotFound = bkerrs.Define(
-		bkerrs.ErrCodeNotFound, "WORKLOAD_ENVVARS_APP_ENV_VAR_NOT_FOUND", "app env var not found",
 	)
 	errAppTypeUnsupportedEnvVars = bkerrs.Define(
 		bkerrs.ErrCodeInvalidRequest, "WORKLOAD_ENVVARS_APP_TYPE_UNSUPPORTED",
@@ -130,20 +117,14 @@ func (h *Handler) CreateScopedEnvVar(c *gin.Context) {
 		Description: input.Description,
 		IsSensitive: input.IsSensitive,
 	}
-	if err = h.scopedEnvVars().Create(ctx, envVar); err != nil {
-		if errors.Is(err, envvars.ErrScopedEnvVarKeyConflict) {
-			bkerrs.AbortWithErr(c, bkerrs.WrapScopedEnvVarKeyConflict(
-				err, ws.ID, string(envVar.ScopeType), envVar.ScopeValue, envVar.Key,
-			))
-			return
-		}
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "create scoped env var"))
+	if err = envvars.Create(ctx, h.registry.DB, envVar); err != nil {
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "create scoped env var"))
 		return
 	}
 
 	obj, err := h.scopedEnvVars().Get(ctx, envvars.ByID(ws.ID, envVar.ID))
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get created scoped env var"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "get created scoped env var"))
 		return
 	}
 
@@ -206,21 +187,14 @@ func (h *Handler) UpdateScopedEnvVar(c *gin.Context) {
 
 	oldObj, err := h.scopedEnvVars().Get(ctx, envvars.ByID(ws.ID, id))
 	if err != nil {
-		if errors.Is(err, envvars.ErrScopedEnvVarNotFound) {
-			bkerrs.AbortWithErr(
-				c,
-				errScopedEnvVarNotFound.With("scopedEnvVarID", uriInput.ScopedEnvVarID).WithCause(err),
-			)
-			return
-		}
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get scoped env var"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "get scoped env var"))
 		return
 	}
 
 	// Sensitive env vars cannot be downgraded to non-sensitive; they can only be
 	// deleted and recreated.
 	if oldObj.IsSensitive && (input.IsSensitive != nil && !*input.IsSensitive) {
-		bkerrs.AbortWithErr(c, errSensitiveEnvVarImmutable)
+		bkerrs.AbortWithErr(c, appmodel.ErrEnvVarSensitivityImmutable)
 		return
 	}
 
@@ -231,33 +205,13 @@ func (h *Handler) UpdateScopedEnvVar(c *gin.Context) {
 		IsSensitive: input.IsSensitive,
 	}
 	if err = envvars.UpdateByID(ctx, h.registry.DB, ws.ID, id, updateData); err != nil {
-		if errors.Is(err, envvars.ErrScopedEnvVarKeyConflict) {
-			bkerrs.AbortWithErr(c, bkerrs.WrapScopedEnvVarKeyConflict(
-				err, ws.ID, string(oldObj.ScopeType), oldObj.ScopeValue, input.Key,
-			))
-			return
-		}
-		if errors.Is(err, envvars.ErrScopedEnvVarNotFound) {
-			bkerrs.AbortWithErr(
-				c,
-				errScopedEnvVarNotFound.With("scopedEnvVarID", uriInput.ScopedEnvVarID).WithCause(err),
-			)
-			return
-		}
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "update scoped env var"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "update scoped env var"))
 		return
 	}
 
 	updatedObj, err := h.scopedEnvVars().Get(ctx, envvars.ByID(ws.ID, id))
 	if err != nil {
-		if errors.Is(err, envvars.ErrScopedEnvVarNotFound) {
-			bkerrs.AbortWithErr(
-				c,
-				errScopedEnvVarNotFound.With("scopedEnvVarID", uriInput.ScopedEnvVarID).WithCause(err),
-			)
-			return
-		}
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get scoped env var"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "get scoped env var"))
 		return
 	}
 
@@ -314,26 +268,12 @@ func (h *Handler) DeleteScopedEnvVar(c *gin.Context) {
 
 	obj, err := h.scopedEnvVars().Get(ctx, envvars.ByID(ws.ID, id))
 	if err != nil {
-		if errors.Is(err, envvars.ErrScopedEnvVarNotFound) {
-			bkerrs.AbortWithErr(
-				c,
-				errScopedEnvVarNotFound.With("scopedEnvVarID", uriInput.ScopedEnvVarID).WithCause(err),
-			)
-			return
-		}
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get scoped env var"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "get scoped env var"))
 		return
 	}
 
 	if err = h.scopedEnvVars().Delete(ctx, envvars.ByID(ws.ID, id)); err != nil {
-		if errors.Is(err, envvars.ErrScopedEnvVarNotFound) {
-			bkerrs.AbortWithErr(
-				c,
-				errScopedEnvVarNotFound.With("scopedEnvVarID", uriInput.ScopedEnvVarID).WithCause(err),
-			)
-			return
-		}
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "delete scoped env var"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "delete scoped env var"))
 		return
 	}
 
@@ -381,7 +321,7 @@ func (h *Handler) ListPublicScopedEnvVars(c *gin.Context) {
 
 	scopedVars, err := envvars.ListPublic(ctx, h.registry.DB, ws.ID)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list public scoped env vars"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "list public scoped env vars"))
 		return
 	}
 
@@ -424,7 +364,7 @@ func (h *Handler) ListDetailedEnvScopedEnvVars(c *gin.Context) {
 		envvars.WithOrdering("created"),
 	)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list env scoped env vars"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "list env scoped env vars"))
 		return
 	}
 
@@ -448,7 +388,7 @@ func (h *Handler) ListDetailedEnvScopedEnvVars(c *gin.Context) {
 	if err != nil {
 		bkerrs.AbortWithErr(
 			c,
-			bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "build scoped env var conflicted info"),
+			errors.Wrap(err, "build scoped env var conflicted info"),
 		)
 		return
 	}
@@ -496,7 +436,7 @@ func (h *Handler) ListDetailedAppEnvVars(c *gin.Context) {
 		}
 		bkerrs.AbortWithErr(
 			c,
-			bkerrs.Wrapf(err, bkerrs.ErrCodeInternalServerError, "get app model for app id=%s", app.ID),
+			errors.Wrapf(err, "get app model for app id=%s", app.ID),
 		)
 		return
 	}
@@ -519,7 +459,7 @@ func (h *Handler) ListDetailedAppEnvVars(c *gin.Context) {
 	if err != nil {
 		bkerrs.AbortWithErr(
 			c,
-			bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "build app env var conflicted info"),
+			errors.Wrap(err, "build app env var conflicted info"),
 		)
 		return
 	}
@@ -566,7 +506,7 @@ func (h *Handler) ListAppDefinedEnvVars(c *gin.Context) {
 			ginutils.OK(c, serializer.ListAppDefinedEnvVarsOutput{Data: []*serializer.AppDefinedEnvVarOutputObj{}})
 			return
 		}
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list app defined env vars"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "list app defined env vars"))
 		return
 	}
 
@@ -616,15 +556,7 @@ func (h *Handler) CreateAppDefinedEnvVar(c *gin.Context) {
 		IsSensitive: input.IsSensitive,
 	})
 	if err != nil {
-		if errors.Is(err, appmodel.ErrEnvVarKeyExists) {
-			bkerrs.AbortWithErr(c, errAppEnvVarKeyExists.With("key", input.Key).WithCause(err))
-			return
-		}
-		if errors.Is(err, appmodel.ErrAppModelNotFound) {
-			bkerrs.AbortWithErr(c, appmodel.ErrAppModelNotFound.With("appName", app.Name).WithCause(err))
-			return
-		}
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "create app defined env var"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "create app defined env var"))
 		return
 	}
 
@@ -690,23 +622,7 @@ func (h *Handler) UpdateAppDefinedEnvVar(c *gin.Context) {
 		},
 	)
 	if err != nil {
-		if errors.Is(err, appmodel.ErrEnvVarNotFound) {
-			bkerrs.AbortWithErr(c, errAppEnvVarNotFound.With("key", uriInput.Key).WithCause(err))
-			return
-		}
-		if errors.Is(err, appmodel.ErrEnvVarKeyExists) {
-			bkerrs.AbortWithErr(c, errAppEnvVarKeyExists.With("key", input.UpdatedKey).WithCause(err))
-			return
-		}
-		if errors.Is(err, appmodel.ErrEnvVarSensitivityImmutable) {
-			bkerrs.AbortWithErr(c, errSensitiveEnvVarImmutable.WithCause(err))
-			return
-		}
-		if errors.Is(err, appmodel.ErrAppModelNotFound) {
-			bkerrs.AbortWithErr(c, appmodel.ErrAppModelNotFound.With("appName", app.Name).WithCause(err))
-			return
-		}
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "update app defined env var"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "update app defined env var"))
 		return
 	}
 
@@ -760,15 +676,7 @@ func (h *Handler) DeleteAppDefinedEnvVar(c *gin.Context) {
 
 	deletedEnvVar, err := appmodel.NewAppEnvVarService(h.registry.DB).Delete(ctx, app.ID, uriInput.Key)
 	if err != nil {
-		if errors.Is(err, appmodel.ErrEnvVarNotFound) {
-			bkerrs.AbortWithErr(c, errAppEnvVarNotFound.With("key", uriInput.Key).WithCause(err))
-			return
-		}
-		if errors.Is(err, appmodel.ErrAppModelNotFound) {
-			bkerrs.AbortWithErr(c, appmodel.ErrAppModelNotFound.With("appName", app.Name).WithCause(err))
-			return
-		}
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "delete app defined env var"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "delete app defined env var"))
 		return
 	}
 
@@ -820,7 +728,7 @@ func (h *Handler) ListEnvAvailableEnvVars(c *gin.Context) {
 	)
 	envVars, err := reader.ListEnvVars(ctx, *env)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list available env vars"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "list available env vars"))
 		return
 	}
 
@@ -851,7 +759,7 @@ func (h *Handler) validateScopedEnvVarScopeValue(
 		if errors.Is(err, envmodel.ErrEnvNotFound) {
 			return nil, envmodel.ErrEnvNotFound.With("envName", scope.ScopeValue).WithCause(err)
 		}
-		return nil, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get environment by workspace and name")
+		return nil, errors.Wrap(err, "get environment by workspace and name")
 	}
 	return environment, nil
 }

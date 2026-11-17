@@ -21,9 +21,9 @@ package handler
 
 import (
 	"context"
-	"errors"
 
 	"github.com/gin-gonic/gin"
+	"github.com/pkg/errors"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
@@ -36,9 +36,6 @@ import (
 )
 
 var (
-	errAppSpecValidationFailed = bkerrs.Define(
-		bkerrs.ErrCodeInvalidRequest, "WORKLOAD_APPSPEC_VALIDATION_FAILED", "app spec validation failed",
-	)
 	errEnvAppSpecSectionNotFound = bkerrs.Define(
 		bkerrs.ErrCodeNotFound, "WORKLOAD_APPSPEC_ENV_SECTION_NOT_FOUND", "env app spec section not found",
 	)
@@ -97,7 +94,7 @@ func getDefaultSection[T, O any](
 	if err != nil {
 		bkerrs.AbortWithErr(
 			c,
-			bkerrs.Wrapf(err, bkerrs.ErrCodeInternalServerError, "getting default %s", sectionName),
+			errors.Wrapf(err, "getting default %s", sectionName),
 		)
 		return
 	}
@@ -135,7 +132,7 @@ func setDefaultSection[T, I any](
 	if err != nil {
 		bkerrs.AbortWithErr(
 			c,
-			bkerrs.Wrapf(err, bkerrs.ErrCodeInternalServerError, "getting default %s before update", sectionName),
+			errors.Wrapf(err, "getting default %s before update", sectionName),
 		)
 		return
 	}
@@ -149,13 +146,9 @@ func setDefaultSection[T, I any](
 		newSection,
 		appspec.SectionWriteModeReplace,
 	); err != nil {
-		if errors.Is(err, appspec.ErrAppSpecValidation) {
-			bkerrs.AbortWithErr(c, errAppSpecValidationFailed.With("section", sectionName).WithCause(err))
-			return
-		}
 		bkerrs.AbortWithErr(
 			c,
-			bkerrs.Wrapf(err, bkerrs.ErrCodeInternalServerError, "setting default %s", sectionName),
+			errors.Wrapf(err, "setting default %s", sectionName),
 		)
 		return
 	}
@@ -194,7 +187,7 @@ func getEnvSection[T, O any](
 		}
 		bkerrs.AbortWithErr(
 			c,
-			bkerrs.Wrapf(err, bkerrs.ErrCodeInternalServerError, "getting env %s", sectionName),
+			errors.Wrapf(err, "getting env %s", sectionName),
 		)
 		return
 	}
@@ -238,7 +231,7 @@ func getEnvEffectiveSection[T, O any](
 	if err != nil {
 		bkerrs.AbortWithErr(
 			c,
-			bkerrs.Wrapf(err, bkerrs.ErrCodeInternalServerError, "getting env effective %s", sectionName),
+			errors.Wrapf(err, "getting env effective %s", sectionName),
 		)
 		return
 	}
@@ -284,7 +277,7 @@ func setEnvSectionChecked[T, I any](
 	if err != nil && !errors.Is(err, appspec.ErrAppSpecNotFound) {
 		bkerrs.AbortWithErr(
 			c,
-			bkerrs.Wrapf(err, bkerrs.ErrCodeInternalServerError, "getting env %s before update", sectionName),
+			errors.Wrapf(err, "getting env %s before update", sectionName),
 		)
 		return
 	}
@@ -305,11 +298,7 @@ func setEnvSectionChecked[T, I any](
 		newSection,
 		appspec.SectionWriteModeReplace,
 	); err != nil {
-		if errors.Is(err, appspec.ErrAppSpecValidation) {
-			bkerrs.AbortWithErr(c, errAppSpecValidationFailed.With("section", sectionName).WithCause(err))
-			return
-		}
-		bkerrs.AbortWithErr(c, bkerrs.Wrapf(err, bkerrs.ErrCodeInternalServerError, "setting env %s", sectionName))
+		bkerrs.AbortWithErr(c, errors.Wrapf(err, "setting env %s", sectionName))
 		return
 	}
 	addAppSpecAudit(ctx, app, env.Name, audit.OperationTypeUpdate, oldSection, newSection)
@@ -340,7 +329,7 @@ func deleteEnvSection[T any](
 	if err != nil && !errors.Is(err, appspec.ErrAppSpecNotFound) {
 		bkerrs.AbortWithErr(
 			c,
-			bkerrs.Wrapf(err, bkerrs.ErrCodeInternalServerError, "getting env %s before deletion", sectionName),
+			errors.Wrapf(err, "getting env %s before deletion", sectionName),
 		)
 		return
 	}
@@ -354,11 +343,7 @@ func deleteEnvSection[T any](
 		nil,
 		appspec.SectionWriteModeReplace,
 	); err != nil {
-		if errors.Is(err, appspec.ErrAppSpecValidation) {
-			bkerrs.AbortWithErr(c, errAppSpecValidationFailed.With("section", sectionName).WithCause(err))
-			return
-		}
-		bkerrs.AbortWithErr(c, bkerrs.Wrapf(err, bkerrs.ErrCodeInternalServerError, "deleting env %s", sectionName))
+		bkerrs.AbortWithErr(c, errors.Wrapf(err, "deleting env %s", sectionName))
 		return
 	}
 	if oldSection != nil {

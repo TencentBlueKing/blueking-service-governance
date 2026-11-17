@@ -180,7 +180,10 @@ func (h *APIHandler) GetCurrentUser(c *gin.Context) {
 		return
 	}
 	if !result.RequestUser.IsAuthenticated() {
-		bkerrs.WriteError(c, auth.ErrUnauthenticated.WithCause(errors.New(result.ErrorMsg)))
+		// 调用方依赖 login_url 跳转登录，通过错误参数输出到 details[0].extras.login_url
+		bkerrs.WriteError(
+			c, auth.ErrUnauthenticated.With("login_url", result.LoginURL).WithCause(errors.New(result.ErrorMsg)),
+		)
 		return
 	}
 	// tenant_id 为空表示认证上游未返回租户（如单租户环境的 bk-login）

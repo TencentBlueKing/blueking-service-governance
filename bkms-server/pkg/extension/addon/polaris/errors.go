@@ -21,24 +21,50 @@ package polaris
 import (
 	"github.com/pkg/errors"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	polarisprovider "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/provider/polaris"
 )
 
 var (
 	// ErrConfigNotFound 北极星配置不存在
-	ErrConfigNotFound = errors.New("polaris config not found")
+	ErrConfigNotFound = bkerrs.Define(
+		bkerrs.ErrCodeNotFound, "EXTENSION_POLARIS_CONFIG_NOT_FOUND", "polaris config not found",
+	)
 	// ErrConfigNameExists 北极星配置名称已存在
-	ErrConfigNameExists = errors.New("polaris config name already exists")
+	ErrConfigNameExists = bkerrs.Define(
+		bkerrs.ErrCodeInvalidRequest, "EXTENSION_POLARIS_CONFIG_NAME_EXISTS", "polaris config name already exists",
+	)
 	// ErrOperatorEmpty 不允许将负责人清空
-	ErrOperatorEmpty = errors.New("operator cannot be empty")
+	ErrOperatorEmpty = bkerrs.Define(
+		bkerrs.ErrCodeInvalidRequest, "EXTENSION_POLARIS_OPERATOR_EMPTY", "operator cannot be empty",
+	)
 	// ErrNotManaged 部分字段仅平台创建的北极星服务允许修改
-	ErrNotManaged = errors.New("field can only be set for platform-created polaris services")
+	ErrNotManaged = bkerrs.Define(
+		bkerrs.ErrCodeInvalidRequest,
+		"EXTENSION_POLARIS_NOT_MANAGED",
+		"field can only be set for platform-created polaris services",
+	)
+	// ErrImportedTokenUnauthorized 引入已有服务时用户提供的 Token 无效或没有写权限
+	ErrImportedTokenUnauthorized = bkerrs.Define(
+		bkerrs.ErrCodeInvalidRequest,
+		"EXTENSION_POLARIS_TOKEN_UNAUTHORIZED",
+		"polaris token is invalid or has no write permission",
+	)
+	// ErrImportedServiceNotFound 引入已有服务时用户指定的北极星服务不存在
+	ErrImportedServiceNotFound = bkerrs.Define(
+		bkerrs.ErrCodeInvalidRequest, "EXTENSION_POLARIS_SERVICE_NOT_FOUND", "polaris service not found",
+	)
 )
 
-// IsClientRequestError 调用方输入问题（Token、权限、服务不存在、不允许改的字段），handler 映射为 400。
-func IsClientRequestError(err error) bool {
-	return errors.Is(err, polarisprovider.ErrUnauthorized) ||
-		errors.Is(err, polarisprovider.ErrServiceNotFound) ||
-		errors.Is(err, ErrOperatorEmpty) ||
-		errors.Is(err, ErrNotManaged)
+// classifyImportedServiceErr 为引入已有服务的北极星调用定码：服务名与 Token 都由用户提供，
+// 鉴权失败和服务不存在属于调用方输入问题；平台创建的服务使用平台 Token，不经过这里
+func classifyImportedServiceErr(err error) error {
+	switch {
+	case errors.Is(err, polarisprovider.ErrUnauthorized):
+		return ErrImportedTokenUnauthorized.WithCause(err)
+	case errors.Is(err, polarisprovider.ErrServiceNotFound):
+		return ErrImportedServiceNotFound.WithCause(err)
+	default:
+		return err
+	}
 }

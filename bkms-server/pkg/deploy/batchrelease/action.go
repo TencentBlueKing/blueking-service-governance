@@ -23,18 +23,36 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
+
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 )
 
 var (
 	// ErrBatchReleaseInProgress 分批发布进行中，拒绝实例更新、删除实例、手动扩缩容等冲突操作
-	ErrBatchReleaseInProgress = errors.New("batch release is in progress, complete, skip or roll it back first")
+	ErrBatchReleaseInProgress = bkerrs.Define(
+		bkerrs.ErrCodeInvalidRequest,
+		"DEPLOY_BATCH_RELEASE_IN_PROGRESS",
+		"batch release is in progress, complete, skip or roll it back first",
+	)
 	// ErrNoBatchReleaseInProgress 当前没有进行中的分批发布，无法执行手动操作
-	ErrNoBatchReleaseInProgress = errors.New("no batch release is in progress")
+	ErrNoBatchReleaseInProgress = bkerrs.Define(
+		bkerrs.ErrCodeInvalidRequest,
+		"DEPLOY_BATCH_RELEASE_NOT_IN_PROGRESS",
+		"no batch release is in progress",
+	)
 	// ErrActionNotAllowed 当前批次状态不满足手动操作的前置条件
-	ErrActionNotAllowed = errors.New("batch release action is not allowed in current state")
+	ErrActionNotAllowed = bkerrs.Define(
+		bkerrs.ErrCodeInvalidRequest,
+		"DEPLOY_BATCH_RELEASE_ACTION_NOT_ALLOWED",
+		"batch release action is not allowed in current state",
+	)
 	// ErrReleaseSwitching 集群中的 Rollout 不属于最新部署记录：再次部署时部署记录先于 Rollout 切换，
 	// 此时 Rollout 仍是上一次发布的，不能执行手动操作
-	ErrReleaseSwitching = errors.New("batch release is switching to the latest deploy, please retry later")
+	ErrReleaseSwitching = bkerrs.Define(
+		bkerrs.ErrCodeAborted,
+		"DEPLOY_BATCH_RELEASE_SWITCHING",
+		"batch release is switching to the latest deploy, please retry later",
+	)
 )
 
 // Action 分批发布手动操作类型

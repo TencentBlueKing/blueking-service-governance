@@ -111,18 +111,12 @@ func (h *Handler) prepareBuildLogDeps(
 
 	bkciClient, err := bkciapi.New(auth.MustGetUser(ctx))
 	if err != nil {
-		return nil, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "init bkci client")
+		return nil, errors.Wrap(err, "init bkci client")
 	}
 
 	record, err := store.Of(h.registry.DB, helmchartbuild.RecordMeta).
 		Get(ctx, helmchartbuild.ByBuild(app.ID, uriInput.BuildID))
 	if err != nil {
-		if errors.Is(err, helmchartbuild.ErrRecordNotFound) {
-			return nil, errChartBuildRecordNotFound.
-				With("appID", app.ID).
-				With("buildID", uriInput.BuildID).
-				WithCause(err)
-		}
 		return nil, errors.Wrap(err, "get chart build record")
 	}
 	project, err := store.Of(h.registry.DB, bkciproject.ProjectMeta).

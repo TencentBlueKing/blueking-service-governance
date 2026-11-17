@@ -20,12 +20,10 @@
 package handler
 
 import (
-	"errors"
-
 	"github.com/gin-gonic/gin"
+	"github.com/pkg/errors"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
-	bkmsworkspace "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/platmgt/workspace/imageregistry"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/platmgt/workspace/imageregistry/serializer"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
@@ -66,7 +64,7 @@ func (h *Handler) GetPlatWorkspaceImageRegistry(c *gin.Context) {
 
 	reg, err := h.manager().Get(c.Request.Context(), path.WorkspaceID)
 	if err != nil {
-		bkerrs.AbortWithErr(c, toAPIError(err, "get platform workspace image registry"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "get platform workspace image registry"))
 		return
 	}
 
@@ -102,7 +100,7 @@ func (h *Handler) UpdatePlatWorkspaceImageRegistry(c *gin.Context) {
 		Password: input.Password,
 	})
 	if err != nil {
-		bkerrs.AbortWithErr(c, toAPIError(err, "update platform workspace image registry"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "update platform workspace image registry"))
 		return
 	}
 
@@ -111,66 +109,4 @@ func (h *Handler) UpdatePlatWorkspaceImageRegistry(c *gin.Context) {
 
 func (h *Handler) manager() *imageregistry.Manager {
 	return imageregistry.NewManager(h.registry.DB)
-}
-
-var (
-	errInvalidRegistryAddress = bkerrs.Define(
-		bkerrs.ErrCodeInvalidArgument,
-		"PLATMGT_IMAGE_REGISTRY_INVALID_ADDRESS",
-		"invalid image registry address, expected host/namespace without a protocol prefix",
-	)
-	errRegistryPasswordRequired = bkerrs.Define(
-		bkerrs.ErrCodeInvalidArgument,
-		"PLATMGT_IMAGE_REGISTRY_PASSWORD_REQUIRED",
-		"image registry password is required",
-	)
-	errBuiltinRegistryNotFound = bkerrs.Define(
-		bkerrs.ErrCodeInvalidRequest,
-		"PLATMGT_BUILTIN_IMAGE_REGISTRY_NOT_FOUND",
-		"builtin image registry not found",
-	)
-	errRegistryAuthFailed = bkerrs.Define(
-		bkerrs.ErrCodeInvalidRequest,
-		"PLATMGT_IMAGE_REGISTRY_AUTH_FAILED",
-		"image registry authentication failed or push permission denied",
-	)
-	errRegistryNamespaceInaccessible = bkerrs.Define(
-		bkerrs.ErrCodeInvalidRequest,
-		"PLATMGT_IMAGE_REGISTRY_NAMESPACE_INACCESSIBLE",
-		"image registry namespace does not exist or is inaccessible",
-	)
-	errRegistryUnreachable = bkerrs.Define(
-		bkerrs.ErrCodeInvalidRequest,
-		"PLATMGT_IMAGE_REGISTRY_UNREACHABLE",
-		"image registry is unreachable",
-	)
-	errBkCICredentialCreateFailed = bkerrs.Define(
-		bkerrs.ErrCodeInvalidRequest,
-		"PLATMGT_IMAGE_REGISTRY_CREDENTIAL_CREATE_FAILED",
-		"failed to create bkci image credential",
-	)
-)
-
-// toAPIError 把 Manager 的错误映射为接口错误。
-func toAPIError(err error, internalMessage string) error {
-	switch {
-	case errors.Is(err, bkmsworkspace.ErrWorkspaceNotFound):
-		return bkmsworkspace.ErrWorkspaceNotFound.WithCause(err)
-	case errors.Is(err, imageregistry.ErrInvalidRegistryAddress):
-		return errInvalidRegistryAddress.WithCause(err)
-	case errors.Is(err, imageregistry.ErrPasswordRequired):
-		return errRegistryPasswordRequired.WithCause(err)
-	case errors.Is(err, imageregistry.ErrBuiltinRegistryNotFound):
-		return errBuiltinRegistryNotFound.WithCause(err)
-	case errors.Is(err, imageregistry.ErrRegistryAuthFailed):
-		return errRegistryAuthFailed.WithCause(err)
-	case errors.Is(err, imageregistry.ErrRegistryNamespaceInaccessible):
-		return errRegistryNamespaceInaccessible.WithCause(err)
-	case errors.Is(err, imageregistry.ErrRegistryUnreachable):
-		return errRegistryUnreachable.WithCause(err)
-	case errors.Is(err, imageregistry.ErrBkCICredentialCreateFailed):
-		return errBkCICredentialCreateFailed.WithCause(err)
-	default:
-		return bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, internalMessage)
-	}
 }

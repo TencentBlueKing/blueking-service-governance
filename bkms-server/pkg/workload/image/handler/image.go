@@ -54,16 +54,8 @@ import (
 
 var _ image.Handler = (*Handler)(nil)
 
-var (
-	errImageRepoNotFound = bkerrs.Define(
-		bkerrs.ErrCodeNotFound, "WORKLOAD_IMAGE_REPO_NOT_FOUND", "image repository is empty or not found",
-	)
-	errImagePromoteTagNotFound = bkerrs.Define(
-		bkerrs.ErrCodeNotFound, "WORKLOAD_IMAGE_PROMOTE_TAG_NOT_FOUND", "image tag not found in app images",
-	)
-	errImageTagNotFound = bkerrs.Define(
-		bkerrs.ErrCodeNotFound, "WORKLOAD_IMAGE_TAG_NOT_FOUND", "image tag not found",
-	)
+var errImageTagNotFound = bkerrs.Define(
+	bkerrs.ErrCodeNotFound, "WORKLOAD_IMAGE_TAG_NOT_FOUND", "image tag not found",
 )
 
 // Handler handles Gin build and image API requests.
@@ -123,7 +115,7 @@ func (h *Handler) ListAppImages(c *gin.Context) {
 	if err != nil {
 		bkerrs.AbortWithErr(
 			c,
-			bkerrs.Wrapf(err, bkerrs.ErrCodeInternalServerError, "list app %s images", uriInput.AppID),
+			errors.Wrapf(err, "list app %s images", uriInput.AppID),
 		)
 		return
 	}
@@ -132,14 +124,14 @@ func (h *Handler) ListAppImages(c *gin.Context) {
 	if err != nil {
 		bkerrs.AbortWithErr(
 			c,
-			bkerrs.Wrapf(err, bkerrs.ErrCodeInternalServerError, "build promotion map for app %s", uriInput.AppID),
+			errors.Wrapf(err, "build promotion map for app %s", uriInput.AppID),
 		)
 		return
 	}
 
 	envMap, err := envmodel.GetAppEnvMap(ctx, h.registry.DB, app.WorkspaceID, app.ID)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list environments"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "list environments"))
 		return
 	}
 	productionEnvNames := serializer.ProductionEnvNames(envMap)
@@ -148,7 +140,7 @@ func (h *Handler) ListAppImages(c *gin.Context) {
 	if err != nil {
 		bkerrs.AbortWithErr(
 			c,
-			bkerrs.Wrapf(err, bkerrs.ErrCodeInternalServerError, "build deployed envs map for app %s", uriInput.AppID),
+			errors.Wrapf(err, "build deployed envs map for app %s", uriInput.AppID),
 		)
 		return
 	}
@@ -214,16 +206,6 @@ func (h *Handler) RefreshAppImages(c *gin.Context) {
 	result, err := snapshotService.RefreshAppSnapshots(ctx, uriInput.AppID)
 	if err != nil {
 		metricStatus = metrics.StatusErr
-		if errors.Is(err, snapshot.ErrRepoNotFound) {
-			err = errImageRepoNotFound.With("appID", uriInput.AppID).WithCause(err).SetDetails(
-				bkerrs.NewDetail(
-					bkerrs.ErrDetailCodeImageRepositoryNotFound,
-					"image repository is empty or not found",
-					bkerrs.WithSystem(bkerrs.SystemName),
-					bkerrs.WithModule(bkerrs.ModuleName),
-				),
-			)
-		}
 		bkerrs.AbortWithErr(c, err)
 		return
 	}
@@ -267,7 +249,7 @@ func (h *Handler) PromoteAppImage(c *gin.Context) {
 	if err != nil {
 		bkerrs.AbortWithErr(
 			c,
-			bkerrs.Wrapf(err, bkerrs.ErrCodeInternalServerError, "resolve repo key for app %s", app.ID),
+			errors.Wrapf(err, "resolve repo key for app %s", app.ID),
 		)
 		return
 	}
@@ -281,16 +263,9 @@ func (h *Handler) PromoteAppImage(c *gin.Context) {
 		uriInput.Tag,
 		auth.MustGetUser(ctx).ID,
 	); err != nil {
-		if errors.Is(err, promotion.ErrImageTagNotFound) {
-			bkerrs.AbortWithErr(
-				c,
-				errImagePromoteTagNotFound.With("tag", uriInput.Tag).With("appID", app.ID).WithCause(err),
-			)
-			return
-		}
 		bkerrs.AbortWithErr(
 			c,
-			bkerrs.Wrapf(err, bkerrs.ErrCodeInternalServerError, "promote image %s:%s", app.ID, uriInput.Tag),
+			errors.Wrapf(err, "promote image %s:%s", app.ID, uriInput.Tag),
 		)
 		return
 	}
@@ -494,8 +469,8 @@ func (h *Handler) ListImageTagDeployRecords(c *gin.Context) {
 			deploytypes.NewestFirst(),
 		)
 		if listErr != nil {
-			bkerrs.AbortWithErr(c, bkerrs.Wrapf(
-				listErr, bkerrs.ErrCodeInternalServerError,
+			bkerrs.AbortWithErr(c, errors.Wrapf(
+				listErr,
 				"list helm deploy records for app %s tag %s", uriInput.AppID, uriInput.Tag,
 			))
 			return
@@ -553,7 +528,7 @@ func (h *Handler) ListDeployableImageTags(c *gin.Context) {
 	if err != nil {
 		bkerrs.AbortWithErr(
 			c,
-			bkerrs.Wrapf(err, bkerrs.ErrCodeInternalServerError, "resolve repo key for app %s", app.ID),
+			errors.Wrapf(err, "resolve repo key for app %s", app.ID),
 		)
 		return
 	}
@@ -567,7 +542,7 @@ func (h *Handler) ListDeployableImageTags(c *gin.Context) {
 		if listErr != nil {
 			bkerrs.AbortWithErr(
 				c,
-				bkerrs.Wrapf(listErr, bkerrs.ErrCodeInternalServerError, "list promoted tags for app %s", app.ID),
+				errors.Wrapf(listErr, "list promoted tags for app %s", app.ID),
 			)
 			return
 		}
@@ -583,8 +558,8 @@ func (h *Handler) ListDeployableImageTags(c *gin.Context) {
 		conds...,
 	)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrapf(
-			err, bkerrs.ErrCodeInternalServerError, "list deployable image tags for app %s env %s", app.ID, env.Name,
+		bkerrs.AbortWithErr(c, errors.Wrapf(
+			err, "list deployable image tags for app %s env %s", app.ID, env.Name,
 		))
 		return
 	}

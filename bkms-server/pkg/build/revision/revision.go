@@ -23,6 +23,8 @@ import (
 	"regexp"
 
 	"github.com/pkg/errors"
+
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 )
 
 // Type 代码来源类型，取值与接口字段 revisionType 一致
@@ -51,11 +53,19 @@ const imageTagCommitIDLen = 7
 var commitIDRegexp = regexp.MustCompile(`^[0-9a-fA-F]{7,40}$`)
 
 // ErrInvalidCommitID CommitID 格式不合法
-var ErrInvalidCommitID = errors.New("commit id must be 7-40 hexadecimal characters")
+var ErrInvalidCommitID = bkerrs.Define(
+	bkerrs.ErrCodeInvalidArgument,
+	"BUILD_INVALID_CODE_REVISION",
+	"commit id must be 7-40 hexadecimal characters",
+)
 
 // ErrRequired 构建未指定代码修订
 // 镜像构建只在代码仓库模式下返回；Helm Chart 构建始终要求有修订
-var ErrRequired = errors.New("code revision is required")
+var ErrRequired = bkerrs.Define(
+	bkerrs.ErrCodeInvalidRequest,
+	"BUILD_CODE_REVISION_REQUIRED",
+	"code revision is required",
+)
 
 // CodeRevision 一次构建使用的代码修订
 type CodeRevision struct {

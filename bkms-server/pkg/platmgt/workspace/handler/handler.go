@@ -20,9 +20,8 @@
 package handler
 
 import (
-	"errors"
-
 	"github.com/gin-gonic/gin"
+	"github.com/pkg/errors"
 	"github.com/samber/lo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
@@ -75,7 +74,7 @@ func (h *GinHandler) ListPlatWorkspaces(c *gin.Context) {
 
 	items, err := h.service().List(c.Request.Context(), query.ToListOptions())
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list platform workspaces"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "list platform workspaces"))
 		return
 	}
 
@@ -113,7 +112,7 @@ func (h *GinHandler) GetPlatWorkspaceStats(c *gin.Context) {
 	if err != nil {
 		bkerrs.AbortWithErr(
 			c,
-			bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get platform workspace state statistics"),
+			errors.Wrap(err, "get platform workspace state statistics"),
 		)
 		return
 	}
@@ -156,7 +155,7 @@ func (h *GinHandler) GetPlatWorkspace(c *gin.Context) {
 				c, bkmsworkspace.ErrWorkspaceNotFound.With("workspaceID", path.WorkspaceID).WithCause(err),
 			)
 		} else {
-			bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get platform workspace"))
+			bkerrs.AbortWithErr(c, errors.Wrap(err, "get platform workspace"))
 		}
 		return
 	}

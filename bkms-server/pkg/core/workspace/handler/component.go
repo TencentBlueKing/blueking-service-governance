@@ -20,10 +20,10 @@
 package handler
 
 import (
-	"errors"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/pkg/errors"
 	"github.com/samber/lo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
@@ -36,11 +36,6 @@ import (
 )
 
 var (
-	errComponentDefNotFound = bkerrs.Define(
-		bkerrs.ErrCodeNotFound,
-		"CORE_WORKSPACE_COMPONENT_DEF_NOT_FOUND",
-		"component def not found",
-	)
 	errWorkspaceComponentNotFound = bkerrs.Define(
 		bkerrs.ErrCodeNotFound,
 		"CORE_WORKSPACE_COMPONENT_NOT_FOUND",
@@ -77,22 +72,15 @@ func (h *Handler) CreateWorkspaceComponent(c *gin.Context) {
 
 	ctx := c.Request.Context()
 	newComp := input.ToModel(uriInput.WorkspaceID)
-	if _, err := store.Of(h.registry.DB, component.ComponentDefMeta).
-		Get(ctx, component.ByNameVersion(newComp.Type, newComp.Version),
-			store.TenantWithPlatform(component.BuiltinShared())); err != nil {
-		if errors.Is(err, component.ErrComponentDefNotFound) {
-			bkerrs.AbortWithErr(
-				c,
-				errComponentDefNotFound.With("type", newComp.Type).With("version", newComp.Version).WithCause(err),
-			)
-			return
-		}
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get component def"))
+	if _, err := component.GetDef(
+		ctx, store.Of(h.registry.DB, component.ComponentDefMeta), newComp.Type, newComp.Version,
+	); err != nil {
+		bkerrs.AbortWithErr(c, err)
 		return
 	}
 
 	if err := workspace.AddComponents(ctx, h.registry.DB, newComp); err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "add workspace component"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "add workspace component"))
 		return
 	}
 
@@ -147,13 +135,13 @@ func (h *Handler) PatchWorkspaceComponent(c *gin.Context) {
 			)
 			return
 		}
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get workspace component"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "get workspace component"))
 		return
 	}
 
 	updateData := input.ToModel()
 	if err = workspace.UpdateComponent(ctx, h.registry.DB, oldComp.ID, updateData); err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "update workspace component"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "update workspace component"))
 		return
 	}
 
@@ -198,7 +186,7 @@ func (h *Handler) DeleteWorkspaceComponent(c *gin.Context) {
 			ginutils.OK(c, serializer.EmptyOutput{})
 			return
 		}
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get workspace component"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "get workspace component"))
 		return
 	}
 
@@ -206,7 +194,7 @@ func (h *Handler) DeleteWorkspaceComponent(c *gin.Context) {
 	compRefResolver := workspace.NewComponentRefResolver(h.registry.DB)
 	compRefMap, err := compRefResolver.BuildRefMap(ctx, uriInput.WorkspaceID)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "build component ref map"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "build component ref map"))
 		return
 	}
 	if len(compRefMap[oldComp.Name]) > 0 {
@@ -215,7 +203,7 @@ func (h *Handler) DeleteWorkspaceComponent(c *gin.Context) {
 	}
 
 	if err = workspace.RemoveComponents(ctx, h.registry.DB, oldComp.ID); err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "remove workspace component"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "remove workspace component"))
 		return
 	}
 
@@ -254,14 +242,14 @@ func (h *Handler) ListWorkspaceComponents(c *gin.Context) {
 	ctx := c.Request.Context()
 	comps, err := h.components().List(ctx, workspace.ComponentsIn(uriInput.WorkspaceID))
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list workspace components"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "list workspace components"))
 		return
 	}
 
 	compRefResolver := workspace.NewComponentRefResolver(h.registry.DB)
 	compRefMap, err := compRefResolver.BuildRefMap(ctx, uriInput.WorkspaceID)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "build component ref map"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "build component ref map"))
 		return
 	}
 

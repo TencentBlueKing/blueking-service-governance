@@ -21,12 +21,17 @@ package appmodel
 import (
 	"time"
 
-	"github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/v2/bson"
+
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 )
 
 // ErrResourceSnapshotRowNotFound 指定快照行不存在或不属于该应用
-var ErrResourceSnapshotRowNotFound = errors.New("app model resource snapshot row not found")
+var ErrResourceSnapshotRowNotFound = bkerrs.Define(
+	bkerrs.ErrCodeNotFound,
+	"DEPLOY_RESOURCE_SNAPSHOT_NOT_FOUND",
+	"resource snapshot not found",
+)
 
 // ResourceSnapshot 资源清单快照
 // 每一条记录对应一个资源清单快照，一次部署有多个资源清单快照

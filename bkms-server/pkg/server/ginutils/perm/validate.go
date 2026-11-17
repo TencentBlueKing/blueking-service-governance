@@ -21,8 +21,8 @@ package perm
 
 import (
 	"context"
-	"errors"
 
+	"github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/v2/bson"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
@@ -141,7 +141,7 @@ func getWorkspaceByID(
 		if errors.Is(err, workspace.ErrWorkspaceNotFound) {
 			return nil, workspace.ErrWorkspaceNotFound.With("workspaceID", workspaceID).WithCause(err)
 		}
-		return nil, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get workspace")
+		return nil, errors.Wrap(err, "get workspace")
 	}
 	return ws, nil
 }
@@ -177,7 +177,7 @@ func ValidateEnvByID(
 		if errors.Is(err, envmodel.ErrEnvNotFound) {
 			return nil, envmodel.ErrEnvNotFound.With("envID", envID).WithCause(err)
 		}
-		return nil, bkerrs.Wrapf(err, bkerrs.ErrCodeInternalServerError, "get environment %s", envID)
+		return nil, errors.Wrapf(err, "get environment %s", envID)
 	}
 
 	permMgr := perm.NewManager()
@@ -225,7 +225,7 @@ func ValidateAppByID(
 		if errors.Is(err, bkmsapp.ErrAppNotFound) {
 			return nil, bkmsapp.ErrAppNotFound.With("appID", appID).WithCause(err)
 		}
-		return nil, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get app")
+		return nil, errors.Wrap(err, "get app")
 	}
 
 	permMgr := perm.NewManager()
@@ -278,7 +278,7 @@ func ValidateAppEnvByName(
 		if errors.Is(err, envmodel.ErrEnvNotFound) {
 			return nil, nil, envmodel.ErrEnvNotFound.With("envName", envName).WithCause(err)
 		}
-		return nil, nil, bkerrs.Wrapf(err, bkerrs.ErrCodeInternalServerError, "get env %s by name", envName)
+		return nil, nil, errors.Wrapf(err, "get env %s by name", envName)
 	}
 	return app, env, nil
 }

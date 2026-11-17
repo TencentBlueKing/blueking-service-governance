@@ -28,6 +28,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkci/pipelineparam"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/utils/crypto"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
@@ -37,7 +38,7 @@ var (
 	// ErrConfigNotFound 构建配置未找到
 	ErrConfigNotFound = errors.New("build config not found")
 	// ErrRecordNotFound 构建记录未找到。调用方据此区分「记录不存在」与 DB 瞬时故障
-	ErrRecordNotFound = errors.New("build record not found")
+	ErrRecordNotFound = bkerrs.Define(bkerrs.ErrCodeNotFound, "BUILD_BUILD_RECORD_NOT_FOUND", "build record not found")
 )
 
 // ConfigStore 构建配置存储

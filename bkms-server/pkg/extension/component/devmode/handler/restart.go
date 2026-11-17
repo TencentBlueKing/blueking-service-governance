@@ -129,7 +129,7 @@ func (h *Handler) RestartDevModeProcesses(c *gin.Context) {
 		ctx, app.ID, auth.MustGetUser(ctx).ID, buildRestartTargets(envTargets),
 	)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "prepare devmode restart records"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "prepare devmode restart records"))
 		return
 	}
 
@@ -155,7 +155,7 @@ func (h *Handler) RestartDevModeProcesses(c *gin.Context) {
 		for _, item := range prepared {
 			restarter.MarkFailed(ctx, item.RecordID, fmt.Sprintf("failed to enqueue restart task: %v", err))
 		}
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "enqueue devmode restart task"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "enqueue devmode restart task"))
 		return
 	}
 
@@ -202,7 +202,7 @@ func (h *Handler) resolveRestartTargetsByEnvTypes(
 	envs, err := store.Of(h.registry.DB, envmodel.EnvMeta).
 		List(ctx, envmodel.InWorkspace(app.WorkspaceID), envmodel.AvailableToApp(app.ID), envmodel.NewestFirst())
 	if err != nil {
-		return nil, nil, bkerrs.Wrapf(err, bkerrs.ErrCodeInternalServerError, "list envs of app %s", app.ID)
+		return nil, nil, errors.Wrapf(err, "list envs of app %s", app.ID)
 	}
 	matched := lo.Filter(envs, func(env envmodel.Environment, _ int) bool {
 		return lo.Contains(envTypes, env.Type)
@@ -262,7 +262,7 @@ func (h *Handler) resolveRestartTargetByEnvName(
 		if errors.Is(err, envmodel.ErrEnvNotFound) {
 			return nil, envmodel.ErrEnvNotFound.With("envName", envName).WithCause(err)
 		}
-		return nil, bkerrs.Wrapf(err, bkerrs.ErrCodeInternalServerError, "get env %s by name", envName)
+		return nil, errors.Wrapf(err, "get env %s by name", envName)
 	}
 	return h.resolveRestartTarget(ctx, app, env, instanceIDs)
 }

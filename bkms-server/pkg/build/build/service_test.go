@@ -30,6 +30,7 @@ import (
 
 	imagebuild "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/revision"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
@@ -130,8 +131,8 @@ var _ = Describe("Service build validation", func() {
 		Expect(err).NotTo(HaveOccurred())
 	})
 
-	// validateBeforeBuild 用 pkg/errors 逐层包装校验错误，handler 依赖包装后仍能用 errors.Is
-	// 区分「镜像填错」与「镜像源故障」来选 HTTP 错误码，因此断言真实调用链上的归因没有丢
+	// 镜像填错在校验处定为参数错误，镜像源故障不定码、由出口按内部错误处理；
+	// validateBeforeBuild 逐层包装后，出口取到的错误码不能变
 	DescribeTable("keeps the failure attribution through the wrap chain",
 		func(validateErr error, wantReferenceInvalid, wantRegistryFailure bool) {
 			const (
@@ -148,8 +149,8 @@ var _ = Describe("Service build validation", func() {
 
 			Expect(err).To(HaveOccurred())
 			Expect(err).To(MatchError(ContainSubstring("validate platform generated Dockerfile build images")))
-			Expect(IsImageReferenceInvalid(err)).To(Equal(wantReferenceInvalid))
-			Expect(IsImageRegistryFailure(err)).To(Equal(wantRegistryFailure))
+			Expect(errors.Is(err, ErrImageReferenceInvalid)).To(Equal(wantReferenceInvalid))
+			Expect(bkerrs.FromError(err) == nil).To(Equal(wantRegistryFailure))
 		},
 		Entry("image name not found is a user input problem",
 			customruntime.ErrImageNameNotFound, true, false),

@@ -57,27 +57,12 @@ func (h *Handler) newAppCfgFileDefService() *appcfg.AppCfgFileDefService {
 }
 
 // abortDefWriteErr 把写入 def 的错误返回给调用方。
-// 文件名 + 挂载目录冲突带 APP_CONFIG_FILE_MOUNT_IDENTITY_CONFLICT，供前端单独提示。
-func abortDefWriteErr(c *gin.Context, err error, action, appID, name, mountDir string) {
-	if errors.Is(err, appcfg.ErrAppConfigFileDefAlreadyExists) {
-		bkerrs.AbortWithErr(c, bkerrs.WrapAppConfigFileMountIdentityConflict(err, appID, name, mountDir))
-		return
-	}
+func abortDefWriteErr(c *gin.Context, err error, action string) {
 	if errors.Is(err, appcfg.ErrInvalidConfigSpec) {
 		bkerrs.AbortWithErr(c, errInvalidConfigSpec.WithCause(err))
 		return
 	}
-	bkerrs.AbortWithErr(c, bkerrs.Wrap(err, errCodeForDefError(err), action))
-}
-
-func errCodeForDefError(err error) bkerrs.ErrCode {
-	if errors.Is(err, appcfg.ErrInvalidConfigSpec) {
-		return bkerrs.ErrCodeInvalidArgument
-	}
-	if errors.Is(err, appcfg.ErrAppConfigFileDefAlreadyExists) {
-		return bkerrs.ErrCodeAlreadyExists
-	}
-	return bkerrs.ErrCodeInternalServerError
+	bkerrs.AbortWithErr(c, errors.Wrap(err, action))
 }
 
 // ListDefaultFilesWithDef 列出应用下所有配置文件定义及其默认文件信息，文件数量不多不分页。
@@ -108,7 +93,7 @@ func (h *Handler) ListDefaultFilesWithDef(c *gin.Context) {
 
 	defs, err := appcfg.ListDefsByApp(ctx, store.Of(h.registry.DB, appcfg.AppConfigFileDefMeta), app.ID)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "listing defs"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "listing defs"))
 		return
 	}
 
@@ -123,7 +108,7 @@ func (h *Handler) ListDefaultFilesWithDef(c *gin.Context) {
 		appcfg.AcfFilterEnvName(appcfg.EnvNameDefault),
 	)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "listing default files"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "listing default files"))
 		return
 	}
 	fileByDefID := make(map[string]*appcfg.AppConfigFile, len(defaultFiles))
@@ -211,7 +196,7 @@ func (h *Handler) CreateAppConfigFileDef(c *gin.Context) {
 		Framework:           mods.Of(app).Stack.Framework,
 	})
 	if err != nil {
-		abortDefWriteErr(c, err, "creating def", app.ID, input.Name, input.MountDir)
+		abortDefWriteErr(c, err, "creating def")
 		return
 	}
 
@@ -269,7 +254,7 @@ func (h *Handler) GetAppCfgFileDetail(c *gin.Context) {
 			bkerrs.AbortWithErr(c, errInvalidConfigSpec.WithCause(err))
 			return
 		}
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, errCodeForDefError(err), "loading env file detail"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "loading env file detail"))
 		return
 	}
 
@@ -327,14 +312,7 @@ func (h *Handler) UpdateAppCfgFileDef(c *gin.Context) {
 			bkerrs.AbortWithErr(c, bkerrs.WrapAppConfigFileVersionConflict(err, def.AppID, def.ID.Hex()))
 			return
 		}
-		name, mountDir := def.Name, def.MountDir
-		if update.Name != nil {
-			name = *update.Name
-		}
-		if update.MountDir != nil {
-			mountDir = *update.MountDir
-		}
-		abortDefWriteErr(c, err, "updating def", def.AppID, name, mountDir)
+		abortDefWriteErr(c, err, "updating def")
 		return
 	}
 
@@ -391,7 +369,7 @@ func (h *Handler) UpdateHelmFile(c *gin.Context) {
 	svc := h.newAppCfgFileDefService()
 	defaultFile, err := svc.GetDefaultFileWithDef(ctx, def.ID)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "loading default file"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "loading default file"))
 		return
 	}
 
@@ -427,7 +405,7 @@ func (h *Handler) UpdateHelmFile(c *gin.Context) {
 			bkerrs.AbortWithErr(c, bkerrs.WrapAppConfigFileVersionConflict(err, def.AppID, defaultFile.ID.Hex()))
 			return
 		}
-		abortDefWriteErr(c, err, "updating helm file", def.AppID, input.Name, def.MountDir)
+		abortDefWriteErr(c, err, "updating helm file")
 		return
 	}
 
@@ -485,12 +463,12 @@ func (h *Handler) DeleteAppCfgFileDef(c *gin.Context) {
 	if fErr != nil {
 		bkerrs.AbortWithErr(
 			c,
-			bkerrs.Wrap(fErr, bkerrs.ErrCodeInternalServerError, "loading default file for deletion"),
+			errors.Wrap(fErr, "loading default file for deletion"),
 		)
 		return
 	}
 	if _, err = svc.DeleteFile(ctx, def.AppID, defaultFile.ID); err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "deleting def"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "deleting def"))
 		return
 	}
 
@@ -534,7 +512,7 @@ func (h *Handler) ListEnvInstances(c *gin.Context) {
 	ctx := c.Request.Context()
 	files, err := h.configFiles().List(ctx, appcfg.FilesByDef(def.ID))
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "listing env instances"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "listing env instances"))
 		return
 	}
 
@@ -676,7 +654,7 @@ func (h *Handler) ResetEnvToDefault(c *gin.Context) {
 			bkerrs.AbortWithErr(c, errResetRequiresIndependentMode.WithCause(err))
 			return
 		}
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "resetting env to default"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "resetting env to default"))
 		return
 	}
 
@@ -728,7 +706,7 @@ func (h *Handler) GetMountPreview(c *gin.Context) {
 	svc := h.newAppCfgFileDefService()
 	items, err := svc.GetMountPreview(ctx, app.ID, query.EnvName)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "getting mount preview"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "getting mount preview"))
 		return
 	}
 

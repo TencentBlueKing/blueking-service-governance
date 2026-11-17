@@ -19,11 +19,9 @@
 package instancelog
 
 import (
-	"errors"
+	"github.com/pkg/errors"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
-	appmodeldeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/appmodel"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/status"
 )
 
 var errInstanceNotFound = bkerrs.Define(
@@ -35,11 +33,6 @@ var errInstanceNotFound = bkerrs.Define(
 // WrapManagerError maps instance log manager errors to bkms API errors.
 func WrapManagerError(err error, appID, envName, instanceID string) error {
 	switch {
-	case errors.Is(err, appmodeldeploy.ErrDeployRecordNotFound):
-		return status.ErrDeployRecordNotFound.
-			With("appID", appID).
-			With("envName", envName).
-			WithCause(err)
 	case errors.Is(err, ErrInstanceNotFound):
 		return errInstanceNotFound.
 			With("instanceID", instanceID).
@@ -47,6 +40,6 @@ func WrapManagerError(err error, appID, envName, instanceID string) error {
 			With("envName", envName).
 			WithCause(err)
 	default:
-		return bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "new instance log manager")
+		return errors.Wrap(err, "new instance log manager")
 	}
 }

@@ -26,6 +26,7 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	k8sclient "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/client"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/cluster"
@@ -41,8 +42,19 @@ var (
 	// ErrComponentNotInstalled 环境所在集群未安装 GPA 组件
 	ErrComponentNotInstalled = errors.New("gpa component is not installed in cluster")
 	// ErrFederationNotSupported 联邦环境本期不支持 GPA
-	ErrFederationNotSupported = errors.New("gpa is not supported in federation environment")
+	ErrFederationNotSupported = bkerrs.Define(
+		bkerrs.ErrCodeInvalidRequest,
+		"EXTENSION_GPA_FEDERATION_NOT_SUPPORTED",
+		"gpa is not supported in federation environment",
+	)
 )
+
+// componentNotInstalledErr 返回集群未安装 GPA 组件的错误，附带组件缺失详情，且满足 errors.Is(err, ErrComponentNotInstalled)
+func componentNotInstalledErr(clusterID string) error {
+	return bkerrs.WrapComponentsNotInstalled(
+		errors.Wrapf(ErrComponentNotInstalled, "cluster %s", clusterID), []string{ClusterAddonName}, clusterID,
+	)
+}
 
 // GPAService 负责将 GPA 配置下发为 GeneralPodAutoscaler CR 并管理其生命周期。
 // 直接操作目标集群的 K8s ApiServer，状态完全以集群中的 CR 为准，不使用 DB 存储状态。
@@ -72,7 +84,7 @@ func (s *GPAService) Apply(ctx context.Context, env *bkmsenv.Environment, config
 	if err != nil {
 		// discovery 阶段无法解析 GeneralPodAutoscaler 资源类型，说明集群未安装 GPA 组件
 		if isComponentNotInstalledErr(err) {
-			return errors.Wrapf(ErrComponentNotInstalled, "cluster %s", env.Cluster.ClusterID)
+			return componentNotInstalledErr(env.Cluster.ClusterID)
 		}
 		return errors.Wrap(err, "create k8s client for gpa")
 	}
@@ -82,7 +94,7 @@ func (s *GPAService) Apply(ctx context.Context, env *bkmsenv.Environment, config
 		// discovery 缓存可能过期：缓存中仍有 GPA 的 GVR 信息，但 CRD 实际已被卸载，
 		// apiserver 会返回 404 "the server could not find the requested resource"。
 		if isResourceTypeNotFoundErr(err) {
-			return errors.Wrapf(ErrComponentNotInstalled, "cluster %s", env.Cluster.ClusterID)
+			return componentNotInstalledErr(env.Cluster.ClusterID)
 		}
 		return errors.Wrap(err, "upsert gpa CR to k8s")
 	}
@@ -155,7 +167,7 @@ func (s *GPAService) NewClusterClient(clusterID string) (*ClusterClient, error) 
 	if err != nil {
 		// discovery 阶段无法解析 GeneralPodAutoscaler 资源类型，说明集群未安装 GPA 组件
 		if isComponentNotInstalledErr(err) {
-			return nil, errors.Wrapf(ErrComponentNotInstalled, "cluster %s", clusterID)
+			return nil, componentNotInstalledErr(clusterID)
 		}
 		return nil, errors.Wrap(err, "create k8s client for gpa")
 	}

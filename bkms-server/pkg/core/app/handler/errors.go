@@ -41,11 +41,6 @@ var (
 		"CORE_APP_INVALID_BUILD_CONFIG",
 		"invalid build config",
 	)
-	errInvalidPlatformBuildImages = bkerrs.Define(
-		bkerrs.ErrCodeInvalidArgument,
-		"CORE_APP_INVALID_PLATFORM_BUILD_IMAGES",
-		"invalid platform build images",
-	)
 	errAppHasActiveDeployments = bkerrs.Define(
 		bkerrs.ErrCodeInvalidRequest,
 		"CORE_APP_HAS_ACTIVE_DEPLOYMENTS",
@@ -130,16 +125,6 @@ var (
 		bkerrs.ErrCodeInvalidRequest,
 		"CORE_APP_INVALID_CONFIG_SPEC",
 		"invalid config spec",
-	)
-	errComponentNameExists = bkerrs.Define(
-		bkerrs.ErrCodeInvalidRequest,
-		"CORE_APP_COMPONENT_NAME_EXISTS",
-		"component name already exists in app",
-	)
-	errComponentNotFound = bkerrs.Define(
-		bkerrs.ErrCodeNotFound,
-		"CORE_APP_COMPONENT_NOT_FOUND",
-		"component not found in app",
 	)
 	errReferenceComponentCannotUpdate = bkerrs.Define(
 		bkerrs.ErrCodeInvalidRequest,

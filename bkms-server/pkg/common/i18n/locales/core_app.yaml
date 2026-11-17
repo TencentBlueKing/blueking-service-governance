@@ -19,9 +19,6 @@ CORE_APP_ALREADY_EXISTS:
 CORE_APP_INVALID_BUILD_CONFIG:
   zh: "构建配置不合法"
   en: "Invalid build configuration"
-CORE_APP_INVALID_PLATFORM_BUILD_IMAGES:
-  zh: "平台构建镜像配置不合法"
-  en: "Invalid platform build image configuration"
 CORE_APP_HAS_ACTIVE_DEPLOYMENTS:
   zh: "应用存在运行中的部署，请先下线后再删除"
   en: "Application has active deployments, please remove them first"
@@ -74,11 +71,11 @@ CORE_APP_INVALID_CONFIG_SPEC:
   zh: "应用配置规格不合法"
   en: "Invalid application config specification"
 CORE_APP_COMPONENT_NAME_EXISTS:
-  zh: "组件名称 {{.compName}} 在应用 {{.appName}} 中已存在"
-  en: "Component name {{.compName}} already exists in application {{.appName}}"
+  zh: "组件名称 {{.compName}} 在应用中已存在"
+  en: "Component name {{.compName}} already exists in application"
 CORE_APP_COMPONENT_NOT_FOUND:
-  zh: "应用 {{.appName}} 中不存在组件 {{.compName}}"
-  en: "Component {{.compName}} not found in application {{.appName}}"
+  zh: "应用中不存在组件 {{.compName}}"
+  en: "Component {{.compName}} not found in application"
 CORE_APP_REFERENCE_COMPONENT_CANNOT_UPDATE:
   zh: "组件 {{.compName}} 为引用组件，不支持修改"
   en: "Component {{.compName}} is a reference component and cannot be updated"

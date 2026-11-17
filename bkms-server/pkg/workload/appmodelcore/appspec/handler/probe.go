@@ -19,9 +19,8 @@
 package handler
 
 import (
-	"errors"
-
 	"github.com/gin-gonic/gin"
+	"github.com/pkg/errors"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
@@ -178,7 +177,7 @@ func (h *Handler) DeleteEnvAppSpecProbeByType(c *gin.Context) {
 			ginutils.OK(c, serializer.EmptyOutput{})
 			return
 		}
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "getting env probe for deletion"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "getting env probe for deletion"))
 		return
 	}
 	if probes == nil {
@@ -222,11 +221,7 @@ func (h *Handler) DeleteEnvAppSpecProbeByType(c *gin.Context) {
 		updated,
 		appspec.SectionWriteModeReplace,
 	); err != nil {
-		if errors.Is(err, appspec.ErrAppSpecValidation) {
-			bkerrs.AbortWithErr(c, errAppSpecValidationFailed.With("section", "probe").WithCause(err))
-			return
-		}
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "deleting env probe by type"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "deleting env probe by type"))
 		return
 	}
 	addAppSpecAudit(ctx, app, env.Name, audit.OperationTypeUpdate, oldProbes, updated)

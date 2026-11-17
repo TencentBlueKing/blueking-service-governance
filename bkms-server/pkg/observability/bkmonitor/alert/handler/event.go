@@ -23,6 +23,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/pkg/errors"
 	"github.com/samber/lo"
 	"go.mongodb.org/mongo-driver/v2/bson"
 
@@ -82,7 +83,7 @@ func (h *Handler) ListAlertEvents(c *gin.Context) {
 	}
 	ws, err := h.workspaces().Get(ctx, workspace.ByWorkspaceID(app.WorkspaceID))
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get workspace"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "get workspace"))
 		return
 	}
 
@@ -98,7 +99,7 @@ func (h *Handler) ListAlertEvents(c *gin.Context) {
 
 	rules, err := h.alertStrategyService().ListByApp(ctx, app.WorkspaceID, app.ID)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list alert strategies by app"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "list alert strategies by app"))
 		return
 	}
 	strategyIDs, remoteToBKMS := collectRemoteStrategyIDsForAppAlerts(ctx, rules, queryInput.AlertDisplayName)
@@ -117,7 +118,7 @@ func (h *Handler) ListAlertEvents(c *gin.Context) {
 	}
 	resp, err := alertevent.NewService().SearchByStrategyIDs(ctx, ws, operator, strategyIDs, searchInput)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "search alerts by app"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "search alerts by app"))
 		return
 	}
 
@@ -175,7 +176,7 @@ func (h *Handler) ListAlertEventsByStrategy(c *gin.Context) {
 	}
 	ws, err := h.workspaces().Get(ctx, workspace.ByWorkspaceID(app.WorkspaceID))
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get workspace"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "get workspace"))
 		return
 	}
 
@@ -187,7 +188,7 @@ func (h *Handler) ListAlertEventsByStrategy(c *gin.Context) {
 
 	rule, err := getAlertStrategyInApp(ctx, h.registry, strategyObjID, uriInput.WorkspaceID, uriInput.AppID)
 	if err != nil {
-		bkerrs.AbortWithErr(c, wrapAlertStrategyLookupErr(err))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "get alert strategy"))
 		return
 	}
 
@@ -217,7 +218,7 @@ func (h *Handler) ListAlertEventsByStrategy(c *gin.Context) {
 		ctx, ws, operator, strategyIDs, queryInput.ToSearchInput(),
 	)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "search alerts by strategy"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "search alerts by strategy"))
 		return
 	}
 
@@ -259,7 +260,7 @@ func (h *Handler) GetAlertDetail(c *gin.Context) {
 
 	detail, err := alertevent.NewService().GetDetail(ctx, ws, auth.MustGetUser(ctx).ID, uriInput.AlertID)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get alert detail"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "get alert detail"))
 		return
 	}
 

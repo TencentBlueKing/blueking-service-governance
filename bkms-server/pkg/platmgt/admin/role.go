@@ -20,15 +20,19 @@ package admin
 
 import (
 	"context"
-	"errors"
 
 	"github.com/samber/lo"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/i18n"
 )
 
 // ErrInvalidRoleCode indicates the target platform role code is unsupported.
-var ErrInvalidRoleCode = errors.New("invalid platform role code")
+var ErrInvalidRoleCode = bkerrs.Define(
+	bkerrs.ErrCodeInvalidArgument,
+	"PLATMGT_ADMIN_INVALID_ROLE_CODE",
+	"invalid platform role code",
+)
 
 // RoleCode identifies a platform management role.
 type RoleCode string

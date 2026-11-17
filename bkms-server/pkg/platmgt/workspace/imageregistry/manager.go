@@ -29,6 +29,7 @@ import (
 	"github.com/samber/lo"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	bkmsworkspace "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
@@ -48,19 +49,47 @@ const (
 
 var (
 	// ErrInvalidRegistryAddress 仓库地址需为 host/namespace，且不带协议前缀
-	ErrInvalidRegistryAddress = errors.New("invalid image registry address")
+	ErrInvalidRegistryAddress = bkerrs.Define(
+		bkerrs.ErrCodeInvalidArgument,
+		"PLATMGT_IMAGE_REGISTRY_INVALID_ADDRESS",
+		"invalid image registry address, expected host/namespace without a protocol prefix",
+	)
 	// ErrPasswordRequired 外部仓库没有可沿用的密码时必须填写密码
-	ErrPasswordRequired = errors.New("image registry password is required")
+	ErrPasswordRequired = bkerrs.Define(
+		bkerrs.ErrCodeInvalidArgument,
+		"PLATMGT_IMAGE_REGISTRY_PASSWORD_REQUIRED",
+		"image registry password is required",
+	)
 	// ErrRegistryAuthFailed 目标仓库鉴权失败或没有推送权限（401 / 403）
-	ErrRegistryAuthFailed = errors.New("image registry authentication failed")
+	ErrRegistryAuthFailed = bkerrs.Define(
+		bkerrs.ErrCodeInvalidRequest,
+		"PLATMGT_IMAGE_REGISTRY_AUTH_FAILED",
+		"image registry authentication failed or push permission denied",
+	)
 	// ErrRegistryNamespaceInaccessible 目标仓库的命名空间不存在或无权访问（404）
-	ErrRegistryNamespaceInaccessible = errors.New("image registry namespace inaccessible")
+	ErrRegistryNamespaceInaccessible = bkerrs.Define(
+		bkerrs.ErrCodeInvalidRequest,
+		"PLATMGT_IMAGE_REGISTRY_NAMESPACE_INACCESSIBLE",
+		"image registry namespace does not exist or is inaccessible",
+	)
 	// ErrRegistryUnreachable 目标仓库网络不可达或探测超时
-	ErrRegistryUnreachable = errors.New("image registry unreachable")
+	ErrRegistryUnreachable = bkerrs.Define(
+		bkerrs.ErrCodeInvalidRequest,
+		"PLATMGT_IMAGE_REGISTRY_UNREACHABLE",
+		"image registry is unreachable",
+	)
 	// ErrBkCICredentialCreateFailed 在空间对应的蓝盾项目下创建镜像凭证失败
-	ErrBkCICredentialCreateFailed = errors.New("create bkci image credential failed")
+	ErrBkCICredentialCreateFailed = bkerrs.Define(
+		bkerrs.ErrCodeInvalidRequest,
+		"PLATMGT_IMAGE_REGISTRY_CREDENTIAL_CREATE_FAILED",
+		"failed to create bkci image credential",
+	)
 	// ErrBuiltinRegistryNotFound 空间没有平台镜像仓库记录，无法切回平台仓库
-	ErrBuiltinRegistryNotFound = errors.New("builtin image registry not found")
+	ErrBuiltinRegistryNotFound = bkerrs.Define(
+		bkerrs.ErrCodeInvalidRequest,
+		"PLATMGT_BUILTIN_IMAGE_REGISTRY_NOT_FOUND",
+		"builtin image registry not found",
+	)
 )
 
 // UpdateParams 设置空间镜像仓库的参数

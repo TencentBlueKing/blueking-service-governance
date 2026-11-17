@@ -25,11 +25,11 @@ EXTENSION_BSCPCFG_METADATA_NOT_FOUND:
   zh: "尚未初始化 BSCP 配置管理，请先初始化"
   en: "BSCP config metadata not found, please initialize first"
 EXTENSION_BSCPCFG_ENV_BINDING_ALREADY_EXISTS:
-  zh: "应用 {{.appID}} 在环境 {{.envName}} 下已存在 BSCP 配置绑定"
-  en: "BSCP config env binding already exists for app {{.appID}} in environment {{.envName}}"
+  zh: "当前环境已存在 BSCP 配置绑定"
+  en: "BSCP config env binding already exists in this environment"
 EXTENSION_BSCPCFG_ENV_BINDING_NOT_FOUND:
-  zh: "环境 {{.envName}} 的 BSCP 配置绑定不存在"
-  en: "BSCP config env binding not found for environment {{.envName}}"
+  zh: "当前环境的 BSCP 配置绑定不存在"
+  en: "BSCP config env binding not found in this environment"
 EXTENSION_BSCPCFG_FIELD_BLANK:
   zh: "字段 {{.field}} 不能为空"
   en: "{{.field}} must not be blank"
@@ -42,8 +42,8 @@ EXTENSION_COMPONENT_DEF_ALREADY_EXISTS:
   zh: "组件定义 {{.name}}:{{.version}} 已存在"
   en: "Component definition {{.name}}:{{.version}} already exists"
 EXTENSION_COMPONENT_DEF_NOT_FOUND:
-  zh: "组件定义 {{.name}} 不存在"
-  en: "Component definition {{.name}} not found"
+  zh: "组件定义 {{.name}}:{{.version}} 不存在"
+  en: "Component definition {{.name}}:{{.version}} not found"
 EXTENSION_COMPONENT_BUILTIN_UPDATE_FORBIDDEN:
   zh: "内置组件定义 {{.name}} 不允许修改"
   en: "Built-in component definition {{.name}} cannot be updated"
@@ -79,9 +79,6 @@ EXTENSION_DEVMODE_NOT_ENABLED:
 EXTENSION_DEVMODE_APP_TYPE_UNSUPPORTED:
   zh: "当前应用类型不支持开发模式"
   en: "Current application type does not support devmode"
-EXTENSION_DEVMODE_BCS_TOKEN_NOT_FOUND:
-  zh: "未找到有效的 BCS 用户访问令牌，请先创建或刷新令牌"
-  en: "No active BCS user token found"
 EXTENSION_DEVMODE_NO_RUNNING_INSTANCES:
   zh: "当前环境没有运行中的实例"
   en: "No running instances found"
@@ -118,19 +115,19 @@ EXTENSION_GPA_FEDERATION_NOT_SUPPORTED:
   zh: "联邦环境暂不支持 GPA 自动扩缩容"
   en: "GPA autoscaling is not supported in federation environment"
 EXTENSION_GPA_CONFIG_NOT_FOUND:
-  zh: "应用 {{.appID}} 在环境 {{.envName}} 下的 GPA 配置不存在"
-  en: "GPA config not found for app {{.appID}} in environment {{.envName}}"
+  zh: "GPA 配置不存在"
+  en: "GPA config not found"
 
 # 北极星配置（addon/polaris）
 EXTENSION_POLARIS_TOKEN_REQUIRED:
   zh: "引入已有北极星服务时必须提供 polarisToken"
   en: "polarisToken is required when importing an existing Polaris service"
 EXTENSION_POLARIS_CONFIG_NAME_EXISTS:
-  zh: "应用 {{.appID}} 中已存在同名的北极星配置"
-  en: "Polaris config name already exists in app {{.appID}}"
+  zh: "应用中已存在同名的北极星配置"
+  en: "Polaris config name already exists in app"
 EXTENSION_POLARIS_CONFIG_NOT_FOUND:
-  zh: "应用 {{.appID}} 下不存在北极星配置 {{.configName}}"
-  en: "Polaris config {{.configName}} not found in app {{.appID}}"
+  zh: "北极星配置不存在"
+  en: "Polaris config not found"
 EXTENSION_POLARIS_INSTANCES_EXIST:
   zh: "北极星服务下仍存在实例，请先删除实例后再删除配置"
   en: "Some instances still exist in the Polaris service, please delete them first"
@@ -149,9 +146,6 @@ EXTENSION_POLARIS_OPERATOR_EMPTY:
 EXTENSION_POLARIS_NOT_MANAGED:
   zh: "该字段仅允许平台创建的北极星服务修改"
   en: "This field can only be modified for platform-created Polaris services"
-EXTENSION_POLARIS_INVALID_REQUEST:
-  zh: "北极星请求参数不符合业务规则"
-  en: "Invalid Polaris request"
 
 # 依赖服务（depservice）
 EXTENSION_DEPSERVICE_REDIS_PARAMS_INVALID:
@@ -175,9 +169,6 @@ EXTENSION_DEPSERVICE_BINDING_NOT_FOUND:
 EXTENSION_DEPSERVICE_PLAN_NOT_FOUND:
   zh: "依赖服务套餐不存在"
   en: "Service plan not found"
-EXTENSION_DEPSERVICE_NOT_FOUND:
-  zh: "依赖服务资源不存在"
-  en: "Dependency service resource not found"
 EXTENSION_DEPSERVICE_BINDING_ALREADY_EXISTS:
   zh: "依赖服务绑定名称已存在"
   en: "Service binding name already exists"

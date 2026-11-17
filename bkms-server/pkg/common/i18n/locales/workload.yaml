@@ -35,8 +35,8 @@ WORKLOAD_ENVVARS_INVALID_SCOPED_ENV_VAR_ID:
   zh: "作用域环境变量 ID {{.scopedEnvVarID}} 格式无效"
   en: "Invalid scoped env var ID {{.scopedEnvVarID}}"
 WORKLOAD_ENVVARS_SCOPED_ENV_VAR_NOT_FOUND:
-  zh: "作用域环境变量 {{.scopedEnvVarID}} 不存在"
-  en: "Scoped env var {{.scopedEnvVarID}} not found"
+  zh: "作用域环境变量不存在"
+  en: "Scoped env var not found"
 WORKLOAD_ENVVARS_SENSITIVE_IMMUTABLE:
   zh: "敏感环境变量不允许修改为非敏感"
   en: "Sensitive env var cannot be changed to non-sensitive"
@@ -64,7 +64,7 @@ WORKLOAD_NETWORKING_SERVICE_NOT_FOUND:
 # 4xx 错误：appmodelcore (appspec / appdefaults)
 WORKLOAD_APPSPEC_VALIDATION_FAILED:
   zh: "应用配置校验失败"
-  en: "App spec {{.section}} validation failed"
+  en: "App spec validation failed"
 WORKLOAD_APPSPEC_ENV_SECTION_NOT_FOUND:
   zh: "环境 {{.envName}} 的应用配置不存在"
   en: "Env {{.envName}} {{.section}} configuration not found"

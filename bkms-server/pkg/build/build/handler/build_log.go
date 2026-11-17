@@ -110,18 +110,12 @@ func (h *Handler) prepareBuildLogDeps(c *gin.Context) (*buildLogDeps, error) {
 
 	bkciClient, err := bkciapi.New(auth.MustGetUser(ctx))
 	if err != nil {
-		return nil, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "init bkci client")
+		return nil, errors.Wrap(err, "init bkci client")
 	}
 
 	record, err := store.Of(h.registry.DB, imagebuild.RecordMeta).
 		Get(ctx, imagebuild.ByBuild(app.ID, uriInput.BuildID))
 	if err != nil {
-		if errors.Is(err, imagebuild.ErrRecordNotFound) {
-			return nil, errBuildRecordNotFound.
-				With("appID", app.ID).
-				With("buildID", uriInput.BuildID).
-				WithCause(err)
-		}
 		return nil, errors.Wrap(err, "get build record")
 	}
 	project, err := store.Of(h.registry.DB, bkciproject.ProjectMeta).

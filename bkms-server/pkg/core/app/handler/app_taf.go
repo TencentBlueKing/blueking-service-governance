@@ -89,13 +89,6 @@ func (h *Handler) UpdateAppTafSpec(c *gin.Context) {
 
 	// 更新 AppModel 应用配置（复用现有逻辑）
 	if err = h.updateTafApp(ctx, app, input.AppModelSpec); err != nil {
-		if errors.Is(err, appcfg.ErrAppConfigFileDefAlreadyExists) {
-			spec := input.AppModelSpec.TafSpec
-			bkerrs.AbortWithErr(c, bkerrs.WrapAppConfigFileMountIdentityConflict(
-				err, app.ID, spec.FileName, spec.FilePath,
-			))
-			return
-		}
 		if errors.Is(err, appcfg.ErrInvalidConfigSpec) {
 			bkerrs.AbortWithErr(c, errInvalidConfigSpecRequest.WithCause(err))
 			return

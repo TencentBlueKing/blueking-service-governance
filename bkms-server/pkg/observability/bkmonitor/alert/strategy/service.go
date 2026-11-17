@@ -27,6 +27,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
@@ -38,7 +39,11 @@ import (
 )
 
 // ErrDisplayNameAlreadyExists 表示同一应用下已存在相同策略名称。
-var ErrDisplayNameAlreadyExists = errors.New("alert strategy displayName already exists in app")
+var ErrDisplayNameAlreadyExists = bkerrs.Define(
+	bkerrs.ErrCodeAlreadyExists,
+	"OBSERVABILITY_BKMONITOR_ALERT_STRATEGY_NAME_EXISTS",
+	"alert strategy display name already exists in app",
+)
 
 // NewService 创建 Service 实例。
 func NewService(db *mongo.Database) *Service {

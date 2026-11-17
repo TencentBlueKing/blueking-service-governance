@@ -44,16 +44,6 @@ var (
 		"OBSERVABILITY_BKMONITOR_ALERT_INVALID_ENV_IDS",
 		"invalid environment IDs in alert strategy",
 	)
-	errAlertStrategyDisplayNameExists = bkerrs.Define(
-		bkerrs.ErrCodeAlreadyExists,
-		"OBSERVABILITY_BKMONITOR_ALERT_STRATEGY_NAME_EXISTS",
-		"alert strategy display name already exists in app",
-	)
-	errAlertStrategyNotFound = bkerrs.Define(
-		bkerrs.ErrCodeNotFound,
-		"OBSERVABILITY_BKMONITOR_ALERT_STRATEGY_NOT_FOUND",
-		"alert strategy not found",
-	)
 	errAppNotFoundInWorkspace = bkerrs.Define(
 		bkerrs.ErrCodeNotFound,
 		"OBSERVABILITY_BKMONITOR_ALERT_APP_NOT_IN_WORKSPACE",
@@ -76,23 +66,16 @@ func (h *Handler) loadStrategyContext(
 	}
 	ws, err := h.workspaces().Get(ctx, workspace.ByWorkspaceID(app.WorkspaceID))
 	if err != nil {
-		return nil, nil, bson.NilObjectID, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get workspace")
+		return nil, nil, bson.NilObjectID, errors.Wrap(err, "get workspace")
 	}
 	strategyObjID, err := bson.ObjectIDFromHex(strategyID)
 	if err != nil {
 		return nil, nil, bson.NilObjectID, errInvalidStrategyID.WithCause(err)
 	}
 	if _, err = getAlertStrategyInApp(ctx, h.registry, strategyObjID, workspaceID, appID); err != nil {
-		return nil, nil, bson.NilObjectID, wrapAlertStrategyLookupErr(err)
+		return nil, nil, bson.NilObjectID, errors.Wrap(err, "get alert strategy")
 	}
 	return app, ws, strategyObjID, nil
-}
-
-func wrapAlertStrategyLookupErr(err error) error {
-	if errors.Is(err, alertstrategy.ErrNotFound) {
-		return errAlertStrategyNotFound.WithCause(err)
-	}
-	return bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get alert strategy")
 }
 
 func getAlertStrategyInApp(

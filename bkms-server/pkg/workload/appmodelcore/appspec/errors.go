@@ -22,6 +22,8 @@ import (
 	stderrors "errors"
 
 	pkgerrors "github.com/pkg/errors"
+
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 )
 
 // ErrAppSpecNotFound is returned when app spec is not found in store.
@@ -31,8 +33,10 @@ var ErrAppSpecNotFound = stderrors.New("app spec not found")
 var ErrAppSpecAlreadyExists = stderrors.New("app spec already exists")
 
 // ErrAppSpecValidation is a sentinel error for validation failures.
-var ErrAppSpecValidation = stderrors.New("app spec validation failed")
+var ErrAppSpecValidation = bkerrs.Define(
+	bkerrs.ErrCodeInvalidRequest, "WORKLOAD_APPSPEC_VALIDATION_FAILED", "app spec validation failed",
+)
 
 func wrapValidationErr(err error) error {
-	return pkgerrors.Wrap(stderrors.Join(ErrAppSpecValidation, err), "validating app spec")
+	return ErrAppSpecValidation.WithCause(pkgerrors.Wrap(err, "validating app spec"))
 }

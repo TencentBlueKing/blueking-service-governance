@@ -22,16 +22,23 @@ package model
 import (
 	"github.com/pkg/errors"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 // 错误定义
 var (
 	// ErrEnvBindingNotFound 配置管理环境绑定不存在
-	ErrEnvBindingNotFound = errors.New("bscpcfg env binding not found")
+	ErrEnvBindingNotFound = bkerrs.Define(
+		bkerrs.ErrCodeNotFound, "EXTENSION_BSCPCFG_ENV_BINDING_NOT_FOUND", "bscpcfg env binding not found",
+	)
 
 	// ErrEnvBindingAlreadyExists 配置管理环境绑定已存在（同一 app+env 只能有一条记录）
-	ErrEnvBindingAlreadyExists = errors.New("bscpcfg env binding already exists")
+	ErrEnvBindingAlreadyExists = bkerrs.Define(
+		bkerrs.ErrCodeAlreadyExists,
+		"EXTENSION_BSCPCFG_ENV_BINDING_ALREADY_EXISTS",
+		"bscpcfg env binding already exists",
+	)
 )
 
 // EnvBindingStore EnvBinding 存储，一个 app+env 一条记录

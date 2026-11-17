@@ -45,23 +45,33 @@ var ErrAppModelNotFound = bkerrs.Define(bkerrs.ErrCodeNotFound, "APP_MODEL_NOT_F
 var ErrAppModelAlreadyExists = errors.New("app model with the same appID already exists")
 
 // ErrComponentNotFound is returned when a component is not found in the app model.
-var ErrComponentNotFound = errors.New("component not found")
+var ErrComponentNotFound = bkerrs.Define(bkerrs.ErrCodeNotFound, "CORE_APP_COMPONENT_NOT_FOUND", "component not found")
 
 // ErrComponentNameExists is returned when a component name already exists in the app model.
-var ErrComponentNameExists = errors.New("component name already exists")
+var ErrComponentNameExists = bkerrs.Define(
+	bkerrs.ErrCodeInvalidRequest, "CORE_APP_COMPONENT_NAME_EXISTS", "component name already exists",
+)
 
 // ErrEnvVarNotFound is returned when an env var is not found in the app model.
-var ErrEnvVarNotFound = errors.New("env var not found")
+var ErrEnvVarNotFound = bkerrs.Define(
+	bkerrs.ErrCodeNotFound, "WORKLOAD_ENVVARS_APP_ENV_VAR_NOT_FOUND", "env var not found",
+)
 
 // ErrEnvVarKeyExists is returned when an env var key already exists in the app model.
-var ErrEnvVarKeyExists = errors.New("env var key already exists")
+var ErrEnvVarKeyExists = bkerrs.Define(
+	bkerrs.ErrCodeAlreadyExists, "WORKLOAD_ENVVARS_APP_ENV_VAR_KEY_EXISTS", "env var key already exists",
+)
 
 // ErrInvalidEnvVarKey is returned when an env var key does not satisfy the Pod env var naming rules.
 var ErrInvalidEnvVarKey = errors.New("invalid env var key")
 
 // ErrEnvVarSensitivityImmutable is returned when attempting to change a sensitive env var to non-sensitive.
 // Sensitive env vars can only be deleted and recreated, not downgraded.
-var ErrEnvVarSensitivityImmutable = errors.New("sensitive env var cannot be changed to non-sensitive")
+var ErrEnvVarSensitivityImmutable = bkerrs.Define(
+	bkerrs.ErrCodeInvalidRequest,
+	"WORKLOAD_ENVVARS_SENSITIVE_IMMUTABLE",
+	"sensitive env var cannot be changed to non-sensitive",
+)
 
 // ComponentUpdateData 定义了更新 Component 时允许修改的数据
 type ComponentUpdateData struct {
@@ -150,7 +160,7 @@ func AddComponent(ctx context.Context, db *mongo.Database, appID string, comp *c
 		store.Where("components", bson.M{"$not": bson.M{"$elemMatch": bson.M{"name": comp.Name}}}),
 	)
 	if errors.Is(err, ErrAppModelNotFound) {
-		err = classifyMiss(ctx, models, appID, ErrComponentNameExists)
+		err = classifyMiss(ctx, models, appID, ErrComponentNameExists.With("compName", comp.Name))
 	}
 	if err != nil {
 		return errors.Wrapf(err, "add component %s to app model of app %s", comp.Name, appID)
@@ -197,7 +207,7 @@ func UpdateComponent(
 	_, err := models.Modify(ctx, bson.M{"$set": updateSet},
 		append(conds, store.ArrayFilters(bson.M{"elem.name": compName}))...)
 	if errors.Is(err, ErrAppModelNotFound) {
-		err = classifyComponentMiss(ctx, models, appID, compName, renamed)
+		err = classifyComponentMiss(ctx, models, appID, compName, updateData.Name, renamed)
 	}
 	if err != nil {
 		return errors.Wrapf(err, "update component %s in app model of app %s", compName, appID)
@@ -217,7 +227,7 @@ func RemoveComponent(ctx context.Context, db *mongo.Database, appID, compName st
 	}
 	removed, found := lo.Find(appModel.Components, func(c *component.Component) bool { return c.Name == compName })
 	if !found {
-		return errors.Wrapf(ErrComponentNotFound, "component %s of app %s", compName, appID)
+		return errors.Wrapf(ErrComponentNotFound.With("compName", compName), "app %s", appID)
 	}
 
 	// 过滤条件要求组件仍存在：查询与删除之间组件被并发删除时不会匹配，避免重复扣减引用计数。
@@ -225,7 +235,7 @@ func RemoveComponent(ctx context.Context, db *mongo.Database, appID, compName st
 	_, err = models.Modify(ctx, bson.M{"$pull": bson.M{"components": bson.M{"name": compName}}},
 		ByApp(appID), store.Where("components.name", compName))
 	if errors.Is(err, ErrAppModelNotFound) {
-		err = classifyMiss(ctx, models, appID, ErrComponentNotFound)
+		err = classifyMiss(ctx, models, appID, ErrComponentNotFound.With("compName", compName))
 	}
 	if err != nil {
 		return errors.Wrapf(err, "remove component %s from app model of app %s", compName, appID)
@@ -260,7 +270,7 @@ func AddAppDefinedEnvVar(ctx context.Context, db *mongo.Database, appID string, 
 		store.Where("workload.envVars", bson.M{"$not": bson.M{"$elemMatch": bson.M{"key": envVar.Key}}}),
 	)
 	if errors.Is(err, ErrAppModelNotFound) {
-		err = classifyMiss(ctx, models, appID, ErrEnvVarKeyExists)
+		err = classifyMiss(ctx, models, appID, ErrEnvVarKeyExists.With("key", envVar.Key))
 	}
 	if err != nil {
 		return errors.Wrapf(err, "add env var %s to app model of app %s", envVar.Key, appID)
@@ -306,7 +316,7 @@ func UpdateAppDefinedEnvVar(ctx context.Context, db *mongo.Database, appID, key 
 	models := store.Of(db, AppModelMeta)
 	_, err := models.Modify(ctx, update, append(conds, store.ArrayFilters(bson.M{"elem.key": key}))...)
 	if errors.Is(err, ErrAppModelNotFound) {
-		err = classifyEnvVarMiss(ctx, models, appID, key)
+		err = classifyEnvVarMiss(ctx, models, appID, key, updated.Key)
 	}
 	if err != nil {
 		return errors.Wrapf(err, "update env var %s in app model of app %s", key, appID)
@@ -321,7 +331,7 @@ func RemoveAppDefinedEnvVar(ctx context.Context, db *mongo.Database, appID, key 
 	_, err := models.Modify(ctx, bson.M{"$pull": bson.M{"workload.envVars": bson.M{"key": key}}},
 		ByApp(appID), store.Where("workload.envVars.key", key))
 	if errors.Is(err, ErrAppModelNotFound) {
-		err = classifyMiss(ctx, models, appID, ErrEnvVarNotFound)
+		err = classifyMiss(ctx, models, appID, ErrEnvVarNotFound.With("key", key))
 	}
 	if err != nil {
 		return errors.Wrapf(err, "remove env var %s from app model of app %s", key, appID)
@@ -353,19 +363,20 @@ func classifyMiss(ctx context.Context, models *AppModelStore, appID string, elem
 
 // classifyComponentMiss 组件更新未命中时，区分模型不存在、组件不存在与新名称冲突
 func classifyComponentMiss(
-	ctx context.Context, models *AppModelStore, appID, compName string, renamed bool,
+	ctx context.Context, models *AppModelStore, appID, compName string, newName *string, renamed bool,
 ) error {
+	notFoundErr := ErrComponentNotFound.With("compName", compName)
 	if !renamed {
-		return classifyMiss(ctx, models, appID, ErrComponentNotFound)
+		return classifyMiss(ctx, models, appID, notFoundErr)
 	}
 	return classifyElemMiss(ctx, models, appID, store.Where("components.name", compName),
-		ErrComponentNotFound, ErrComponentNameExists)
+		notFoundErr, ErrComponentNameExists.With("compName", *newName))
 }
 
 // classifyEnvVarMiss 环境变量更新未命中时，区分模型不存在、变量不存在与新 key 冲突
-func classifyEnvVarMiss(ctx context.Context, models *AppModelStore, appID, key string) error {
+func classifyEnvVarMiss(ctx context.Context, models *AppModelStore, appID, key, newKey string) error {
 	return classifyElemMiss(ctx, models, appID, store.Where("workload.envVars.key", key),
-		ErrEnvVarNotFound, ErrEnvVarKeyExists)
+		ErrEnvVarNotFound.With("key", key), ErrEnvVarKeyExists.With("key", newKey))
 }
 
 // classifyElemMiss 应用模型存在时，元素（elemCond）不存在返回 notFoundErr，否则视为与其它元素冲突，返回 conflictErr

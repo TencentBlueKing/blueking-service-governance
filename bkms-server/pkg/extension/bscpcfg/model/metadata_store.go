@@ -22,13 +22,16 @@ package model
 import (
 	"github.com/pkg/errors"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 // 错误定义
 var (
 	// ErrMetadataNotFound 配置管理元信息不存在
-	ErrMetadataNotFound = errors.New("bscpcfg metadata not found")
+	ErrMetadataNotFound = bkerrs.Define(
+		bkerrs.ErrCodeNotFound, "EXTENSION_BSCPCFG_METADATA_NOT_FOUND", "bscpcfg metadata not found",
+	)
 
 	// ErrMetadataAlreadyExists 配置管理元信息已存在（同一 app 只能有一条记录）
 	ErrMetadataAlreadyExists = errors.New("bscpcfg metadata already exists")

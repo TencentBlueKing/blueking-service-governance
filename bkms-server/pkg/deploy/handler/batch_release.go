@@ -20,10 +20,10 @@ package handler
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"github.com/gin-gonic/gin"
+	"github.com/pkg/errors"
 	"github.com/samber/lo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
@@ -74,8 +74,8 @@ func (h *Handler) GetBatchReleaseProgress(c *gin.Context) {
 		return
 	}
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrapf(
-			err, bkerrs.ErrCodeInternalServerError, "get latest deploy record for %s",
+		bkerrs.AbortWithErr(c, errors.Wrapf(
+			err, "get latest deploy record for %s",
 			genDeployInfo(app.WorkspaceID, app.ID, uriInput.EnvName, input.TrafficLaneName),
 		))
 		return
@@ -141,7 +141,7 @@ func (h *Handler) OperateBatchRelease(c *gin.Context) {
 		ctx, h.registry.DB, app.ID, uriInput.EnvName, input.TrafficLaneName, input.Action,
 	)
 	if err != nil {
-		bkerrs.AbortWithErr(c, batchrelease.APIError(err, fmt.Sprintf(
+		bkerrs.AbortWithErr(c, errors.Wrap(err, fmt.Sprintf(
 			"%s batch release of %s", input.Action,
 			genDeployInfo(app.WorkspaceID, app.ID, uriInput.EnvName, input.TrafficLaneName),
 		)))

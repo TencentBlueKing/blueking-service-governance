@@ -29,6 +29,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	build "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/i18n"
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
@@ -48,7 +49,11 @@ const (
 
 // ErrRepoNotFound 远端镜像仓库为空或不存在。
 // mirrors 等制品库在仓库内镜像全部删除（或从未推送）时，tags/list 返回 NAME_UNKNOWN 而不是空列表，两种情况无法区分
-var ErrRepoNotFound = errors.New("image repository is empty or not found")
+var ErrRepoNotFound = bkerrs.Define(
+	bkerrs.ErrCodeNotFound,
+	"WORKLOAD_IMAGE_REPO_NOT_FOUND",
+	"image repository is empty or not found",
+)
 
 // Service 镜像快照服务
 type Service struct {
@@ -489,5 +494,12 @@ func (s *Service) clearMissingRepo(ctx context.Context, info *RepoKeyInfo, listE
 		return errors.Wrapf(err, "clear local snapshots for missing repo %s", info.RepoKey)
 	}
 	log.Infof(ctx, "repository %s is empty or not found, removed %d local snapshots", info.RepoName, removedCount)
-	return errors.Wrapf(ErrRepoNotFound, "list all tags for %s: %v", info.RepoName, listErr)
+	return ErrRepoNotFound.WithCause(errors.Wrapf(listErr, "list all tags for %s", info.RepoName)).SetDetails(
+		bkerrs.NewDetail(
+			bkerrs.ErrDetailCodeImageRepositoryNotFound,
+			"image repository is empty or not found",
+			bkerrs.WithSystem(bkerrs.SystemName),
+			bkerrs.WithModule(bkerrs.ModuleName),
+		),
+	)
 }

@@ -16,35 +16,16 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
-package appcfgfiledef
+package bcstoken
 
 import (
-	stdErrors "errors"
+	"testing"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/pkg/errors"
-
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
 )
 
-var _ = Describe("errCodeForDefError", func() {
-	It("maps invalid config spec errors to invalid argument", func() {
-		err := errors.Wrap(appcfg.ErrInvalidConfigSpec, "not effective")
-
-		Expect(errCodeForDefError(err)).To(Equal(bkerrs.ErrCodeInvalidArgument))
-	})
-
-	It("maps an existing def to already exists", func() {
-		err := errors.Wrap(appcfg.ErrAppConfigFileDefAlreadyExists, "name taken")
-
-		Expect(errCodeForDefError(err)).To(Equal(bkerrs.ErrCodeAlreadyExists))
-	})
-
-	It("keeps unknown errors as internal server error", func() {
-		err := stdErrors.New("db down")
-
-		Expect(errCodeForDefError(err)).To(Equal(bkerrs.ErrCodeInternalServerError))
-	})
-})
+func TestBCSToken(t *testing.T) {
+	RegisterFailHandler(Fail)
+	RunSpecs(t, "BCSToken Suite")
+}

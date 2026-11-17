@@ -24,11 +24,16 @@ import (
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 // ErrClusterAddonDefNotFound Addon 定义未找到
-var ErrClusterAddonDefNotFound = errors.New("cluster addon def not found")
+var ErrClusterAddonDefNotFound = bkerrs.Define(
+	bkerrs.ErrCodeNotFound,
+	"CLUSTER_ADDON_NOT_FOUND",
+	"cluster addon not found",
+)
 
 // ClusterAddonDefStore 集群 Addon 定义存储
 type ClusterAddonDefStore = store.GenericStore[ClusterAddonDef]

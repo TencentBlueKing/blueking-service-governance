@@ -27,6 +27,7 @@ import (
 	"helm.sh/helm/v3/pkg/action"
 	"helm.sh/helm/v3/pkg/storage/driver"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	helmdeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/helm"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/helm"
@@ -43,7 +44,11 @@ func GenerateReleaseName(addonDef *ClusterAddonDef) string {
 }
 
 // ErrAddonNotApplicable 表示组件不适用于目标集群。
-var ErrAddonNotApplicable = errors.New("cluster addon is not applicable to the target cluster")
+var ErrAddonNotApplicable = bkerrs.Define(
+	bkerrs.ErrCodeInvalidRequest,
+	"CLUSTER_ADDON_NOT_APPLICABLE",
+	"cluster addon is not applicable to the target cluster",
+)
 
 // InstallOrUpgradeClusterAddon 部署或更新集群 Addon，拒绝安装不适用于目标集群的组件。
 func InstallOrUpgradeClusterAddon(
@@ -59,7 +64,7 @@ func InstallOrUpgradeClusterAddon(
 	clusterID := env.Cluster.ClusterID
 	if !addonDef.IsApplicableToEnv(env) {
 		return errors.Wrapf(
-			ErrAddonNotApplicable,
+			ErrAddonNotApplicable.With("addonName", addonDef.Name),
 			"install or upgrade addon %s in cluster %s",
 			addonDef.Name,
 			clusterID,

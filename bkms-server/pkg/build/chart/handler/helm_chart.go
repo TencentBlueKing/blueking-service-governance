@@ -47,16 +47,6 @@ import (
 )
 
 var (
-	errInvalidCodeRevision = bkerrs.Define(
-		bkerrs.ErrCodeInvalidArgument,
-		"BUILD_CHART_INVALID_CODE_REVISION",
-		"invalid code revision",
-	)
-	errCodeRevisionRequired = bkerrs.Define(
-		bkerrs.ErrCodeInvalidRequest,
-		"BUILD_CHART_CODE_REVISION_REQUIRED",
-		"code revision is required",
-	)
 	errAppNotHelmBased = bkerrs.Define(
 		bkerrs.ErrCodeInvalidArgument,
 		"BUILD_CHART_APP_NOT_HELM_BASED",
@@ -66,11 +56,6 @@ var (
 		bkerrs.ErrCodeInvalidArgument,
 		"BUILD_CHART_INVALID_LOG_URI_PARAMS",
 		"invalid build log uri parameters",
-	)
-	errChartBuildRecordNotFound = bkerrs.Define(
-		bkerrs.ErrCodeNotFound,
-		"BUILD_CHART_RECORD_NOT_FOUND",
-		"chart build record not found",
 	)
 	errBKCIProjectNotFound = bkerrs.Define(
 		bkerrs.ErrCodeNotFound,
@@ -113,7 +98,7 @@ func (h *Handler) CreateHelmChartBuild(c *gin.Context) {
 	// 在调用构建服务前校验格式：服务内会消耗语义化版本号，参数错误时不应浪费版本号
 	rev, err := revision.Resolve(input.RevisionType, input.Revision, input.Branch)
 	if err != nil {
-		bkerrs.AbortWithErr(c, errInvalidCodeRevision.WithCause(err))
+		bkerrs.AbortWithErr(c, err)
 		return
 	}
 
@@ -127,10 +112,6 @@ func (h *Handler) CreateHelmChartBuild(c *gin.Context) {
 	buildSvc := helmchartbuild.NewChartBuildService(h.registry.DB)
 	result, err := buildSvc.ExecuteChartBuild(ctx, app, input.BumpType, rev)
 	if err != nil {
-		if errors.Is(err, revision.ErrRequired) {
-			bkerrs.AbortWithErr(c, errCodeRevisionRequired.WithCause(err))
-			return
-		}
 		bkerrs.AbortWithErr(c, errors.Wrap(err, "trigger helm chart build"))
 		return
 	}
@@ -145,8 +126,8 @@ func (h *Handler) CreateHelmChartBuild(c *gin.Context) {
 		asynq.ProcessIn(chartbuildpoll.PollingInterval()),
 	)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(
-			err, bkerrs.ErrCodeInternalServerError, "enqueue polling helm chart build status task",
+		bkerrs.AbortWithErr(c, errors.Wrap(
+			err, "enqueue polling helm chart build status task",
 		))
 		return
 	}
@@ -189,7 +170,7 @@ func (h *Handler) GetHelmChartSemver(c *gin.Context) {
 
 	counter, err := semver.Get(ctx, h.registry.DB, app.ID)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get helm chart semver"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "get helm chart semver"))
 		return
 	}
 
@@ -248,14 +229,14 @@ func (h *Handler) ListAppHelmCharts(c *gin.Context) {
 
 	repoConfig, err := h.resolveRepoConfig(ctx, app)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "resolve helm repo config"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "resolve helm repo config"))
 		return
 	}
 
 	repoIndex, err := helmrepo.FetchIndex(repoConfig)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrapf(
-			err, bkerrs.ErrCodeInternalServerError, "fetch helm repo index for app %s", app.ID,
+		bkerrs.AbortWithErr(c, errors.Wrapf(
+			err, "fetch helm repo index for app %s", app.ID,
 		))
 		return
 	}
@@ -268,7 +249,7 @@ func (h *Handler) ListAppHelmCharts(c *gin.Context) {
 
 	envMap, err := envmodel.GetAppEnvMap(ctx, h.registry.DB, app.WorkspaceID, app.ID)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list environments"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "list environments"))
 		return
 	}
 	deployedEnvsMap, err := h.buildHelmChartDeployedEnvsMap(ctx, app.ID, envMap)
@@ -325,8 +306,8 @@ func (h *Handler) ListHelmChartBuildRecords(c *gin.Context) {
 		helmchartbuild.ByApp(app.ID), helmchartbuild.KeywordMatches(queryInput.Keyword), helmchartbuild.NewestFirst(),
 	)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrapf(
-			err, bkerrs.ErrCodeInternalServerError, "list helm chart build records for app %s", app.ID,
+		bkerrs.AbortWithErr(c, errors.Wrapf(
+			err, "list helm chart build records for app %s", app.ID,
 		))
 		return
 	}
@@ -373,15 +354,15 @@ func (h *Handler) GetHelmChartFiles(c *gin.Context) {
 
 	repoConfig, err := h.resolveRepoConfig(ctx, app)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "resolve helm repo config"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "resolve helm repo config"))
 		return
 	}
 
 	reader := helmrepo.NewReader(repoConfig)
 	root, err := reader.ReadChartTree(helmrepo.Version{Name: uriInput.ChartVersion})
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrapf(
-			err, bkerrs.ErrCodeInternalServerError,
+		bkerrs.AbortWithErr(c, errors.Wrapf(
+			err,
 			"read chart tree for app %s version %s", app.ID, uriInput.ChartVersion,
 		))
 		return
@@ -424,14 +405,14 @@ func (h *Handler) ListChartVersions(c *gin.Context) {
 
 	repoConfig, err := h.resolveRepoConfig(ctx, app)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "resolve helm repo config"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "resolve helm repo config"))
 		return
 	}
 
 	reader := helmrepo.NewReader(repoConfig)
 	versions, err := reader.ListVersions()
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "listing versions"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "listing versions"))
 		return
 	}
 
@@ -479,7 +460,7 @@ func (h *Handler) GetValuesFile(c *gin.Context) {
 	content, err := reader.ReadFile(helmrepo.Version{Name: uriInput.ChartVersion}, "values.yaml")
 	if err != nil {
 		log.Error(ctx, errors.Wrap(err, "reading app config file").Error())
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "reading app config file"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "reading app config file"))
 		return
 	}
 
@@ -518,7 +499,7 @@ func (h *Handler) buildHelmChartDeployedEnvsMap(
 ) (map[string][]*serializer.DeployedEnvInfo, error) {
 	pairs, err := helmdeploy.ListChartVersionDeployedEnvs(ctx, h.registry.DB, appID)
 	if err != nil {
-		return nil, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list chart version deploy envs")
+		return nil, errors.Wrap(err, "list chart version deploy envs")
 	}
 
 	m := make(map[string][]*serializer.DeployedEnvInfo, len(pairs))

@@ -28,15 +28,29 @@ import (
 	"github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"k8s.io/apimachinery/pkg/util/intstr"
+
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 )
 
 var (
 	// ErrStrategyNotFound 发布策略不存在
-	ErrStrategyNotFound = errors.New("release strategy not found")
+	ErrStrategyNotFound = bkerrs.Define(
+		bkerrs.ErrCodeNotFound,
+		"DEPLOY_RELEASE_STRATEGY_NOT_FOUND",
+		"release strategy not found",
+	)
 	// ErrStrategyNameConflict 同一空间内已存在同名发布策略
-	ErrStrategyNameConflict = errors.New("release strategy name already exists")
+	ErrStrategyNameConflict = bkerrs.Define(
+		bkerrs.ErrCodeInvalidRequest,
+		"DEPLOY_RELEASE_STRATEGY_NAME_CONFLICT",
+		"release strategy name already exists",
+	)
 	// ErrInvalidBatchTarget 批次目标值不合法
-	ErrInvalidBatchTarget = errors.New("invalid batch target")
+	ErrInvalidBatchTarget = bkerrs.Define(
+		bkerrs.ErrCodeInvalidArgument,
+		"DEPLOY_RELEASE_STRATEGY_INVALID_BATCH_TARGET",
+		"invalid batch target",
+	)
 )
 
 // PauseMode 批次完成后的暂停方式

@@ -72,4 +72,25 @@ var _ = Describe("GetCurrentUser", func() {
 		Expect(code).To(Equal(http.StatusOK))
 		Expect(body).To(Equal(map[string]any{"user_id": "alice", "tenant_id": ""}))
 	})
+
+	It("未登录时返回 401 并在 details 中带上登录地址", func() {
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/simple_account/info", nil))
+
+		Expect(rec.Code).To(Equal(http.StatusUnauthorized))
+		var body struct {
+			Error struct {
+				Code    string `json:"code"`
+				Details []struct {
+					Code   string            `json:"code"`
+					Extras map[string]string `json:"extras"`
+				} `json:"details"`
+			} `json:"error"`
+		}
+		Expect(json.Unmarshal(rec.Body.Bytes(), &body)).To(Succeed())
+		Expect(body.Error.Code).To(Equal("UNAUTHENTICATED"))
+		Expect(body.Error.Details).To(HaveLen(1))
+		Expect(body.Error.Details[0].Code).To(Equal("USER_UNAUTHENTICATED"))
+		Expect(body.Error.Details[0].Extras).To(HaveKeyWithValue("login_url", "http://login.example.com/plain/"))
+	})
 })

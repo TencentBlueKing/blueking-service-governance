@@ -96,8 +96,8 @@ func (h *Handler) ListCustomBuildImages(c *gin.Context) {
 		customruntime.InListOrder(),
 	)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrapf(
-			err, bkerrs.ErrCodeInternalServerError, "list workspace %s custom build images", uriInput.WorkspaceID,
+		bkerrs.AbortWithErr(c, errors.Wrapf(
+			err, "list workspace %s custom build images", uriInput.WorkspaceID,
 		))
 		return
 	}

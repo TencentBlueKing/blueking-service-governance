@@ -30,12 +30,10 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
 
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime"
 	appmodeldeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/appmodel"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/status"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component/devmode"
 	k8sclient "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/client"
@@ -89,10 +87,6 @@ func (h *Handler) validateAppAndGetDeployRecord(
 	// 按环境 + 泳道取最新部署记录；未命中与 List 一样 404，Watch 也建不成连接
 	record, err := appmodeldeploy.GetLatest(ctx, h.registry.DB, app.ID, uriInput.EnvName, trafficLaneName)
 	if err != nil {
-		if errors.Is(err, appmodeldeploy.ErrDeployRecordNotFound) {
-			return nil, nil, status.ErrDeployRecordNotFound.With("appID", app.ID).
-				With("envName", uriInput.EnvName).WithCause(err)
-		}
 		return nil, nil, errors.Wrap(err, "get latest deploy record")
 	}
 
@@ -113,8 +107,8 @@ func (h *Handler) listMatchingAppInstancePods(
 	pods, err := client.List(ctx, record.Namespace, metav1.ListOptions{LabelSelector: labelSelector})
 	if err != nil {
 		// 拉 Pod 失败则整次 List 失败，不分页/全量都不会降级为空列表
-		return nil, "", bkerrs.Wrapf(
-			err, bkerrs.ErrCodeInternalServerError,
+		return nil, "", errors.Wrapf(
+			err,
 			"list namespace %s labelsSelector [%s] pods", record.Namespace, labelSelector,
 		)
 	}
@@ -172,7 +166,7 @@ func (h *Handler) projectListedAppInstances(
 
 			// 分页必须与改造前一致：当前页任一 Pod 解析失败则整次 500，避免 CLI 中断
 			if !queryInput.All {
-				return nil, nil, 0, bkerrs.Wrapf(pErr, bkerrs.ErrCodeInternalServerError, "parse pod %s", podName)
+				return nil, nil, 0, errors.Wrapf(pErr, "parse pod %s", podName)
 			}
 
 			// 全量不因单个坏 Pod 失败整次请求，记入 skipped 后继续

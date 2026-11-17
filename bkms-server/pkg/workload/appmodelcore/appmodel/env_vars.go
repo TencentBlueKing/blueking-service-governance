@@ -82,11 +82,11 @@ func (s *AppEnvVarService) Update(
 
 	oldIdx := findEnvVarIndex(envVars, key)
 	if oldIdx < 0 {
-		return nil, nil, ErrEnvVarNotFound
+		return nil, nil, ErrEnvVarNotFound.With("key", key)
 	}
 
 	if updateData.Key != key && findEnvVarIndex(envVars, updateData.Key) >= 0 {
-		return nil, nil, ErrEnvVarKeyExists
+		return nil, nil, ErrEnvVarKeyExists.With("key", updateData.Key)
 	}
 	if err := envvartypes.ValidateEnvVarKey(updateData.Key); err != nil {
 		return nil, nil, ErrInvalidEnvVarKey
@@ -130,7 +130,7 @@ func (s *AppEnvVarService) Delete(ctx context.Context, appID, key string) (*Vari
 
 	idx := findEnvVarIndex(envVars, key)
 	if idx < 0 {
-		return nil, ErrEnvVarNotFound
+		return nil, ErrEnvVarNotFound.With("key", key)
 	}
 
 	removedEnvVar := envVars[idx]

@@ -25,7 +25,11 @@ import (
 )
 
 // ErrInvalidArgument 参数/业务校验失败
-var ErrInvalidArgument = errors.New("invalid argument")
+var ErrInvalidArgument = bkerrs.Define(
+	bkerrs.ErrCodeInvalidRequest,
+	"EXTENSION_DEPSERVICE_INVALID_ARGUMENT",
+	"invalid dependency service argument",
+)
 
 // ErrUpdateNotSupported provider 不支持更新服务实例
 var ErrUpdateNotSupported = errors.New("service instance update is not supported")

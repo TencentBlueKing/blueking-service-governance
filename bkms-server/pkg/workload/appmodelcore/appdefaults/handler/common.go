@@ -3,9 +3,9 @@ package handler
 
 import (
 	"context"
-	"errors"
 
 	"github.com/gin-gonic/gin"
+	"github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/v2/bson"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
@@ -18,20 +18,8 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appdefaults/serializer"
 )
 
-var (
-	errInvalidRuleID = bkerrs.Define(
-		bkerrs.ErrCodeInvalidArgument, "WORKLOAD_APPDEFAULTS_INVALID_RULE_ID", "invalid rule ID",
-	)
-	errRuleNotFound = bkerrs.Define(
-		bkerrs.ErrCodeNotFound, "WORKLOAD_APPDEFAULTS_RULE_NOT_FOUND", "application default rule not found",
-	)
-	errInvalidRule = bkerrs.Define(
-		bkerrs.ErrCodeInvalidRequest, "WORKLOAD_APPDEFAULTS_INVALID_RULE", "invalid application default rule",
-	)
-	errRuleConflict = bkerrs.Define(
-		bkerrs.ErrCodeInvalidRequest, "WORKLOAD_APPDEFAULTS_RULE_CONFLICT",
-		"application default rule already exists for this environment type",
-	)
+var errInvalidRuleID = bkerrs.Define(
+	bkerrs.ErrCodeInvalidArgument, "WORKLOAD_APPDEFAULTS_INVALID_RULE_ID", "invalid rule ID",
 )
 
 // Handler handles workspace application-default APIs.
@@ -77,7 +65,7 @@ func listRules[Output any](
 
 	rules, err := h.rules().List(ctx, appdefaults.ByConfigType(workspace.ID, configType))
 	if err != nil {
-		bkerrs.AbortWithErr(c, apiError(err, "list "+configType.String()+" application default rules"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "list "+configType.String()+" application default rules"))
 		return
 	}
 	data := make([]*Output, 0, len(rules))
@@ -116,11 +104,11 @@ func createRule[Input, Output any](
 		Spec:        definition.Spec,
 	}
 	if err = appdefaults.ValidateRule(created); err != nil {
-		bkerrs.AbortWithErr(c, apiError(err, "create "+configType.String()+" application default rule"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "create "+configType.String()+" application default rule"))
 		return
 	}
 	if err = h.rules().Create(ctx, created); err != nil {
-		bkerrs.AbortWithErr(c, apiError(err, "create "+configType.String()+" application default rule"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "create "+configType.String()+" application default rule"))
 		return
 	}
 	recordAudit(ctx, workspace.ID, audit.OperationTypeCreate, nil, created)
@@ -157,7 +145,7 @@ func updateRule[Input, Output any](
 	// section with the same rule ID therefore resolves as not found.
 	before, err := h.rules().Get(ctx, appdefaults.ByID(workspace.ID, configType, ruleID))
 	if err != nil {
-		bkerrs.AbortWithErr(c, apiError(err, "update "+configType.String()+" application default rule"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "update "+configType.String()+" application default rule"))
 		return
 	}
 	definition := toModel(*input)
@@ -165,12 +153,12 @@ func updateRule[Input, Output any](
 	updated.EnvTypes = definition.EnvTypes
 	updated.Spec = definition.Spec
 	if err = appdefaults.ValidateRule(&updated); err != nil {
-		bkerrs.AbortWithErr(c, apiError(err, "update "+configType.String()+" application default rule"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "update "+configType.String()+" application default rule"))
 		return
 	}
 	// Replace the complete document so removed configuration cannot survive as stale BSON.
 	if err = h.rules().Replace(ctx, &updated, appdefaults.ByID(workspace.ID, configType, ruleID)); err != nil {
-		bkerrs.AbortWithErr(c, apiError(err, "update "+configType.String()+" application default rule"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "update "+configType.String()+" application default rule"))
 		return
 	}
 	recordAudit(ctx, workspace.ID, audit.OperationTypeUpdate, before, &updated)
@@ -202,24 +190,11 @@ func deleteRule(
 
 	deleted, err := h.rules().GetAndDelete(ctx, appdefaults.ByID(workspace.ID, configType, ruleID))
 	if err != nil {
-		bkerrs.AbortWithErr(c, apiError(err, "delete "+configType.String()+" application default rule"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "delete "+configType.String()+" application default rule"))
 		return
 	}
 	recordAudit(ctx, workspace.ID, audit.OperationTypeDelete, deleted, nil)
 	ginutils.OK(c, serializer.EmptyOutput{})
-}
-
-func apiError(err error, operation string) error {
-	switch {
-	case errors.Is(err, appdefaults.ErrRuleNotFound):
-		return errRuleNotFound.With("operation", operation).WithCause(err)
-	case errors.Is(err, appdefaults.ErrInvalidRule):
-		return errInvalidRule.With("operation", operation).WithCause(err)
-	case errors.Is(err, appdefaults.ErrRuleConflict):
-		return errRuleConflict.With("operation", operation).WithCause(err)
-	default:
-		return bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, operation)
-	}
 }
 
 func recordAudit(

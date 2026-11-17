@@ -20,9 +20,8 @@
 package handler
 
 import (
-	"errors"
-
 	"github.com/gin-gonic/gin"
+	"github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
@@ -95,7 +94,7 @@ func (h *Handler) ListRoleBindings(c *gin.Context) {
 	if err != nil {
 		bkerrs.AbortWithErr(
 			c,
-			bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list platform administrator role bindings"),
+			errors.Wrap(err, "list platform administrator role bindings"),
 		)
 		return
 	}
@@ -135,7 +134,7 @@ func (h *Handler) AssignRoles(c *gin.Context) {
 		auth.MustGetUser(c.Request.Context()).ID,
 	)
 	if err != nil {
-		bkerrs.AbortWithErr(c, toAPIError(err, "assign platform administrator roles"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "assign platform administrator roles"))
 		return
 	}
 	ginutils.NoContent(c)
@@ -165,34 +164,10 @@ func (h *Handler) RevokeRole(c *gin.Context) {
 	if err := h.platAdminService().RevokeRole(c.Request.Context(), path.Username); err != nil {
 		bkerrs.AbortWithErr(
 			c,
-			bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "revoke platform administrator role"),
+			errors.Wrap(err, "revoke platform administrator role"),
 		)
 		return
 	}
 
 	ginutils.NoContent(c)
-}
-
-var (
-	errInvalidRoleCode = bkerrs.Define(
-		bkerrs.ErrCodeInvalidArgument, "PLATMGT_ADMIN_INVALID_ROLE_CODE", "invalid platform role code",
-	)
-	errRoleBindingAlreadyExists = bkerrs.Define(
-		bkerrs.ErrCodeAlreadyExists,
-		"PLATMGT_ADMIN_ROLE_BINDING_EXISTS",
-		"platform administrator role binding already exists",
-	)
-)
-
-func toAPIError(err error, internalMessage string) error {
-	switch {
-	case errors.Is(err, admin.ErrPermissionDenied):
-		return admin.ErrPermissionDenied.WithCause(err)
-	case errors.Is(err, admin.ErrInvalidRoleCode):
-		return errInvalidRoleCode.WithCause(err)
-	case errors.Is(err, admin.ErrRoleBindingAlreadyExists):
-		return errRoleBindingAlreadyExists.WithCause(err)
-	default:
-		return bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, internalMessage)
-	}
 }

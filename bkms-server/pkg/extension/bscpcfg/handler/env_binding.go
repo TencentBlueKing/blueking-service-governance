@@ -36,19 +36,6 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
-var (
-	errEnvBindingAlreadyExists = bkerrs.Define(
-		bkerrs.ErrCodeAlreadyExists,
-		"EXTENSION_BSCPCFG_ENV_BINDING_ALREADY_EXISTS",
-		"bscpcfg env binding already exists",
-	)
-	errEnvBindingNotFound = bkerrs.Define(
-		bkerrs.ErrCodeNotFound,
-		"EXTENSION_BSCPCFG_ENV_BINDING_NOT_FOUND",
-		"bscpcfg env binding not found",
-	)
-)
-
 // CreateEnvBinding 创建环境绑定（前置条件：已调用 InitMetadata）。
 //
 //	@ID			CreateBscpCfgEnvBinding
@@ -79,7 +66,7 @@ func (h *Handler) CreateEnvBinding(c *gin.Context) {
 
 	ws, err := store.Of(h.registry.DB, workspace.Meta).Get(ctx, workspace.ByWorkspaceID(app.WorkspaceID))
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrapf(err, bkerrs.ErrCodeInternalServerError, "get workspace"))
+		bkerrs.AbortWithErr(c, errors.Wrapf(err, "get workspace"))
 		return
 	}
 	if ws.BkSystems.BkCCBizID == "" {
@@ -102,13 +89,7 @@ func (h *Handler) CreateEnvBinding(c *gin.Context) {
 		Operator:  auth.MustGetUser(ctx).ID,
 	})
 	if err != nil {
-		if errors.Is(err, cfgmodel.ErrEnvBindingAlreadyExists) {
-			bkerrs.AbortWithErr(
-				c, errEnvBindingAlreadyExists.With("appID", app.ID).With("envName", uri.EnvName).WithCause(err),
-			)
-			return
-		}
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "create bscpcfg env binding"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "create bscpcfg env binding"))
 		return
 	}
 
@@ -150,13 +131,7 @@ func (h *Handler) DeleteEnvBinding(c *gin.Context) {
 	}
 
 	if err = mgr.DeleteEnvBinding(ctx, app.ID, uri.EnvName); err != nil {
-		if errors.Is(err, cfgmodel.ErrEnvBindingNotFound) {
-			bkerrs.AbortWithErr(
-				c, errEnvBindingNotFound.With("envName", uri.EnvName).WithCause(err),
-			)
-			return
-		}
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "delete bscpcfg env binding"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "delete bscpcfg env binding"))
 		return
 	}
 
@@ -199,20 +174,7 @@ func (h *Handler) GetEnvBinding(c *gin.Context) {
 
 	config, err := mgr.GetSnapshot(ctx, app.ID, uri.EnvName)
 	if err != nil {
-		switch {
-		case errors.Is(err, cfgmodel.ErrMetadataNotFound):
-			bkerrs.AbortWithErr(
-				c,
-				errMetadataNotFound.With("appID", uri.AppID).WithCause(err),
-			)
-		case errors.Is(err, cfgmodel.ErrEnvBindingNotFound):
-			bkerrs.AbortWithErr(
-				c,
-				errEnvBindingNotFound.With("envName", uri.EnvName).WithCause(err),
-			)
-		default:
-			bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get bscpcfg env binding"))
-		}
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "get bscpcfg env binding"))
 		return
 	}
 	ginutils.OK(c, &slz.EnvBindingResponse{Data: new(slz.EnvBindingOutput).FromModel(config)})
@@ -256,7 +218,7 @@ func (h *Handler) ListEnvBindings(c *gin.Context) {
 			ginutils.OK(c, &slz.EnvBindingListResponse{Data: []*slz.EnvBindingOutput{}})
 			return
 		}
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list env bindings"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "list env bindings"))
 		return
 	}
 

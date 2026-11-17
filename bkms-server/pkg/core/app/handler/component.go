@@ -19,9 +19,8 @@
 package handler
 
 import (
-	"errors"
-
 	"github.com/gin-gonic/gin"
+	"github.com/pkg/errors"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/serializer"
@@ -67,15 +66,15 @@ func (h *Handler) CreateAppComponent(c *gin.Context) {
 	if newComp.RefWorkspaceCompName != "" {
 		if _, err = store.Of(h.registry.DB, workspace.ComponentMeta).
 			Get(ctx, workspace.ComponentByName(app.WorkspaceID, newComp.RefWorkspaceCompName)); err != nil {
-			bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get workspace component"))
+			bkerrs.AbortWithErr(c, errors.Wrap(err, "get workspace component"))
 			return
 		}
 	} else {
-		def, iErr := store.Of(h.registry.DB, component.ComponentDefMeta).
-			Get(ctx, component.ByNameVersion(newComp.Type, newComp.Version),
-				store.TenantWithPlatform(component.BuiltinShared()))
+		def, iErr := component.GetDef(
+			ctx, store.Of(h.registry.DB, component.ComponentDefMeta), newComp.Type, newComp.Version,
+		)
 		if iErr != nil {
-			bkerrs.AbortWithErr(c, bkerrs.Wrap(iErr, bkerrs.ErrCodeInternalServerError, "get component def"))
+			bkerrs.AbortWithErr(c, iErr)
 			return
 		}
 		newComp.Type = def.Name
@@ -83,20 +82,9 @@ func (h *Handler) CreateAppComponent(c *gin.Context) {
 	}
 
 	if err = appmodel.AddComponent(ctx, h.registry.DB, app.ID, newComp); err != nil {
-		if errors.Is(err, appmodel.ErrAppModelNotFound) {
-			bkerrs.AbortWithErr(c, appmodel.ErrAppModelNotFound.With("appName", app.Name).WithCause(err))
-			return
-		}
-		if errors.Is(err, appmodel.ErrComponentNameExists) {
-			bkerrs.AbortWithErr(
-				c,
-				errComponentNameExists.With("compName", newComp.Name).With("appName", app.Name).WithCause(err),
-			)
-			return
-		}
 		bkerrs.AbortWithErr(
 			c,
-			bkerrs.Wrapf(err, bkerrs.ErrCodeInternalServerError, "add component to app(%s) model", app.Name),
+			errors.Wrapf(err, "add component to app(%s) model", app.Name),
 		)
 		return
 	}
@@ -149,11 +137,7 @@ func (h *Handler) PatchAppComponent(c *gin.Context) {
 
 	appModel, err := store.Of(h.registry.DB, appmodel.AppModelMeta).Get(ctx, appmodel.ByApp(app.ID))
 	if err != nil {
-		if errors.Is(err, appmodel.ErrAppModelNotFound) {
-			bkerrs.AbortWithErr(c, appmodel.ErrAppModelNotFound.With("appName", app.Name).WithCause(err))
-			return
-		}
-		bkerrs.AbortWithErr(c, bkerrs.Wrapf(err, bkerrs.ErrCodeInternalServerError, "get app(%s) model", app.Name))
+		bkerrs.AbortWithErr(c, errors.Wrapf(err, "get app(%s) model", app.Name))
 		return
 	}
 
@@ -165,7 +149,7 @@ func (h *Handler) PatchAppComponent(c *gin.Context) {
 		}
 	}
 	if targetComp == nil {
-		bkerrs.AbortWithErr(c, errComponentNotFound.With("compName", uriInput.CompName).With("appName", app.Name))
+		bkerrs.AbortWithErr(c, appmodel.ErrComponentNotFound.With("compName", uriInput.CompName))
 		return
 	}
 	if targetComp.RefWorkspaceCompName != "" {
@@ -175,31 +159,9 @@ func (h *Handler) PatchAppComponent(c *gin.Context) {
 
 	updateData := input.ToModel()
 	if err = appmodel.UpdateComponent(ctx, h.registry.DB, app.ID, uriInput.CompName, updateData); err != nil {
-		if errors.Is(err, appmodel.ErrAppModelNotFound) {
-			bkerrs.AbortWithErr(c, appmodel.ErrAppModelNotFound.With("appName", app.Name).WithCause(err))
-			return
-		}
-		if errors.Is(err, appmodel.ErrComponentNotFound) {
-			bkerrs.AbortWithErr(
-				c,
-				errComponentNotFound.With("compName", uriInput.CompName).With("appName", app.Name).WithCause(err),
-			)
-			return
-		}
-		if errors.Is(err, appmodel.ErrComponentNameExists) {
-			compName := uriInput.CompName
-			if updateData.Name != nil {
-				compName = *updateData.Name
-			}
-			bkerrs.AbortWithErr(
-				c,
-				errComponentNameExists.With("compName", compName).With("appName", app.Name).WithCause(err),
-			)
-			return
-		}
 		bkerrs.AbortWithErr(
 			c,
-			bkerrs.Wrapf(err, bkerrs.ErrCodeInternalServerError, "update component in app(%s) model", app.Name),
+			errors.Wrapf(err, "update component in app(%s) model", app.Name),
 		)
 		return
 	}
@@ -247,17 +209,13 @@ func (h *Handler) DeleteAppComponent(c *gin.Context) {
 	}
 
 	if err = appmodel.RemoveComponent(ctx, h.registry.DB, app.ID, uriInput.CompName); err != nil {
-		if errors.Is(err, appmodel.ErrAppModelNotFound) {
-			bkerrs.AbortWithErr(c, appmodel.ErrAppModelNotFound.With("appName", app.Name).WithCause(err))
-			return
-		}
 		if errors.Is(err, appmodel.ErrComponentNotFound) {
 			ginutils.OK(c, serializer.EmptyOutput{})
 			return
 		}
 		bkerrs.AbortWithErr(
 			c,
-			bkerrs.Wrapf(err, bkerrs.ErrCodeInternalServerError, "remove component from app(%s) model", app.Name),
+			errors.Wrapf(err, "remove component from app(%s) model", app.Name),
 		)
 		return
 	}

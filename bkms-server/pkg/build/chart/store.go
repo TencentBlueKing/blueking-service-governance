@@ -26,11 +26,16 @@ import (
 	"github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
 // ErrRecordNotFound Helm Chart 构建记录未找到时返回固定错误
-var ErrRecordNotFound = errors.New("helm chart build record not found")
+var ErrRecordNotFound = bkerrs.Define(
+	bkerrs.ErrCodeNotFound,
+	"BUILD_CHART_RECORD_NOT_FOUND",
+	"chart build record not found",
+)
 
 // RecordStore Helm Chart 构建记录存储
 type RecordStore = store.GenericStore[Record]

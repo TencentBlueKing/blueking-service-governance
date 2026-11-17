@@ -28,18 +28,31 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	k8sclient "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/client"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/cluster"
 )
 
 var (
 	// ErrRolloutNotInstalled 集群未安装 bcs-kourse-rollout（不存在 Rollout CRD），错误信息中携带集群返回的原因
-	ErrRolloutNotInstalled = errors.New("rollout CRD is not installed in cluster")
+	ErrRolloutNotInstalled = bkerrs.Define(
+		bkerrs.ErrCodeNotFound,
+		"DEPLOY_BATCH_RELEASE_ROLLOUT_NOT_INSTALLED",
+		"rollout CRD is not installed in cluster",
+	)
 	// ErrRolloutNotFound 集群中不存在指定的 Rollout CR
-	ErrRolloutNotFound = errors.New("rollout not found")
+	ErrRolloutNotFound = bkerrs.Define(
+		bkerrs.ErrCodeNotFound,
+		"DEPLOY_BATCH_RELEASE_ROLLOUT_NOT_FOUND",
+		"rollout not found",
+	)
 	// ErrRolloutChanged 读取 Rollout 之后它又被修改（控制器推进了批次、其他用户的操作、被删除重建等），
 	// 基于读取时状态生成的修改已不再可靠，需要重新读取后再决定
-	ErrRolloutChanged = errors.New("batch release status has changed, please refresh and retry")
+	ErrRolloutChanged = bkerrs.Define(
+		bkerrs.ErrCodeAborted,
+		"DEPLOY_BATCH_RELEASE_ROLLOUT_CHANGED",
+		"batch release status has changed, please refresh and retry",
+	)
 )
 
 // StatusPatch Rollout status 子资源的修改内容，nil 字段不修改

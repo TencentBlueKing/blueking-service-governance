@@ -42,11 +42,6 @@ var (
 		"CLUSTER_ADDON_ENV_CLUSTER_NOT_CONFIGURED",
 		"environment has no cluster configured",
 	)
-	errClusterAddonNotFound = bkerrs.Define(
-		bkerrs.ErrCodeNotFound,
-		"CLUSTER_ADDON_NOT_FOUND",
-		"cluster addon not found",
-	)
 	errConcurrentInstallConflict = bkerrs.Define(
 		bkerrs.ErrCodeAborted,
 		"CLUSTER_ADDON_CONCURRENT_INSTALL_CONFLICT",
@@ -56,11 +51,6 @@ var (
 		bkerrs.ErrCodeAborted,
 		"CLUSTER_ADDON_CONCURRENT_UNINSTALL_CONFLICT",
 		"concurrent uninstall conflict occurred",
-	)
-	errAddonNotApplicable = bkerrs.Define(
-		bkerrs.ErrCodeInvalidRequest,
-		"CLUSTER_ADDON_NOT_APPLICABLE",
-		"cluster addon is not applicable to the target cluster",
 	)
 )
 
@@ -115,13 +105,13 @@ func (h *Handler) ListClusterAddons(c *gin.Context) {
 
 	addonDefs, err := clusteraddon.ListDefs(ctx, h.addonDefs())
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list cluster addon defs"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "list cluster addon defs"))
 		return
 	}
 
 	repoIndex, repoErr := clusteraddon.FetchRepoIndex()
 	if repoErr != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(repoErr, bkerrs.ErrCodeInternalServerError, "fetch helm repo index"))
+		bkerrs.AbortWithErr(c, errors.Wrap(repoErr, "fetch helm repo index"))
 		return
 	}
 
@@ -181,12 +171,7 @@ func (h *Handler) UpsertClusterAddon(c *gin.Context) {
 		ctx, clusteraddon.ByName(uriInput.AddonName),
 	)
 	if err != nil {
-		if errors.Is(err, clusteraddon.ErrClusterAddonDefNotFound) {
-			bkerrs.AbortWithErr(c, errClusterAddonNotFound.With("addonName", uriInput.AddonName).WithCause(err))
-			return
-		}
-		bkerrs.AbortWithErr(c, bkerrs.Wrapf(err, bkerrs.ErrCodeInternalServerError,
-			"get cluster addon def %s", uriInput.AddonName))
+		bkerrs.AbortWithErr(c, errors.Wrapf(err, "get cluster addon def %s", uriInput.AddonName))
 		return
 	}
 
@@ -202,12 +187,7 @@ func (h *Handler) UpsertClusterAddon(c *gin.Context) {
 	if err = clusteraddon.InstallOrUpgradeClusterAddon(
 		ctx, addonDef, env, namespace, jsonInput.ChartVersion, jsonInput.Values,
 	); err != nil {
-		if errors.Is(err, clusteraddon.ErrAddonNotApplicable) {
-			bkerrs.AbortWithErr(c, errAddonNotApplicable.With("addonName", uriInput.AddonName).WithCause(err))
-			return
-		}
-		bkerrs.AbortWithErr(c, bkerrs.Wrapf(err, bkerrs.ErrCodeInternalServerError,
-			"deploy cluster addon %s", uriInput.AddonName))
+		bkerrs.AbortWithErr(c, errors.Wrapf(err, "deploy cluster addon %s", uriInput.AddonName))
 		return
 	}
 
@@ -267,12 +247,7 @@ func (h *Handler) DeleteClusterAddon(c *gin.Context) {
 		ctx, clusteraddon.ByName(uriInput.AddonName),
 	)
 	if err != nil {
-		if errors.Is(err, clusteraddon.ErrClusterAddonDefNotFound) {
-			bkerrs.AbortWithErr(c, errClusterAddonNotFound.With("addonName", uriInput.AddonName).WithCause(err))
-			return
-		}
-		bkerrs.AbortWithErr(c, bkerrs.Wrapf(err, bkerrs.ErrCodeInternalServerError,
-			"get cluster addon def %s", uriInput.AddonName))
+		bkerrs.AbortWithErr(c, errors.Wrapf(err, "get cluster addon def %s", uriInput.AddonName))
 		return
 	}
 
@@ -286,8 +261,7 @@ func (h *Handler) DeleteClusterAddon(c *gin.Context) {
 	defer installLock.Release(ctx)
 
 	if err = clusteraddon.UninstallClusterAddon(ctx, addonDef, clusterID, namespace); err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrapf(err, bkerrs.ErrCodeInternalServerError,
-			"uninstall cluster addon %s", uriInput.AddonName))
+		bkerrs.AbortWithErr(c, errors.Wrapf(err, "uninstall cluster addon %s", uriInput.AddonName))
 		return
 	}
 

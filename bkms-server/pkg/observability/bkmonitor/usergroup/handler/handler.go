@@ -21,26 +21,18 @@
 package handler
 
 import (
-	"errors"
-
 	"github.com/go-playground/validator/v10"
+	"github.com/pkg/errors"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	bkmusergroup "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/bkmonitor/usergroup"
 	storereg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
 )
 
-var (
-	errUserGroupNotFound = bkerrs.Define(
-		bkerrs.ErrCodeNotFound,
-		"OBSERVABILITY_BKMONITOR_USER_GROUP_NOT_FOUND",
-		"user group not found or does not belong to current workspace",
-	)
-	errUserGroupInvalidParams = bkerrs.Define(
-		bkerrs.ErrCodeInvalidArgument,
-		"OBSERVABILITY_BKMONITOR_USER_GROUP_INVALID_PARAMS",
-		"invalid user group parameters",
-	)
+var errUserGroupInvalidParams = bkerrs.Define(
+	bkerrs.ErrCodeInvalidArgument,
+	"OBSERVABILITY_BKMONITOR_USER_GROUP_INVALID_PARAMS",
+	"invalid user group parameters",
 )
 
 // Handler handles user group HTTP requests.
@@ -55,12 +47,9 @@ func New(registry *storereg.Registry, service *bkmusergroup.Service) *Handler {
 }
 
 func (h *Handler) wrapServiceError(err error, action string) error {
-	if errors.Is(err, bkmusergroup.ErrUserGroupNotInWorkspace) {
-		return errUserGroupNotFound.WithCause(err)
-	}
 	var validationErrs validator.ValidationErrors
 	if errors.As(err, &validationErrs) {
 		return errUserGroupInvalidParams.WithCause(err)
 	}
-	return bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, action)
+	return errors.Wrap(err, action)
 }

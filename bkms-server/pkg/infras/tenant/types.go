@@ -18,7 +18,11 @@
 
 package tenant
 
-import "errors"
+import (
+	"errors"
+
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
+)
 
 const (
 	// HeaderTenantID 多租户请求头，对齐 ConfigCenter TenantHeader。
@@ -36,9 +40,13 @@ var (
 	// ErrTenantIDRequired indicates multi-tenant mode requires an explicit tenant header.
 	ErrTenantIDRequired = errors.New("tenant id is required")
 	// ErrTenantIDInvalid indicates the incoming tenant value violates local mode rules.
-	ErrTenantIDInvalid = errors.New("tenant id is invalid")
+	ErrTenantIDInvalid = bkerrs.Define(bkerrs.ErrCodeInvalidArgument, "TENANT_ID_INVALID", "tenant id is invalid")
 	// ErrTenantAccessDenied indicates the authenticated user cannot access the requested tenant.
-	ErrTenantAccessDenied = errors.New("tenant access denied")
+	ErrTenantAccessDenied = bkerrs.Define(bkerrs.ErrCodeNoPermission, "TENANT_ACCESS_DENIED", "tenant access denied")
 	// ErrTenantUserDisabled indicates the bk-user account exists but is not enabled.
-	ErrTenantUserDisabled = errors.New("tenant user is disabled")
+	ErrTenantUserDisabled = bkerrs.Define(
+		bkerrs.ErrCodeNoPermission,
+		"TENANT_USER_DISABLED",
+		"tenant user is disabled",
+	)
 )

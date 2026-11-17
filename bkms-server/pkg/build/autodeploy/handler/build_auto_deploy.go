@@ -47,11 +47,6 @@ import (
 var _ autodeploy.Handler = (*Handler)(nil)
 
 var (
-	errInvalidCodeRevision = bkerrs.Define(
-		bkerrs.ErrCodeInvalidArgument,
-		"BUILD_AUTODEPLOY_INVALID_CODE_REVISION",
-		"invalid code revision",
-	)
 	errInvalidAppType = bkerrs.Define(
 		bkerrs.ErrCodeInvalidArgument,
 		"BUILD_AUTODEPLOY_INVALID_APP_TYPE",
@@ -61,21 +56,6 @@ var (
 		bkerrs.ErrCodeInvalidArgument,
 		"BUILD_AUTODEPLOY_NON_PROD_ENV_REQUIRED",
 		"build auto deploy only supports non-production env",
-	)
-	errImageReferenceInvalid = bkerrs.Define(
-		bkerrs.ErrCodeInvalidArgument,
-		"BUILD_AUTODEPLOY_INVALID_IMAGE_REFERENCE",
-		"invalid platform build image reference",
-	)
-	errWorkspaceImageCredentialMissing = bkerrs.Define(
-		bkerrs.ErrCodeInvalidArgument,
-		"BUILD_AUTODEPLOY_IMAGE_CREDENTIAL_MISSING",
-		"workspace image registry credential is missing",
-	)
-	errCodeRevisionRequired = bkerrs.Define(
-		bkerrs.ErrCodeInvalidRequest,
-		"BUILD_AUTODEPLOY_CODE_REVISION_REQUIRED",
-		"code revision is required",
 	)
 )
 
@@ -184,11 +164,11 @@ func (h *Handler) createAppModelBuildDeploy(c *gin.Context, expectedFramework st
 
 	buildService, err := h.newBuildService()
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "init build service"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "init build service"))
 		return
 	}
 
-	// 触发构建并登记自动部署；参数类失败由 wrapBuildAutoDeployError 映射
+	// 触发构建并登记自动部署
 	buildRecord, err := build.StartAndScheduleBuild(
 		c.Request.Context(),
 		buildService,
@@ -205,7 +185,7 @@ func (h *Handler) createAppModelBuildDeploy(c *gin.Context, expectedFramework st
 		},
 	)
 	if err != nil {
-		bkerrs.AbortWithErr(c, wrapBuildAutoDeployError(err))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "start build auto deploy"))
 		return
 	}
 
@@ -228,7 +208,7 @@ func bindBuildDeployRequest(
 
 	rev, err := revision.Resolve(input.RevisionType, input.Revision, input.Branch)
 	if err != nil {
-		bkerrs.AbortWithErr(c, errInvalidCodeRevision.WithCause(err))
+		bkerrs.AbortWithErr(c, err)
 		return serializer.AppEnvURIInput{}, serializer.CreateAppModelBuildDeployInput{}, revision.CodeRevision{}, false
 	}
 
@@ -290,22 +270,6 @@ func (h *Handler) prepareBuildAutoDeploy(
 	}
 
 	return app, true
-}
-
-// wrapBuildAutoDeployError 把构建启动失败映射成对应接口错误
-// StartAndScheduleBuild 内部会跑构建前置校验，镜像引用填错或缺凭证属参数问题，
-// 与保存构建配置时的错误码保持一致；其余失败仍按内部错误上报
-func wrapBuildAutoDeployError(err error) error {
-	switch {
-	case build.IsImageReferenceInvalid(err):
-		return errImageReferenceInvalid.WithCause(err)
-	case errors.Is(err, build.ErrWorkspaceImageCredentialMissing):
-		return errWorkspaceImageCredentialMissing.WithCause(err)
-	case errors.Is(err, revision.ErrRequired):
-		return errCodeRevisionRequired.WithCause(err)
-	default:
-		return errors.Wrap(err, "start build auto deploy")
-	}
 }
 
 func supportsBuildAutoDeployEnvType(envType string) bool {

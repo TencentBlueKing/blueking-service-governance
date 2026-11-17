@@ -34,6 +34,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkci/pipelinevar"
 	imgbuild "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/revision"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime/capability/platformbuild"
@@ -45,7 +46,9 @@ import (
 )
 
 // ErrWorkspaceImageCredentialMissing 本次会拉取自定义镜像，但工作空间生效镜像源没有蓝盾凭证
-var ErrWorkspaceImageCredentialMissing = errors.New(
+var ErrWorkspaceImageCredentialMissing = bkerrs.Define(
+	bkerrs.ErrCodeInvalidArgument,
+	"BUILD_BUILD_IMAGE_CREDENTIAL_MISSING",
 	"workspace image registry credential is not configured",
 )
 
