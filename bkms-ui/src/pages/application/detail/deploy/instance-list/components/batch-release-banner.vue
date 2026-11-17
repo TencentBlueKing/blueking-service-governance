@@ -59,11 +59,10 @@
               </template>
             </i18n-t>
           </template>
-          <!-- 暂停态：等待手动继续 / 定时暂停为蓝色过程态（批次已完成）；仅「已暂停」兜底为黄色警示态 -->
+          <!-- 暂停态：与「灰度发布进度」视图同口径，等待手动继续 / 定时暂停 / 已暂停统一为 warning（橙色） -->
           <template v-else-if="view.kind === 'paused'">
             <template v-if="pausedWaiting">
-              <!-- 设计稿：定时暂停的状态词为橙色 #F59500，等待手动继续沿用蓝色；容器与图标仍为蓝色过程态 -->
-              <span :class="['font-bold', pausedCountdown ? 'text-[#F59500]' : themeClass.status]">
+              <span :class="['font-bold', themeClass.status]">
                 {{ $t('第 {0} 批已完成', [view.batchIndex ?? '--']) }}
               </span>
               <i18n-t
@@ -280,9 +279,9 @@
   }
 
   /**
-   * 五套语义配色（设计稿）：
-   * 绿（已完成）/ 红（失败）/ 黄（已暂停兜底、已回滚、回滚中）/ 蓝（更新中）。
-   * 等待手动继续 / 定时暂停为蓝色过程态，见 PAUSED_WAITING_THEME。
+   * 语义配色，与「灰度发布进度」视图（batch-release-progress-panel）保持同一套口径：
+   * 绿（已完成）/ 红（失败）/ 黄（暂停、已回滚、回滚中）/ 蓝（更新中）。
+   * 暂停态（含等待手动继续 / 定时暂停）与详情视图一致，统一使用 warning 橙色。
    */
   const THEMES: Record<BatchReleaseBannerView['kind'], BannerTheme> = {
     completed: {
@@ -311,12 +310,6 @@
     },
   };
 
-  /** 等待手动继续 / 定时暂停（批次已完成的暂停）：设计稿蓝色过程态，与「已暂停」黄色警示态区分。 */
-  const PAUSED_WAITING_THEME: BannerTheme = {
-    container: '!border-[#A3C5FD] !bg-[#F0F5FF]',
-    status: 'text-[#3A84FF]',
-  };
-
   /** Alert 内置主题（决定默认无障碍语义，图标已由 icon 插槽覆盖）。 */
   const ALERT_THEMES: Record<BatchReleaseBannerView['kind'], 'danger' | 'info' | 'success' | 'warning'> = {
     completed: 'success',
@@ -328,8 +321,9 @@
   };
 
   /**
-   * 暂停态细分：statusTag 为「等待手动继续 / 定时暂停中」时按设计稿展示蓝色过程态
-   * （批次已完成，等待继续）；「已暂停」（定时到期兜底等）保持黄色警示态。
+   * 暂停态细分：「等待手动继续 / 定时暂停中」表示当前批次已完成、在等继续，
+   * 文案展示「第 N 批已完成 · 等待继续」；「已暂停」（定时到期兜底等）展示「第 N 批已暂停」。
+   * 两者容器与状态色统一为 warning 橙色，与「灰度发布进度」视图一致。
    */
   const pausedWaiting = computed(() => {
     if (props.view.kind !== 'paused') return false;
@@ -383,9 +377,9 @@
     warning: 'bkms-icon-warning-circle',
   };
 
-  const themeClass = computed(() => (pausedWaiting.value ? PAUSED_WAITING_THEME : THEMES[props.view.kind]));
+  const themeClass = computed(() => THEMES[props.view.kind]);
 
-  const alertTheme = computed(() => (pausedWaiting.value ? 'info' : ALERT_THEMES[props.view.kind]));
+  const alertTheme = computed(() => ALERT_THEMES[props.view.kind]);
 
   /** 字体图标类名；loading 态由 SvgIcon 渲染，此处返回空串。 */
   const iconClass = computed(() => (props.view.iconKind === 'loading' ? '' : ICONS[props.view.iconKind]));

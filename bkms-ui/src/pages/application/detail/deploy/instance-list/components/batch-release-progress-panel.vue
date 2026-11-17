@@ -68,7 +68,7 @@
 
     <!-- 语义色大横幅 -->
     <div
-      :class="['rounded-[2px] border px-[16px] py-[16px]', themeClass.container]"
+      :class="['batch-release-progress-banner rounded-[2px] border px-[16px] py-[16px]', themeClass.container]"
       data-testid="batch-release-progress-banner"
     >
       <div class="flex items-center justify-between gap-[16px]">
@@ -475,10 +475,10 @@
   ]);
 
   /** 把内部主题映射到 bkui Button 支持的 theme 取值。 */
-  function buttonTheme(item: BatchReleaseBannerAction): 'danger' | 'primary' | undefined {
+  function buttonTheme(item: BatchReleaseBannerAction): 'danger' | 'default' | 'primary' {
     if (item.theme === 'primary') return 'primary';
     if (item.theme === 'danger') return 'danger';
-    return undefined;
+    return 'default';
   }
 
   function handleAction(item: BatchReleaseBannerAction) {

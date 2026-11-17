@@ -22,7 +22,7 @@
 -->
 <template>
   <div
-    class="rounded-[2px] border border-[#DCDEE5] bg-white p-[16px]"
+    class="shadow-[0_2px_4px_0_#0000001a] bg-[#fff] p-[16px]"
     data-testid="canary-instance-table"
   >
     <div class="flex items-center justify-between gap-[16px] mb-[16px]">
