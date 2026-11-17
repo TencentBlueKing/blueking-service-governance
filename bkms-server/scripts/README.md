@@ -26,6 +26,21 @@ uv run scripts/<category>/<script-name>.py [参数...]
 
 ## 脚本清单
 
+### `i18n-extract/` —— 补全翻译骨架
+
+- **用途**：扫描 `pkg/`、`cmd/` 中需要翻译的 key（`bkerrs.Define` 的错误详情码、`i18n.T` 的字面量 key），
+  把 `pkg/common/i18n/locales/` 中缺失的 key 以待翻译骨架追加到所属模块的 YAML 文件。
+- **目标文件**：取同目录（含子目录）已翻译 key 最多落在的文件，没有时逐级向上查找到模块目录，都找不到时写入 `misc.yaml`。
+- **骨架内容**：英文预填 `Define` 的默认描述，中文留空，上方附 `# TODO(make i18n)` 注释标明引用位置和调用处传入的参数
+  （`Define` 取自 `.With("name", ...)`，`i18n.T` 取自参数 map 的键），文案中以 `{{.name}}` 引用。
+  i18n 加载时拒绝空文案，补全翻译之前服务无法启动、测试也会失败。
+- **输出**：逐条打印 `locale文件:行号  key  (used at 源码位置)`，可直接在 IDE 中点击跳转。
+- **使用示例**（在 `bkms-server` 目录下）：
+
+    ```bash
+    make i18n
+    ```
+
 ### `platform-build/` —— 平台构建
 
 这一组脚本用于维护"平台构建"能力所依赖的运行时基础镜像：先由 `gen-runtime-images.py` 生成经过筛选的镜像清单文件，

@@ -19,75 +19,119 @@
 package i18n
 
 import (
-	"go/ast"
-	"go/parser"
-	"go/token"
-	"io/fs"
-	"os"
+	"fmt"
 	"path/filepath"
-	"strconv"
-	"strings"
+	"slices"
+	"text/template"
+	"text/template/parse"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/i18n/extract"
 )
 
-// literalTKeys 扫描 root 下的非测试 Go 文件，返回 i18n.T 调用中以字符串字面量传入的 key 及其位置
-func literalTKeys(root string) (map[string]string, error) {
-	keys := map[string]string{}
-	fset := token.NewFileSet()
-	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
-		if err != nil || d.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
-			return err
-		}
-		f, err := parser.ParseFile(fset, path, nil, parser.SkipObjectResolution)
-		if err != nil {
-			return err
-		}
-		ast.Inspect(f, func(n ast.Node) bool {
-			call, ok := n.(*ast.CallExpr)
-			if !ok || len(call.Args) < 2 {
-				return true
-			}
-			sel, ok := call.Fun.(*ast.SelectorExpr)
-			if !ok || sel.Sel.Name != "T" {
-				return true
-			}
-			if pkg, isIdent := sel.X.(*ast.Ident); !isIdent || pkg.Name != "i18n" {
-				return true
-			}
-			lit, ok := call.Args[1].(*ast.BasicLit)
-			if !ok || lit.Kind != token.STRING {
-				return true
-			}
-			key, err := strconv.Unquote(lit.Value)
-			if err == nil {
-				keys[key] = fset.Position(lit.Pos()).String()
-			}
-			return true
-		})
-		return nil
-	})
-	return keys, err
-}
+var _ = Describe("Translation keys in source", func() {
+	var keys []extract.Key
 
-var _ = Describe("i18n.T usages", func() {
-	It("should find literal keys passed to i18n.T", func() {
-		dir := GinkgoT().TempDir()
-		src := "package demo\n\nfunc f() { _ = i18n.T(ctx, \"demo.key\"); _ = i18n.T(ctx, prefix+\"x\") }\n"
-		Expect(os.WriteFile(filepath.Join(dir, "demo.go"), []byte(src), 0o600)).To(Succeed())
-
-		keys, err := literalTKeys(dir)
+	BeforeEach(func() {
+		var err error
+		keys, err = extract.Keys(filepath.Join("..", ".."))
 		Expect(err).NotTo(HaveOccurred())
-		Expect(keys).To(HaveLen(1))
-		Expect(keys).To(HaveKey("demo.key"))
+		Expect(keys).NotTo(BeEmpty())
 	})
 
-	It("should have a localized message for every literal key", func() {
-		keys, err := literalTKeys(filepath.Join("..", ".."))
-		Expect(err).NotTo(HaveOccurred())
-		for key, pos := range keys {
-			Expect(HasKey(key)).To(BeTrue(), "missing message for key %q used at %s", key, pos)
+	It("should have a localized message for every key referenced in source", func() {
+		for _, key := range keys {
+			Expect(
+				HasKey(key.Name),
+			).To(BeTrue(), "missing message for key %q used at %s, run `make i18n`", key.Name, key.Pos)
 		}
+	})
+
+	It("should keep template placeholders consistent with the params passed in source", func() {
+		var problems []string
+		for _, key := range keys {
+			if !HasKey(key.Name) {
+				continue
+			}
+			problems = append(problems, placeholderProblems(key)...)
+		}
+		Expect(problems).To(BeEmpty())
 	})
 })
+
+// placeholderProblems 检查一个 key 的模板占位符：各语言须一致；不得使用调用处未传入的参数；
+// i18n.T 传入的参数须在模板中用到（Define 的参数同时作为错误详情的附加信息，允许只传不用）
+func placeholderProblems(key extract.Key) []string {
+	var problems []string
+	fields := templateFields(messages[key.Name][supportedLangs[0]])
+	for _, lang := range supportedLangs[1:] {
+		if other := templateFields(messages[key.Name][lang]); !slices.Equal(fields, other) {
+			problems = append(problems, fmt.Sprintf("%s: placeholders differ between %s %v and %s %v",
+				key.Name, supportedLangs[0], fields, lang, other))
+		}
+	}
+	if key.ParamsUnknown {
+		return problems
+	}
+	for _, f := range fields {
+		if !slices.Contains(key.Params, f) {
+			problems = append(problems, fmt.Sprintf("%s: placeholder {{.%s}} is not passed at any call site (%s)",
+				key.Name, f, key.Pos))
+		}
+	}
+	if key.Kind == extract.KindT {
+		for _, p := range key.Params {
+			if !slices.Contains(fields, p) {
+				problems = append(problems, fmt.Sprintf("%s: param %q is passed at %s but not used in the template",
+					key.Name, p, key.Pos))
+			}
+		}
+	}
+	return problems
+}
+
+// templateFields 返回模板中引用的顶层字段名（如 {{.appID}} 中的 appID），已排序去重
+func templateFields(tmpl *template.Template) []string {
+	var fields []string
+	var walk func(n parse.Node)
+	walkBranch := func(b *parse.BranchNode) {
+		walk(b.Pipe)
+		walk(b.List)
+		walk(b.ElseList)
+	}
+	walk = func(n parse.Node) {
+		switch n := n.(type) {
+		case *parse.ListNode:
+			if n != nil {
+				for _, c := range n.Nodes {
+					walk(c)
+				}
+			}
+		case *parse.PipeNode:
+			if n != nil {
+				for _, c := range n.Cmds {
+					walk(c)
+				}
+			}
+		case *parse.ActionNode:
+			walk(n.Pipe)
+		case *parse.CommandNode:
+			for _, a := range n.Args {
+				walk(a)
+			}
+		case *parse.FieldNode:
+			fields = append(fields, n.Ident[0])
+		case *parse.IfNode:
+			walkBranch(&n.BranchNode)
+		case *parse.RangeNode:
+			walkBranch(&n.BranchNode)
+		case *parse.WithNode:
+			walkBranch(&n.BranchNode)
+		}
+	}
+	walk(tmpl.Root)
+	slices.Sort(fields)
+	return slices.Compact(fields)
+}
