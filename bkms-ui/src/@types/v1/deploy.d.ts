@@ -892,11 +892,11 @@ export interface BatchReleaseProgressOutputObj {
    */
   updatedReplicas?: number;
   /**
-   * 旧版本：工作负载 status.currentRevision；轮询任务读到工作负载前为空
+   * 旧版本：工作负载 status.currentRevision；尚未读到工作负载时为空
    */
   workloadCurrentRevision?: string;
   /**
-   * 新版本：工作负载 status.updateRevision，实例 workloadRevision 与之相等即为新版本实例；轮询任务读到工作负载前为空
+   * 新版本：工作负载 status.updateRevision，实例 workloadRevision 与之相等即为新版本实例；尚未读到工作负载时为空
    */
   workloadUpdateRevision?: string;
 }

@@ -2290,7 +2290,6 @@ HostPort 目前仅对绑定联邦集群的环境生效: HostPort currently only 
 "仅展示前 100 个结果，请缩小搜索范围": "Only the first 100 results are shown. Refine your search"
 "最多选择 50 个实例": "Select up to 50 instances"
 "一次最多选择 50 个实例，请减少勾选数量，或清空选择后查看全部实例": "Select up to 50 instances. Select fewer instances, or clear the selection to view all instances"
-"选择实例后展示全部已选实例": "Show all selected instances after selecting instances"
 "排序": "Sort"
 "升序": "Ascending"
 "降序": "Descending"
