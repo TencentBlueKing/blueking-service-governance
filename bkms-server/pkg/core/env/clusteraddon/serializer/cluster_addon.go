@@ -113,7 +113,7 @@ func (o *ClusterAddonInfoOutput) FromModel(
 	*o = ClusterAddonInfoOutput{
 		Name:                info.Name,
 		DisplayName:         info.DisplayName,
-		Description:         i18n.T(ctx, "cluster_addon.addon."+info.Name+".description"),
+		Description:         localizedDescription(ctx, info),
 		RequiredForAppTypes: info.RequiredForAppTypes,
 		OptionalForAppTypes: info.OptionalForAppTypes,
 		SupportedActions:    info.SupportedActions,
@@ -136,6 +136,15 @@ func (o *ClusterAddonInfoOutput) FromModel(
 		}
 	}
 	return o
+}
+
+// localizedDescription 返回插件描述的翻译；部署目录可配置，且数据库中可能残留已移出仓库的插件定义，
+// 这些插件没有内嵌翻译，回退到定义中的原文
+func localizedDescription(ctx context.Context, info clusteraddon.ClusterAddonInfo) string {
+	if msg, ok := i18n.TryT(ctx, "cluster_addon.addon."+info.Name+".description", nil); ok {
+		return msg
+	}
+	return info.Description
 }
 
 // -----------------------------------------------------------------------------

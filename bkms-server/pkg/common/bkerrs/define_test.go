@@ -110,6 +110,12 @@ var _ = Describe("Is", func() {
 		Expect(errors.Is(plain, errTestItemDuplicated)).To(BeFalse())
 		Expect(errors.Is(errTestItemDuplicated, plain)).To(BeFalse())
 	})
+
+	It("should not panic on nil errors", func() {
+		var nilErr *bkerrs.Error
+		Expect(nilErr.Is(errTestItemDuplicated)).To(BeFalse())
+		Expect(errTestItemDuplicated.Is(nilErr)).To(BeFalse())
+	})
 })
 
 var _ = Describe("FromError", func() {

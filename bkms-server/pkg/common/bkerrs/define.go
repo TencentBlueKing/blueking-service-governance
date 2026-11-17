@@ -115,7 +115,7 @@ func (e *Error) WithCause(cause error) *Error {
 // Is 判断两个错误是否为同一类已定义错误（code 与 detailCode 均相同）
 func (e *Error) Is(target error) bool {
 	t, ok := target.(*Error)
-	return ok && e.detailCode != "" && e.code == t.code && e.detailCode == t.detailCode
+	return ok && e != nil && t != nil && e.detailCode != "" && e.code == t.code && e.detailCode == t.detailCode
 }
 
 // clone 复制错误并记录调用方的调用栈，需由导出方法直接调用以保证栈深度正确
