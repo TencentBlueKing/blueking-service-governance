@@ -110,7 +110,7 @@ func saveURL(ctx context.Context, db *mongo.Database, appID, u, operator string)
 	return GetEntry(ctx, db, appID)
 }
 
-// DeleteByApp 删除应用的七彩石入口，不存在时不报错
+// DeleteByApp 删除应用的七彩石入口，不存在时不报错。用户删除入口与删除应用时调用
 func DeleteByApp(ctx context.Context, db *mongo.Database, appID string) error {
 	if err := store.Of(db, EntryMeta).DeleteIfExists(ctx, ByApp(appID)); err != nil {
 		return errors.Wrapf(err, "delete rainbow tconf entry of app %s", appID)

@@ -57,6 +57,9 @@ func NewRainbowTConfOutput(e *rainbowtconf.Entry) *RainbowTConfOutput {
 	return &RainbowTConfOutput{URL: e.URL, Updater: e.Updater, UpdatedAt: lo.EmptyableToPtr(e.UpdatedAt)}
 }
 
+// RainbowTConfEmptyOutput is the JSON response for rainbow tconf APIs that return no data.
+type RainbowTConfEmptyOutput struct{}
+
 // RainbowTConfResponse is the JSON response carrying the rainbow tconf page of an app.
 type RainbowTConfResponse struct {
 	Data *RainbowTConfOutput `json:"data"`

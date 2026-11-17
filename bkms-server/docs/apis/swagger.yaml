@@ -4375,9 +4375,9 @@ definitions:
         type: integer
       bkCIProjectID:
         description: |-
-          蓝盾项目 ID;
-          创建时，新建容器项目，无需填写
-          创建时，绑定已有容器项目，必填.
+          蓝盾项目 ID / 绑定容器项目时的 BCS 项目 code。
+          创建时，新建容器项目，无需填写。
+          创建时，绑定已有容器项目，必填。
         type: string
       description:
         description: 描述信息（0-512 字符）
@@ -8693,6 +8693,8 @@ definitions:
         type: string
     required:
     - url
+    type: object
+  serializer.RainbowTConfEmptyOutput:
     type: object
   serializer.RainbowTConfOutput:
     properties:
@@ -18858,6 +18860,32 @@ paths:
       tags:
       - app-config-file-defs
   /apps/{appID}/rainbow-tconf:
+    delete:
+      description: 删除后应用回到未配置状态；未配置时调用同样返回成功；应用所在空间未开启七彩石配置开关时不可用
+      operationId: DeleteRainbowTConf
+      parameters:
+      - description: 应用 ID
+        in: path
+        name: appID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.RainbowTConfEmptyOutput'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 删除应用的七彩石入口
+      tags:
+      - rainbowtconf
     get:
       description: 未配置时 url 为空；应用所在空间未开启七彩石配置开关时不可用
       operationId: GetRainbowTConf

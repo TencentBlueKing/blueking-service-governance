@@ -129,6 +129,41 @@ func (h *Handler) PutRainbowTConf(c *gin.Context) {
 	c.PureJSON(http.StatusOK, serializer.RainbowTConfResponse{Data: serializer.NewRainbowTConfOutput(entry)})
 }
 
+// DeleteRainbowTConf 删除应用的七彩石入口。
+//
+//	@ID				DeleteRainbowTConf
+//	@Summary		删除应用的七彩石入口
+//	@Description	删除后应用回到未配置状态；未配置时调用同样返回成功；应用所在空间未开启七彩石配置开关时不可用
+//	@Tags			rainbowtconf
+//	@Produce		json
+//	@Security		BkUserInfo
+//	@Security		BkUserCredential
+//	@Param			appID	path		string	true	"应用 ID"
+//	@Success		200		{object}	serializer.RainbowTConfEmptyOutput
+//	@Failure		400		{object}	bkerrs.GinErrorOutput
+//	@Router			/apps/{appID}/rainbow-tconf [delete]
+func (h *Handler) DeleteRainbowTConf(c *gin.Context) {
+	var uri serializer.AppURIInput
+	if err := ginutils.BindURI(c, &uri); err != nil {
+		bkerrs.AbortWithErr(c, err)
+		return
+	}
+
+	ctx := c.Request.Context()
+	app, err := h.validateApp(ctx, uri.AppID, perm.TypeEdit)
+	if err != nil {
+		bkerrs.AbortWithErr(c, err)
+		return
+	}
+
+	if err = rainbowtconf.DeleteByApp(ctx, h.registry.DB, app.ID); err != nil {
+		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "delete rainbow tconf entry"))
+		return
+	}
+
+	ginutils.OK(c, serializer.RainbowTConfEmptyOutput{})
+}
+
 // validateApp 校验应用权限，并要求应用所在空间已开启七彩石配置开关。
 // 本包所有接口都须经过它，开关关闭时读写接口一律不可用
 //
