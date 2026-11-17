@@ -19846,7 +19846,7 @@ const docTemplate = `{
                         "BkUserCredential": []
                     }
                 ],
-                "description": "返回平台内置模板与空间自定义模板，每个框架、语言先列内置模板；不返回模板内容",
+                "description": "返回平台内置模板与空间自定义模板，每个框架、语言先列内置模板（TAF 没有内置模板）；不返回模板内容",
                 "produces": [
                     "application/json"
                 ],
@@ -20076,7 +20076,7 @@ const docTemplate = `{
                         "BkUserCredential": []
                     }
                 ],
-                "description": "删除默认模板后，该框架、语言回落到平台内置模板；平台内置模板不能删除",
+                "description": "删除默认模板后，该框架、语言回落到平台内置模板（TAF 没有内置模板，则不再有默认模板）；平台内置模板不能删除",
                 "produces": [
                     "application/json"
                 ],
@@ -28115,7 +28115,7 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "bkCIProjectID": {
-                    "description": "蓝盾项目 ID;\n创建时，新建容器项目，无需填写\n创建时，绑定已有容器项目，必填.",
+                    "description": "蓝盾项目 ID / 绑定容器项目时的 BCS 项目 code。\n创建时，新建容器项目，无需填写。\n创建时，绑定已有容器项目，必填。",
                     "type": "string"
                 },
                 "description": {
@@ -37305,7 +37305,7 @@ const docTemplate = `{
                     "minLength": 1
                 },
                 "isDefault": {
-                    "description": "是否设为创建应用时默认使用的模板；不传不修改，取消默认后回落到平台默认模板",
+                    "description": "是否设为创建应用时默认使用的模板；不传不修改，取消默认后回落到平台默认模板，TAF 没有平台默认模板",
                     "type": "boolean"
                 },
                 "name": {

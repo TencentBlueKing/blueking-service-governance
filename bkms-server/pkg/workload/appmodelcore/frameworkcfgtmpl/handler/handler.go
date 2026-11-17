@@ -50,7 +50,7 @@ func New(registry *storereg.Registry) *Handler {
 //
 //	@ID			ListWorkspaceFrameworkConfigTemplates
 //	@Summary	查询工作空间框架配置模板列表
-//	@Description	返回平台内置模板与空间自定义模板，每个框架、语言先列内置模板；不返回模板内容
+//	@Description	返回平台内置模板与空间自定义模板，每个框架、语言先列内置模板（TAF 没有内置模板）；不返回模板内容
 //	@Tags		framework-config-templates
 //	@Produce	json
 //	@Security	BkUserInfo
@@ -207,7 +207,7 @@ func (h *Handler) UpdateTemplate(c *gin.Context) {
 //
 //	@ID			DeleteWorkspaceFrameworkConfigTemplate
 //	@Summary	删除工作空间框架配置模板
-//	@Description	删除默认模板后，该框架、语言回落到平台内置模板；平台内置模板不能删除
+//	@Description	删除默认模板后，该框架、语言回落到平台内置模板（TAF 没有内置模板，则不再有默认模板）；平台内置模板不能删除
 //	@Tags		framework-config-templates
 //	@Produce	json
 //	@Security	BkUserInfo

@@ -88,7 +88,7 @@ type UpdateTemplateInput struct {
 	FileName string `json:"fileName" binding:"required,min=1,max=64,app_config_file_name"`
 	// 框架配置文件内容
 	Content string `json:"content" binding:"required"`
-	// 是否设为创建应用时默认使用的模板；不传不修改，取消默认后回落到平台默认模板
+	// 是否设为创建应用时默认使用的模板；不传不修改，取消默认后回落到平台默认模板，TAF 没有平台默认模板
 	IsDefault *bool `json:"isDefault"`
 }
 

@@ -35,7 +35,6 @@ import (
 const (
 	trpcGoBuiltinID  = "builtin-trpc-go"
 	trpcCppBuiltinID = "builtin-trpc-cpp"
-	tafBuiltinID     = "builtin-taf-cpp"
 )
 
 var _ = Describe("Framework config template service", func() {
@@ -87,7 +86,7 @@ var _ = Describe("Framework config template service", func() {
 			views, err := frameworkcfgtmpl.List(ctx, db, workspaceID, frameworkcfgtmpl.Group{})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(lo.Map(views, func(v *frameworkcfgtmpl.View, _ int) string { return v.ID })).
-				To(Equal([]string{trpcGoBuiltinID, trpcCppBuiltinID, tafBuiltinID}))
+				To(Equal([]string{trpcCppBuiltinID, trpcGoBuiltinID}))
 			for _, v := range views {
 				Expect(v.Builtin).To(BeTrue())
 				Expect(v.IsDefault).To(BeTrue())
@@ -108,9 +107,9 @@ var _ = Describe("Framework config template service", func() {
 			views, err := frameworkcfgtmpl.List(ctx, db, workspaceID, frameworkcfgtmpl.Group{})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(lo.Map(views, func(v *frameworkcfgtmpl.View, _ int) string { return v.ID })).To(Equal([]string{
-				trpcGoBuiltinID, goTpl.ID, trpcCppBuiltinID, cppTpl.ID, tafBuiltinID, tafTpl.ID,
+				tafTpl.ID, trpcCppBuiltinID, cppTpl.ID, trpcGoBuiltinID, goTpl.ID,
 			}))
-			Expect(views[1].Content).To(BeEmpty())
+			Expect(views[0].Content).To(BeEmpty())
 
 			trpcOnly, err := frameworkcfgtmpl.List(ctx, db, workspaceID, frameworkcfgtmpl.Group{Framework: "trpc"})
 			Expect(err).NotTo(HaveOccurred())
@@ -119,7 +118,7 @@ var _ = Describe("Framework config template service", func() {
 			cppOnly, err := frameworkcfgtmpl.List(ctx, db, workspaceID, frameworkcfgtmpl.Group{Language: "cpp"})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(lo.Map(cppOnly, func(v *frameworkcfgtmpl.View, _ int) string { return v.ID })).
-				To(Equal([]string{trpcCppBuiltinID, cppTpl.ID, tafBuiltinID, tafTpl.ID}))
+				To(Equal([]string{tafTpl.ID, trpcCppBuiltinID, cppTpl.ID}))
 		})
 	})
 
@@ -152,6 +151,7 @@ var _ = Describe("Framework config template service", func() {
 				Expect(errors.Is(err, frameworkcfgtmpl.ErrTemplateNotFound)).To(BeTrue())
 			},
 			Entry("unknown builtin", "builtin-trpc-python"),
+			Entry("TAF has no builtin", "builtin-taf-cpp"),
 			Entry("malformed ID", "not-an-object-id"),
 			Entry("missing custom", "000000000000000000000000"),
 		)
@@ -331,18 +331,28 @@ var _ = Describe("Framework config template service", func() {
 
 	Context("Delete", func() {
 		It("falls back to the builtin default after deleting the default template", func() {
-			created := create("taf", "cpp", "taf-default", true)
-			group := frameworkcfgtmpl.Group{Framework: "taf", Language: "cpp"}
+			created := create("trpc", "go", "go-default", true)
+			group := frameworkcfgtmpl.Group{Framework: "trpc", Language: "go"}
 			Expect(defaultIDs(group)).To(Equal([]string{created.ID}))
 
 			deleted, err := frameworkcfgtmpl.Delete(ctx, db, workspaceID, created.ID)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(deleted.ID).To(Equal(created.ID))
-			Expect(defaultIDs(group)).To(Equal([]string{tafBuiltinID}))
+			Expect(defaultIDs(group)).To(Equal([]string{trpcGoBuiltinID}))
+		})
+
+		It("leaves TAF without a default after deleting its default template", func() {
+			created := create("taf", "cpp", "taf-default", true)
+			group := frameworkcfgtmpl.Group{Framework: "taf", Language: "cpp"}
+			Expect(defaultIDs(group)).To(Equal([]string{created.ID}))
+
+			_, err := frameworkcfgtmpl.Delete(ctx, db, workspaceID, created.ID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(defaultIDs(group)).To(BeEmpty())
 		})
 
 		It("rejects builtin templates and templates of other workspaces", func() {
-			_, err := frameworkcfgtmpl.Delete(ctx, db, workspaceID, tafBuiltinID)
+			_, err := frameworkcfgtmpl.Delete(ctx, db, workspaceID, trpcGoBuiltinID)
 			Expect(errors.Is(err, frameworkcfgtmpl.ErrBuiltinReadOnly)).To(BeTrue())
 
 			created := create("trpc", "go", "tpl", false)

@@ -43,11 +43,11 @@ type builtinSource struct {
 	embedPath string
 }
 
-// builtins 平台内置模板，每个支持框架配置文件的分组恰好一个，顺序即列表中分组的展示顺序。
+// builtins 平台内置模板，每个分组至多一个。TAF 没有统一的标准配置，不提供内置模板，完全由空间自定义。
+// trpc_cpp.yaml 目前沿用前端原有行为，内容与 trpc_go.yaml 一致。
 var builtins = lo.Map([]builtinSource{
 	{Group{appruntime.FrameworkTRPC, appruntime.LanguageGo}, "trpc_go.yaml", "builtin/trpc_go.yaml"},
 	{Group{appruntime.FrameworkTRPC, appruntime.LanguageCpp}, "trpc_cpp.yaml", "builtin/trpc_cpp.yaml"},
-	{Group{appruntime.FrameworkTAF, appruntime.LanguageCpp}, "config.conf", "builtin/taf_cpp.conf"},
 }, func(src builtinSource, _ int) View {
 	return View{
 		ID:       builtinID(src.group),

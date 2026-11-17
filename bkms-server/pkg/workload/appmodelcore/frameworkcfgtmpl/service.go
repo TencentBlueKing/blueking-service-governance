@@ -43,13 +43,13 @@ type CreateParams struct {
 // UpdateParams 编辑自定义模板的参数，分组（框架与语言）不可修改。
 type UpdateParams struct {
 	Definition
-	// IsDefault 为 nil 时不改变默认状态；取消默认模板的默认状态后，分组回落到内置模板。
+	// IsDefault 为 nil 时不改变默认状态；取消默认模板的默认状态后，分组回落到内置模板，没有内置模板的分组（如 TAF）则没有默认模板。
 	IsDefault *bool
 	Operator  string
 }
 
 // List 列出工作空间的模板，不返回模板内容。filter 中为空的字段不参与过滤。
-// 每个分组先列内置模板，再按更新时间倒序列自定义模板。
+// 按分组依次列出：有内置模板的分组先列内置模板，再按更新时间倒序列自定义模板。
 func List(ctx context.Context, db *mongo.Database, workspaceID string, filter Group) ([]*View, error) {
 	opts := []store.Opt{ByWorkspace(workspaceID), store.OmitFields("content"), store.Desc("updatedAt")}
 	if filter.Framework != "" {
@@ -65,17 +65,20 @@ func List(ctx context.Context, db *mongo.Database, workspaceID string, filter Gr
 	customsByGroup := lo.GroupBy(customs, func(t Template) Group { return t.Group })
 
 	views := make([]*View, 0, len(builtins)+len(customs))
-	for _, builtin := range builtins {
-		if (filter.Framework != "" && builtin.Framework != filter.Framework) ||
-			(filter.Language != "" && builtin.Language != filter.Language) {
+	for _, group := range groups {
+		if (filter.Framework != "" && group.Framework != filter.Framework) ||
+			(filter.Language != "" && group.Language != filter.Language) {
 			continue
 		}
-		group := customsByGroup[builtin.Group]
-		builtin.Content = ""
-		builtin.IsDefault = !lo.ContainsBy(group, func(t Template) bool { return t.IsDefault })
-		views = append(views, &builtin)
-		for i := range group {
-			views = append(views, group[i].view())
+		members := customsByGroup[group]
+		if builtin, ok := lookupBuiltin(builtinID(group)); ok {
+			// 内置模板不入库，分组内没有自定义默认模板时它就是默认。
+			builtin.Content = ""
+			builtin.IsDefault = !lo.ContainsBy(members, func(t Template) bool { return t.IsDefault })
+			views = append(views, &builtin)
+		}
+		for i := range members {
+			views = append(views, members[i].view())
 		}
 	}
 	return views, nil
@@ -179,7 +182,7 @@ func Update(
 	return old.view(), updated.view(), nil
 }
 
-// Delete 删除自定义模板。删除的是默认模板时，分组回落到内置模板。
+// Delete 删除自定义模板。删除的是默认模板时，分组回落到内置模板，没有内置模板的分组则没有默认模板。
 func Delete(ctx context.Context, db *mongo.Database, workspaceID, id string) (*View, error) {
 	if isBuiltinID(id) {
 		return nil, errors.Wrapf(ErrBuiltinReadOnly, "delete template %s", id)
@@ -221,7 +224,7 @@ func SetDefault(ctx context.Context, db *mongo.Database, workspaceID, id string)
 	return before, after, nil
 }
 
-// setDefault 把 target 设为分组的默认模板；target 为 nil 时清除自定义默认，分组回落到内置模板。
+// setDefault 把 target 设为分组的默认模板；target 为 nil 时清除自定义默认，分组回落到内置模板（若有）。
 // 默认状态不属于模板内容，不刷新 updatedAt。
 func setDefault(ctx context.Context, s *TemplateStore, workspaceID string, group Group, target *bson.ObjectID) error {
 	if err := clearOtherDefaults(ctx, s, workspaceID, group, target); err != nil {

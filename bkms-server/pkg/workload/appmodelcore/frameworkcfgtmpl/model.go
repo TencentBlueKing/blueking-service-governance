@@ -18,7 +18,7 @@
 
 // Package frameworkcfgtmpl 管理工作空间的框架配置模板。
 //
-// 模板分平台内置与空间自定义两种：内置模板随代码发布、只读，不入库；
+// 模板分平台内置与空间自定义两种：内置模板随代码发布、只读，不入库，目前只有 tRPC 提供；
 // 自定义模板存储在 workspace_framework_config_templates 集合。模板只用于创建 tRPC、TAF
 // 应用时填充框架配置文件，不影响已创建的应用。
 package frameworkcfgtmpl
@@ -41,7 +41,7 @@ var (
 	ErrBuiltinReadOnly = errors.New("builtin framework config template is read-only")
 )
 
-// Group 模板分组。同一工作空间的每个分组至多有一个默认模板，没有时平台内置模板为默认。
+// Group 模板分组。同一工作空间的每个分组至多有一个默认模板。
 type Group struct {
 	// Framework 框架，如 trpc、taf。
 	Framework string `bson:"framework"`
@@ -69,7 +69,8 @@ type Template struct {
 	Name        string `bson:"name"`
 	FileName    string `bson:"fileName"`
 	Content     string `bson:"content"`
-	// IsDefault 是否为所在分组的默认模板。
+	// IsDefault 是否为所在分组的默认模板。后端只维护这个标记，不在创建应用、部署等流程中读取：
+	// 前端创建应用时据此预选模板，把模板内容填入框架配置文件；修改默认不影响已创建的应用。
 	IsDefault bool      `bson:"isDefault"`
 	Creator   string    `bson:"creator"`
 	Updater   string    `bson:"updater"`
@@ -85,8 +86,10 @@ type View struct {
 	Name     string
 	FileName string
 	// Content 列表场景下为空。
-	Content   string
-	Builtin   bool
+	Content string
+	Builtin bool
+	// IsDefault 自定义模板取库中的标记。内置模板不入库，默认状态按分组推导：
+	// 分组内没有自定义默认模板时，内置模板就是默认；没有内置模板的分组（如 TAF）此时没有默认模板。
 	IsDefault bool
 	// 以下字段内置模板为零值。
 	Creator   string

@@ -34,6 +34,21 @@ const (
 	MaxNameLength = 64
 )
 
+// groups 支持框架配置文件的全部分组，按能力目录的顺序排列，也是列表中分组的展示顺序。
+var groups = supportedGroups()
+
+func supportedGroups() []Group {
+	var out []Group
+	for _, def := range appruntime.Catalog() {
+		for _, language := range def.SupportedLanguages {
+			if _, _, err := ResolveGroup(def.Name, language); err == nil {
+				out = append(out, Group{Framework: def.Name, Language: language})
+			}
+		}
+	}
+	return out
+}
+
 // ResolveGroup 校验框架与语言的组合是否支持框架配置文件，并返回文件格式。
 func ResolveGroup(framework, language string) (Group, appcfg.FileFormat, error) {
 	group := Group{Framework: framework, Language: language}

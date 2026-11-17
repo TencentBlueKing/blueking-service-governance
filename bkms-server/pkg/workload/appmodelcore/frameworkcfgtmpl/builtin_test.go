@@ -21,28 +21,29 @@ package frameworkcfgtmpl
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/samber/lo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime"
 )
 
 var _ = Describe("Builtin templates", func() {
-	It("provides exactly one builtin template for every group with a framework config file", func() {
-		var groups []Group
-		for _, def := range appruntime.Catalog() {
-			for _, language := range def.SupportedLanguages {
-				if _, _, err := ResolveGroup(def.Name, language); err == nil {
-					groups = append(groups, Group{Framework: def.Name, Language: language})
-				}
-			}
-		}
-		Expect(groups).NotTo(BeEmpty())
+	It("lists every group with a framework config file", func() {
+		Expect(groups).To(ConsistOf(
+			Group{Framework: appruntime.FrameworkTRPC, Language: appruntime.LanguageGo},
+			Group{Framework: appruntime.FrameworkTRPC, Language: appruntime.LanguageCpp},
+			Group{Framework: appruntime.FrameworkTAF, Language: appruntime.LanguageCpp},
+		))
+	})
 
-		builtinGroups := make([]Group, 0, len(builtins))
-		for _, b := range builtins {
-			builtinGroups = append(builtinGroups, b.Group)
-		}
-		Expect(builtinGroups).To(ConsistOf(groups))
+	It("provides at most one builtin template per supported group and none for TAF", func() {
+		builtinGroups := lo.Map(builtins, func(b View, _ int) Group { return b.Group })
+		Expect(lo.Uniq(builtinGroups)).To(HaveLen(len(builtinGroups)))
+		Expect(groups).To(ContainElements(builtinGroups))
+		Expect(builtinGroups).To(ConsistOf(
+			Group{Framework: appruntime.FrameworkTRPC, Language: appruntime.LanguageGo},
+			Group{Framework: appruntime.FrameworkTRPC, Language: appruntime.LanguageCpp},
+		))
 	})
 
 	It("ships builtin contents that pass format validation", func() {
@@ -52,6 +53,16 @@ var _ = Describe("Builtin templates", func() {
 			Expect(b.Content).NotTo(BeEmpty(), b.ID)
 			Expect(appcfg.FrameworkPolicy{}.ValidateContent(b.Content, format)).To(Succeed(), b.ID)
 		}
+	})
+
+	It("shares the tRPC Go content with tRPC C++ under its own file name", func() {
+		goView, ok := lookupBuiltin("builtin-trpc-go")
+		Expect(ok).To(BeTrue())
+		cppView, ok := lookupBuiltin("builtin-trpc-cpp")
+		Expect(ok).To(BeTrue())
+		Expect(cppView.Content).To(Equal(goView.Content))
+		Expect(goView.FileName).To(Equal("trpc_go.yaml"))
+		Expect(cppView.FileName).To(Equal("trpc_cpp.yaml"))
 	})
 
 	It("looks up builtin templates by ID as copies", func() {
@@ -69,6 +80,8 @@ var _ = Describe("Builtin templates", func() {
 		Expect(again.Content).NotTo(Equal("mutated"))
 
 		_, ok = lookupBuiltin("builtin-trpc-python")
+		Expect(ok).To(BeFalse())
+		_, ok = lookupBuiltin("builtin-taf-cpp")
 		Expect(ok).To(BeFalse())
 	})
 })
