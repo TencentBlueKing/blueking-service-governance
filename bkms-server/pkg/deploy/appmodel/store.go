@@ -139,6 +139,24 @@ func GetLatest(
 	return record, nil
 }
 
+// ListRecent 按创建时间倒序列出应用在指定环境、泳道下最近的 limit 条部署记录
+func ListRecent(
+	ctx context.Context, db *mongo.Database, appID, envName, trafficLaneName string, limit int64,
+) ([]Record, error) {
+	records, err := store.Of(db, RecordMeta).List(
+		ctx,
+		deploytypes.ByAppEnvLane(appID, envName, trafficLaneName),
+		deploytypes.NewestFirst(),
+		store.Limit(limit),
+	)
+	if err != nil {
+		return nil, errors.Wrapf(
+			err, "list recent app model deploy records of app %s env %s lane %s", appID, envName, trafficLaneName,
+		)
+	}
+	return records, nil
+}
+
 // GetLatestWorkload 取应用在指定环境、泳道下最新部署记录的主工作负载类型与名称（只查部署记录，不访问集群）。
 // 部署记录不存在时返回 ErrDeployRecordNotFound；记录中缺少工作负载信息时返回错误。
 func GetLatestWorkload(

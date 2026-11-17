@@ -72,6 +72,29 @@ var _ = Describe("Config nil receiver", func() {
 	})
 })
 
+var _ = Describe("VersionedConfigMapName", func() {
+	It("should append a 10-character hex content hash to the base name", func() {
+		name := runtimerender.VersionedConfigMapName("demo-app", map[string]string{"00-app.yaml": "a"})
+		Expect(name).To(MatchRegexp(`^demo-app-[0-9a-f]{10}$`))
+	})
+
+	It("should be stable for the same data", func() {
+		data := map[string]string{"00-app.yaml": "a", "01-log.yaml": "b"}
+		sameData := map[string]string{"01-log.yaml": "b", "00-app.yaml": "a"}
+		Expect(runtimerender.VersionedConfigMapName("demo-app", data)).To(Equal(
+			runtimerender.VersionedConfigMapName("demo-app", sameData),
+		))
+	})
+
+	It("should differ when either key or value changes", func() {
+		base := runtimerender.VersionedConfigMapName("demo-app", map[string]string{"00-app.yaml": "a"})
+		Expect(runtimerender.VersionedConfigMapName("demo-app", map[string]string{"00-app.yaml": "b"})).
+			NotTo(Equal(base))
+		Expect(runtimerender.VersionedConfigMapName("demo-app", map[string]string{"01-app.yaml": "a"})).
+			NotTo(Equal(base))
+	})
+})
+
 var _ = Describe("BuildConfig", func() {
 	It("should build single-file config rendering resources", func() {
 		result, err := runtimerender.BuildConfig(runtimerender.ConfigParams{
@@ -83,13 +106,17 @@ var _ = Describe("BuildConfig", func() {
 		})
 
 		Expect(err).NotTo(HaveOccurred())
-		Expect(result.ConfigMap.Name).To(Equal("demo-app"))
+		Expect(result.ConfigMap.Name).To(Equal(
+			runtimerender.VersionedConfigMapName("demo-app", result.ConfigMap.Data),
+		))
 		Expect(result.ConfigMap.Data).To(HaveKeyWithValue("00-app.yaml", "server:\n  app: demo\n"))
 		Expect(result.MainContainerMounts).To(HaveLen(1))
 		Expect(result.MainContainerMounts[0].Name).To(Equal("trpc-config-rendered"))
 		Expect(result.MainContainerMounts[0].MountPath).To(Equal("/etc/app/app.yaml"))
 		Expect(result.Volumes).To(HaveLen(2))
 		Expect(result.Volumes[0].Name).To(Equal("trpc-config-template"))
+		Expect(result.Volumes[0].ConfigMap.Name).To(Equal(result.ConfigMap.Name))
+		Expect(result.Volumes[0].ConfigMap.Items).To(HaveLen(1))
 		Expect(result.Volumes[1].Name).To(Equal("trpc-config-rendered"))
 		Expect(result.InitContainerSpecs).To(HaveLen(1))
 		Expect(result.InitContainerSpecs[0].Name).To(Equal("trpc-init"))
@@ -130,6 +157,27 @@ var _ = Describe("BuildConfig", func() {
 		Expect(script).To(ContainSubstring("for f in /plain-cfg-config-template/*"))
 		Expect(script).NotTo(ContainSubstring("00-nginx.conf"))
 		Expect(script).NotTo(ContainSubstring("01-redis.conf"))
+	})
+
+	It("should change ConfigMap name only when config content changes", func() {
+		build := func(content string) *runtimerender.Config {
+			result, err := runtimerender.BuildConfig(runtimerender.ConfigParams{
+				WorkloadType:  "trpc",
+				ConfigMapName: "demo-app",
+				Files: []cfgrender.RenderedMountableFile{
+					{FileName: "app.yaml", FilePath: "/etc/app", FileContent: content},
+				},
+			})
+			Expect(err).NotTo(HaveOccurred())
+			return result
+		}
+
+		v1 := build("server:\n  app: v1\n")
+		Expect(build("server:\n  app: v1\n").ConfigMap.Name).To(Equal(v1.ConfigMap.Name))
+
+		v2 := build("server:\n  app: v2\n")
+		Expect(v2.ConfigMap.Name).NotTo(Equal(v1.ConfigMap.Name))
+		Expect(v2.Volumes[0].ConfigMap.Name).To(Equal(v2.ConfigMap.Name))
 	})
 
 	It("should return empty config when files list is empty", func() {
