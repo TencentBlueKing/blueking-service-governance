@@ -101,11 +101,11 @@
       </TableColumn>
       <TableColumn
         :label="$t('操作')"
-        min-width="100"
+        min-width="120"
         show-overflow="tooltip"
       >
         <template #default="{ row, rowIndex }: { row: any; rowIndex?: number }">
-          <div class="flex items-center gap-[10px]">
+          <div class="flex items-center gap-[16px]">
             <span v-bk-tooltips="{ content: $t('仅支持查看近期部署历史的 Values'), disabled: row.values }">
               <Button
                 :disabled="!row.values"

@@ -124,7 +124,7 @@
         :width="200"
       >
         <template #default="{ row }: { row: AppInstanceOutputObj }">
-          <div class="flex items-center gap-[4px]">
+          <div class="flex items-center gap-[16px]">
             <Button
               v-bk-tooltips="{
                 content: $t('实例尚未创建成功或宿主机异常，暂无法获取日志'),
