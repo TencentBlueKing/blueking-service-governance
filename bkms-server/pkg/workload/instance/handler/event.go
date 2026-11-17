@@ -21,21 +21,14 @@ package handler
 import (
 	"errors"
 
-	"github.com/TencentBlueKing/gopkg/mapx"
 	"github.com/gin-gonic/gin"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/labels"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	appmodeldeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/appmodel"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/clusterresources"
-	k8sclient "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/client"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/cluster"
-	k8skind "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/kind"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/perm"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/instance/podquery"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/instance/serializer"
 )
 
@@ -97,57 +90,35 @@ func (h *Handler) ListEvents(c *gin.Context) {
 		return
 	}
 
-	// 从部署记录的 ResourceKeys 中提取工作负载的 Kind 和 Name
-	var resourceKinds, resourceNames []string
-	for _, rk := range record.ResourceKeys {
-		resourceKinds = append(resourceKinds, rk.Kind)
-		resourceNames = append(resourceNames, rk.Name)
-	}
-	// 通过部署记录的 LabelSelector 从集群获取关联的 Pod，将 Pod 事件一并查询
+	// 选择器为空时会列出整个命名空间的 Pod，把无关事件混进来，因此必须先拦下
 	if len(record.LabelSelector) == 0 {
 		bkerrs.AbortWithErr(c, bkerrs.New(bkerrs.ErrCodeInternalServerError, "deploy record label selector is empty"))
 		return
 	}
-	podClient := k8sclient.NewPodClient(cluster.NewConfig(record.ClusterID))
-	labelSelector := labels.SelectorFromSet(record.LabelSelector).String()
-	pods, err := podClient.List(ctx, record.Namespace, metav1.ListOptions{LabelSelector: labelSelector})
+	// 工作负载事件与该次部署 Pod 的事件一并查询
+	pods, err := podquery.NewPodLister(podquery.Location{
+		ClusterID:     record.ClusterID,
+		Namespace:     record.Namespace,
+		LabelSelector: record.LabelSelector,
+	}).List(ctx)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrapf(
-			err, bkerrs.ErrCodeInternalServerError,
-			"list namespace %s labelSelector [%s] pods", record.Namespace, labelSelector,
-		))
+		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list deploy pods"))
 		return
 	}
-	for _, pod := range pods.Items {
-		podName := mapx.GetStr(pod.Object, "metadata.name")
-		if podName != "" {
-			resourceKinds = append(resourceKinds, k8skind.Po)
-			resourceNames = append(resourceNames, podName)
-		}
-	}
+	refs := append(podquery.BuildWorkloadRefs(record.ResourceKeys), podquery.BuildPodRefs(pods.Items)...)
 
-	// 创建 ClusterResources API 客户端
-	client, err := clusterresources.New(auth.MustGetUser(ctx))
+	lister, err := podquery.NewEventLister(ctx, env)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "initial cluster resources client"))
+		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "initial event lister"))
 		return
 	}
-	// 调用 ClusterResources API 获取事件列表
-	paginatedEvents, err := client.ListEvents(
-		ctx,
-		env.Cluster.ProjectCode,
-		env.Cluster.ClusterID,
-		clusterresources.ListEventParams{
-			Namespace:     record.Namespace,
-			ResourceKinds: resourceKinds,
-			ResourceNames: resourceNames,
-			Level:         queryInput.Level,
-			StartedAt:     queryInput.StartedAt,
-			EndedAt:       queryInput.EndedAt,
-			Page:          int(queryInput.Page),
-			PageSize:      int(queryInput.PageSize),
-		},
-	)
+	paginatedEvents, err := lister.List(ctx, record.Namespace, refs, podquery.EventFilter{
+		Level:     queryInput.Level,
+		StartedAt: queryInput.StartedAt,
+		EndedAt:   queryInput.EndedAt,
+		Page:      int(queryInput.Page),
+		PageSize:  int(queryInput.PageSize),
+	})
 	if err != nil {
 		bkerrs.AbortWithErr(
 			c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list events from cluster resources"),

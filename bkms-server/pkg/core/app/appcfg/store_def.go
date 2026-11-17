@@ -88,6 +88,19 @@ func ListDefsByApp(
 	return list, nil
 }
 
+// GetFrameworkDef 返回应用唯一的 framework def，框架配置文件的名称和挂载目录以它为准
+// 没有或不止一个时返回 nil 且不报错，由调用方决定如何降级
+func GetFrameworkDef(ctx context.Context, defs *AppConfigFileDefStore, appID string) (*AppConfigFileDef, error) {
+	list, err := ListDefsByApp(ctx, defs, appID, DefFilterConfigKind(ConfigKindFramework))
+	if err != nil {
+		return nil, errors.Wrapf(err, "list framework defs of app %s", appID)
+	}
+	if len(list) != 1 {
+		return nil, nil
+	}
+	return &list[0], nil
+}
+
 // UpdateDef 按 ID 更新 def 记录的可变字段，def 不存在时返回 ErrAppConfigFileDefNotFound。
 // EnvConfigMode 以 inline 方式展开为 isUnifiedConfig / mountedEnvNames / envContentStrategy。
 func UpdateDef(ctx context.Context, defs *AppConfigFileDefStore, def *AppConfigFileDef) error {

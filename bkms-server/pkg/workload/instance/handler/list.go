@@ -25,9 +25,7 @@ import (
 	"github.com/TencentBlueKing/gopkg/mapx"
 	"github.com/gin-gonic/gin"
 	"github.com/samber/lo"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/labels"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
@@ -36,10 +34,9 @@ import (
 	appmodeldeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/appmodel"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component/devmode"
-	k8sclient "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/client"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/cluster"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
 	ginperm "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/perm"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/instance/podquery"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/instance/serializer"
 )
 
@@ -99,18 +96,15 @@ func (h *Handler) listMatchingAppInstancePods(
 	ctx context.Context,
 	record *appmodeldeploy.Record,
 ) ([]unstructured.Unstructured, string, error) {
-	// 集群与命名空间以部署记录为准，不从请求参数推断
-	client := k8sclient.NewPodClient(cluster.NewConfig(record.ClusterID))
-
 	// 只拉该次部署写入的 LabelSelector 匹配的 Pod，后续再按全量/分页窗口投影
-	labelSelector := labels.SelectorFromSet(record.LabelSelector).String()
-	pods, err := client.List(ctx, record.Namespace, metav1.ListOptions{LabelSelector: labelSelector})
+	pods, err := podquery.NewPodLister(podquery.Location{
+		ClusterID:     record.ClusterID,
+		Namespace:     record.Namespace,
+		LabelSelector: record.LabelSelector,
+	}).List(ctx)
 	if err != nil {
 		// 拉 Pod 失败则整次 List 失败，不分页/全量都不会降级为空列表
-		return nil, "", bkerrs.Wrapf(
-			err, bkerrs.ErrCodeInternalServerError,
-			"list namespace %s labelsSelector [%s] pods", record.Namespace, labelSelector,
-		)
+		return nil, "", bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list app instance pods")
 	}
 
 	// resourceVersion 取 Client.List 保留的首次位点，供 Watch 续传；空列表时也可能有值

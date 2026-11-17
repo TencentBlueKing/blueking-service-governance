@@ -81,3 +81,15 @@ var _ = Describe("SafeReadFile", func() {
 		Expect(os.IsNotExist(err)).To(BeTrue())
 	})
 })
+
+var _ = DescribeTable("IsSameAbsPath",
+	func(a, b string, want bool) {
+		Expect(file.IsSameAbsPath(a, b)).To(Equal(want))
+	},
+	Entry("identical absolute paths", "/app/conf/a.yaml", "/app/conf/a.yaml", true),
+	Entry("redundant separators and dots are cleaned", "/app//conf/./a.yaml", "/app/conf/a.yaml", true),
+	Entry("trailing slash is ignored", "/app/conf/", "/app/conf", true),
+	Entry("different absolute paths", "/app/conf/a.yaml", "/data/a.yaml", false),
+	Entry("relative path never matches", "conf/a.yaml", "/app/conf/a.yaml", false),
+	Entry("both relative never match", "a.yaml", "a.yaml", false),
+)
