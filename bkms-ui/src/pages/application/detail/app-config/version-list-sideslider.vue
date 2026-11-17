@@ -184,7 +184,7 @@
             <template v-if="row.isCurrent">--</template>
             <div
               v-else
-              class="flex items-center gap-[12px]"
+              class="flex items-center gap-[16px]"
             >
               <span
                 v-bk-tooltips="{

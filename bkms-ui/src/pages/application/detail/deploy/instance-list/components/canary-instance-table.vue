@@ -22,10 +22,10 @@
 -->
 <template>
   <div
-    class="rounded-[2px] border border-[#DCDEE5] bg-white"
+    class="rounded-[2px] border border-[#DCDEE5] bg-white p-[16px]"
     data-testid="canary-instance-table"
   >
-    <div class="flex items-center justify-between gap-[16px] px-[16px] py-[12px]">
+    <div class="flex items-center justify-between gap-[16px] mb-[16px]">
       <!-- 胶囊筛选：全部 / 灰度新起 / 灰度前（与基础信息成员筛选同款 Radio.Group capsule） -->
       <Radio.Group
         v-model="activeFilter"

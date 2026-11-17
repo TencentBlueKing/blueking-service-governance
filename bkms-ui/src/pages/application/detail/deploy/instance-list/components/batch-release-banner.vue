@@ -163,7 +163,7 @@
             {{ $t('查看发布详情') }}
           </Button>
         </div>
-        <!-- 顺序：主操作 → 更多 → 危险操作（回滚固定在最后） -->
+        <!-- 顺序：主操作 → 平铺的低频操作 → 更多 → 危险操作（回滚固定在最后） -->
         <div
           v-if="inlineActions.length || view.overflowActions.length || dangerActions.length"
           class="flex shrink-0 items-center gap-[8px]"
@@ -179,8 +179,20 @@
           >
             {{ $t(item.labelKey) }}
           </Button>
+          <!-- 低频操作只有一个时没有折叠价值（如失败态仅「回退上一批」），直接平铺 -->
+          <Button
+            v-for="item in flatOverflowActions"
+            :key="`flat-${item.action}-${item.labelKey}`"
+            :disabled="isActionDisabled(item)"
+            :loading="pendingAction === item.action"
+            size="small"
+            :theme="buttonTheme(item)"
+            @click="handleAction(item)"
+          >
+            {{ $t(item.labelKey) }}
+          </Button>
           <Dropdown
-            v-if="view.overflowActions.length"
+            v-if="menuOverflowActions.length"
             placement="bottom-end"
             :popover-options="{ boundary: 'body', clickContentAutoHide: true }"
             trigger="click"
@@ -196,7 +208,7 @@
             <template #content>
               <Dropdown.DropdownMenu class="!w-[116px] !p-0">
                 <Dropdown.DropdownItem
-                  v-for="item in view.overflowActions"
+                  v-for="item in menuOverflowActions"
                   :key="`${item.action}-${item.labelKey}`"
                   class="!h-[32px] !px-[16px] !text-[12px] !leading-[32px]"
                   :class="
@@ -383,6 +395,22 @@
 
   /** 危险操作（回滚），固定排在「更多」之后 */
   const dangerActions = computed(() => props.view.actions.filter(item => item.theme === 'danger'));
+
+  /**
+   * 低频操作收纳阈值：仅 1 项时折叠成「更多」反而多一次点击，
+   * 因此平铺展示（如失败态只有「回退上一批」），≥2 项才收进下拉。
+   */
+  const FLATTEN_OVERFLOW_SIZE = 1;
+
+  /** 平铺渲染的低频操作 */
+  const flatOverflowActions = computed(() =>
+    props.view.overflowActions.length === FLATTEN_OVERFLOW_SIZE ? props.view.overflowActions : [],
+  );
+
+  /** 收进「更多」下拉的低频操作 */
+  const menuOverflowActions = computed(() =>
+    props.view.overflowActions.length > FLATTEN_OVERFLOW_SIZE ? props.view.overflowActions : [],
+  );
 
   /** 有操作在途：所有入口统一置灰，避免「按钮看着能点、点了没反应」。 */
   const isBusy = computed(() => !!props.pendingAction);

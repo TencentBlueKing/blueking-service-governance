@@ -110,6 +110,7 @@
                 v-bk-tooltips="{
                   content: curDeployStatus?.message,
                   theme: 'dark',
+                  extCls: 'max-w-[50%]',
                 }"
                 class="bkms-icon bkms-icon-circle-info ml-[4px] cursor-pointer text-[16px] text-[#C4C6CC]"
               ></i>
@@ -379,6 +380,7 @@
       :target-envs="overviewDeployTargets"
       @update="handleQuickDeploySuccess"
       @update:deploy-status-list="handleDeployStatusListUpdate"
+      @view-release-detail="handleShowReleaseDetail"
     />
     <!-- 移除部署 -->
     <RemoveDeploy
@@ -393,6 +395,7 @@
       :latest-build-id="buildLogInfo.buildID"
       :latest-build-status="buildLogInfo.status"
       @update="handleUpdateDeploySuccess"
+      @view-release-detail="handleShowReleaseDetail"
     />
     <!-- 普通部署在打开侧栏前统一执行“资源规格”和“环境变量”预检查 -->
     <EnvVarPrecheckDialog
@@ -1123,6 +1126,42 @@
       precheckLoading.value = false;
     }
   }
+  /**
+   * 灰度发布提交后跳转「发布详情」：发布成功或失败（表单校验不通过除外）都直接展示批次进度。
+   * 总览入口可能部署到非当前环境，需先切到目标环境的实例列表；进度尚未落库时先留在实例列表，由轮询兜底。
+   */
+  async function handleShowReleaseDetail(envName?: string) {
+    const targetEnvName = envName || trpcDeployStore.curEnvItem?.name || '';
+    if (!targetEnvName) return;
+
+    if (targetEnvName !== trpcDeployStore.curEnvItem?.name) {
+      const targetEnv = envList.value.find(item => item.name === targetEnvName);
+      if (targetEnv) trpcDeployStore.updateCurEnvItem(targetEnv);
+      latestDeployStatus.value = null;
+      initLoading.value = true;
+    }
+    // 发布详情只在单环境实例列表中渲染：退出多环境并把当前环境对齐到部署目标。
+    isMultiEnvMode.value = false;
+    envStore.updateCurrentEnv(targetEnvName);
+    curEnvs.value = [targetEnvName];
+    // activeTab 由 URL 派生，必须等 replace 完成后再刷新状态，否则仍按总览页直接返回。
+    if (activeTab.value !== TAB_NAMES.instance) {
+      await router.replace({ query: { ...route.query, activeTab: TAB_NAMES.instance } });
+    }
+
+    // 先拿到最新部署状态并回查批次进度，再切到进度视图，避免面板没有数据可渲染。
+    await handleGetLatestDeployStatus();
+    const latest = latestDeployStatus.value;
+    showBatchReleaseProgress.value =
+      !!batchReleaseView.value || latest?.inProgressReleaseMode === 'canary' || latest?.releaseMode === 'canary';
+
+    // 总览入口发起的部署：同步刷新聚合数据与特性环境，返回实例列表时数据不滞后。
+    if (overviewDeployTargets.value !== undefined) {
+      await Promise.all([refreshEnvSelectPanel(), deployOverviewRef.value?.load()]);
+      fetchFeatureEnvList();
+    }
+  }
+
   /** 全量更新成功后按构建模式决定是否关闭侧栏；源码构建需保留侧栏展示实时日志。 */
   function handleUpdateDeploySuccess(keepOpen: boolean) {
     if (!keepOpen) {

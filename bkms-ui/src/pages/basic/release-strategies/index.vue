@@ -172,7 +172,7 @@
           width="160"
         >
           <template #default="{ row }">
-            <div class="flex items-center gap-[8px]">
+            <div class="flex items-center gap-[16px]">
               <Button
                 v-if="row.isBuiltin"
                 text

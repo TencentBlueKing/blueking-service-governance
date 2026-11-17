@@ -538,6 +538,17 @@
   // 离开确认：表单有变更时提示用户
   const { confirmBox, forceCleanDirtyTag, withPausedWatch } = useLeaveConfirm(formModel);
 
+  /**
+   * 提交结果：
+   * - submitted=false 表示未真正发起部署（表单校验 / 环境预检查 / 环境资格拦截），调用方应停留在侧栏；
+   * - ok 表示部署接口是否成功返回，releaseMode 供调用方判断是否需要跳转「发布详情」。
+   */
+  interface DeploySubmitResult {
+    ok: boolean;
+    releaseMode: 'all' | 'canary';
+    submitted: boolean;
+  }
+
   // 清除表单校验结果
   function clearValidate() {
     formRef.value?.clearValidate?.();
@@ -622,18 +633,25 @@
   }
 
   // 提交部署：内部完成校验、部署和脏标记清理
-  async function submit(targetEnv: EnvOutput) {
+  async function submit(targetEnv: EnvOutput): Promise<DeploySubmitResult> {
+    const releaseMode = formModel.releaseMode;
     const valid = await validate();
-    if (!valid) return false;
+    if (!valid) return { ok: false, releaseMode, submitted: false };
 
     if (props.precheckBeforeSubmit) {
       const precheckPassed = await precheck(targetEnv);
-      if (!precheckPassed) return false;
+      if (!precheckPassed) return { ok: false, releaseMode, submitted: false };
     }
 
-    if (!(await deploy(targetEnv))) return false;
+    try {
+      if (!(await deploy(targetEnv))) return { ok: false, releaseMode, submitted: false };
+    } catch (error) {
+      // 请求异常已由拦截器提示，这里只记录日志：灰度发布即使失败也要进入发布详情。
+      console.warn(error);
+      return { ok: false, releaseMode, submitted: true };
+    }
     forceCleanDirtyTag();
-    return true;
+    return { ok: true, releaseMode, submitted: true };
   }
 
   // 校验表单

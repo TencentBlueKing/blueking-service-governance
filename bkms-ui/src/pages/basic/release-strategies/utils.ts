@@ -240,8 +240,11 @@ export function buildStrategyPreviewRows(batches: StrategyBatchForm[], t: Transl
   });
 }
 
-/** 预览摘要：批次数 / 暂停次数 / 首批数量 / 流量批次（本期无流量批次，固定 0） */
-export function buildStrategyPreviewSummary(batches: StrategyBatchForm[]): StrategyPreviewSummary {
+/**
+ * 预览摘要：批次数 / 暂停次数 / 首批数量 / 流量批次（本期无流量批次，固定 0）。
+ * 单位文案随语言切换（count → `个` 在英文下为空串），因此由调用方传入翻译函数。
+ */
+export function buildStrategyPreviewSummary(batches: StrategyBatchForm[], t: TranslateFn): StrategyPreviewSummary {
   const firstBatch = batches[0];
   const firstValue = firstBatch?.targetValue;
   const hasFirst = firstValue !== undefined && firstValue !== null && !Number.isNaN(Number(firstValue));
@@ -249,7 +252,7 @@ export function buildStrategyPreviewSummary(batches: StrategyBatchForm[]): Strat
     batchCount: batches.length,
     pauseCount: batches.filter(batch => batch.pauseMode !== 'none').length,
     firstCountValue: hasFirst ? String(Number(firstValue)) : '0',
-    firstCountUnit: firstBatch?.targetUnit === 'percent' ? '%' : '个',
+    firstCountUnit: firstBatch?.targetUnit === 'percent' ? '%' : t('个'),
     trafficBatchCount: 0,
   };
 }

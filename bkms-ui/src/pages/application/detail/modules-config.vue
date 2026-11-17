@@ -254,7 +254,7 @@
             min-width="120"
           >
             <template #default="{ row }">
-              <div class="flex items-center gap-[12px]">
+              <div class="flex items-center gap-[16px]">
                 <Button
                   v-bk-tooltips="{
                     content: $t('引用创建的实例不支持编辑'),

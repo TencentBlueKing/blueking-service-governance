@@ -59,14 +59,14 @@
         "
       />
 
-      <BkmsContent
-        v-model:collapsed="basicCollapsed"
-        :collapsible="true"
-        :title="t('基本信息')"
+      <ToggleCard
+        v-model="basicExpanded"
+        :name="t('基本信息')"
+        type="normal"
       >
         <Form
           ref="basicFormRef"
-          class="basic-info-form mt-[24px]"
+          class="basic-info-form"
           form-type="vertical"
           :model="formModel"
           :rules="basicFormRules"
@@ -105,15 +105,15 @@
             />
           </Form.FormItem>
         </Form>
-      </BkmsContent>
+      </ToggleCard>
 
-      <BkmsContent
-        v-model:collapsed="batchCollapsed"
-        :collapsible="true"
-        :title="t('发布批次')"
+      <ToggleCard
+        v-model="batchExpanded"
+        :name="t('发布批次')"
+        type="normal"
       >
         <div class="flex flex-col gap-[8px]">
-          <div class="flex items-center gap-[4px] text-[12px] leading-[20px] mt-[24px]">
+          <div class="flex items-center gap-[4px] text-[12px] leading-[20px]">
             <span class="font-700 text-[#313238]">{{ t('发布批次') }}</span>
             <span class="text-[#ea3636]">*</span>
             <!-- <span class="text-[#979ba5]"> （{{ t('更新实例会换镜像；调整流量只改已更新实例的北极星权重') }}） </span> -->
@@ -146,7 +146,7 @@
             {{ batchesEmptyError }}
           </div>
         </div>
-      </BkmsContent>
+      </ToggleCard>
     </div>
 
     <template #footer>
@@ -195,7 +195,7 @@
   import { Alert, Button, Form, Input, Message, Sideslider, Tag } from 'bkui-vue';
   import { useI18n } from 'vue-i18n';
   import { ReleaseStrategiesService } from '~/api/modules/v1/release-strategies';
-  import BkmsContent from '~/components/bkms-content.vue';
+  import ToggleCard from '~/components/toggle-card.vue';
   import { useSpaceStore } from '~/stores/space';
 
   import useStrategyFormDirty from '../use-strategy-form-dirty';
@@ -278,8 +278,9 @@
   const apiNameError = ref('');
   const nameInputRef = ref<InstanceType<typeof Input> | null>(null);
   const descriptionInputRef = ref<InstanceType<typeof Input> | null>(null);
-  const basicCollapsed = ref(false);
-  const batchCollapsed = ref(false);
+  /** 分组展开态（ToggleCard 的 v-model 表示展开，与原先 collapsed 语义相反） */
+  const basicExpanded = ref(true);
+  const batchExpanded = ref(true);
   const previewVisible = ref(false);
   /** 查看态点击「克隆为空间策略」进入克隆态时置 true：提交成功后提示「已克隆为空间策略」而非「策略已创建」 */
   const clonedFromView = ref(false);
@@ -393,8 +394,8 @@
     batchPauseErrors.value = {};
     // 后端名称错误只针对本次提交的策略，回填另一条策略时必须清掉，否则合法名称也会被旧错误挡住
     apiNameError.value = '';
-    basicCollapsed.value = false;
-    batchCollapsed.value = false;
+    basicExpanded.value = true;
+    batchExpanded.value = true;
     previewVisible.value = false;
 
     const strategy = props.strategy;
@@ -532,7 +533,7 @@
     )?.key;
 
     if (hasBasicError && validation.nameError) {
-      basicCollapsed.value = false;
+      basicExpanded.value = true;
       await nextTick();
       nameInputRef.value?.focus();
       scrollToElement(nameInputRef.value?.$el);
@@ -540,7 +541,7 @@
     }
 
     if (hasBasicError && validation.descriptionError) {
-      basicCollapsed.value = false;
+      basicExpanded.value = true;
       await nextTick();
       descriptionInputRef.value?.focus();
       scrollToElement(descriptionInputRef.value?.$el);
@@ -548,7 +549,7 @@
     }
 
     if (firstErrorBatchKey) {
-      batchCollapsed.value = false;
+      batchExpanded.value = true;
       activeBatchKey.value = firstErrorBatchKey;
       await nextTick();
       // 批次列表自身是滚动容器，按 key 精确定位到出错卡片
@@ -557,7 +558,7 @@
       return;
     }
 
-    if (validation.batchesEmptyError) batchCollapsed.value = false;
+    if (validation.batchesEmptyError) batchExpanded.value = true;
   }
 
   /** 删除指定批次：至少保留一批；删的是当前选中项时优先选中后一个，末位时回退到前一个 */

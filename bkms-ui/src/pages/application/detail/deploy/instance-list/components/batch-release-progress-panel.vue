@@ -282,13 +282,13 @@
     },
   };
 
-  /** 状态 Tag 主题 → bkui Tag 配色。 */
+  /** 状态 Tag 主题 → bkui Tag 配色：default 深灰字浅灰底，其余主题统一白字彩底。 */
   const TAG_CLASSES = {
-    danger: '!border-none !bg-[#FFEBEB] !text-[#E71818]',
+    danger: '!border-none !bg-[#EA3636] !text-[#FFF]',
     default: '!border-none !bg-[#F0F1F5] !text-[#4D4F56]',
-    info: '!border-none !bg-[#E1ECFF] !text-[#1768EF]',
-    success: '!border-none !bg-[#DAF6E5] !text-[#299E56]',
-    warning: '!border-none !bg-[#FDEED8] !text-[#E38B02]',
+    info: '!border-none !bg-[#3A84FF] !text-[#FFF]',
+    success: '!border-none !bg-[#2CAF5E] !text-[#FFF]',
+    warning: '!border-none !bg-[#F59500] !text-[#FFF]',
   } as const;
 
   const themeClass = computed(() => THEMES[props.view.kind]);
@@ -443,15 +443,22 @@
     })),
   );
 
-  /** bkui Steps 的 curStep 从 1 开始；未进入批次落在第 1 批；终态越过最后一个节点表达「全部已完成」。 */
+  /** 全部批次都已走完的终态：仅这些状态允许 curStep 越过末节点（Steps 会把越过的节点全部渲染成已完成）。 */
+  const ALL_STEPS_SETTLED_KINDS = new Set<BatchReleaseBannerView['kind']>(['completed', 'rolledBack', 'rollingBack']);
+
+  /**
+   * bkui Steps 的 curStep 从 1 开始：`isCurrent = curStep === index + 1`，`isDone = curStep > index + 1`。
+   * - 有批次序号：高亮该批（curStep = 序号）；
+   * - 全部批次已走完的终态：curStep 越过末节点，所有节点渲染为已完成；
+   * - 批次序号未回填（尚未进入批次 / 失败态后端置空）：传 0，不命中任何节点，
+   *   所有批次保持「未开始」的灰色数字，避免出现「Tag 未开始但第一个节点被高亮」的矛盾。
+   */
   const curStep = computed(() => {
     const total = stepsData.value.length || 1;
-    if (props.view.batchIndex == null) {
-      // 终态（已完成 / 回滚中 / 已回滚）：curStep = 总批数 + 1，越过最后一个节点，
-      // 配合全部节点 done 避免最后一批被高亮为当前步骤；未进入批次（pending）落在第 1 批。
-      return props.view.kind === 'updating' ? 1 : total + 1;
-    }
-    return Math.min(props.view.batchIndex, total);
+    const { batchIndex } = props.view;
+    if (batchIndex != null) return Math.min(batchIndex, total);
+    if (ALL_STEPS_SETTLED_KINDS.has(props.view.kind)) return total + 1;
+    return 0;
   });
 
   /** Steps 组件级状态：当前批正在更新时传 loading，保证当前节点显示旋转 loading 图标。 */
@@ -500,8 +507,9 @@
     }
 
     &.done:not(.current) .bk-step-number {
-      border-color: #e1ecff;
-      background-color: #e1ecff;
+      border-color: #cbf0da;
+      background-color: #cbf0da;
+      color: #2caf5e;
     }
 
     &:not(.current):not(.done) .bk-step-number {
@@ -518,7 +526,7 @@
       position: absolute;
       top: 11px;
       left: 30px;
-      width: 99999px;
+      width: 4000px;
       height: 1px;
       background-color: #dcdee5;
       content: '';

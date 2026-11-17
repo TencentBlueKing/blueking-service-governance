@@ -208,7 +208,7 @@
           <template #default="{ row }">
             <template v-if="!editStates[row.id].editing">
               <Button
-                class="mr-[10px]"
+                class="mr-[16px]"
                 text
                 theme="primary"
                 @click="editRow(row)"
@@ -239,7 +239,7 @@
                 {{ $t('保存') }}
               </Button>
               <Button
-                class="ml-[10px]"
+                class="ml-[16px]"
                 text
                 theme="primary"
                 @click="cancelEdit(row)"

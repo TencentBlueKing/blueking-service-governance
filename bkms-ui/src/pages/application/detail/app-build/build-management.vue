@@ -312,11 +312,10 @@
 <script lang="ts" setup>
   import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue';
 
-  import { Table, TableColumn } from '@blueking/table';
+  import { type ISettings, Table, TableColumn } from '@blueking/table';
   import { useDebounce } from '@vueuse/core';
   import { Button, Form, Input, Message, Popover } from 'bkui-vue';
   import { cloneDeep } from 'lodash-es';
-  import { ISettings } from 'node_modules/@blueking/table/typings/components/setting-column/Index.vue';
   import { useI18n } from 'vue-i18n';
   import { type BuildConfigOutputObj } from '~/@types/v1/app';
   import { type BuildRecordOutputObj, type UpdateBuildConfigRequest } from '~/@types/v1/builds';

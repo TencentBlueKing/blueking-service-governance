@@ -387,7 +387,7 @@ describe('发布策略纯函数：预览数据', () => {
   });
 
   it('摘要应统计批次数、暂停次数、首批数量与流量批次', () => {
-    expect(buildStrategyPreviewSummary(batches)).toEqual({
+    expect(buildStrategyPreviewSummary(batches, t)).toEqual({
       batchCount: 3,
       pauseCount: 2,
       firstCountValue: '1',
@@ -395,8 +395,11 @@ describe('发布策略纯函数：预览数据', () => {
       trafficBatchCount: 0,
     });
     // 首批为百分比时单位取 %
-    const percentFirst = buildStrategyPreviewSummary([batch({ key: 'a', targetUnit: 'percent', targetValue: 10 })]);
+    const percentFirst = buildStrategyPreviewSummary([batch({ key: 'a', targetUnit: 'percent', targetValue: 10 })], t);
     expect(percentFirst).toMatchObject({ firstCountValue: '10', firstCountUnit: '%' });
+    // 单位文案走 i18n：英文下「个」译文为空串
+    const enTranslate: TranslateFn = key => (key === '个' ? '' : key);
+    expect(buildStrategyPreviewSummary(batches, enTranslate).firstCountUnit).toBe('');
   });
 });
 

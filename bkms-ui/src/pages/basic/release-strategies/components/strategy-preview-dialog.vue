@@ -60,13 +60,13 @@
 
         <!-- 批次时间线 -->
         <div class="relative flex w-full flex-col">
-          <span class="pointer-events-none absolute bottom-[24px] left-[11px] top-[8px] w-[2px] bg-[#dcdee5]"></span>
           <template
             v-for="(row, index) in rows"
             :key="row.key"
           >
             <div
-              class="relative flex w-full items-start gap-[12px] overflow-hidden py-[4px]"
+              class="step-item-title relative flex w-full items-start gap-[12px] overflow-hidden pb-[6px]"
+              :class="{ 'is-last': index === rows.length - 1 }"
               data-testid="preview-row"
             >
               <span
@@ -76,24 +76,16 @@
               </span>
               <div class="flex min-w-0 flex-1 flex-col items-start gap-[8px] overflow-hidden pt-[2px]">
                 <div class="flex w-full items-center justify-between gap-[8px]">
-                  <div class="flex min-w-0 items-center gap-[8px] overflow-hidden">
-                    <div class="flex shrink-0 items-center gap-[8px] overflow-hidden">
-                      <span class="whitespace-nowrap text-[12px] font-700 leading-[20px] text-[#313238]">
-                        {{ row.label }}
-                      </span>
-                      <span
-                        v-if="row.isFull"
-                        class="flex h-[16px] shrink-0 items-center rounded-[2px] bg-[#e1ecff] px-[6px] text-[10px] leading-[16px] text-[#1768ef]"
-                        data-testid="preview-row-full"
-                      >
-                        {{ t('全量') }}
-                      </span>
-                    </div>
+                  <div class="flex min-w-0 shrink-0 items-center gap-[8px] overflow-hidden">
+                    <span class="whitespace-nowrap text-[12px] font-700 leading-[20px] text-[#313238]">
+                      {{ row.label }}
+                    </span>
                     <span
-                      v-if="row.hasPause"
-                      class="flex h-[16px] shrink-0 items-center rounded-[2px] bg-[#f0f1f5] px-[6px] text-[10px] leading-[16px] text-[#4d4f56]"
+                      v-if="row.isFull"
+                      class="flex h-[16px] shrink-0 items-center rounded-[2px] bg-[#e1ecff] px-[6px] text-[10px] leading-[16px] text-[#1768ef]"
+                      data-testid="preview-row-full"
                     >
-                      {{ row.pauseText }}
+                      {{ t('全量') }}
                     </span>
                   </div>
                   <div class="flex shrink-0 items-center gap-[4px] text-[12px] leading-[20px]">
@@ -106,7 +98,7 @@
                   <span
                     v-for="(square, squareIndex) in buildPreviewSquares(row)"
                     :key="squareIndex"
-                    class="h-[12px] min-w-px flex-1 rounded-[2px]"
+                    class="h-[8px] min-w-px flex-1 rounded-[2px]"
                     :class="squareClassMap[square]"
                   ></span>
                 </div>
@@ -116,7 +108,8 @@
             <!-- 暂停标签：位于时间线轴上，紧跟所属批次；永久暂停告警橙、定时暂停主蓝 -->
             <div
               v-if="row.hasPause"
-              class="flex w-full items-center overflow-hidden py-[6px] pl-[32px]"
+              class="step-item-tag relative flex w-full items-center overflow-hidden py-[6px] pl-[32px]"
+              :class="{ 'is-last': index === rows.length - 1 }"
               data-testid="preview-row-pause"
             >
               <Tag :theme="row.pauseTheme === 'warn' ? 'warning' : 'info'">
@@ -126,7 +119,7 @@
             <!-- 无暂停配置的批次补充「不停」标签；末批之后无下一批，不展示 -->
             <div
               v-else-if="index < rows.length - 1"
-              class="flex w-full items-center overflow-hidden py-[6px] pl-[32px]"
+              class="step-item-tag relative flex w-full items-center overflow-hidden py-[6px] pl-[32px]"
               data-testid="preview-row-next"
             >
               <Tag class="!text-[#4D4F56]">{{ t('不停，直接进入下一批') }}</Tag>
@@ -196,7 +189,7 @@
   const showRemainingAutoUpdateTip = computed(() => shouldShowRemainingAutoUpdateTip(props.batches));
 
   const summaryItems = computed(() => {
-    const summary = buildStrategyPreviewSummary(props.batches);
+    const summary = buildStrategyPreviewSummary(props.batches, t);
     return [
       { label: t('批次数'), value: summary.batchCount, unit: t('批') },
       { label: t('暂停次数'), value: summary.pauseCount, unit: t('次') },
@@ -228,5 +221,22 @@
   :deep(.bk-tag-warning) {
     background-color: #fdeed8;
     color: #e38b02;
+  }
+
+  .step-item-title::before,
+  .step-item-tag::before {
+    display: block;
+    content: '';
+    width: 2px;
+    height: 100%;
+    left: 12px;
+    background-color: #dcdee5;
+    position: absolute;
+  }
+
+  /* 末批节点只连到圆点中心，避免时间线尾部悬空（含末批的暂停标签） */
+  .step-item-title.is-last::before,
+  .step-item-tag.is-last::before {
+    display: none;
   }
 </style>

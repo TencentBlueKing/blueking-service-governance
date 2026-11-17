@@ -370,6 +370,8 @@
   const isShow = defineModel<boolean>('isShow');
   const emit = defineEmits<{
     update: [keepOpen: boolean];
+    /** 灰度发布提交后：由父组件切换到发布详情（无论发布结果成功或失败都跳转） */
+    viewReleaseDetail: [];
   }>();
   const props = defineProps<{
     effectiveReplicas?: number;
@@ -771,6 +773,9 @@
       return;
     }
 
+    // 灰度发布：提交请求结束后无论成败都进入发布详情，只有表单 / 资格校验不通过时留在侧栏。
+    const isCanaryRelease = formModel.releaseMode === 'canary';
+
     loading.value = true;
     try {
       let result = false;
@@ -778,6 +783,20 @@
         result = await handleConfigAndImage();
       } else {
         result = await handleImage();
+      }
+
+      if (isCanaryRelease) {
+        forceCleanDirtyTag(() => {
+          if (result) {
+            Message({
+              theme: 'success',
+              message: buildSubmitSuccessMessage(),
+            });
+          }
+          emit('update', false);
+          emit('viewReleaseDetail');
+        });
+        return;
       }
 
       if (!result) return;

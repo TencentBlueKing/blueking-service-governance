@@ -60,8 +60,8 @@
           {{ row.batchIndex }}
         </span>
         <div class="flex items-center justify-between gap-[8px]">
-          <div class="flex min-w-0 items-center gap-[6px]">
-            <span class="text-[13px] font-bold leading-[20px] text-[#313238]">{{ batchTitle(row) }}</span>
+          <div class="flex min-w-0 items-center gap-[8px]">
+            <span class="text-[12px] font-bold leading-[20px] text-[#313238]">{{ batchTitle(row) }}</span>
             <Tag
               v-if="row.isFull"
               size="small"
@@ -70,10 +70,14 @@
               {{ $t('全量') }}
             </Tag>
           </div>
-          <div class="shrink-0 text-[13px] leading-[20px] text-[#313238]">
-            <span class="font-bold">{{
-              $t('新版本 {0} · 旧版本 {1}', [row.updatedCount, preview.summary.totalReplicas - row.updatedCount])
-            }}</span>
+          <div class="shrink-0 text-[12px] leading-[20px] text-[#979BA5]">
+            <i18n-t
+              keypath="新版本 {0} · 旧版本 {1}"
+              tag="span"
+            >
+              <span class="font-bold text-[#4D4F56]">{{ row.updatedCount }}</span>
+              <span class="font-bold text-[#4D4F56]">{{ preview.summary.totalReplicas - row.updatedCount }}</span>
+            </i18n-t>
           </div>
         </div>
         <div
@@ -84,7 +88,7 @@
           <span
             v-for="(square, squareIndex) in buildBatchSquares(row, preview.summary.totalReplicas)"
             :key="squareIndex"
-            class="h-[10px] flex-1 rounded-[2px]"
+            class="h-[8px] flex-1 rounded-[2px]"
             :class="{
               'bg-[#3A84FF]': square === 'prev',
               'bg-[#A3C5FD]': square === 'new',

@@ -122,6 +122,8 @@
   const emits = defineEmits<{
     update: [envName?: string];
     'update:deployStatusList': [list: AppDeployedEnvOutputObj[]];
+    /** 灰度发布提交后：由父组件切换到发布详情（无论发布结果成功或失败都跳转） */
+    viewReleaseDetail: [envName: string];
   }>();
   const props = defineProps<{
     effectiveReplicas?: number;
@@ -195,8 +197,26 @@
       if (!env?.name) return;
 
       confirmLoading.value = true;
-      const submitted = await deployFormRef.value?.submit(env);
-      if (!submitted) return;
+      const result = await deployFormRef.value?.submit(env);
+      // 表单校验 / 环境预检查未通过：留在侧栏让用户修正，不跳转。
+      if (!result?.submitted) return;
+
+      // 灰度发布：无论发布结果成功还是失败，都关闭侧栏并进入发布详情查看批次进度。
+      if (result.releaseMode === 'canary') {
+        if (result.ok) {
+          Message({
+            theme: 'success',
+            message: t('操作成功'),
+          });
+        }
+        deployFormRef.value?.reset(1);
+        isShow.value = false;
+        emits('viewReleaseDetail', env.name);
+        return;
+      }
+
+      // 非灰度发布失败时保留侧栏，便于用户修正后重试。
+      if (!result.ok) return;
 
       Message({
         theme: 'success',

@@ -661,9 +661,10 @@ describe('实例列表分批发布控制：横幅与操作', () => {
 
     expect(banner).toHaveAttribute('data-kind', 'failed');
     expect(within(banner).getByText('2 个实例健康检查未通过')).toBeInTheDocument();
-    // 设计稿：失败态主入口「重试」+ 回滚平铺，回退上一批收进「更多」
+    // 设计稿：失败态主入口「重试」+ 回滚平铺；低频操作只剩「回退上一批」一项，无需折叠成「更多」
     expect(within(banner).getByRole('button', { name: '重试' })).toBeEnabled();
-    expect(buttonLabelsOf(banner)).toEqual(['查看发布详情', '重试', '更多', '回滚']);
+    expect(buttonLabelsOf(banner)).toEqual(['查看发布详情', '重试', '回退上一批', '回滚']);
+    expect(within(banner).queryByRole('button', { name: '更多' })).toBeNull();
     // 失败后仍需先收尾，顶部部署入口保持禁用
     expect(screen.getByRole('button', { name: '部署' })).toBeDisabled();
 
@@ -855,5 +856,30 @@ describe('实例列表分批发布控制：灰度发布进度视图', () => {
 
     await userEvent.click(within(progressBanner).getByRole('button', { name: '继续发布' }));
     await waitFor(() => expectOperateCalledWith('continue'));
+  });
+
+  it('当失败态批次序号未回填时，步骤条所有节点都应保持未开始（既不已完成也不高亮）', async () => {
+    // 后端失败时可能把 currentBatchIndex 置空：curStep 若越过末节点会把所有节点渲染成已完成的对勾，
+    // 若落在 1 又会把第一个节点高亮成「当前」，两者都与「未开始」Tag 自相矛盾。
+    mocks.progress.mockResolvedValue(
+      buildProgress({ currentBatchIndex: null, message: '2 个实例健康检查未通过', status: 'failed' }),
+    );
+    mocks.latest.mockResolvedValue({
+      deployID: 'deploy-1',
+      inProgressReleaseMode: 'canary',
+      releaseMode: 'canary',
+      stage: 'deploy',
+      status: 'failed',
+    });
+    mountPage();
+    const panel = await openProgressPanel();
+    const progressBanner = within(panel).getByTestId('batch-release-progress-banner');
+
+    expect(within(panel).getByText('失败')).toBeInTheDocument();
+    // 没有任何批次已完成：不得出现 done 节点（绿色对勾）
+    expect(progressBanner.querySelectorAll('.bk-step.done')).toHaveLength(0);
+    // 也没有任何批次在执行：不得出现 current 节点（蓝色数字高亮）
+    expect(progressBanner.querySelectorAll('.bk-step.current')).toHaveLength(0);
+    expect(within(progressBanner).getAllByText('未开始')).toHaveLength(3);
   });
 });

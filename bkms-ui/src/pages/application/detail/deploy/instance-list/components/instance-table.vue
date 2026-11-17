@@ -624,9 +624,10 @@
           fixed="right"
           header-class-name="instance-actions-col"
           :label="$t('操作')"
-          :width="140"
+          :width="150"
         >
           <template #default="{ row }: { row: AppInstanceOutputObj }">
+            <div class="flex items-center gap-[16px]">
             <div class="flex items-center gap-[16px]">
               <Button
                 v-bk-tooltips="{

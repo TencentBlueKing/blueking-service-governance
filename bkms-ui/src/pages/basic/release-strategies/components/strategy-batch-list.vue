@@ -23,7 +23,7 @@
         v-for="(batch, index) in batches"
         :key="batch.key"
         :aria-pressed="batch.key === activeKey"
-        class="group relative flex h-[56px] w-full shrink-0 cursor-pointer flex-col justify-center gap-[2px] border border-solid px-[12px] py-[8px] text-left outline-none transition-colors"
+        class="group relative flex h-[56px] w-full rounded-[2px] shrink-0 cursor-pointer flex-col justify-center gap-[2px] border border-solid px-[12px] py-[8px] text-left outline-none transition-colors"
         :class="cardClass(batch)"
         :data-batch-key="batch.key"
         data-testid="batch-card"
@@ -150,7 +150,7 @@
     if (isActive) {
       return ['bg-[#f0f5ff]', isError ? 'border-[#ea3636]' : 'border-[#a3c5fd]', 'shadow-[inset_3px_0_0_0_#3a84ff]'];
     }
-    return ['bg-white hover:border-[#dcdee5] hover:bg-[#f5f7fa]', isError ? 'border-[#ea3636]' : 'border-[#eaebf0]'];
+    return ['bg-white hover:bg-[#f5f7fa]', isError ? 'border-[#ea3636]' : 'border-[#dcdee5]'];
   }
 
   /** 单个批次是否为累计 100% 的全量批次 */
