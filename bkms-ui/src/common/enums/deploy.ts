@@ -32,6 +32,8 @@ export const APP_DEPLOY_STATUS = {
   DEPLOYING: 'deploying',
   /** 已部署 */
   DEPLOYED: 'deployed',
+  /** 已回滚 */
+  ROLLED_BACK: 'rolled-back',
   /** 卸载中 */
   UNINSTALLING: 'uninstalling',
   /** 已卸载 */
