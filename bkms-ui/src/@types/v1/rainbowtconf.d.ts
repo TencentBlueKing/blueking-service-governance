@@ -17,6 +17,13 @@ export type PutRainbowTConfRequest = PutRainbowTConfInput & {
   appID: string;
 };
 
+export interface DeleteRainbowTConfRequest {
+  /**
+   * 应用 ID
+   */
+  appID: string;
+}
+
 export interface RainbowTConfResponse {
   data?: RainbowTConfOutput;
 }
@@ -26,6 +33,9 @@ export interface PutRainbowTConfInput {
    * 七彩石页面地址，仅支持 https
    */
   url: string;
+}
+
+export interface RainbowTConfEmptyOutput {
 }
 
 export interface RainbowTConfOutput {

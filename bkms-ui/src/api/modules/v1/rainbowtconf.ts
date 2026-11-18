@@ -6,7 +6,7 @@
 import type { Config } from '~/api/interceptors';
 import type { NoInfer } from '~/api/ts-helpers';
 import { v1Fetch } from '~/api/clients';
-import type { GetRainbowTConfRequest, RainbowTConfOutput, PutRainbowTConfRequest } from '~/@types/v1/rainbowtconf';
+import type { GetRainbowTConfRequest, RainbowTConfOutput, PutRainbowTConfRequest, DeleteRainbowTConfRequest, RainbowTConfEmptyOutput } from '~/@types/v1/rainbowtconf';
 
 export const RainbowtconfService = {
   /**
@@ -42,4 +42,20 @@ export const RainbowtconfService = {
     params?: NoInfer<Request>,
     config?: Config,
   ) => await v1Fetch.put<Request, ResponseData>('/apps/{appID}/rainbow-tconf')(params, config),
+  /**
+   * 删除应用的七彩石入口
+   *
+   * 删除后应用回到未配置状态；未配置时调用同样返回成功；应用所在空间未开启七彩石配置开关时不可用
+   *
+   * @method DELETE
+   * @path /apps/{appID}/rainbow-tconf
+   * @tag rainbowtconf
+   * @param appID path string required 应用 ID
+   * @response 200 RainbowTConfEmptyOutput OK
+   * @response 400 GinErrorOutput Bad Request
+   */
+  deleteRainbowTConf: async <Request extends DeleteRainbowTConfRequest = DeleteRainbowTConfRequest, ResponseData = RainbowTConfEmptyOutput>(
+    params?: NoInfer<Request>,
+    config?: Config,
+  ) => await v1Fetch.delete<Request, ResponseData>('/apps/{appID}/rainbow-tconf')(params, config),
 };
