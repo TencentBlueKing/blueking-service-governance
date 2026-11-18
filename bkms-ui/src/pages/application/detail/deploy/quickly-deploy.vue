@@ -103,6 +103,7 @@
 
   import { Button, Form, Message, Sideslider } from 'bkui-vue';
   import { useI18n } from 'vue-i18n';
+  import { RELEASE_MODE } from '~/common/enums/deploy';
   import EnvSelectPanel from '~/components/env-select-panel/env-select-panel.vue';
   import { isFederationEnv } from '~/composables/use-is-federation-env';
   import { useAppDetail } from '~/stores/app-detail';
@@ -202,7 +203,7 @@
       if (!result?.submitted) return;
 
       // 灰度发布：无论发布结果成功还是失败，都关闭侧栏并进入发布详情查看批次进度。
-      if (result.releaseMode === 'canary') {
+      if (result.releaseMode === RELEASE_MODE.CANARY) {
         if (result.ok) {
           Message({
             theme: 'success',

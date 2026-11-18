@@ -113,7 +113,7 @@
               data-testid="preview-row-pause"
             >
               <Tag :theme="row.pauseTheme === 'warn' ? 'warning' : 'info'">
-                {{ formatPauseTagText(row, t) }}
+                {{ row.pauseText }}
               </Tag>
             </div>
             <!-- 无暂停配置的批次补充「不停」标签；末批之后无下一批，不展示 -->
@@ -164,7 +164,7 @@
     shouldShowRemainingAutoUpdateTip,
   } from '../utils';
 
-  import type { StrategyBatchForm, StrategyPreviewRow } from '../utils';
+  import type { StrategyBatchForm } from '../utils';
 
   interface Props {
     /** 已通过表单校验的批次（弹窗内不做校验） */
@@ -198,11 +198,6 @@
       // { label: t('流量批次'), value: summary.trafficBatchCount, unit: t('个') },
     ];
   });
-
-  /** 暂停标签文案：时间线标签与设计稿一致用「·」分隔 */
-  function formatPauseTagText(row: StrategyPreviewRow, tf: (key: string) => string): string {
-    return row.pauseTheme === 'warn' ? tf('永久暂停 · 手动继续') : row.pauseText;
-  }
 
   // 实例方块状态色：已更新 / 本批新增 / 待更新
   const squareClassMap: Record<string, string> = {

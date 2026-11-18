@@ -1988,6 +1988,8 @@ tRPC 运行时解析，平台不渲染进配置文件: Resolved by tRPC at runti
 停用后，所有的业务将会停用该策略，请谨慎操作！: After disabling, all services will stop using this policy. Please proceed with caution!
 确定停用该策略？: Are you sure you want to disable this policy?
 提醒: Reminder
+确认删除该策略: Confirm deleting this policy
+'策略名称: {name}': 'Policy Name: {name}'
 确定删除该发布策略？: Delete this release strategy?
 删除后无法恢复，部署应用时将不能再选择该策略。: Once deleted, it cannot be restored and the strategy will no longer be selectable when deploying applications.
 启用成功: Enabled successfully
@@ -2369,16 +2371,14 @@ BSCP: BSCP
 策略已创建: Strategy created
 策略已更新: Strategy updated
 策略已删除: Strategy deleted
-请输入策略名称，1 ~ 64 个字符: Enter a strategy name (1-64 characters)
-请输入策略说明，最多 200 个字符: Enter a description (up to 200 characters)
 正整数或百分比，如 1 或 25%: Positive integer or percentage, e.g. 1 or 25%
 30 ~ 86400 秒: 30-86400 seconds
 '{0} 批': '{0} batches'
 '累计 {0}': 'Accumulated {0}'
 '{0}（全量）': '{0} (all)'
 策略名称不能为空: Strategy name cannot be empty
-策略名称不能超过 64 个字符: Strategy name cannot exceed 64 characters
-策略说明不能超过 200 个字符: Description cannot exceed 200 characters
+'策略名称不能超过 {0} 个字符': Strategy name cannot exceed {0} characters
+'策略说明不能超过 {0} 个字符': Description cannot exceed {0} characters
 请至少配置一个批次: Configure at least one batch
 请输入正整数或百分比（如 1 或 25%）: Enter a positive integer or percentage (e.g. 1 or 25%)
 百分比需为 1% ~ 100% 的整数: Percentage must be an integer between 1% and 100%
@@ -2411,6 +2411,4 @@ BSCP: BSCP
 请输入累计更新副本数: Enter the accumulated updated replicas
 请输入策略名称，1 ~ 32 个字符: Enter a strategy name (1-32 characters)
 例如：生产环境先放 1 个实例观察，再按 25% / 50% / 全量放量: e.g. Update 1 instance in production first, then roll out by 25% / 50% / all
-策略名称不能超过 32 个字符: Strategy name cannot exceed 32 characters
-策略说明不能超过 100 个字符: Description cannot exceed 100 characters
 策略名称在当前空间已存在: This strategy name already exists in the current space

@@ -326,7 +326,7 @@
         validator: toFormValidator((value: string) => {
           if (apiNameError.value) return apiNameError.value;
           const error = validateStrategyName(value, nameValidateOptions.value);
-          return error ? t(error) : '';
+          return error ? translate(t, error.key, error.params) : '';
         }),
       },
     ],
@@ -334,7 +334,9 @@
       {
         trigger: 'blur',
         validator: toFormValidator((value: string) =>
-          (value ?? '').length > DESCRIPTION_MAX_LENGTH ? t('策略说明不能超过 100 个字符') : '',
+          (value ?? '').length > DESCRIPTION_MAX_LENGTH
+            ? translate(t, '策略说明不能超过 {0} 个字符', [DESCRIPTION_MAX_LENGTH])
+            : '',
         ),
       },
     ],
@@ -600,7 +602,9 @@
   async function validateAndFocus(): Promise<boolean> {
     // 统一从 utils 取一次结果：批次错误仍由抽屉内联展示，字段错误交给 Form 渲染
     const validation = validateStrategyForm(formModel, nameValidateOptions.value);
-    batchesEmptyError.value = validation.batchesEmptyError ? t(validation.batchesEmptyError) : '';
+    batchesEmptyError.value = validation.batchesEmptyError
+      ? translate(t, validation.batchesEmptyError.key, validation.batchesEmptyError.params)
+      : '';
     batchErrors.value = translateBatchErrors(validation.batchErrors);
     batchErrorDetails.value = translateBatchErrors(validation.batchErrorDetails);
     batchPauseErrors.value = translateBatchErrors(validation.batchPauseErrors);

@@ -257,6 +257,7 @@
 
   import { Alert, Button, Dropdown } from 'bkui-vue';
   import { AngleDownLine } from 'bkui-vue/lib/icon';
+  import { BATCH_PHASE } from '~/common/enums/deploy';
 
   import { formatPauseCountdown, isBatchReleaseFinalizing, resolveTimedPauseRemainingSeconds } from '../batch-release';
 
@@ -333,30 +334,13 @@
   };
 
   /**
-   * 暂停态细分：「等待手动继续 / 定时暂停中」表示当前批次已完成、在等继续，
-   * 文案展示「第 N 批已完成 · 等待继续」；「已暂停」（定时到期兜底等）展示「第 N 批已暂停」。
-   * 两者容器与状态色统一为 warning 橙色，与「灰度发布进度」视图一致。
-   */
-  const pausedWaiting = computed(() => {
-    if (props.view.kind !== 'paused') return false;
-    const key = props.view.statusTag?.key ?? '';
-    return key === '等待手动继续' || key.startsWith('定时暂停中');
-  });
-
-  /**
-   * 全量收尾（UpdatingPrimary / 收尾清理）：所有批次已走完，后端清空了批次序号。
-   * 此时标题不能再用「第 -- 批正在更新实例」描述，改为「正在全量更新剩余实例」。
-   */
-  const isFinalizing = computed(() => props.view.kind === 'updating' && isBatchReleaseFinalizing(props.progress));
-
-  /**
    * 逐秒时间源：定时暂停的 mm:ss 倒计时按当前时间实时换算，不等 5s 轮询；
    * 仅在定时暂停态开启 1s 定时器，其余时间静止（取值无意义，相关计算不依赖它）。
    */
   const now = ref(Date.now());
   let countdownTimer: ReturnType<typeof setInterval> | undefined;
   watch(
-    () => props.progress?.batchPhase === 'timed-paused',
+    () => props.progress?.batchPhase === BATCH_PHASE.TIMED_PAUSED,
     isTimedPaused => {
       if (isTimedPaused && !countdownTimer) {
         now.value = Date.now();
@@ -373,11 +357,33 @@
   onUnmounted(() => clearInterval(countdownTimer));
 
   /**
+   * 暂停态细分：「等待手动继续 / 定时暂停中」表示当前批次已完成、在等继续，
+   * 文案展示「第 N 批已完成 · 等待继续」；「已暂停」（定时到期兜底等）展示「第 N 批已暂停」。
+   * 两者容器与状态色统一为 warning 橙色，与「灰度发布进度」视图一致。
+   *
+   * 判据取 batchPhase + 逐秒换算的剩余时间，不再嗅探 statusTag 的文案 key：
+   * 文案是可翻译的字符串，拿它做业务判断会在改动 copy 时静默失效。
+   */
+  const pausedWaiting = computed(() => {
+    if (props.view.kind !== 'paused') return false;
+    const progress = props.progress;
+    if (progress?.batchPhase !== BATCH_PHASE.TIMED_PAUSED) return true;
+    // 定时暂停到期：后端即将继续，按「已暂停」展示（与进度面板 statusTag 到期口径一致）
+    return resolveTimedPauseRemainingSeconds(progress, now.value) > 0;
+  });
+
+  /**
+   * 全量收尾（UpdatingPrimary / 收尾清理）：所有批次已走完，后端清空了批次序号。
+   * 此时标题不能再用「第 -- 批正在更新实例」描述，改为「正在全量更新剩余实例」。
+   */
+  const isFinalizing = computed(() => props.view.kind === 'updating' && isBatchReleaseFinalizing(props.progress));
+
+  /**
    * 定时暂停倒计时（mm:ss）：按 pauseStartTime + pauseSeconds 逐秒换算，随秒跳动；
-   * 非 timed-paused 或已到期时为空（到期后轮询会把 statusTag 校正为「已暂停」）。
+   * 非 timed-paused 或已到期时为空（到期后 pausedWaiting 转 false，展示「已暂停」）。
    */
   const pausedCountdown = computed(() => {
-    if (props.progress?.batchPhase !== 'timed-paused') return '';
+    if (props.progress?.batchPhase !== BATCH_PHASE.TIMED_PAUSED) return '';
     const remaining = resolveTimedPauseRemainingSeconds(props.progress, now.value);
     return remaining > 0 ? formatPauseCountdown(remaining) : '';
   });

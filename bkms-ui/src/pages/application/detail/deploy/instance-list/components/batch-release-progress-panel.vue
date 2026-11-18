@@ -192,6 +192,7 @@
 
   import { Button, Divider, Popover, Steps, Tag } from 'bkui-vue';
   import { useI18n } from 'vue-i18n';
+  import { BATCH_PHASE } from '~/common/enums/deploy';
   import { envTypeMap, envTypeTagClassMap } from '~/composables/use-env-manager';
 
   import {
@@ -308,7 +309,7 @@
   const now = ref(Date.now());
   let countdownTimer: ReturnType<typeof setInterval> | undefined;
   watch(
-    () => props.progress?.batchPhase === 'timed-paused' || isElapsedTicking.value,
+    () => props.progress?.batchPhase === BATCH_PHASE.TIMED_PAUSED || isElapsedTicking.value,
     shouldTick => {
       if (shouldTick && !countdownTimer) {
         now.value = Date.now();
@@ -324,15 +325,16 @@
   );
   onUnmounted(() => clearInterval(countdownTimer));
 
-  /** 标题状态 Tag：定时暂停时按逐秒时间源重算倒计时，其余状态沿用 view 收敛结果。 */
+  /**
+   * 标题状态 Tag：定时暂停一律按逐秒时间源自己算（view 里不带倒计时，见 resolveBatchReleaseBanner），
+   * 其余状态沿用 view 收敛结果。
+   */
   const statusTag = computed(() => {
-    const { statusTag } = props.view;
-    if (!statusTag) return null;
     const progress = props.progress;
-    if (progress?.batchPhase === 'timed-paused') {
+    if (progress?.batchPhase === BATCH_PHASE.TIMED_PAUSED) {
       return resolvePausedStatusTag(progress, resolveTimedPauseRemainingSeconds(progress, now.value));
     }
-    return statusTag;
+    return props.view.statusTag;
   });
 
   const strategyName = computed(() => props.progress?.strategyName || '');

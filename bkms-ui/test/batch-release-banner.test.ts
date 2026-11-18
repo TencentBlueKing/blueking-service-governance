@@ -43,9 +43,11 @@ import {
   resolveBatchReleaseDurationSeconds,
   resolveBatchReleaseSuccessMessage,
   resolveInstanceCanaryState,
+  resolvePausedStatusTag,
   resolvePercentAccumulatedCount,
   shouldFetchBatchReleaseProgress,
 } from '~/pages/application/detail/deploy/instance-list/batch-release';
+import { resolveBatchUpdatedCount } from '~/pages/application/detail/deploy/release-preview';
 
 import type { BatchReleaseProgressOutputObj, LatestDeployStatus } from '~/@types/v1/deploy';
 
@@ -176,17 +178,18 @@ describe('resolveBatchReleaseBanner：按 batchPhase 决定按钮', () => {
     expect(view?.statusTag).toEqual({ key: '等待手动继续', theme: 'warning' });
   });
 
-  it('timed-paused 已到期（或无倒计时数据）：按钮与人工暂停一致，Tag 为已暂停', () => {
+  it('timed-paused：按钮与人工暂停一致，view 不固化倒计时（statusTag 为 null，由渲染层逐秒换算）', () => {
     const view = resolveBatchReleaseBanner(buildProgress({ batchPhase: 'timed-paused' }));
     expect(view?.kind).toBe('paused');
     // 图标按暂停方式区分：定时暂停用时钟，人工/永久暂停用暂停符号
     expect(view?.iconKind).toBe('time');
     expect(actionsOf(view)).toEqual(['continue', 'rollback']);
     expect(overflowOf(view)).toEqual(['backward', 'skip']);
-    expect(view?.statusTag).toEqual({ key: '已暂停', theme: 'warning' });
+    // view 由 5s 轮询快照派生，写进倒计时就会随时间失效：倒计时交给横幅 / 进度面板按秒换算
+    expect(view?.statusTag).toBeNull();
   });
 
-  it('timed-paused 未到期：不提供暂停入口（后端把 paused=temporary 视为已暂停），Tag 为「定时暂停中 · mm:ss 后自动继续」', () => {
+  it('timed-paused 未到期：不提供暂停入口（后端把 paused=temporary 视为已暂停）', () => {
     const pauseStartTime = new Date(Date.now() - 10_000).toISOString();
     const view = resolveBatchReleaseBanner(
       buildProgress({
@@ -202,12 +205,7 @@ describe('resolveBatchReleaseBanner：按 batchPhase 决定按钮', () => {
     expect(view?.kind).toBe('paused');
     // batchrelease.Status.ActionPatch：paused 为 true/manually/temporary 时 pause 一律拒绝
     expect(actionsOf(view)).toEqual(['continue', 'rollback']);
-    const remaining = Math.ceil((Date.parse(pauseStartTime) + 30_000 - Date.now()) / 1000);
-    expect(view?.statusTag).toEqual({
-      key: '定时暂停中 · {0} 后自动继续',
-      params: [remainingFormatted(remaining)],
-      theme: 'warning',
-    });
+    expect(view?.statusTag).toBeNull();
   });
 
   it('第 1 批暂停时没有上一批可回退，回退上一批置灰展示', () => {
@@ -611,8 +609,13 @@ describe('buildBatchReleaseSteps：批次步骤视图模型', () => {
       ],
       pauseStartTime,
     });
-    const view = resolveBatchReleaseBanner(progress);
-    expect(view?.statusTag).toMatchObject({ key: '定时暂停中 · {0} 后自动继续', params: ['00:20'] });
+    // 标题 Tag 由渲染层按逐秒时间源换算（view 不再携带倒计时）
+    expect(resolveBatchReleaseBanner(progress)?.statusTag).toBeNull();
+    expect(resolvePausedStatusTag(progress, 20)).toEqual({
+      key: '定时暂停中 · {0} 后自动继续',
+      params: ['00:20'],
+      theme: 'warning',
+    });
     const steps = buildBatchReleaseSteps(progress, TIMESTAMP_NOW);
     expect(steps[2]).toMatchObject({ tagKey: '暂停中 {0}', tagParams: ['00:20'], tagTheme: 'warning' });
   });
@@ -754,16 +757,25 @@ describe('buildBatchReleaseSteps：批次步骤视图模型', () => {
   });
 });
 
-describe('resolvePercentAccumulatedCount：百分比批步骤条标题的累计实例数（Math.round 口径）', () => {
-  it('按 Math.round 换算：20 × 25% = 5，20 × 33% = 6.6 → 7', () => {
-    expect(resolvePercentAccumulatedCount(25, 20)).toBe(5);
+describe('resolvePercentAccumulatedCount：百分比批步骤条标题的累计实例数（与发布预览同一 ceil 口径）', () => {
+  it('向上取整：4 × 33% = 1.32 → 2，20 × 33% = 6.6 → 7', () => {
+    // 4 × 33% 是区分 round / ceil 的关键用例：round 得 1，ceil 得 2（集群实际滚 2 个）
+    expect(resolvePercentAccumulatedCount(33, 4)).toBe(2);
     expect(resolvePercentAccumulatedCount(33, 20)).toBe(7);
+    expect(resolvePercentAccumulatedCount(25, 20)).toBe(5);
     expect(resolvePercentAccumulatedCount(50, 20)).toBe(10);
     expect(resolvePercentAccumulatedCount(100, 20)).toBe(20);
   });
 
+  it('步骤条标题与发布预览对同一批次给出相同目标数', () => {
+    const replicas = 4;
+    for (const pct of [1, 25, 33, 50, 100]) {
+      expect(resolvePercentAccumulatedCount(pct, replicas)).toBe(resolveBatchUpdatedCount(`${pct}%`, replicas));
+    }
+  });
+
   it('至少 1 个、不超过实例总数', () => {
-    // 1% 向下舍入为 0 时收敛为 1
+    // 1% 向上取整仍为 1
     expect(resolvePercentAccumulatedCount(1, 20)).toBe(1);
     // 超过 100% 或实例总数封顶
     expect(resolvePercentAccumulatedCount(120, 20)).toBe(20);

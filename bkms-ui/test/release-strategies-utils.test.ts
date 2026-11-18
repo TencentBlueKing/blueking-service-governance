@@ -40,6 +40,7 @@ import {
   sortStrategies,
   toBatchForms,
   toBatchInputs,
+  translate,
   validatePauseSeconds,
   validateStrategyForm,
   validateStrategyName,
@@ -150,51 +151,70 @@ describe('发布策略纯函数：表单整体校验', () => {
   });
 
   it('名称空 / 超过 32 字应给出名称错误', () => {
-    expect(validateStrategyForm({ ...validForm, name: '  ' }).nameError).toBe('策略名称不能为空');
-    expect(validateStrategyForm({ ...validForm, name: 'x'.repeat(33) }).nameError).toBe('策略名称不能超过 32 个字符');
-    expect(validateStrategyForm({ ...validForm, name: 'x'.repeat(32) }).nameError).toBeUndefined();
+    expect(validateStrategyForm({ ...validForm, name: '  ' }).nameError).toEqual({
+      key: '策略名称不能为空',
+      params: [],
+    });
+    expect(validateStrategyForm({ ...validForm, name: 'x'.repeat(33) }).nameError).toEqual({
+      key: '策略名称不能超过 {0} 个字符',
+      params: [NAME_MAX_LENGTH],
+    });
+    expect(validateStrategyForm({ ...validForm, name: 'x'.repeat(NAME_MAX_LENGTH) }).nameError).toBeUndefined();
+  });
+
+  it('长度类错误用固定 key + params，key 不随常量变化（否则 locale 里会留死词条）', () => {
+    const error = validateStrategyForm({ ...validForm, name: 'x'.repeat(33) }).nameError;
+    expect(error?.key).toBe('策略名称不能超过 {0} 个字符');
+    // 渲染后与旧文案一致
+    expect(translate(t, error!.key, error!.params)).toBe('策略名称不能超过 32 个字符');
   });
 
   it('名称与当前空间已有策略重名时应拦截', () => {
     const options = { existingNames: ['生产谨慎发布', '分三批灰度'] };
     expect(validateStrategyForm({ ...validForm, name: '生产谨慎发布' }, options).valid).toBe(false);
-    expect(validateStrategyForm({ ...validForm, name: '生产谨慎发布' }, options).nameError).toBe(
-      '策略名称在当前空间已存在',
-    );
+    expect(validateStrategyForm({ ...validForm, name: '生产谨慎发布' }, options).nameError).toEqual({
+      key: '策略名称在当前空间已存在',
+      params: [],
+    });
     // 前后空格由 trim 归一
-    expect(validateStrategyForm({ ...validForm, name: '  生产谨慎发布 ' }, options).nameError).toBe(
-      '策略名称在当前空间已存在',
-    );
+    expect(validateStrategyForm({ ...validForm, name: '  生产谨慎发布 ' }, options).nameError).toEqual({
+      key: '策略名称在当前空间已存在',
+      params: [],
+    });
     // 未命中重名时通过
     expect(validateStrategyForm(validForm, options).nameError).toBeUndefined();
     // 空名称仍优先给出非空提示，不叠加重名提示
-    expect(validateStrategyName('', options)).toBe('策略名称不能为空');
+    expect(validateStrategyName('', options)).toEqual({ key: '策略名称不能为空', params: [] });
   });
 
   it('编辑态与自身原名称相同不算重名，改成其他策略名仍拦截', () => {
     const options = { existingNames: ['生产谨慎发布', '分三批灰度'], selfName: '生产谨慎发布' };
-    expect(validateStrategyName('生产谨慎发布', options)).toBe('');
-    expect(validateStrategyName('分三批灰度', options)).toBe('策略名称在当前空间已存在');
+    expect(validateStrategyName('生产谨慎发布', options)).toBeNull();
+    expect(validateStrategyName('分三批灰度', options)).toEqual({ key: '策略名称在当前空间已存在', params: [] });
     expect(validateStrategyForm({ ...validForm, name: '生产谨慎发布' }, options).valid).toBe(true);
   });
 
   it('名称比较按 trim 后精确匹配：大小写不同视为不同名称（由后端保底校验）', () => {
-    expect(validateStrategyName('Alpha', { existingNames: ['alpha'] })).toBe('');
-    expect(validateStrategyName('alpha', { existingNames: ['alpha'] })).toBe('策略名称在当前空间已存在');
-    expect(validateStrategyName('谨慎发布', { existingNames: [''] })).toBe('');
+    expect(validateStrategyName('Alpha', { existingNames: ['alpha'] })).toBeNull();
+    expect(validateStrategyName('alpha', { existingNames: ['alpha'] })).toEqual({
+      key: '策略名称在当前空间已存在',
+      params: [],
+    });
+    expect(validateStrategyName('谨慎发布', { existingNames: [''] })).toBeNull();
   });
 
   it('说明超过 100 字应给出说明错误', () => {
-    expect(validateStrategyForm({ ...validForm, description: 'x'.repeat(101) }).descriptionError).toBe(
-      '策略说明不能超过 100 个字符',
-    );
+    expect(validateStrategyForm({ ...validForm, description: 'x'.repeat(101) }).descriptionError).toEqual({
+      key: '策略说明不能超过 {0} 个字符',
+      params: [100],
+    });
     expect(validateStrategyForm({ ...validForm, description: 'x'.repeat(100) }).descriptionError).toBeUndefined();
   });
 
   it('批次为空应给出提示', () => {
     const result = validateStrategyForm({ ...validForm, batches: [] });
     expect(result.valid).toBe(false);
-    expect(result.batchesEmptyError).toBe('请至少配置一个批次');
+    expect(result.batchesEmptyError).toEqual({ key: '请至少配置一个批次', params: [] });
     expect(Object.keys(result.batchErrors)).toHaveLength(0);
   });
 

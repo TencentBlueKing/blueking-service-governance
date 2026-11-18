@@ -22,6 +22,7 @@ import { useSessionStorage } from '@vueuse/core';
 import { InfoBox, Message } from 'bkui-vue';
 import { useI18n } from 'vue-i18n';
 import { DeployService } from '~/api/modules/v1';
+import { RELEASE_MODE } from '~/common/enums/deploy';
 
 import {
   type BatchReleaseAction,
@@ -169,7 +170,7 @@ export function useBatchReleaseControl(options: UseBatchReleaseControlOptions) {
     // 仅在「后端也不认为有进行中的分批发布」时记忆空结果：刚发起发布、进度尚未落库时
     // inProgressReleaseMode 已是 canary，此时空结果是暂时的，下一轮必须重查。
     const deployID = latest?.deployID ?? '';
-    if (deployID && latest?.inProgressReleaseMode !== 'canary') {
+    if (deployID && latest?.inProgressReleaseMode !== RELEASE_MODE.CANARY) {
       emptyQueriedDeployID.value = deployID;
     }
   }

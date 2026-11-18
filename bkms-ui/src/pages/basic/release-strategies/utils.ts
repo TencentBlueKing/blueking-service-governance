@@ -16,6 +16,8 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
+import { resolvePauseText, translateMessage } from '~/common/batch-release';
+import { type BatchPauseMode, BATCH_PAUSE_MODE } from '~/common/enums/deploy';
 import {
   buildSquaresByRatio,
   formatOptionTarget,
@@ -33,8 +35,8 @@ export interface BatchErrorDetail {
   params: (number | string)[];
 }
 
-/** 批次完成后的暂停方式：none 不暂停 / duration 定时暂停 / permanent 永久暂停 */
-export type PauseMode = 'duration' | 'none' | 'permanent';
+/** 批次完成后的暂停方式：none 不暂停 / duration 定时暂停 / permanent 永久暂停（枚举见 ~/common/enums/deploy） */
+export type PauseMode = BatchPauseMode;
 
 /** 进度方块单格状态：已更新 / 本批新增 / 待更新（与部署预览共用同一类型） */
 export type PreviewSquareState = ProgressSquareState;
@@ -64,6 +66,16 @@ export interface StrategyFormData {
 }
 
 /**
+ * 校验错误的 i18n 描述：key 为固定模板，params 依序插值。
+ * 不能把常量拼进 key（如 `不能超过 ${NAME_MAX_LENGTH} 个字符`）：
+ * 那样 key 会随常量变成一条新词条，非中文环境直接回退成 key 原文，且会在 locale 里留下死词条。
+ */
+export interface StrategyFormError {
+  key: string;
+  params: (number | string)[];
+}
+
+/**
  * 名称唯一性校验的上下文。
  * 前端按当前空间已加载的策略列表做同步校验（输入即反馈），后端仍会保底校验同名。
  */
@@ -84,15 +96,15 @@ export interface StrategyFormValidation {
    */
   batchErrors: Record<string, BatchErrorDetail>;
   /** 表单级错误：批次列表为空 */
-  batchesEmptyError?: string;
+  batchesEmptyError?: StrategyFormError;
   /**
    * 批次暂停时长错误（仅 duration 模式），key 为批次的稳定标识。
    * 详情面板据此把文案内联到「暂停」输入下方，而不是挂在「目标资源」行上；
    * 卡片仍从 batchErrors 取合并后的错误展示。
    */
   batchPauseErrors: Record<string, BatchErrorDetail>;
-  descriptionError?: string;
-  nameError?: string;
+  descriptionError?: StrategyFormError;
+  nameError?: StrategyFormError;
   valid: boolean;
 }
 
@@ -144,10 +156,10 @@ export type TranslateFn = (key: string, params?: Record<string, unknown> | unkno
 /**
  * 带参数翻译：部分运行环境（dev 下 vue-i18n 运行时编译不可用）会原样返回含 `{0}` 的模板串，
  * 这里对残留占位符再做一次替换；译文已插值时不会命中，属幂等操作。
+ * 实现统一收敛在 ~/common/batch-release.translateMessage，与运行态进度共用一套插值逻辑。
  */
 export function translate(t: TranslateFn, key: string, params: Array<number | string>): string {
-  const text = t(key, params);
-  return params.reduce<string>((out, param, index) => out.split(`{${index}}`).join(String(param)), text);
+  return translateMessage(t, key, params);
 }
 
 export const NAME_MAX_LENGTH = 32;
@@ -167,7 +179,7 @@ export const STRATEGY_NAME_CONFLICT_PATTERN = /name already exists|名称[^\n]*�
 /** 切到「定时暂停」时的默认时长，与设计稿一致 */
 export const DEFAULT_PAUSE_SECONDS = 30;
 
-const PAUSE_MODES: PauseMode[] = ['none', 'duration', 'permanent'];
+const PAUSE_MODES: PauseMode[] = Object.values(BATCH_PAUSE_MODE);
 
 /** 明细 Popover 的批次行（模板直接渲染，避免在模板里做下标运算） */
 export interface BatchDetailRow {
@@ -231,9 +243,10 @@ export function buildStrategyPreviewRows(batches: StrategyBatchForm[], t: Transl
       prevRatio,
       accumulatedRatio,
       isFull: isFullBatch(batch),
-      hasPause: batch.pauseMode !== 'none',
-      pauseText: formatBatchPauseText(batch, t),
-      pauseTheme: batch.pauseMode === 'permanent' ? 'warn' : 'brand',
+      hasPause: batch.pauseMode !== BATCH_PAUSE_MODE.NONE,
+      // 预览时间线的暂停标签与列表页同形态（「·」分隔）
+      pauseText: resolvePauseText(batch.pauseMode, batch.pauseSeconds, t, 'detail'),
+      pauseTheme: batch.pauseMode === BATCH_PAUSE_MODE.PERMANENT ? 'warn' : 'brand',
     };
     prevRatio = accumulatedRatio;
     return row;
@@ -250,7 +263,7 @@ export function buildStrategyPreviewSummary(batches: StrategyBatchForm[], t: Tra
   const hasFirst = firstValue !== undefined && firstValue !== null && !Number.isNaN(Number(firstValue));
   return {
     batchCount: batches.length,
-    pauseCount: batches.filter(batch => batch.pauseMode !== 'none').length,
+    pauseCount: batches.filter(batch => batch.pauseMode !== BATCH_PAUSE_MODE.NONE).length,
     firstCountValue: hasFirst ? String(Number(firstValue)) : '0',
     firstCountUnit: firstBatch?.targetUnit === 'percent' ? '%' : t('个'),
     trafficBatchCount: 0,
@@ -298,7 +311,7 @@ export function createEmptyBatch(): StrategyBatchForm {
     key: createBatchKey(),
     targetUnit: 'count',
     targetValue: undefined,
-    pauseMode: 'permanent',
+    pauseMode: BATCH_PAUSE_MODE.PERMANENT,
   };
 }
 
@@ -350,17 +363,13 @@ export function formatBatchesSummary(batches: BatchOutputObj[] | undefined, text
 
 /**
  * 批次卡片第二行的暂停方式文案：不停 / 暂停 600 秒后自动继续 / 永久暂停，手动继续。
- * 永久暂停的文案与列表页 `formatPauseMode`（用 · 分隔）略有差异，与设计稿保持一致。
+ * 文案映射统一收敛在 ~/common/batch-release，卡片与列表页只是形态（标点）不同。
  */
 export function formatBatchPauseText(
   batch: Pick<StrategyBatchForm, 'pauseMode' | 'pauseSeconds'>,
   t: TranslateFn,
 ): string {
-  if (batch.pauseMode === 'permanent') return t('永久暂停，手动继续');
-  if (batch.pauseMode === 'duration') {
-    return translate(t, '暂停 {0} 秒后自动继续', [Number(batch.pauseSeconds) || DEFAULT_PAUSE_SECONDS]);
-  }
-  return t('不停');
+  return resolvePauseText(batch.pauseMode, batch.pauseSeconds, t, 'card');
 }
 
 /** 表单批次的累计值文案：个数带单位「个」，百分比如 25% */
@@ -375,10 +384,7 @@ export function formatBatchTargetText(
 
 /** 暂停方式展示文案：permanent → 永久暂停 · 手动继续 / duration → 暂停 N 秒后自动继续 / none → 不停 */
 export function formatPauseMode(batch: Pick<BatchOutputObj, 'pauseMode' | 'pauseSeconds'>, t: TranslateFn): string {
-  const mode = batch.pauseMode ?? 'none';
-  if (mode === 'permanent') return t('永久暂停 · 手动继续');
-  if (mode === 'duration') return translate(t, '暂停 {0} 秒后自动继续', [batch.pauseSeconds ?? 0]);
-  return t('不停');
+  return resolvePauseText(batch.pauseMode, batch.pauseSeconds, t, 'detail');
 }
 
 /** 表单批次 → 接口 target 字符串（"1" / "25%"），未填返回空串 */
@@ -415,7 +421,7 @@ export function isFullBatch(batch: Pick<StrategyBatchForm, 'targetUnit' | 'targe
 
 /** 归一化暂停方式：接口返回的非法值降级为 none */
 export function normalizePauseMode(mode: string | undefined): PauseMode {
-  return PAUSE_MODES.includes(mode as PauseMode) ? (mode as PauseMode) : 'none';
+  return PAUSE_MODES.includes(mode as PauseMode) ? (mode as PauseMode) : BATCH_PAUSE_MODE.NONE;
 }
 
 /**
@@ -457,7 +463,7 @@ export function toBatchForms(batches: BatchOutputObj[] | undefined): StrategyBat
       targetUnit: target.unit,
       targetValue: target.value,
       pauseMode,
-      pauseSeconds: pauseMode === 'duration' ? batch.pauseSeconds : undefined,
+      pauseSeconds: pauseMode === BATCH_PAUSE_MODE.DURATION ? batch.pauseSeconds : undefined,
     };
   });
 }
@@ -467,7 +473,7 @@ export function toBatchInputs(batches: StrategyBatchForm[]): BatchInput[] {
   return batches.map(batch => ({
     target: formatTargetValue(batch),
     pauseMode: batch.pauseMode,
-    ...(batch.pauseMode === 'duration' ? { pauseSeconds: Number(batch.pauseSeconds) } : {}),
+    ...(batch.pauseMode === BATCH_PAUSE_MODE.DURATION ? { pauseSeconds: Number(batch.pauseSeconds) } : {}),
   }));
 }
 
@@ -501,9 +507,12 @@ export function validateStrategyForm(
 
   const nameError = validateStrategyName(form.name, options);
 
-  const descriptionError =
-    form.description.length > DESCRIPTION_MAX_LENGTH ? `策略说明不能超过 ${DESCRIPTION_MAX_LENGTH} 个字符` : '';
-  const batchesEmptyError = form.batches.length === 0 ? '请至少配置一个批次' : '';
+  const descriptionError: StrategyFormError | undefined =
+    form.description.length > DESCRIPTION_MAX_LENGTH
+      ? { key: '策略说明不能超过 {0} 个字符', params: [DESCRIPTION_MAX_LENGTH] }
+      : undefined;
+  const batchesEmptyError: StrategyFormError | undefined =
+    form.batches.length === 0 ? { key: '请至少配置一个批次', params: [] } : undefined;
 
   form.batches.forEach(batch => {
     const targetError = validateTargetValue(batch.targetValue, batch.targetUnit);
@@ -550,9 +559,9 @@ export function validateStrategyForm(
       !batchesEmptyError &&
       Object.keys(batchErrors).length === 0 &&
       Object.keys(batchPauseErrors).length === 0,
-    nameError: nameError || undefined,
-    descriptionError: descriptionError || undefined,
-    batchesEmptyError: batchesEmptyError || undefined,
+    nameError: nameError ?? undefined,
+    descriptionError,
+    batchesEmptyError,
     batchErrors,
     batchErrorDetails,
     batchPauseErrors,
@@ -560,16 +569,21 @@ export function validateStrategyForm(
 }
 
 /**
- * 校验策略名称：非空 → 长度 → 与当前空间已有策略重名（合法返回空串）。
+ * 校验策略名称：非空 → 长度 → 与当前空间已有策略重名（合法返回 null）。
  *
  * 重名以前端列表数据为准做同步提示（名称 blur / 提交 / 预览时即时反馈），
  * 后端唯一性校验作为保底：列表可能滞后（他人刚创建），此时由接口错误内联兜底。
  * 与自身原名称相同不算重复（编辑态未改名）；名称按 trim 后精确比较，大小写不同视为不同名称。
  */
-export function validateStrategyName(name: string, options: StrategyFormValidateOptions = {}): string {
+export function validateStrategyName(
+  name: string,
+  options: StrategyFormValidateOptions = {},
+): null | StrategyFormError {
   const trimmed = (name ?? '').trim();
-  if (!trimmed) return '策略名称不能为空';
-  if (trimmed.length > NAME_MAX_LENGTH) return `策略名称不能超过 ${NAME_MAX_LENGTH} 个字符`;
+  if (!trimmed) return { key: '策略名称不能为空', params: [] };
+  if (trimmed.length > NAME_MAX_LENGTH) {
+    return { key: '策略名称不能超过 {0} 个字符', params: [NAME_MAX_LENGTH] };
+  }
 
   const selfName = (options.selfName ?? '').trim();
   const duplicated = (options.existingNames ?? []).some(existing => {
@@ -577,7 +591,7 @@ export function validateStrategyName(name: string, options: StrategyFormValidate
     if (!target || target === selfName) return false;
     return target === trimmed;
   });
-  return duplicated ? '策略名称在当前空间已存在' : '';
+  return duplicated ? { key: '策略名称在当前空间已存在', params: [] } : null;
 }
 
 /** 校验单个批次的累计值：个为 >0 正整数，百分比为 1% ~ 100% 整数，合法返回空串 */

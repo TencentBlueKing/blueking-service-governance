@@ -17,7 +17,8 @@
  */
 
 import dayjs, { type Dayjs } from 'dayjs';
-import { APP_DEPLOY_STATUS } from '~/common/enums/deploy';
+import { resolvePauseTextDescriptor } from '~/common/batch-release';
+import { APP_DEPLOY_STATUS, BATCH_PHASE, RELEASE_MODE, ROLLOUT_PHASE } from '~/common/enums/deploy';
 
 import {
   isFullTarget,
@@ -80,7 +81,10 @@ export interface BatchReleaseBannerView {
   /** 收进「更多」下拉的低频操作 */
   overflowActions: BatchReleaseBannerAction[];
   replicas: number;
-  /** 标题状态 Tag；已回滚为终态提示不展示（回滚中按设计稿展示「正在清理灰度资源」） */
+  /**
+   * 标题状态 Tag；已回滚为终态提示不展示（回滚中按设计稿展示「正在清理灰度资源」）。
+   * 定时暂停为 null：倒计时必须由渲染层的逐秒时间源换算，不能在轮询派生的 view 里固化。
+   */
   statusTag: BatchReleaseStatusTag | null;
   updatedReplicas: number;
 }
@@ -188,26 +192,9 @@ const TERMINAL_BATCH_RELEASE_STATUSES = new Set<string>([
   APP_DEPLOY_STATUS.ROLLED_BACK,
 ]);
 
-/** manual-paused：策略配置的永久暂停或人工暂停 */
-const MANUAL_PAUSED_BATCH_PHASES = new Set(['manual-paused']);
-
-/** timed-paused：定时暂停，可提前进入下一批 */
-const TIMED_PAUSED_BATCH_PHASES = new Set(['timed-paused']);
-
-/** 本批更新中或尚未开始：此时只能暂停（pending 阶段后端不支持暂停，按钮置灰） */
-const UPDATING_BATCH_PHASES = new Set(['pending', 'updating']);
-
 /** 步骤条暂停态批次阶段：manual-paused / timed-paused，节点保留数字由 curStep 高亮 */
-const PAUSED_PHASES = new Set(['manual-paused', 'timed-paused']);
-
-/** Rollout phase：正在执行发布步骤。后端只在该 phase 下接受手动操作 */
-const ROLLOUT_PHASE_RUNNING = 'Running';
-
-/** Rollout phase：所有步骤已完成，正在全量更新剩余的旧版本实例 */
-const ROLLOUT_PHASE_UPDATING_PRIMARY = 'UpdatingPrimary';
-
-/** Rollout phase：正在清理灰度资源（发布开始与结束时都会出现） */
-const ROLLOUT_PHASE_CLEANING_CANARY = 'CleaningCanary';
+const isPausedPhase = (phase: string | undefined): boolean =>
+  phase === BATCH_PHASE.MANUAL_PAUSED || phase === BATCH_PHASE.TIMED_PAUSED;
 
 /** 关闭记忆 key：应用 + 环境 + 部署记录，任一变化都视为新的发布结果。 */
 export function buildBatchReleaseDismissKey(appID: string, envName: string, deployID: string): string {
@@ -267,11 +254,11 @@ export function buildBatchReleaseSteps(
       tagTheme = 'danger';
       stepStatus = 'error';
     } else if (hasCurrentIndex && index === currentIdx) {
-      if (batchPhase === 'completed') {
+      if (batchPhase === BATCH_PHASE.COMPLETED) {
         tagKey = '已完成';
         tagTheme = 'success';
         stepStatus = 'done';
-      } else if (PAUSED_PHASES.has(batchPhase)) {
+      } else if (isPausedPhase(batchPhase)) {
         // 暂停态不带 per-step 状态：保留数字节点，由 curStep 高亮为蓝色。
         // 定时暂停带 mm:ss 倒计时，手动 / 永久暂停展示「等待手动继续」。
         const pauseTag = resolvePausedStepTag(progress, now);
@@ -346,7 +333,7 @@ export function canOperateBatchRelease(progress: BatchReleaseProgressOutputObj |
   if (!progress) return false;
   const rolloutPhase = progress.rolloutPhase ?? '';
   // 历史数据的进度快照可能没有 rolloutPhase（接口回填前只落了 batchPhase），退回按批次序号判断
-  if (rolloutPhase && rolloutPhase !== ROLLOUT_PHASE_RUNNING) return false;
+  if (rolloutPhase && rolloutPhase !== ROLLOUT_PHASE.RUNNING) return false;
 
   const index = progress.currentBatchIndex;
   if (typeof index !== 'number' || !Number.isFinite(index) || index < 0) return false;
@@ -368,9 +355,9 @@ export function hasCanaryDeployRecord(latest: LatestDeployStatus | null): boolea
   // 此时已没有任何批次或实例可控制，不能继续搭车轮询进度接口。
   // build 阶段沿用实例列表口径：构建不删旧实例，旧的分批发布可能仍在运行。
   if (latest.hasDeployRecord === false && latest.stage !== 'build') return false;
-  if (latest.inProgressReleaseMode === 'canary') return true;
+  if (latest.inProgressReleaseMode === RELEASE_MODE.CANARY) return true;
   // 进行中标记为空时，再看最新记录本身是否为分批发布，用于完成一次进度查询后清理状态。
-  return latest.releaseMode === 'canary';
+  return latest.releaseMode === RELEASE_MODE.CANARY;
 }
 
 /**
@@ -384,11 +371,11 @@ export function isBatchReleaseFinalizing(progress: BatchReleaseProgressOutputObj
   const index = progress.currentBatchIndex;
   // 仍停在某个批次上（含回滚中的 -1）就不算收尾
   if (typeof index === 'number' && index >= 0) return false;
-  if (progress.batchPhase === 'completed') return true;
+  if (progress.batchPhase === BATCH_PHASE.COMPLETED) return true;
 
   const rolloutPhase = progress.rolloutPhase ?? '';
-  if (rolloutPhase === ROLLOUT_PHASE_UPDATING_PRIMARY) return true;
-  if (rolloutPhase === ROLLOUT_PHASE_CLEANING_CANARY) {
+  if (rolloutPhase === ROLLOUT_PHASE.UPDATING_PRIMARY) return true;
+  if (rolloutPhase === ROLLOUT_PHASE.CLEANING_CANARY) {
     const replicas = progress.replicas ?? 0;
     return replicas > 0 && (progress.updatedReplicas ?? 0) >= replicas;
   }
@@ -400,7 +387,7 @@ export function isBatchReleaseFinalizing(progress: BatchReleaseProgressOutputObj
  * CleaningCanary 在发布开始与结束都会出现，实例全部更新完时只剩资源清理，全量节点应展示已完成。
  */
 export function isBatchReleaseUpdatingRemaining(progress: BatchReleaseProgressOutputObj | null): boolean {
-  if (progress?.rolloutPhase !== ROLLOUT_PHASE_CLEANING_CANARY) return true;
+  if (progress?.rolloutPhase !== ROLLOUT_PHASE.CLEANING_CANARY) return true;
   const replicas = progress.replicas ?? 0;
   return !(replicas > 0 && (progress.updatedReplicas ?? 0) >= replicas);
 }
@@ -561,14 +548,14 @@ export function resolveBatchReleaseBanner(
   const batchPhase = progress.batchPhase ?? '';
   const batchCount = progress.batches?.length ?? 0;
   const hasBatchIndex = typeof currentBatchIndex === 'number' && currentBatchIndex >= 0;
-  const isManualPaused = MANUAL_PAUSED_BATCH_PHASES.has(batchPhase);
-  const isTimedPaused = TIMED_PAUSED_BATCH_PHASES.has(batchPhase);
-  const isUpdating = UPDATING_BATCH_PHASES.has(batchPhase);
+  const isManualPaused = batchPhase === BATCH_PHASE.MANUAL_PAUSED;
+  const isTimedPaused = batchPhase === BATCH_PHASE.TIMED_PAUSED;
+  const isUpdating = batchPhase === BATCH_PHASE.UPDATING || batchPhase === BATCH_PHASE.PENDING;
 
   // 全量更新中：灰度批走完后系统补齐全量批（batchPhase=completed、rolloutPhase=UpdatingPrimary，
   // 或批次序号越过灰度批数）。后端已清空批次序号、不再接受任何手动操作，因此只展示进度。
   const isFullUpdating =
-    batchPhase === 'completed' ||
+    batchPhase === BATCH_PHASE.COMPLETED ||
     isBatchReleaseFinalizing(progress) ||
     (hasBatchIndex && batchCount > 0 && currentBatchIndex >= batchCount);
   if (isFullUpdating) {
@@ -613,7 +600,6 @@ export function resolveBatchReleaseBanner(
 
   // manual-paused（策略配置的永久暂停或人工暂停）/ timed-paused（定时暂停，可提前进入下一批）
   if (isManualPaused || isTimedPaused) {
-    const remaining = isTimedPaused ? resolveTimedPauseRemainingSeconds(progress) : 0;
     return {
       ...base,
       actions: operable ? [createAction('continue', 'primary'), rollbackAction] : [],
@@ -621,7 +607,9 @@ export function resolveBatchReleaseBanner(
       iconKind: isTimedPaused ? 'time' : 'pause',
       kind: 'paused',
       overflowActions,
-      statusTag: resolvePausedStatusTag(progress, remaining),
+      // 定时暂停的 mm:ss 倒计时不固化在 view 里：view 由 5s 轮询快照派生，写进去就会随时间失效。
+      // 渲染层（横幅 / 进度面板）用逐秒时间源调用 resolvePausedStatusTag 实时换算，view 只给语义 key。
+      statusTag: isTimedPaused ? null : { key: '等待手动继续', theme: 'warning' },
     };
   }
 
@@ -709,7 +697,7 @@ export function resolvePausedStatusTag(
   progress: BatchReleaseProgressOutputObj,
   remainingSeconds: number,
 ): BatchReleaseStatusTag {
-  if (progress.batchPhase !== 'timed-paused') return { key: '等待手动继续', theme: 'warning' };
+  if (progress.batchPhase !== BATCH_PHASE.TIMED_PAUSED) return { key: '等待手动继续', theme: 'warning' };
   if (remainingSeconds <= 0) return { key: '已暂停', theme: 'warning' };
   return {
     key: '定时暂停中 · {0} 后自动继续',
@@ -719,14 +707,15 @@ export function resolvePausedStatusTag(
 }
 
 /**
- * 百分比批步骤条标题的累计实例数：Math.round 口径，至少 1、不超过实例总数。
+ * 百分比批步骤条标题的累计实例数。
  *
- * 仅用于进度面板步骤条标题展示（设计稿「25%（3 个）」），数字递增天然表达累计含义；
- * 发布预览沿用 release-preview.resolveBatchUpdatedCount 的 ceil 口径，两者互不影响。
+ * 直接复用发布预览的 resolveBatchUpdatedCount（向上取整、至少 1、不超过实例总数），
+ * 保证「预览里看到的目标数」与「进度面板里的目标数」是同一个数字：
+ * 用 Math.round 时 4 实例 × 33% 会算成 1 个，而集群实际滚动的是 ceil(1.32) = 2 个。
  */
 export function resolvePercentAccumulatedCount(pct: number | undefined, replicas: number): number {
   if (!pct || !Number.isFinite(pct) || replicas <= 0) return 0;
-  return Math.min(replicas, Math.max(1, Math.round((replicas * pct) / 100)));
+  return resolveBatchUpdatedCount(`${pct}%`, replicas);
 }
 
 /**
@@ -735,7 +724,7 @@ export function resolvePercentAccumulatedCount(pct: number | undefined, replicas
  * 非 timed-paused、数据缺失或已到期时返回 0。
  */
 export function resolveTimedPauseRemainingSeconds(progress: BatchReleaseProgressOutputObj, now = Date.now()): number {
-  if (progress.batchPhase !== 'timed-paused') return 0;
+  if (progress.batchPhase !== BATCH_PHASE.TIMED_PAUSED) return 0;
   const currentIndex = progress.currentBatchIndex;
   const batch = progress.batches?.[typeof currentIndex === 'number' && currentIndex >= 0 ? currentIndex : -1];
   const startAt = progress.pauseStartTime ? Date.parse(progress.pauseStartTime) : NaN;
@@ -765,7 +754,9 @@ export function shouldFetchBatchReleaseProgress(
     // 同一 deployID 已被服务端确认「无进度」时不再重查；但后端标记为进行中的分批发布必须重新补查，
     // 避免「先前空结果」把刚发起的发布挡在门外。
     const confirmedEmpty =
-      !!latestDeployID && latestDeployID === emptyQueriedDeployID && latest?.inProgressReleaseMode !== 'canary';
+      !!latestDeployID &&
+      latestDeployID === emptyQueriedDeployID &&
+      latest?.inProgressReleaseMode !== RELEASE_MODE.CANARY;
     if (confirmedEmpty) return false;
     return !isTerminalBatchReleaseStatus(cached?.status);
   }
@@ -773,7 +764,7 @@ export function shouldFetchBatchReleaseProgress(
   if (cached.deployID !== latestDeployID) return true;
   // 同一部署记录被重新发起灰度发布（重新部署复用 deployID，进度已被重置）：
   // 后端标记进行中时终态缓存已过期，必须重查，否则横幅会一直停留在上一次的「已完成 / 已回滚」。
-  if (latest?.inProgressReleaseMode === 'canary') return true;
+  if (latest?.inProgressReleaseMode === RELEASE_MODE.CANARY) return true;
   return !isTerminalBatchReleaseStatus(cached.status);
 }
 
@@ -820,18 +811,12 @@ function parseServerTime(value?: string): Dayjs | null {
   return time.isValid() && time.year() >= 2000 ? time : null;
 }
 
-/** 批次暂停方式的副文本描述。 */
+/** 批次暂停方式的副文本描述（文案映射与策略配置页共用 ~/common/batch-release）。 */
 function resolveBatchPauseSubtitle(batch: {
   pauseMode?: string;
   pauseSeconds?: number;
 }): BatchReleaseMessageDescriptor {
-  if (batch.pauseMode === 'permanent') {
-    return { key: '永久暂停 · 手动继续', params: [] };
-  }
-  if (batch.pauseMode === 'duration') {
-    return { key: '暂停 {0} 秒 · 自动继续', params: [batch.pauseSeconds ?? 0] };
-  }
-  return { key: '不停 · 自动继续', params: [] };
+  return resolvePauseTextDescriptor(batch.pauseMode, batch.pauseSeconds, 'step');
 }
 
 /**
@@ -839,7 +824,7 @@ function resolveBatchPauseSubtitle(batch: {
  * 到期或换算不出展示「已暂停」；手动 / 永久暂停展示「等待手动继续」。
  */
 function resolvePausedStepTag(progress: BatchReleaseProgressOutputObj, now: number): BatchReleaseMessageDescriptor {
-  if (progress.batchPhase !== 'timed-paused') return { key: '等待手动继续', params: [] };
+  if (progress.batchPhase !== BATCH_PHASE.TIMED_PAUSED) return { key: '等待手动继续', params: [] };
   const remaining = resolveTimedPauseRemainingSeconds(progress, now);
   if (remaining <= 0) return { key: '已暂停', params: [] };
   return { key: '暂停中 {0}', params: [formatPauseCountdown(remaining)] };

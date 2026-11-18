@@ -433,7 +433,7 @@
   import { EnvOutput, FeatureEnvOutput } from '~/@types/v1/env';
   import { AppSpecService, EnvService } from '~/api/modules/v1';
   import { APP_BUILD_STATUS, BUILD_INTERRUPT_STATUSES } from '~/common/enums/build';
-  import { APP_DEPLOY_STATUS, DEPLOY_FAILED_STATUSES, DEPLOY_SOURCE } from '~/common/enums/deploy';
+  import { APP_DEPLOY_STATUS, DEPLOY_FAILED_STATUSES, DEPLOY_SOURCE, RELEASE_MODE } from '~/common/enums/deploy';
   import ColorIcon from '~/components/color-icon.vue';
   import FlexRow from '~/components/flex-row.vue';
   import Layout from '~/components/skeleton/skeleton-layout';
@@ -842,7 +842,7 @@
         isFailed = (DEPLOY_FAILED_STATUSES as readonly string[]).includes(latest.status!);
         isRunning = latest.status === APP_DEPLOY_STATUS.DEPLOYING;
         // 分批发布进行中：部署状态补充为「灰度发布中」，与部署总览状态列保持一致
-        if (latest.status === APP_DEPLOY_STATUS.DEPLOYING && latest.inProgressReleaseMode === 'canary') {
+        if (latest.status === APP_DEPLOY_STATUS.DEPLOYING && latest.inProgressReleaseMode === RELEASE_MODE.CANARY) {
           const progress = canaryProgress.value;
           statusInfo =
             progress?.currentBatch != null
@@ -1153,7 +1153,9 @@
     await handleGetLatestDeployStatus();
     const latest = latestDeployStatus.value;
     showBatchReleaseProgress.value =
-      !!batchReleaseView.value || latest?.inProgressReleaseMode === 'canary' || latest?.releaseMode === 'canary';
+      !!batchReleaseView.value ||
+      latest?.inProgressReleaseMode === RELEASE_MODE.CANARY ||
+      latest?.releaseMode === RELEASE_MODE.CANARY;
 
     // 总览入口发起的部署：同步刷新聚合数据与特性环境，返回实例列表时数据不滞后。
     if (overviewDeployTargets.value !== undefined) {

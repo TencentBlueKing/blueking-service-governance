@@ -16,6 +16,8 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
+import { BATCH_PAUSE_MODE } from '~/common/enums/deploy';
+
 import type { BatchOutputObj } from '~/@types/v1/release-strategies';
 
 /** 单个批次 target 的解析结果（策略预览 / 部署预览共用的唯一事实源） */
@@ -142,7 +144,7 @@ export function buildReleasePreview(batches: BatchOutputObj[] | undefined, repli
 
   let prevCount = 0;
   const rows: ReleasePreviewRow[] = list.map((batch, index) => {
-    const pauseMode = batch.pauseMode ?? 'none';
+    const pauseMode = batch.pauseMode ?? BATCH_PAUSE_MODE.NONE;
     const parsed = parseBatchTarget(batch.target);
     const targetText = parsed.text || '100%';
     const row: ReleasePreviewRow = {
@@ -154,11 +156,10 @@ export function buildReleasePreview(batches: BatchOutputObj[] | undefined, repli
       isFull: isFullTarget(batch.target),
     };
     prevCount = row.updatedCount;
-    if (pauseMode === 'permanent' || pauseMode === 'duration') {
-      row.pause = {
-        mode: pauseMode,
-        seconds: pauseMode === 'duration' ? Number(batch.pauseSeconds) || 0 : undefined,
-      };
+    if (pauseMode === BATCH_PAUSE_MODE.PERMANENT) {
+      row.pause = { mode: BATCH_PAUSE_MODE.PERMANENT };
+    } else if (pauseMode === BATCH_PAUSE_MODE.DURATION) {
+      row.pause = { mode: BATCH_PAUSE_MODE.DURATION, seconds: Number(batch.pauseSeconds) || 0 };
     }
     return row;
   });

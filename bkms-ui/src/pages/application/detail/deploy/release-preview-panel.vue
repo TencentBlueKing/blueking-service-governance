@@ -101,11 +101,7 @@
           class="mt-[10px]"
           :theme="row.pause.mode === 'permanent' ? 'warning' : 'info'"
         >
-          {{
-            row.pause.mode === 'permanent'
-              ? $t('永久暂停 · 手动继续')
-              : $t('暂停 {0} 秒后自动继续', [row.pause.seconds])
-          }}
+          {{ formatPauseTag(row) }}
         </Tag>
         <!-- 无暂停配置的批次补充「不停」标签；末批之后无下一批，不展示 -->
         <Tag
@@ -132,6 +128,7 @@
 
   import { Tag } from 'bkui-vue';
   import { useI18n } from 'vue-i18n';
+  import { resolvePauseText } from '~/common/batch-release';
 
   import { type ReleasePreviewResult, type ReleasePreviewRow, buildBatchSquares } from './release-preview';
 
@@ -158,6 +155,11 @@
     }
     const percentSuffix = row.isPercent ? `（${row.targetText}）` : '';
     return `${head} · ${t('累计 {0} 个', [row.updatedCount])}${percentSuffix}`;
+  }
+
+  /** 暂停标签文案：与策略预览／列表页共用 ~/common/batch-release 的 pauseMode 映射 */
+  function formatPauseTag(row: ReleasePreviewRow): string {
+    return resolvePauseText(row.pause?.mode, row.pause?.seconds, t, 'detail');
   }
 </script>
 
