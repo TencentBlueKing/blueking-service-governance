@@ -1,4 +1,4 @@
-# Example (run from bkms-govern root):
+# Example (run from blueking-service-governance root):
 #    docker build -f bkms-server/Dockerfile \
 #       -t bkms/bkms-server:0.0.1-alpha.1 \
 #       --build-arg VERSION="$(git describe --always)" \

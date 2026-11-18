@@ -351,6 +351,89 @@ func (c *ApiClient) DeleteCredential(ctx context.Context, projectCode, credentia
 	return nil
 }
 
+// ------------------------------------------ 蓝盾第三方构建机 API ------------------------------------------
+
+// ListThirdPartyAgentNodes 获取项目下的第三方构建机节点列表
+//
+// 对应网关 API：v4_user_node_list
+// GET .../v4/apigw-user/projects/{projectId}/environment/third_part_agent_nodes
+func (c *ApiClient) ListThirdPartyAgentNodes(ctx context.Context, projectCode string) ([]AgentNode, error) {
+	apiOperation := c.NewOperation(
+		bkapi.OperationConfig{
+			Name:   "v4_user_node_list",
+			Method: "GET",
+			Path:   "/v4/apigw-user/projects/{projectId}/environment/third_part_agent_nodes",
+		},
+		bkapi.OptSetRequestPathParams(
+			map[string]string{"projectId": projectCode},
+		),
+	)
+
+	result, err := c.handleOperation(ctx, apiOperation)
+	if err != nil {
+		return nil, errors.Wrapf(err, "list bkci third party agent nodes in project %s", projectCode)
+	}
+
+	var nodes []AgentNode
+	for _, d := range mapx.GetList(result, "data") {
+		n, ok := d.(map[string]any)
+		if !ok {
+			return nil, errors.New("invalid agent node data (not map[string]any type)")
+		}
+		nodes = append(nodes, parseAgentNode(n))
+	}
+	return nodes, nil
+}
+
+// GetThirdPartyAgentNodeStatus 获取第三方构建机节点状态；节点不存在时返回 ObjectNotFound
+//
+// 对应网关 API：v4_user_node_status
+// GET .../v4/apigw-user/projects/{projectId}/environment/third_part_agent_node_status?nodeHashId=
+func (c *ApiClient) GetThirdPartyAgentNodeStatus(
+	ctx context.Context, projectCode, nodeHashID string,
+) (*AgentNodeStatus, error) {
+	apiOperation := c.NewOperation(
+		bkapi.OperationConfig{
+			Name:   "v4_user_node_status",
+			Method: "GET",
+			Path:   "/v4/apigw-user/projects/{projectId}/environment/third_part_agent_node_status",
+		},
+		bkapi.OptSetRequestPathParams(
+			map[string]string{"projectId": projectCode},
+		),
+	).SetQueryParams(map[string]string{"nodeHashId": nodeHashID})
+
+	result, err := c.handleOperation(ctx, apiOperation)
+	if err != nil {
+		return nil, errors.Wrapf(err, "get bkci agent node %s status in project %s", nodeHashID, projectCode)
+	}
+
+	// 节点不存在时蓝盾不一定返回 404，data 为 null 或缺少 nodeHashId 同样视为不存在。
+	// 不能用 mapx.GetMap，它遇到 null 会 panic
+	data, _ := result["data"].(map[string]any)
+	if mapx.GetStr(data, "nodeHashId") == "" {
+		return nil, errors.Wrapf(ObjectNotFound, "agent node %s in project %s", nodeHashID, projectCode)
+	}
+	return &AgentNodeStatus{
+		AgentNode:   parseAgentNode(data),
+		AgentHashID: mapx.GetStr(data, "agentHashId"),
+		CanUse:      cast.ToBool(mapx.Get(data, "canUse", false)),
+	}, nil
+}
+
+// parseAgentNode 解析列表与状态接口共有的节点字段。
+// 两个接口的 nodeStatus、nodeType 口径不同（状态接口返回中文文案），因此在线只看 agentStatus
+func parseAgentNode(n map[string]any) AgentNode {
+	return AgentNode{
+		NodeHashID:  mapx.GetStr(n, "nodeHashId"),
+		DisplayName: mapx.GetStr(n, "displayName"),
+		Hostname:    mapx.GetStr(n, "name"),
+		IP:          mapx.GetStr(n, "ip"),
+		OSName:      mapx.GetStr(n, "osName"),
+		AgentOnline: cast.ToBool(mapx.Get(n, "agentStatus", false)),
+	}
+}
+
 // ------------------------------------------ 蓝盾流水线 API ------------------------------------------
 
 // ListPipelines 获取流水线列表

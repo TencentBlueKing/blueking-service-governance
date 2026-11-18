@@ -3,6 +3,13 @@
 // 来源：apps/bkms-server/docs/apis/swagger.json
 // 模块：bkintegrations-bkci
 
+export interface ListBkCIBuildNodesRequest {
+  /**
+   * 工作空间 ID
+   */
+  workspaceID: string;
+}
+
 export interface ListBkCIOAuthGitProjectsRequest {
   /**
    * 工作空间 ID
@@ -116,6 +123,31 @@ export interface ListBkCIRepositoryTagsRequest {
   pageSize: number;
 }
 
+export interface GetBuildNodeBindingRequest {
+  /**
+   * 工作空间 ID
+   */
+  workspaceID: string;
+}
+
+export type BindBuildNodeRequest = BindBuildNodeInput & {
+  /**
+   * 工作空间 ID
+   */
+  workspaceID: string;
+};
+
+export interface UnbindBuildNodeRequest {
+  /**
+   * 工作空间 ID
+   */
+  workspaceID: string;
+}
+
+export interface ListBuildNodeCandidatesOutput {
+  data?: BuildNodeCandidateOutput[];
+}
+
 export interface ListBkCIOAuthGitProjectsOutput {
   data?: BkCIOAuthGitProjectOutput[];
 }
@@ -142,6 +174,48 @@ export interface ListBkCIRepositoryBranchesOutput {
 
 export interface ListBkCIRepositoryTagsOutput {
   data?: BkCIRepositoryRefOutput[];
+}
+
+export interface GetBuildNodeBindingOutput {
+  data?: BuildNodeBindingStateOutput;
+}
+
+export interface BindBuildNodeInput {
+  nodeHashID: string;
+}
+
+export interface EmptyOutput {
+}
+
+export interface BuildNodeBindingStateOutput {
+  /**
+   * 当前关联的构建机，未关联时为 null，表示使用公共构建机
+   */
+  binding?: BuildNodeBindingOutput;
+  /**
+   * 当前用户能否关联、更换或解除构建机
+   */
+  editable?: boolean;
+  /**
+   * 工作空间的蓝盾项目 Code，为空表示尚未初始化蓝盾项目
+   */
+  projectCode?: string;
+}
+
+export interface BuildNodeBindingOutput {
+  displayName?: string;
+  ip?: string;
+  /**
+   * 蓝盾节点 HashId，用于更换时回显当前选项，页面不展示
+   */
+  nodeHashID?: string;
+  osName?: string;
+  /**
+   * 实时状态：online 在线；offline 离线；notFound 已从蓝盾删除；unknown 查询失败
+   */
+  state?: "online" | "offline" | "notFound" | "unknown";
+  updatedAt?: string;
+  updater?: string;
 }
 
 export interface BkCIRepositoryRefOutput {
@@ -201,4 +275,20 @@ export interface BkCIOAuthGitProjectOutput {
   id?: string;
   name?: string;
   url?: string;
+}
+
+export interface BuildNodeCandidateOutput {
+  displayName?: string;
+  ip?: string;
+  /**
+   * 蓝盾节点 HashId，只作为选项的值，页面不展示
+   */
+  nodeHashID?: string;
+  online?: boolean;
+  osName?: string;
+  selectable?: boolean;
+  /**
+   * 不可关联的原因：offline 离线；osUnsupported 非 Linux
+   */
+  unselectableReason?: "offline" | "osUnsupported";
 }

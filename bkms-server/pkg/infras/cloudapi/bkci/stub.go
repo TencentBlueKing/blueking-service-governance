@@ -152,6 +152,76 @@ func (s *StubApiClient) DeleteCredential(ctx context.Context, projectCode, crede
 	return nil
 }
 
+// ------------------------------------------ 蓝盾第三方构建机 API ------------------------------------------
+
+const (
+	// StubAgentNodeLinuxOnline 在线的 Linux 节点，可被关联
+	StubAgentNodeLinuxOnline = "stub-node-linux-online"
+	// StubAgentNodeLinuxOffline 离线的 Linux 节点
+	StubAgentNodeLinuxOffline = "stub-node-linux-offline"
+	// StubAgentNodeWindows 在线的 Windows 节点
+	StubAgentNodeWindows = "stub-node-windows"
+	// StubAgentNodeNoUsePerm 在线的 Linux 节点，但当前用户没有使用权限
+	StubAgentNodeNoUsePerm = "stub-node-no-use-perm"
+)
+
+// stubAgentNodes 返回模拟的节点状态，数据均为虚构
+func (s *StubApiClient) stubAgentNodes() []AgentNodeStatus {
+	return []AgentNodeStatus{
+		{
+			AgentNode: AgentNode{
+				NodeHashID: StubAgentNodeLinuxOnline, DisplayName: "测试构建机（Linux 在线）",
+				Hostname: "stub-host-1", IP: "127.0.0.1", OSName: "linux", AgentOnline: true,
+			},
+			AgentHashID: "stub-agent-1", CanUse: true,
+		},
+		{
+			AgentNode: AgentNode{
+				NodeHashID: StubAgentNodeLinuxOffline, DisplayName: "测试构建机（Linux 离线）",
+				Hostname: "stub-host-2", IP: "127.0.0.2", OSName: "linux", AgentOnline: false,
+			},
+			AgentHashID: "stub-agent-2", CanUse: true,
+		},
+		{
+			AgentNode: AgentNode{
+				NodeHashID: StubAgentNodeWindows, DisplayName: "",
+				Hostname: "stub-host-3", IP: "127.0.0.3", OSName: "windows", AgentOnline: true,
+			},
+			AgentHashID: "stub-agent-3", CanUse: true,
+		},
+		{
+			AgentNode: AgentNode{
+				NodeHashID: StubAgentNodeNoUsePerm, DisplayName: "测试构建机（无使用权限）",
+				Hostname: "stub-host-4", IP: "127.0.0.4", OSName: "linux", AgentOnline: true,
+			},
+			AgentHashID: "stub-agent-4", CanUse: false,
+		},
+	}
+}
+
+// ListThirdPartyAgentNodes 返回模拟的第三方构建机节点列表
+func (s *StubApiClient) ListThirdPartyAgentNodes(ctx context.Context, projectCode string) ([]AgentNode, error) {
+	log.Infof(ctx, "Stub: ListThirdPartyAgentNodes request: %s", projectCode)
+	var nodes []AgentNode
+	for _, n := range s.stubAgentNodes() {
+		nodes = append(nodes, n.AgentNode)
+	}
+	return nodes, nil
+}
+
+// GetThirdPartyAgentNodeStatus 返回模拟的节点状态，未知节点返回 ObjectNotFound
+func (s *StubApiClient) GetThirdPartyAgentNodeStatus(
+	ctx context.Context, projectCode, nodeHashID string,
+) (*AgentNodeStatus, error) {
+	log.Infof(ctx, "Stub: GetThirdPartyAgentNodeStatus request: %s, %s", projectCode, nodeHashID)
+	for _, n := range s.stubAgentNodes() {
+		if n.NodeHashID == nodeHashID {
+			return &n, nil
+		}
+	}
+	return nil, ObjectNotFound
+}
+
 // ------------------------------------------ 蓝盾流水线 API ------------------------------------------
 
 func (s *StubApiClient) stubPipelines() []Pipeline {

@@ -81,6 +81,31 @@ type PipelineVariable struct {
 	Options      []PipelineVariableOption
 }
 
+// AgentNode 蓝盾项目下的第三方构建机节点（来自节点列表接口）
+type AgentNode struct {
+	// NodeHashID 节点 HashId，绑定时作为节点标识
+	NodeHashID string
+	// DisplayName 节点别名，由注册人填写，可能为空
+	DisplayName string
+	// Hostname 主机名，DisplayName 为空时用于展示
+	Hostname string
+	// IP 节点 IP
+	IP string
+	// OSName 操作系统，蓝盾返回小写，如 linux
+	OSName string
+	// AgentOnline Agent 是否在线
+	AgentOnline bool
+}
+
+// AgentNodeStatus 单个第三方构建机节点的状态（来自节点状态接口）
+type AgentNodeStatus struct {
+	AgentNode
+	// AgentHashID Agent HashId，与 NodeHashID 不同，流水线调度第三方构建机时使用它
+	AgentHashID string
+	// CanUse 当前用户在蓝盾是否有该节点的使用权限
+	CanUse bool
+}
+
 // Pipeline 蓝盾流水线
 type Pipeline struct {
 	ID          string
