@@ -200,6 +200,15 @@ const UPDATING_BATCH_PHASES = new Set(['pending', 'updating']);
 /** 步骤条暂停态批次阶段：manual-paused / timed-paused，节点保留数字由 curStep 高亮 */
 const PAUSED_PHASES = new Set(['manual-paused', 'timed-paused']);
 
+/** Rollout phase：正在执行发布步骤。后端只在该 phase 下接受手动操作 */
+const ROLLOUT_PHASE_RUNNING = 'Running';
+
+/** Rollout phase：所有步骤已完成，正在全量更新剩余的旧版本实例 */
+const ROLLOUT_PHASE_UPDATING_PRIMARY = 'UpdatingPrimary';
+
+/** Rollout phase：正在清理灰度资源（发布开始与结束时都会出现） */
+const ROLLOUT_PHASE_CLEANING_CANARY = 'CleaningCanary';
+
 /** 关闭记忆 key：应用 + 环境 + 部署记录，任一变化都视为新的发布结果。 */
 export function buildBatchReleaseDismissKey(appID: string, envName: string, deployID: string): string {
   if (!appID || !envName || !deployID) return '';
@@ -230,8 +239,12 @@ export function buildBatchReleaseSteps(
   const currentIdx = typeof currentIndex === 'number' && currentIndex >= 0 ? currentIndex : -1;
   const hasCurrentIndex = currentIdx >= 0;
   // 终态 / 回滚中：所有节点统一收敛为已完成，设计稿未对回滚态做批次级区分。
-  const isSettled =
+  const isTerminalSettled =
     currentIndex === -1 || status === APP_DEPLOY_STATUS.DEPLOYED || status === APP_DEPLOY_STATUS.ROLLED_BACK;
+  // 收尾阶段（UpdatingPrimary / 收尾清理）：批次已全部走完，但后端清空了批次序号。
+  // 若仍按「未开始」渲染会与实际进度相反，这里按已完成处理，全量节点按进行中处理。
+  const isFinalizing = !isTerminalSettled && isBatchReleaseFinalizing(progress);
+  const isSettled = isTerminalSettled || isFinalizing;
   const isFailed = status === APP_DEPLOY_STATUS.FAILED;
 
   const steps: BatchReleaseStepVM[] = batches.map((batch, index) => {
@@ -290,10 +303,17 @@ export function buildBatchReleaseSteps(
     let tagKey = '未开始';
     let tagTheme: BatchReleaseStepVM['tagTheme'] = 'default';
     let stepStatus: BatchReleaseStepVM['stepStatus'];
-    if (isSettled) {
+    if (isTerminalSettled) {
       tagKey = '已完成';
       tagTheme = 'success';
       stepStatus = 'done';
+    } else if (isFinalizing) {
+      // 全量收尾：还有旧版本实例在更新则为进行中；CleaningCanary 收尾时实例已全部更新完，算已完成。
+      // 若此时整体失败，失败点就落在这一节点上。
+      const stillUpdating = isBatchReleaseUpdatingRemaining(progress);
+      tagKey = isFailed ? '失败' : stillUpdating ? '正在更新' : '已完成';
+      tagTheme = isFailed ? 'danger' : stillUpdating ? 'info' : 'success';
+      stepStatus = isFailed ? 'error' : stillUpdating ? 'loading' : 'done';
     } else if (hasCurrentIndex && currentIdx >= autoFullIndex) {
       tagKey = '正在更新';
       tagTheme = 'info';
@@ -314,6 +334,28 @@ export function buildBatchReleaseSteps(
 }
 
 /**
+ * 是否还有可执行的手动操作，与后端 batchrelease.Status.ActionPatch 的前置条件保持一致：
+ * Rollout 必须处于 Running，且批次序号落在 [0, 批次总数) 内，否则所有操作都会被拒绝。
+ *
+ * 以下真实响应都必须收起操作入口，前端凭 batchPhase 生成按钮会全部 400：
+ * - UpdatingPrimary（批次已全部走完、正在全量更新）/ CleaningCanary（清理灰度资源）：stepStatus 被清空，序号为 null
+ * - Healthy：Rollout 刚创建或上一轮发布刚结束，尚未进入批次
+ * - 已提交「跳过剩余批次」：序号等于批次总数
+ */
+export function canOperateBatchRelease(progress: BatchReleaseProgressOutputObj | null): boolean {
+  if (!progress) return false;
+  const rolloutPhase = progress.rolloutPhase ?? '';
+  // 历史数据的进度快照可能没有 rolloutPhase（接口回填前只落了 batchPhase），退回按批次序号判断
+  if (rolloutPhase && rolloutPhase !== ROLLOUT_PHASE_RUNNING) return false;
+
+  const index = progress.currentBatchIndex;
+  if (typeof index !== 'number' || !Number.isFinite(index) || index < 0) return false;
+
+  const batchCount = progress.batches?.length ?? 0;
+  return batchCount > 0 && index < batchCount;
+}
+
+/**
  * 部署记录是否为分批发布（进行中或已结束）。
  *
  * 后端约定：判断是否展示分批发布面板必须用 `inProgressReleaseMode`。
@@ -329,6 +371,38 @@ export function hasCanaryDeployRecord(latest: LatestDeployStatus | null): boolea
   if (latest.inProgressReleaseMode === 'canary') return true;
   // 进行中标记为空时，再看最新记录本身是否为分批发布，用于完成一次进度查询后清理状态。
   return latest.releaseMode === 'canary';
+}
+
+/**
+ * 所有批次是否已走完、进入收尾阶段（后端已清空批次序号）。
+ * - UpdatingPrimary：灰度批全部完成，正在全量更新剩余实例
+ * - CleaningCanary：发布开始与结束都会出现，只有实例已全部更新完才算收尾
+ * - batchPhase=completed：末批更新完成、序号尚未推进的过渡态
+ */
+export function isBatchReleaseFinalizing(progress: BatchReleaseProgressOutputObj | null | undefined): boolean {
+  if (!progress) return false;
+  const index = progress.currentBatchIndex;
+  // 仍停在某个批次上（含回滚中的 -1）就不算收尾
+  if (typeof index === 'number' && index >= 0) return false;
+  if (progress.batchPhase === 'completed') return true;
+
+  const rolloutPhase = progress.rolloutPhase ?? '';
+  if (rolloutPhase === ROLLOUT_PHASE_UPDATING_PRIMARY) return true;
+  if (rolloutPhase === ROLLOUT_PHASE_CLEANING_CANARY) {
+    const replicas = progress.replicas ?? 0;
+    return replicas > 0 && (progress.updatedReplicas ?? 0) >= replicas;
+  }
+  return false;
+}
+
+/**
+ * 收尾阶段是否还有旧版本实例正在更新。
+ * CleaningCanary 在发布开始与结束都会出现，实例全部更新完时只剩资源清理，全量节点应展示已完成。
+ */
+export function isBatchReleaseUpdatingRemaining(progress: BatchReleaseProgressOutputObj | null): boolean {
+  if (progress?.rolloutPhase !== ROLLOUT_PHASE_CLEANING_CANARY) return true;
+  const replicas = progress.replicas ?? 0;
+  return !(replicas > 0 && (progress.updatedReplicas ?? 0) >= replicas);
 }
 
 /** 已结束且无需干预的终态：可关闭，也不再阻塞新的部署入口。 */
@@ -452,16 +526,20 @@ export function resolveBatchReleaseBanner(
   }
 
   // 当前批次失败：主入口「重试」（复用 continue 动作）+ 回滚，回退上一批收进「更多」。
+  // 失败也可能落在全量收尾阶段（批次序号已被清空），此时后端同样不接受操作，入口一并收起。
   if (progress.status === APP_DEPLOY_STATUS.FAILED) {
+    const operable = canOperateBatchRelease(progress);
     return {
       ...base,
-      actions: [
-        createAction('continue', 'primary', { labelKey: '重试' }),
-        createAction('rollback', 'danger', { confirm: ROLLBACK_CONFIRM }),
-      ],
+      actions: operable
+        ? [
+            createAction('continue', 'primary', { labelKey: '重试' }),
+            createAction('rollback', 'danger', { confirm: ROLLBACK_CONFIRM }),
+          ]
+        : [],
       iconKind: 'warning',
       kind: 'failed',
-      overflowActions: [buildBackwardAction(progress)],
+      overflowActions: operable ? [buildBackwardAction(progress)] : [],
       statusTag: { key: '失败', theme: 'danger' },
     };
   }
@@ -481,18 +559,18 @@ export function resolveBatchReleaseBanner(
   }
 
   const batchPhase = progress.batchPhase ?? '';
-  // 后端约定：currentBatchIndex 在「尚未进入批次」时可能还没回填（null），
-  // 因此按钮是否可用只看 batchPhase，绝不能拿批次序号做门控，否则 updating 态会退化成无任何入口。
+  const batchCount = progress.batches?.length ?? 0;
   const hasBatchIndex = typeof currentBatchIndex === 'number' && currentBatchIndex >= 0;
   const isManualPaused = MANUAL_PAUSED_BATCH_PHASES.has(batchPhase);
   const isTimedPaused = TIMED_PAUSED_BATCH_PHASES.has(batchPhase);
   const isUpdating = UPDATING_BATCH_PHASES.has(batchPhase);
 
-  // 全量更新中：灰度批走完后系统补齐全量批（batchPhase=completed，或批次序号越过灰度批数）。
-  // 该阶段自动收尾，不提供任何操作，避免干扰。
+  // 全量更新中：灰度批走完后系统补齐全量批（batchPhase=completed、rolloutPhase=UpdatingPrimary，
+  // 或批次序号越过灰度批数）。后端已清空批次序号、不再接受任何手动操作，因此只展示进度。
   const isFullUpdating =
     batchPhase === 'completed' ||
-    (hasBatchIndex && (progress.batches?.length ?? 0) > 0 && currentBatchIndex >= (progress.batches?.length ?? 0));
+    isBatchReleaseFinalizing(progress) ||
+    (hasBatchIndex && batchCount > 0 && currentBatchIndex >= batchCount);
   if (isFullUpdating) {
     return {
       ...base,
@@ -520,11 +598,17 @@ export function resolveBatchReleaseBanner(
   /**
    * 本层按钮集合（设计稿「第二层：有批次在执行时」）：
    * - 继续发布：manual-paused / timed-paused
-   * - 暂停：updating / pending；timed-paused 未到期可提前转人工暂停
+   * - 暂停：本批执行中且未暂停（后端 ActionPause 要求 paused 为 false，暂停态点击必然被拒绝）
    * - 回退上一批：任意阶段展示，第 1 批（或批次未知）置灰
    * - 跳过剩余批次 / 回滚：任意批次阶段
+   *
+   * 所有入口都以 canOperate 为前提：Rollout 不在 Running 或批次序号为空时后端一律拒绝，
+   * 例如刚创建部署（pending + 序号为空）、UpdatingPrimary / CleaningCanary 收尾阶段。
    */
-  const overflowActions = [buildBackwardAction(progress), createAction('skip', 'default', { confirm: SKIP_CONFIRM })];
+  const operable = canOperateBatchRelease(progress);
+  const overflowActions = operable
+    ? [buildBackwardAction(progress), createAction('skip', 'default', { confirm: SKIP_CONFIRM })]
+    : [];
   const rollbackAction = createAction('rollback', 'danger', { confirm: ROLLBACK_CONFIRM });
 
   // manual-paused（策略配置的永久暂停或人工暂停）/ timed-paused（定时暂停，可提前进入下一批）
@@ -532,12 +616,7 @@ export function resolveBatchReleaseBanner(
     const remaining = isTimedPaused ? resolveTimedPauseRemainingSeconds(progress) : 0;
     return {
       ...base,
-      // 定时暂停未到期可「暂停」提前转人工；到期后与永久/手动暂停按钮集合一致。
-      actions: [
-        createAction('continue', 'primary'),
-        ...(isTimedPaused && remaining > 0 ? [createAction('pause', 'default')] : []),
-        rollbackAction,
-      ],
+      actions: operable ? [createAction('continue', 'primary'), rollbackAction] : [],
       // 图标区分暂停方式：定时暂停用时钟，人工/永久暂停用暂停符号。
       iconKind: isTimedPaused ? 'time' : 'pause',
       kind: 'paused',
@@ -549,7 +628,7 @@ export function resolveBatchReleaseBanner(
   // updating / pending（本批更新中或尚未开始）：暂停 + 回滚
   return {
     ...base,
-    actions: [createAction('pause', 'default'), rollbackAction],
+    actions: operable ? [createAction('pause', 'default'), rollbackAction] : [],
     iconKind: 'loading',
     kind: 'updating',
     overflowActions,

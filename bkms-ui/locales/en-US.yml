@@ -1508,6 +1508,7 @@ CLB 区域: CLB Region
 '部署任务已提交，开始第 1 批灰度发布': 'Deploy task submitted, starting grayscale release of batch 1'
 '当前环境灰度发布：': 'Grayscale release in current environment: '
 ' · 第 {index} 批正在更新实例（{version}）': ' · batch {index} is updating instances ({version})'
+' · 正在全量更新剩余实例（{version}）': ' · updating all remaining instances ({version})'
 '第 {0} 批已暂停': 'Batch {0} paused'
 ' · 已更新 {replicas} 个实例（{version}）': ' · {replicas} instances updated ({version})'
 '第 {0} 批失败': 'Batch {0} failed'
@@ -2382,8 +2383,8 @@ BSCP: BSCP
 请输入正整数或百分比（如 1 或 25%）: Enter a positive integer or percentage (e.g. 1 or 25%)
 百分比需为 1% ~ 100% 的整数: Percentage must be an integer between 1% and 100%
 请输入大于 0 的正整数: Enter a positive integer greater than 0
-暂停时长需为 30 ~ 86400 秒之间的整数: Pause duration must be an integer between 30 and 86400 seconds
-可填 30 ~ 86400 秒的整数（最长 24 小时）。: Enter an integer between 30 and 86400 seconds (24 hours at most).
+'暂停时长需为 {0} ~ {1} 秒之间的整数': Pause duration must be an integer between {0} and {1} seconds
+'可填 {0} ~ {1} 秒的整数（最长 24 小时）。': Enter an integer between {0} and {1} seconds (24 hours at most).
 策略在空间内共享，供 tRPC、TAF 等平台托管应用分批灰度发布时选用；保存后仅对后续新部署生效。: Strategies are shared within the workspace and can be selected for batched grayscale release of platform-hosted applications such as tRPC and TAF. Changes take effect only for subsequent new deployments.
 平台内置策略不可编辑。如需调整，请克隆为空间策略后修改。: Built-in strategies cannot be edited. To make adjustments, clone them as workspace strategies and then modify the clone.
 发布批次: Release Batches

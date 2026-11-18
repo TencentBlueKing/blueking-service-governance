@@ -50,7 +50,19 @@
           <!-- 本批更新中 / 尚未开始 -->
           <template v-if="view.kind === 'updating'">
             <span :class="['font-bold', themeClass.status]">{{ $t('灰度发布中') }}</span>
-            <i18n-t keypath=" · 第 {index} 批正在更新实例（{version}）">
+            <!-- 全量收尾（批次已走完、序号被清空）：不能再显示「第 -- 批」 -->
+            <i18n-t
+              v-if="isFinalizing"
+              keypath=" · 正在全量更新剩余实例（{version}）"
+            >
+              <template #version>
+                <span class="font-bold">{{ forwardVersion }}</span>
+              </template>
+            </i18n-t>
+            <i18n-t
+              v-else
+              keypath=" · 第 {index} 批正在更新实例（{version}）"
+            >
               <template #index>
                 <span class="font-bold">{{ view.batchIndex ?? '--' }}</span>
               </template>
@@ -246,7 +258,7 @@
   import { Alert, Button, Dropdown } from 'bkui-vue';
   import { AngleDownLine } from 'bkui-vue/lib/icon';
 
-  import { formatPauseCountdown, resolveTimedPauseRemainingSeconds } from '../batch-release';
+  import { formatPauseCountdown, isBatchReleaseFinalizing, resolveTimedPauseRemainingSeconds } from '../batch-release';
 
   import type {
     BatchReleaseAction,
@@ -330,6 +342,12 @@
     const key = props.view.statusTag?.key ?? '';
     return key === '等待手动继续' || key.startsWith('定时暂停中');
   });
+
+  /**
+   * 全量收尾（UpdatingPrimary / 收尾清理）：所有批次已走完，后端清空了批次序号。
+   * 此时标题不能再用「第 -- 批正在更新实例」描述，改为「正在全量更新剩余实例」。
+   */
+  const isFinalizing = computed(() => props.view.kind === 'updating' && isBatchReleaseFinalizing(props.progress));
 
   /**
    * 逐秒时间源：定时暂停的 mm:ss 倒计时按当前时间实时换算，不等 5s 轮询；

@@ -70,7 +70,8 @@ function buildProgress(
     currentBatchIndex?: null | number;
   } = {},
 ): BatchReleaseProgressOutputObj {
-  return {
+  const { currentBatchIndex, ...rest } = overrides;
+  const progress: BatchReleaseProgressOutputObj = {
     batchPhase: 'updating',
     batches: [
       { target: '1', pauseMode: 'permanent' },
@@ -84,8 +85,11 @@ function buildProgress(
     replicas: 20,
     status: 'deploying',
     updatedReplicas: 8,
-    ...overrides,
+    ...rest,
   };
+  // d.ts 只把 currentBatchIndex 标注为 number，接口在序号未回填时返回 null，这里按真实取值放宽
+  if (currentBatchIndex !== undefined) progress.currentBatchIndex = currentBatchIndex ?? undefined;
+  return progress;
 }
 
 function overflowOf(view: BatchReleaseBannerView | null) {
@@ -182,7 +186,7 @@ describe('resolveBatchReleaseBanner：按 batchPhase 决定按钮', () => {
     expect(view?.statusTag).toEqual({ key: '已暂停', theme: 'warning' });
   });
 
-  it('timed-paused 未到期：额外提供暂停入口可提前转人工，标题 Tag 为「定时暂停中 · mm:ss 后自动继续」', () => {
+  it('timed-paused 未到期：不提供暂停入口（后端把 paused=temporary 视为已暂停），Tag 为「定时暂停中 · mm:ss 后自动继续」', () => {
     const pauseStartTime = new Date(Date.now() - 10_000).toISOString();
     const view = resolveBatchReleaseBanner(
       buildProgress({
@@ -196,7 +200,8 @@ describe('resolveBatchReleaseBanner：按 batchPhase 决定按钮', () => {
       }),
     );
     expect(view?.kind).toBe('paused');
-    expect(actionsOf(view)).toEqual(['continue', 'pause', 'rollback']);
+    // batchrelease.Status.ActionPatch：paused 为 true/manually/temporary 时 pause 一律拒绝
+    expect(actionsOf(view)).toEqual(['continue', 'rollback']);
     const remaining = Math.ceil((Date.parse(pauseStartTime) + 30_000 - Date.now()) / 1000);
     expect(view?.statusTag).toEqual({
       key: '定时暂停中 · {0} 后自动继续',
@@ -219,23 +224,23 @@ describe('resolveBatchReleaseBanner：按 batchPhase 决定按钮', () => {
     expect(overflowOf(view)).toEqual(['backward', 'skip']);
   });
 
-  it('pending（本批尚未开始）：按设计稿仍可暂停、跳过与回滚', () => {
+  it('pending（本批尚未开始）且序号未回填：没有任何可执行操作', () => {
+    // 后端 ActionPatch 要求 CurrentStepIndex 非空且在 [0, batchCount) 内，序号为空时所有操作都会 400
     const view = resolveBatchReleaseBanner(buildProgress({ batchPhase: 'pending', currentBatchIndex: null }));
     expect(view?.kind).toBe('updating');
     expect(view?.batchIndex).toBeNull();
-    expect(actionsOf(view)).toEqual(['pause', 'rollback']);
-    // 批次序号未回填时无法确认存在上一批，回退上一批置灰展示
-    expect(overflowOf(view)).toEqual(['backward:disabled', 'skip']);
+    expect(actionsOf(view)).toEqual([]);
+    expect(overflowOf(view)).toEqual([]);
   });
 
-  it('batchPhase=updating 但 currentBatchIndex 尚未回填时，仍必须展示暂停与回滚', () => {
-    // 线上真实响应：status=deploying、batchPhase=updating、currentBatchIndex 还没落库（null）。
-    // 此时不能因为拿不到批次序号就把所有入口掐掉，否则横幅右侧会空无一物。
+  it('batchPhase=updating 但 currentBatchIndex 未回填（Running 尚未进入批次）：不展示操作入口', () => {
     const view = resolveBatchReleaseBanner(
       buildProgress({ batchPhase: 'updating', currentBatchIndex: null, message: 'All steps are completed' }),
     );
     expect(view?.kind).toBe('updating');
-    expect(actionsOf(view)).toEqual(['pause', 'rollback']);
+    expect(actionsOf(view)).toEqual([]);
+    expect(overflowOf(view)).toEqual([]);
+    expect(view?.statusTag).toEqual({ key: '正在更新实例', theme: 'info' });
   });
 
   it('全部批次已走完（batchPhase=completed）时进入全量更新态，不提供批次操作', () => {
@@ -251,6 +256,72 @@ describe('resolveBatchReleaseBanner：按 batchPhase 决定按钮', () => {
     expect(actionsOf(view)).toEqual([]);
     expect(overflowOf(view)).toEqual([]);
     expect(view?.statusTag).toEqual({ key: '正在全量更新', theme: 'info' });
+  });
+
+  // 以下为后端真实输出组合的契约用例：rolloutPhase + currentBatchIndex 决定「有没有操作」
+  it('UpdatingPrimary（步骤走完、序号清空）：不展示任何操作', () => {
+    const view = resolveBatchReleaseBanner(
+      buildProgress({ batchPhase: 'updating', currentBatchIndex: null, rolloutPhase: 'UpdatingPrimary' }),
+    );
+    expect(actionsOf(view)).toEqual([]);
+    expect(overflowOf(view)).toEqual([]);
+    expect(view?.statusTag).toEqual({ key: '正在全量更新', theme: 'info' });
+  });
+
+  it('CleaningCanary（清理灰度资源）：即使 batchPhase=updating 也不展示任何操作', () => {
+    const startView = resolveBatchReleaseBanner(
+      buildProgress({
+        batchPhase: 'updating',
+        currentBatchIndex: null,
+        rolloutPhase: 'CleaningCanary',
+        updatedReplicas: 0,
+      }),
+    );
+    expect(actionsOf(startView)).toEqual([]);
+    expect(overflowOf(startView)).toEqual([]);
+    expect(startView?.statusTag).toEqual({ key: '正在更新实例', theme: 'info' });
+
+    const endView = resolveBatchReleaseBanner(
+      buildProgress({
+        batchPhase: 'updating',
+        currentBatchIndex: null,
+        rolloutPhase: 'CleaningCanary',
+        updatedReplicas: 20,
+      }),
+    );
+    expect(actionsOf(endView)).toEqual([]);
+    expect(endView?.statusTag).toEqual({ key: '正在全量更新', theme: 'info' });
+  });
+
+  it('Healthy（Rollout 刚创建、尚未进入批次）：不展示任何操作', () => {
+    const view = resolveBatchReleaseBanner(
+      buildProgress({ batchPhase: 'pending', currentBatchIndex: null, rolloutPhase: 'Healthy' }),
+    );
+    expect(actionsOf(view)).toEqual([]);
+    expect(overflowOf(view)).toEqual([]);
+  });
+
+  it('RollbackCompleted（回滚中）：不展示任何操作', () => {
+    const view = resolveBatchReleaseBanner(
+      buildProgress({ batchPhase: 'updating', currentBatchIndex: -1, rolloutPhase: 'RollbackCompleted' }),
+    );
+    expect(view?.kind).toBe('rollingBack');
+    expect(actionsOf(view)).toEqual([]);
+  });
+
+  it('Running + 有效批次序号：保留全部操作（与后端 ActionPatch 一致）', () => {
+    const view = resolveBatchReleaseBanner(buildProgress({ batchPhase: 'updating', rolloutPhase: 'Running' }));
+    expect(actionsOf(view)).toEqual(['pause', 'rollback']);
+    expect(overflowOf(view)).toEqual(['backward', 'skip']);
+  });
+
+  it('失败且批次序号为空（失败点在全量收尾）：不展示重试与回滚', () => {
+    const view = resolveBatchReleaseBanner(
+      buildProgress({ currentBatchIndex: null, rolloutPhase: 'UpdatingPrimary', status: 'failed' }),
+    );
+    expect(view?.kind).toBe('failed');
+    expect(actionsOf(view)).toEqual([]);
+    expect(overflowOf(view)).toEqual([]);
   });
 
   it('回滚中（currentBatchIndex=-1）：展示且没有可执行操作，标题 Tag 为正在清理灰度资源', () => {
@@ -550,6 +621,60 @@ describe('buildBatchReleaseSteps：批次步骤视图模型', () => {
     const steps = buildBatchReleaseSteps(buildProgress({ batchPhase: 'updating', currentBatchIndex: null }));
     expect(steps.map(step => step.tagKey)).toEqual(['未开始', '未开始', '未开始']);
     expect(steps.every(step => step.stepStatus === undefined)).toBe(true);
+  });
+
+  it('UpdatingPrimary（批次走完、序号被清空）：批次节点已完成，全量节点正在更新', () => {
+    const steps = buildBatchReleaseSteps(
+      buildProgress({
+        batchPhase: 'updating',
+        batches: [
+          { target: '1', pauseMode: 'none' },
+          { target: '50%', pauseMode: 'none' },
+        ],
+        currentBatchIndex: null,
+        rolloutPhase: 'UpdatingPrimary',
+      }),
+    );
+    expect(steps).toHaveLength(3);
+    expect(steps[0]).toMatchObject({ stepStatus: 'done', tagKey: '已完成' });
+    expect(steps[1]).toMatchObject({ stepStatus: 'done', tagKey: '已完成' });
+    expect(steps[2]).toMatchObject({ isAutoFull: true, stepStatus: 'loading', tagKey: '正在更新', tagTheme: 'info' });
+  });
+
+  it('CleaningCanary 按版本区分：发布开始（实例未更新）仍为未开始，发布结束（全部更新）为已完成', () => {
+    const batchOverrides = {
+      batchPhase: 'updating',
+      batches: [
+        { target: '1', pauseMode: 'none' },
+        { target: '50%', pauseMode: 'none' },
+      ],
+      currentBatchIndex: null,
+      replicas: 20,
+      rolloutPhase: 'CleaningCanary',
+    };
+
+    const atStart = buildBatchReleaseSteps(buildProgress({ ...batchOverrides, updatedReplicas: 0 }));
+    expect(atStart.every(step => step.tagKey === '未开始')).toBe(true);
+
+    const atEnd = buildBatchReleaseSteps(buildProgress({ ...batchOverrides, updatedReplicas: 20 }));
+    expect(atEnd.every(step => step.stepStatus === 'done' && step.tagKey === '已完成')).toBe(true);
+  });
+
+  it('全量收尾阶段失败：失败落在「全量更新剩余实例」节点上', () => {
+    const steps = buildBatchReleaseSteps(
+      buildProgress({
+        batchPhase: 'updating',
+        batches: [
+          { target: '1', pauseMode: 'none' },
+          { target: '50%', pauseMode: 'none' },
+        ],
+        currentBatchIndex: null,
+        rolloutPhase: 'UpdatingPrimary',
+        status: 'failed',
+      }),
+    );
+    expect(steps[0]).toMatchObject({ stepStatus: 'done' });
+    expect(steps[2]).toMatchObject({ stepStatus: 'error', tagKey: '失败', tagTheme: 'danger' });
   });
 
   it('失败态：当前批 error，之前批已完成，之后批未开始', () => {

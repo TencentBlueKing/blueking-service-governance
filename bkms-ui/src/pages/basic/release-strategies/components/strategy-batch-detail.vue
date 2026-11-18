@@ -140,7 +140,7 @@
               class="pt-[2px] text-[12px] leading-[20px] text-[#979ba5]"
               data-testid="pause-hint"
             >
-              {{ t('可填 30 ~ 86400 秒的整数（最长 24 小时）。') }}
+              {{ translate(t, '可填 {0} ~ {1} 秒的整数（最长 24 小时）。', [PAUSE_SECONDS_MIN, PAUSE_SECONDS_MAX]) }}
             </div>
             <template #error="message">
               <span data-testid="pause-error">{{ message }}</span>
@@ -158,7 +158,15 @@
   import { Form, Input, Radio, Select } from 'bkui-vue';
   import { useI18n } from 'vue-i18n';
 
-  import { DEFAULT_PAUSE_SECONDS, formatBatchCardTitle, PERCENT_TARGET_MAX, validatePauseSeconds } from '../utils';
+  import {
+    DEFAULT_PAUSE_SECONDS,
+    formatBatchCardTitle,
+    PAUSE_SECONDS_MAX,
+    PAUSE_SECONDS_MIN,
+    PERCENT_TARGET_MAX,
+    translate,
+    validatePauseSeconds,
+  } from '../utils';
 
   import type { PauseMode, StrategyBatchForm, TargetUnit } from '../utils';
 
@@ -220,7 +228,7 @@
         trigger: 'blur',
         validator: (value: number | undefined) => {
           const error = validatePauseSeconds(value);
-          return error ? t(error) : true;
+          return error ? translate(t, error.key, error.params) : true;
         },
       },
     ],

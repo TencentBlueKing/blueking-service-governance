@@ -23,13 +23,14 @@
 | S3 | 定时暂停中 | `status=deploying` 且 `batchPhase=timed-paused` 且剩余秒数 > 0（`pauseStartTime + pauseSeconds` 换算） |
 | S4 | 已暂停 | `status=deploying` 且 `batchPhase=timed-paused` 且倒计时已到期（换算不出剩余时间也归入 S4，不再兜底为「等待手动继续」） |
 | S5 | 失败暂停 | `status=failed` |
-| S6 | 全量更新中 | `status=deploying` 且当前批为系统补齐全量批（`currentBatchIndex` 越过灰度批数，即 `currentIdx >= batches.length`），或 `batchPhase=completed` |
+| S6 | 全量更新中 | `status=deploying` 且 `rolloutPhase ∈ {UpdatingPrimary, CleaningCanary}`（批次序号已被后端清空），或当前批为系统补齐全量批（`currentBatchIndex` 越过灰度批数），或 `batchPhase=completed` |
 | S7 | 已完成 | `status=deployed` |
 | S8 | 正在回滚（保留态） | `status=deploying` 且 `currentBatchIndex=-1` |
 | S9 | 已回滚（保留态） | `status=rolled-back` |
 
 > 说明：
-> - `currentBatchIndex` 可能为 `null`（尚未进入批次），此时按 S1（更新中）处理，按钮门控只看 `batchPhase`，不看批次序号。
+> - `currentBatchIndex` 可能为 `null`（尚未进入批次 / 批次已全部走完 / 正在清理灰度资源），此时仍按 S1 展示进度文案，但**不提供任何操作按钮**。
+> - 按钮门控统一由 `canOperateBatchRelease()` 判定，与后端 `batchrelease.Status.ActionPatch` 对齐：`rolloutPhase=Running` 且 `currentBatchIndex ∈ [0, batchCount)`。后端在所有步骤走完（`UpdatingPrimary`）时会清空批次序号，任何操作都会被拒绝，前端必须收起入口。
 > - S3/S4 的拆分是本次设计稿新增的口径：现状里 timed-paused 到期统一展示「等待手动继续」，需改为「已暂停」。
 
 ### 状态流转图
@@ -63,7 +64,7 @@ stateDiagram-v2
 |---|------|----------|----------|------|--------|----------|
 | S1 | 更新中（普通批） | 灰度发布中 | 正在更新实例（info） | 暂停、回滚 | 否 | 蓝 |
 | S2 | 等待手动继续 | 灰度发布中 | 等待手动继续（warning） | 继续发布、回退上一批（第 1 批置灰）、跳过剩余批次、回滚 | 否 | 橙 |
-| S3 | 定时暂停中 | 灰度发布中 | 定时暂停中 · mm:ss 后自动继续（warning，逐秒倒计时）；步骤 Tag 为「暂停中 mm:ss」 | 继续发布、暂停、跳过剩余批次、回滚 | 否 | 橙 |
+| S3 | 定时暂停中 | 灰度发布中 | 定时暂停中 · mm:ss 后自动继续（warning，逐秒倒计时）；步骤 Tag 为「暂停中 mm:ss」 | 继续发布、回退上一批、跳过剩余批次、回滚 | 否 | 橙 |
 | S4 | 已暂停 | 灰度发布中 | 已暂停（warning） | 继续发布、回退上一批、跳过剩余批次、回滚 | 否 | 橙 |
 | S5 | 失败暂停 | 灰度发布中 | 失败（danger） | 回退上一批、回滚（重试待确认，见 §6） | 否 | 红 |
 | S6 | 全量更新中 | 灰度发布中 | 正在全量更新（info） | 无 | 否 | 蓝 |
@@ -114,7 +115,8 @@ stateDiagram-v2
 
 - **标题**：灰度发布中
 - **标题 Tag**：`暂停中 00:18`（warning，橙；mm:ss 格式，随 5s 轮询刷新）
-- **按钮**：`继续发布`（primary）→ `暂停`（default，**本次新增**：提前进入手动暂停）→ `跳过剩余批次`（default，二次确认）→ `回滚`（danger，二次确认）
+- **按钮**：`继续发布`（primary）→ `回退上一批`（default，第 1 批置灰）→ `跳过剩余批次`（default，二次确认）→ `回滚`（danger，二次确认）
+- **暂停入口**：暂不提供。后端 `batchrelease.Status.ActionPatch` 把 `paused=temporary` 也视为「已暂停」，`pause` 一律返回 400；设计稿的「提前转人工暂停」需后端先放开该动作（见 §7-2）
 - **批次步骤**：当前批 Tag=`暂停中 mm:ss`（warning）；副文本=「暂停 N 秒 · 自动继续」
 - **curStep**：当前批序号
 
@@ -213,7 +215,7 @@ bkui Steps 的 `curStep` 从 1 开始，指向「当前节点」。
 |---|------|------|------|----------|------------|
 | ① | 标题统一 | 失败/暂停标题为「第 N 批失败」「第 N 批已暂停」 | 统一为「灰度发布中」，批次信息由元信息行与步骤条承载 | `batch-release-progress-panel.vue` `statusText` | `test/batch-release-banner.test.ts` |
 | ② | 标题 Tag 七态化 | `failed`/`completed` 无 Tag；S6 全量更新中仍显示「正在更新实例」；timed-paused 到期显示「等待手动继续」 | 补齐 S5「失败」、S7「已完成」、S6「正在全量更新」、S4「已暂停」；倒计时改 mm:ss | `hintTag` computed；建议把 Tag 收敛进 `resolveBatchReleaseBanner` 纯函数层（新增 `statusTag` 字段），组件只渲染 | `test/batch-release-banner.test.ts`、`test/scenarios/batch-release-control.test.ts` |
-| ③ | timed-paused 新增「暂停」按钮 | 暂停态按钮只有 `继续发布 + 回滚` | S3 增加 `暂停`（default），提前进入手动暂停；S4 无此按钮 | `batch-release.ts` `resolveBatchReleaseBanner` 暂停分支；action `pause` 已存在，需确认后端 operateBatchRelease 支持在 timed-paused 阶段下发 pause | `test/scenarios/batch-release-control.test.ts` |
+| ③ | timed-paused 新增「暂停」按钮 | 暂停态按钮只有 `继续发布 + 回滚` | **暂不实施**：后端在 `paused=temporary` 时拒绝 `pause`（见 §7-2），先与后端对齐再补按钮 | `batch-release.ts` `resolveBatchReleaseBanner` 暂停分支 | `test/scenarios/batch-release-control.test.ts` |
 | ④ | 失败态按钮 | `重试`（continue）+ `回滚` | 设计图为 `回退上一批 + 回滚`（无重试），待确认 | `resolveBatchReleaseBanner` failed 分支 | `test/scenarios/batch-release-control.test.ts` |
 | ⑤ | 全量更新中无按钮 | batchPhase=completed 时 actions 已为空 | 维持无按钮，仅标题 Tag 改为「正在全量更新」 | `hintTag` | `test/batch-release-banner.test.ts` |
 | ⑥ | 步骤失败 Tag 文案 | 「更新失败」 | 「失败」 | `batch-release.ts` `buildBatchReleaseSteps` | `test/scenarios/batch-release-control.test.ts` |
@@ -229,7 +231,7 @@ bkui Steps 的 `curStep` 从 1 开始，指向「当前节点」。
 ## 7. 待确认项
 
 1. **开始时间 / 耗时接口字段**：设计稿元信息含「开始时间 10-12 14:30」「已耗时/总耗时」，`BatchReleaseProgressOutputObj` 无对应字段。需后端在进度接口补充（建议 `startTime`、`elapsedSeconds` / `totalDurationSeconds`），前端在字段就绪前隐藏。
-2. **S3 的「暂停」按钮语义**：点击后预期把 timed-paused 转为 manual-paused（放弃自动继续）。需与后端确认 `operateBatchRelease(action=pause)` 是否支持在 timed-paused 阶段下发，以及暂停后剩余倒计时作废的口径。
+2. **S3 的「暂停」按钮语义**：点击后预期把 timed-paused 转为 manual-paused（放弃自动继续）。**已核对后端**：`batchrelease.Status.stepBatchPhase()` 在 `paused=temporary` 时返回 `BatchPhaseTimedPaused`，`ActionPatch` 中 `pause` 分支以 `paused = IsPaused()` 拦截，必然返回 `ErrActionNotAllowed`（400）。因此前端当前不提供该入口；若确认需要该能力，后端需在 `ActionPause` 中放行 `PausedTemporary` 并改写为 `PausedTrue`。
 3. **S5 失败态是否保留「重试」**：设计图只有「回退上一批 + 回滚」。若失败后不允许重试，需后端确认；若保留，按钮集合为「重试 + 回退上一批 + 回滚」。
 4. **S3 是否展示「回退上一批」**：设计图③无此按钮（不确定是否因处于第 1 批）。建议规则与 S4 对齐：非第 1 批显示、第 1 批置灰，待设计确认。
 5. **S6 全量更新中的回滚风险**：全量批阶段回滚是否允许、是否需要更强的二次确认，设计稿未覆盖（现状无按钮=不允许），建议维持现状并同步设计。

@@ -80,6 +80,13 @@ export function useBatchReleaseControl(options: UseBatchReleaseControlOptions) {
 
   const progress = ref<BatchReleaseProgressOutputObj | null>(null);
   const pendingAction = ref<BatchReleaseAction | null>(null);
+  /**
+   * 当前操作的世代号。
+   * 看门狗释放锁之后用户可能马上发起下一个操作，此时旧请求仍未返回；旧请求的 finally
+   * 若无条件清空 pendingAction，会把新操作的锁一起放掉，导致按钮被重复点击、重复发出写请求。
+   * 因此只有世代号仍是当前值时才能清理。
+   */
+  let pendingActionID = 0;
   // 进度回查进行中：横幅渲染骨架占位，避免数据返回时横幅突然弹出造成布局跳动。
   const loading = ref(false);
   // 接口已确认「无进度」的部署记录：空结果是稳定态，记住后不再随 latest-status 每 5s 空转。
@@ -225,9 +232,11 @@ export function useBatchReleaseControl(options: UseBatchReleaseControlOptions) {
     }
 
     const currentView = view.value;
+    const actionID = ++pendingActionID;
     pendingAction.value = action;
     const watchdog = setTimeout(() => {
-      pendingAction.value = null;
+      // 已被后续操作接管时不再解锁，避免旧看门狗清掉新操作的锁
+      if (actionID === pendingActionID) pendingAction.value = null;
     }, PENDING_ACTION_WATCHDOG);
     try {
       // 带上确认时的 deployID：后端据此核对目标，避免「检查与写入之间」的竞争窗口。
@@ -259,7 +268,8 @@ export function useBatchReleaseControl(options: UseBatchReleaseControlOptions) {
       await withTimeout(fetchProgress(), PROGRESS_REFETCH_TIMEOUT);
     } finally {
       clearTimeout(watchdog);
-      pendingAction.value = null;
+      // 旧请求晚于新操作返回时不能解锁：锁属于当前世代的操作
+      if (actionID === pendingActionID) pendingAction.value = null;
     }
   }
 

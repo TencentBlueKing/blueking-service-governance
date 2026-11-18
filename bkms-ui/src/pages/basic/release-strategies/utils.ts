@@ -30,7 +30,7 @@ import type { TargetTexts } from '~/pages/application/detail/deploy/release-prev
 /** 详情面板的带参错误文案：key 为 i18n 模板，params 依序插值 */
 export interface BatchErrorDetail {
   key: string;
-  params: string[];
+  params: (number | string)[];
 }
 
 /** 批次完成后的暂停方式：none 不暂停 / duration 定时暂停 / permanent 永久暂停 */
@@ -471,13 +471,17 @@ export function toBatchInputs(batches: StrategyBatchForm[]): BatchInput[] {
   }));
 }
 
-/** 校验定时暂停秒数：30 ~ 86400，合法返回空串 */
-export function validatePauseSeconds(seconds: number | undefined): string {
+/**
+ * 校验定时暂停秒数：PAUSE_SECONDS_MIN ~ PAUSE_SECONDS_MAX，合法返回 null。
+ * 文案用固定 key + params 插值，不能把常量拼进 key：常量改动后 key 与 locale 对不上，
+ * 非中文环境会直接回退成 key 原文。
+ */
+export function validatePauseSeconds(seconds: number | undefined): BatchErrorDetail | null {
   const value = Number(seconds);
   if (!Number.isInteger(value) || value < PAUSE_SECONDS_MIN || value > PAUSE_SECONDS_MAX) {
-    return `暂停时长需为 ${PAUSE_SECONDS_MIN} ~ ${PAUSE_SECONDS_MAX} 秒之间的整数`;
+    return { key: '暂停时长需为 {0} ~ {1} 秒之间的整数', params: [PAUSE_SECONDS_MIN, PAUSE_SECONDS_MAX] };
   }
-  return '';
+  return null;
 }
 
 /**
@@ -511,7 +515,7 @@ export function validateStrategyForm(
       const pauseError = validatePauseSeconds(batch.pauseSeconds);
       // 暂停时长错误只进 batchPauseErrors：卡片宽度有限，长文案会挤压左侧批次列表，
       // 文案统一由详情面板的 FormItem 在输入下方内联展示。
-      if (pauseError) batchPauseErrors[batch.key] = { key: pauseError, params: [] };
+      if (pauseError) batchPauseErrors[batch.key] = pauseError;
     }
   });
 

@@ -34,6 +34,8 @@ import {
   isFullBatch,
   NAME_MAX_LENGTH,
   parseTarget,
+  PAUSE_SECONDS_MAX,
+  PAUSE_SECONDS_MIN,
   shouldShowRemainingAutoUpdateTip,
   sortStrategies,
   toBatchForms,
@@ -90,20 +92,24 @@ describe('发布策略纯函数：目标资源校验', () => {
 
 describe('发布策略纯函数：暂停秒数校验', () => {
   it('30 ~ 86400 之间的整数应通过', () => {
-    expect(validatePauseSeconds(30)).toBe('');
-    expect(validatePauseSeconds(86_400)).toBe('');
+    expect(validatePauseSeconds(30)).toBeNull();
+    expect(validatePauseSeconds(86_400)).toBeNull();
   });
 
-  it('越界或非整数应被拦截', () => {
-    expect(validatePauseSeconds(29)).toContain('30 ~ 86400');
-    expect(validatePauseSeconds(86_401)).toContain('30 ~ 86400');
-    expect(validatePauseSeconds(undefined)).toContain('30 ~ 86400');
-    expect(validatePauseSeconds(1.5)).toContain('30 ~ 86400');
+  it('越界或非整数应被拦截，且文案为「固定模板 + 常量插值」', () => {
+    const expected = { key: '暂停时长需为 {0} ~ {1} 秒之间的整数', params: [PAUSE_SECONDS_MIN, PAUSE_SECONDS_MAX] };
+    expect(validatePauseSeconds(29)).toEqual(expected);
+    expect(validatePauseSeconds(86_401)).toEqual(expected);
+    expect(validatePauseSeconds(undefined)).toEqual(expected);
+    expect(validatePauseSeconds(1.5)).toEqual(expected);
+    // key 不能把常量拼进去：常量一改 key 就与 locale 对不上，非中文环境会回退成 key 原文
+    expect(expected.key).not.toContain(String(PAUSE_SECONDS_MIN));
+    expect(expected.key).not.toContain(String(PAUSE_SECONDS_MAX));
   });
 
   it('切到定时暂停时的默认时长应为 30 秒且通过校验', () => {
     expect(DEFAULT_PAUSE_SECONDS).toBe(30);
-    expect(validatePauseSeconds(DEFAULT_PAUSE_SECONDS)).toBe('');
+    expect(validatePauseSeconds(DEFAULT_PAUSE_SECONDS)).toBeNull();
   });
 });
 
@@ -214,7 +220,10 @@ describe('发布策略纯函数：表单整体校验', () => {
     });
     expect(result.valid).toBe(false);
     // 暂停时长错误单列：只由详情面板的 Form 在输入下方展示，不进批次卡片文案
-    expect(result.batchPauseErrors.paused).toEqual({ key: '暂停时长需为 30 ~ 86400 秒之间的整数', params: [] });
+    expect(result.batchPauseErrors.paused).toEqual({
+      key: '暂停时长需为 {0} ~ {1} 秒之间的整数',
+      params: [PAUSE_SECONDS_MIN, PAUSE_SECONDS_MAX],
+    });
     expect(result.batchPauseErrors.full).toBeUndefined();
     expect(result.batchErrors.paused).toBeUndefined();
     expect(result.batchErrorDetails.paused).toBeUndefined();
