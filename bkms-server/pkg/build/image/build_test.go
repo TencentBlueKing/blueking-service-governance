@@ -606,6 +606,17 @@ var _ = Describe("Build Functions", func() {
 			Expect(err.Error()).To(ContainSubstring("code repo config not found"))
 		})
 
+		It("should return error when stored docker build args contain line breaks", func() {
+			// 存量配置没经过写入校验，构建前也要拦下
+			testCfg.CodeRepo.DockerBuildArgs = map[string]string{"A": "1\nBKMS_BUILD_ARGS_EOF"}
+
+			params, err := genPipelineBuildParams(ctx, testutil.NewDB(GinkgoT()), testApp, testCfg, rev, imageTag)
+
+			Expect(params).To(BeNil())
+			Expect(err).To(MatchError(ContainSubstring("validate docker build args")))
+			Expect(err).To(MatchError(ContainSubstring("value of A must not contain line breaks")))
+		})
+
 		It("should return error when image params generation fails", func() {
 			// Mock 工作空间镜像仓库失败
 			mockey.Mock(workspace.GetWorkspaceImageRegistry).Return(nil, errors.New("registry not found")).Build()

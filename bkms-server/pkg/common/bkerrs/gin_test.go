@@ -19,6 +19,7 @@
 package bkerrs
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -26,6 +27,7 @@ import (
 	"github.com/gin-gonic/gin"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	pkgerrors "github.com/pkg/errors"
 )
 
 type testUnauthenticatedError struct{}
@@ -87,6 +89,35 @@ var _ = Describe("Gin error handling", func() {
 					"details": null
 				}
 			}`))
+		})
+	})
+
+	Context("when handler reports an error caused by bscp being disabled", func() {
+		It("should restore the BSCP_DISABLED detail even if wrapped by another bk error", func() {
+			cause := pkgerrors.Wrap(ErrBSCPDisabled, "initializing bscp client")
+			rec := makeRequest(Wrap(cause, ErrCodeInvalidArgument, "validating bscp config"))
+
+			Expect(rec.Code).To(Equal(http.StatusNotImplemented))
+			var out GinErrorOutput
+			Expect(json.Unmarshal(rec.Body.Bytes(), &out)).To(Succeed())
+			Expect(out.Error.Code).To(Equal(ErrCodeNotImplemented))
+			Expect(out.Error.Message).To(ContainSubstring("validating bscp config"))
+			Expect(out.Error.Details).To(HaveLen(1))
+			Expect(out.Error.Details[0]["code"]).To(Equal(string(ErrDetailCodeBSCPDisabled)))
+			Expect(out.Error.Details[0]["module"]).To(Equal("bscp"))
+		})
+
+		It("should return BSCP_DISABLED for the bare sentinel error", func() {
+			rec := makeRequest(ErrBSCPDisabled)
+
+			Expect(rec.Code).To(Equal(http.StatusNotImplemented))
+			var out GinErrorOutput
+			Expect(json.Unmarshal(rec.Body.Bytes(), &out)).To(Succeed())
+			Expect(out.Error.Message).To(Equal(
+				"bscp is disabled in current environment: " + ErrBSCPDisabled.Error(),
+			))
+			Expect(out.Error.Details).To(HaveLen(1))
+			Expect(out.Error.Details[0]["code"]).To(Equal(string(ErrDetailCodeBSCPDisabled)))
 		})
 	})
 

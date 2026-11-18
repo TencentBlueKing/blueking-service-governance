@@ -20,6 +20,7 @@ import { ref } from 'vue';
 
 import { flushPromises, shallowMount } from '@vue/test-utils';
 import { Radio } from 'bkui-vue';
+import { languages } from 'monaco-editor';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ConfigFileListItem from '~/pages/application/detail/app-config/components/config-file-list-item.vue';
 import ConfigFiles from '~/pages/application/detail/app-config/config-files.vue';
@@ -41,7 +42,10 @@ const mocks = vi.hoisted(() => ({
   message: vi.fn(),
   appType: 'taf',
   editorValue: '',
+  resetEnv: vi.fn(),
   saveContent: vi.fn(),
+  stopLoading: vi.fn(),
+  validate: vi.fn(),
 }));
 const runtimeState = ref<null | PublicView | undefined>();
 vi.mock('vue-i18n', async importOriginal => ({
@@ -78,6 +82,7 @@ vi.mock('~/api/modules/v1', () => ({
     listAppConfigFileDefEnvInstances: mocks.instances,
     updateAppConfigFileDef: mocks.update,
     createAppConfigFileDef: mocks.create,
+    resetAppConfigFileDefEnvToDefault: mocks.resetEnv,
     updateAppConfigFileDefContent: mocks.saveContent,
   },
   AppConfigFilesService: {},
@@ -91,12 +96,14 @@ vi.mock('bkui-vue', async importOriginal => {
 vi.mock('~/components/monaco-editor/ms-editor.vue', () => ({
   default: {
     name: 'MsEditor',
+    props: ['lang', 'requireYamlMapRoot'],
     template: '<div><slot name="title" /></div>',
     methods: {
       setValue(value: string) {
         mocks.editorValue = value;
       },
       getValue: () => mocks.editorValue,
+      validate: mocks.validate,
     },
   },
 }));
@@ -104,10 +111,15 @@ vi.mock('~/pages/application/detail/app-config/components/env-content-strategy-c
   default: { name: 'EnvContentStrategyConfirmDialog', template: '<div />', methods: { confirm: async () => true } },
 }));
 vi.mock('~/pages/application/detail/app-config/components/clear-file-content-dialog.vue', () => ({
-  default: { template: '<div />' },
+  default: { name: 'ClearFileContentDialog', props: ['isShow'], template: '<div />' },
 }));
 vi.mock('~/pages/application/detail/app-config/components/save-version-confirm-dialog.vue', () => ({
-  default: { name: 'SaveVersionConfirmDialog', props: ['isShow'], template: '<div />' },
+  default: {
+    name: 'SaveVersionConfirmDialog',
+    props: ['isShow', 'preview'],
+    template: '<div />',
+    methods: { stopLoading: mocks.stopLoading },
+  },
 }));
 vi.mock('~/pages/application/detail/app-config/components/create-config-file-sideslider.vue', () => ({
   default: { name: 'CreateConfigFileSideslider', props: ['isShow', 'loading'], template: '<div />' },
@@ -128,6 +140,18 @@ beforeEach(() => {
   mocks.appType = 'taf';
   runtimeState.value = undefined;
   mocks.editorValue = '';
+  mocks.validate.mockReturnValue(false);
+  vi.spyOn(languages, 'getLanguages').mockReturnValue([
+    { id: 'yaml', extensions: ['.yaml', '.yml'] },
+    { id: 'json', extensions: ['.json'] },
+    { id: 'xml', extensions: ['.xml'] },
+    { id: 'ini', extensions: ['.ini', '.properties'], filenames: ['config'] },
+    { id: 'shell', extensions: ['.sh', '.bash'] },
+    { id: 'typescript', extensions: ['.ts'] },
+    { id: 'custom', extensions: ['.config.ts'] },
+    { id: 'dockerfile', extensions: ['.dockerfile'], filenames: ['Dockerfile'] },
+    { id: 'plaintext' },
+  ]);
   savedFile = {
     id: 'def-id',
     fileId: 'file-id',
@@ -158,7 +182,7 @@ afterEach(() => {
   wrapper?.unmount();
 });
 
-async function openEditor() {
+async function openEditor(editFileInfo = true) {
   wrapper = shallowMount(ConfigFiles, {
     global: {
       mocks: i18nGlobalMocks,
@@ -187,8 +211,10 @@ async function openEditor() {
     },
   });
   await flushPromises();
-  await wrapper.get('[data-edit]').trigger('click');
-  await flushPromises();
+  if (editFileInfo) {
+    await wrapper.get('[data-edit]').trigger('click');
+    await flushPromises();
+  }
   return wrapper;
 }
 
@@ -198,6 +224,292 @@ async function save() {
   await button!.trigger('click');
   await flushPromises();
 }
+
+describe('配置文件保存预览', () => {
+  it('首次保存独立环境时预览已加载的原文，并提交预览时的草稿和版本 0', async () => {
+    mocks.appType = 'trpc';
+    savedFile = {
+      ...savedFile,
+      name: 'trpc_go.yaml',
+      editableContentField: 'content',
+      envContentStrategy: 'overwrite',
+      isUnifiedConfig: false,
+      content: 'enabled: false\n',
+      currentVersion: 6,
+    };
+    const view = await openEditor(false);
+    view.getComponent({ name: 'EnvPerspectiveSelect' }).vm.$emit('change', 'prod');
+    await flushPromises();
+    await view.get('[data-section="文件内容"]').trigger('click');
+    mocks.editorValue = 'enabled: true\n';
+    await save();
+
+    const dialog = view.getComponent({ name: 'SaveVersionConfirmDialog' });
+    expect(dialog.props('preview')).toMatchObject({
+      fileName: 'trpc_go.yaml',
+      originalContent: 'enabled: false\n',
+      content: 'enabled: true\n',
+      currentVersion: 0,
+    });
+    expect(mocks.detail).toHaveBeenCalledTimes(2);
+    expect(mocks.saveContent).not.toHaveBeenCalled();
+
+    // 提交时使用预览中的草稿。
+    mocks.editorValue = 'enabled: false\n';
+    dialog.vm.$emit('confirm', 'enable in prod');
+    await flushPromises();
+    expect(mocks.saveContent).toHaveBeenCalledExactlyOnceWith(
+      { appID: 'app-id', id: 'def-id', content: 'enabled: true\n', currentVersion: 0, description: 'enable in prod' },
+      { interceptorErr: false, needRes: true, queryParams: { envName: 'prod' } },
+    );
+    expect(dialog.props('isShow')).toBe(false);
+  });
+
+  it('两侧均为空的文件仍可提交空版本', async () => {
+    savedFile = {
+      ...savedFile,
+      name: 'placeholder.conf',
+      configKind: 'plain',
+      editableContentField: 'content',
+      currentVersion: 0,
+    };
+    const view = await openEditor(false);
+    await view.get('[data-section="文件内容"]').trigger('click');
+    await save();
+    const dialog = view.getComponent({ name: 'SaveVersionConfirmDialog' });
+    expect(dialog.props('preview')).toMatchObject({ originalContent: '', content: '', currentVersion: 0 });
+    dialog.vm.$emit('confirm', 'create empty version');
+    await flushPromises();
+
+    expect(mocks.saveContent).toHaveBeenCalledExactlyOnceWith(
+      { appID: 'app-id', id: 'def-id', content: '', currentVersion: 0, description: 'create empty version' },
+      { interceptorErr: false, needRes: true, queryParams: undefined },
+    );
+    expect(dialog.props('isShow')).toBe(false);
+  });
+
+  it.each(['list', 'detail', 'instances'] as const)('保存成功后 %s 刷新失败时保留已保存内容', async refresh => {
+    savedFile = { ...savedFile, configKind: 'plain', editableContentField: 'content', content: 'enabled: false' };
+    const view = await openEditor(false);
+    await view.get('[data-section="文件内容"]').trigger('click');
+    mocks.editorValue = 'enabled: true';
+    await save();
+    const dialog = view.getComponent({ name: 'SaveVersionConfirmDialog' });
+    mocks.saveContent.mockImplementationOnce(async () => {
+      savedFile = { ...savedFile, currentVersion: 4, content: 'enabled: true' };
+      return { currentVersion: 4 };
+    });
+    const { promise, reject } = Promise.withResolvers<never>();
+    mocks[refresh].mockReturnValueOnce(promise);
+    dialog.vm.$emit('confirm', 'enable feature');
+    await flushPromises();
+    expect(dialog.props('isShow')).toBe(false);
+
+    reject(new Error('refresh unavailable'));
+    await flushPromises();
+    expect(mocks.editorValue).toBe('enabled: true');
+    expect(mocks.message).toHaveBeenCalledExactlyOnceWith({
+      theme: 'warning',
+      message: '配置已保存，获取最新配置失败，请刷新页面重试',
+    });
+    await view.get('[data-section="文件内容"]').trigger('click');
+    expect(view.findAll('button').some(button => button.text() === '保存')).toBe(false);
+    expect(mocks.saveContent).toHaveBeenCalledOnce();
+  });
+
+  it('版本冲突后保留预览和草稿，取消预览也不丢失草稿', async () => {
+    savedFile = {
+      ...savedFile,
+      name: 'feature.yaml',
+      configKind: 'plain',
+      editableContentField: 'content',
+      content: 'enabled: false\n',
+    };
+    const view = await openEditor(false);
+    await view.get('[data-section="文件内容"]').trigger('click');
+    mocks.editorValue = 'enabled: true\n';
+    await save();
+    const dialog = view.getComponent({ name: 'SaveVersionConfirmDialog' });
+    mocks.saveContent.mockRejectedValueOnce({ error: { details: [{ code: 'APP_CONFIG_FILE_VERSION_CONFLICT' }] } });
+    dialog.vm.$emit('confirm', 'enable feature');
+    await flushPromises();
+
+    expect(mocks.stopLoading).toHaveBeenCalledOnce();
+    expect(mocks.message).toHaveBeenCalledExactlyOnceWith({
+      theme: 'error',
+      message: '当前配置已被他人更新。为避免数据被覆盖，请刷新页面获取最新版本后重新编辑。',
+    });
+    expect(dialog.props('isShow')).toBe(true);
+    expect(dialog.props('preview')).toMatchObject({ originalContent: 'enabled: false\n', content: 'enabled: true\n' });
+    expect(mocks.detail).toHaveBeenCalledOnce();
+    expect(mocks.editorValue).toBe('enabled: true\n');
+
+    dialog.vm.$emit('update:isShow', false);
+    await flushPromises();
+    expect(dialog.props('isShow')).toBe(false);
+    expect(mocks.editorValue).toBe('enabled: true\n');
+    expect(mocks.saveContent).toHaveBeenCalledOnce();
+  });
+
+  it.each(['saveEmpty', 'deleteFile'])('清空已有环境差异时按原动作 %s 提交', async action => {
+    savedFile = { ...savedFile, editableContentField: 'content', isUnifiedConfig: false };
+    mocks.detail.mockImplementation(async ({ envName }: { envName?: string }) => ({
+      item:
+        envName === 'prod'
+          ? { ...savedFile, hasEnvInstance: true, editableContentField: 'overlayContent', overlayContent: 'key: value' }
+          : savedFile,
+    }));
+    const view = await openEditor(false);
+    view.getComponent({ name: 'EnvPerspectiveSelect' }).vm.$emit('change', 'prod');
+    await flushPromises();
+    await view.get('[data-section="文件内容"]').trigger('click');
+    mocks.editorValue = '';
+    await save();
+
+    expect(view.getComponent({ name: 'SaveVersionConfirmDialog' }).props('isShow')).toBe(false);
+    const dialog = view.getComponent({ name: 'ClearFileContentDialog' });
+    expect(dialog.props('isShow')).toBe(true);
+    dialog.vm.$emit('confirm', action);
+    await flushPromises();
+
+    if (action === 'saveEmpty') {
+      expect(mocks.saveContent).toHaveBeenCalledExactlyOnceWith(
+        { appID: 'app-id', id: 'def-id', content: '', currentVersion: 3, description: '保存为空文件' },
+        { interceptorErr: false, needRes: true, queryParams: { envName: 'prod' } },
+      );
+      expect(mocks.resetEnv).not.toHaveBeenCalled();
+    } else {
+      expect(mocks.resetEnv).toHaveBeenCalledExactlyOnceWith({ appID: 'app-id', id: 'def-id', envName: 'prod' });
+      expect(mocks.saveContent).not.toHaveBeenCalled();
+    }
+  });
+});
+
+describe('配置文件格式识别与校验', () => {
+  it.each([
+    ['app.yaml', 'yaml'],
+    ['app.yml', 'yaml'],
+    ['APP.YML', 'yaml'],
+    ['app.json', 'json'],
+    ['app.xml', 'xml'],
+    ['app.ini', 'ini'],
+    ['app.properties', 'ini'],
+    ['start.sh', 'shell'],
+    ['app.config.ts', 'custom'],
+    ['Dockerfile', 'dockerfile'],
+    ['config', 'ini'],
+    ['app.unknown', 'plaintext'],
+    ['no-extension', 'plaintext'],
+  ])('普通文件 %s 使用 %s 高亮', async (name, language) => {
+    savedFile = { ...savedFile, configKind: 'plain', name, fileFormat: 'yaml' };
+    const view = await openEditor();
+    expect(view.getComponent({ name: 'MsEditor' }).props('lang')).toBe(language);
+  });
+
+  // 普通文件只校验 YAML 语法；values.yaml 类框架文件才额外约束根节点为 key-value 结构。
+  it.each([
+    ['framework', true],
+    ['plain', false],
+  ])('%s 文件的 YAML 根节点结构约束为 %s', async (configKind, requireYamlMapRoot) => {
+    savedFile = { ...savedFile, configKind, name: 'app.yaml' };
+    const view = await openEditor();
+    expect(view.getComponent({ name: 'MsEditor' }).props('requireYamlMapRoot')).toBe(requireYamlMapRoot);
+  });
+
+  // 框架文件的格式由运行时声明，与文件名后缀无关。
+  it.each([
+    ['taf', 'default', 'xml'],
+    ['taf', 'taf.default.xml', 'xml'],
+    ['taf', 'trpc.go.yaml', 'xml'],
+    ['trpc', 'app.json', 'yaml'],
+    ['trpc', 'trpc.go.yaml', 'yaml'],
+  ])('%s 框架文件（%s）始终按运行时声明的格式使用 %s 高亮', async (appType, name, language) => {
+    mocks.appType = appType;
+    savedFile.name = name;
+    const view = await openEditor();
+    expect(view.getComponent({ name: 'MsEditor' }).props('lang')).toBe(language);
+  });
+
+  it('保存普通文件名后更新编辑器语言与工具栏', async () => {
+    savedFile = { ...savedFile, configKind: 'plain', name: 'app.json' };
+    const view = await openEditor();
+    await view.findAll('input')[0].setValue('app.YML');
+    await save();
+    expect(view.getComponent({ name: 'MsEditor' }).props('lang')).toBe('yaml');
+    expect(view.getComponent({ name: 'MsEditor' }).text()).toContain('yaml');
+  });
+
+  it('不同环境沿用文件名识别出的语言并加载对应内容', async () => {
+    savedFile = {
+      ...savedFile,
+      configKind: 'plain',
+      name: 'app.yml',
+      mountedEnvNames: ['prod'],
+      isUnifiedConfig: false,
+      content: 'key: default',
+    };
+    mocks.detail.mockImplementation(async ({ envName }: { envName?: string }) => ({
+      item: { ...savedFile, content: envName ? 'key: prod' : 'key: default' },
+    }));
+    const view = await openEditor();
+    view.getComponent({ name: 'EnvPerspectiveSelect' }).vm.$emit('change', 'prod');
+    await flushPromises();
+    expect(view.getComponent({ name: 'MsEditor' }).props('lang')).toBe('yaml');
+    expect(mocks.editorValue).toBe('key: prod');
+  });
+
+  it('切换内容相同但后缀不同的文件时更新语言', async () => {
+    savedFile = { ...savedFile, configKind: 'plain', name: 'app.yml', content: 'key: value' };
+    const otherFile = { ...savedFile, id: 'other-id', name: 'app.json' };
+    mocks.list.mockResolvedValue({ items: [savedFile, otherFile] });
+    mocks.detail.mockImplementation(async ({ id }: { id: string }) => ({
+      item: id === otherFile.id ? otherFile : savedFile,
+    }));
+    const view = await openEditor();
+    view.getComponent({ name: 'ConfigFileList' }).vm.$emit('select', otherFile.id);
+    await flushPromises();
+    expect(view.getComponent({ name: 'MsEditor' }).props('lang')).toBe('json');
+    expect(mocks.editorValue).toBe('key: value');
+  });
+
+  it('保存前立即校验，存在错误时不打开版本确认框', async () => {
+    savedFile = { ...savedFile, configKind: 'plain', name: 'app.yaml', editableContentField: 'content' };
+    const view = await openEditor();
+    await save();
+    await view.get('[data-section="文件内容"]').trigger('click');
+    mocks.validate.mockReturnValueOnce(true);
+    await save();
+    expect(mocks.validate).toHaveBeenCalledTimes(1);
+    expect(view.getComponent({ name: 'SaveVersionConfirmDialog' }).props('isShow')).toBe(false);
+    await save();
+    expect(view.getComponent({ name: 'SaveVersionConfirmDialog' }).props('isShow')).toBe(true);
+  });
+
+  it('编辑器错误禁用保存，清除错误后恢复', async () => {
+    savedFile = { ...savedFile, configKind: 'plain', name: 'app.yml', editableContentField: 'content' };
+    const view = await openEditor();
+    await save();
+    await view.get('[data-section="文件内容"]').trigger('click');
+    const editor = view.getComponent({ name: 'MsEditor' });
+    editor.vm.$emit('error', [{ message: 'invalid YAML' }]);
+    await flushPromises();
+    expect(
+      view
+        .findAll('button')
+        .find(button => button.text() === '保存')!
+        .attributes('disabled'),
+    ).toBeDefined();
+    expect(view.getComponent({ name: 'EditorStatus' }).props('message')).toEqual(['invalid YAML']);
+    editor.vm.$emit('error', []);
+    await flushPromises();
+    expect(
+      view
+        .findAll('button')
+        .find(button => button.text() === '保存')!
+        .attributes('disabled'),
+    ).toBeUndefined();
+  });
+});
 
 describe('配置文件信息编辑', () => {
   it.each<[string, null | PublicView]>([

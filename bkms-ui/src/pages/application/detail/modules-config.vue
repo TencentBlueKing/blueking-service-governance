@@ -197,23 +197,37 @@
                 v-else-if="row.scopeEnvNames?.length"
                 class="flex items-center gap-[4px] flex-wrap"
               >
-                <Tag
-                  v-for="(env, index) in row.scopeEnvNames?.slice(0, 2)"
+                <span
+                  v-for="(env, index) in row.scopeEnvNames.slice(0, 2)"
                   :key="index"
-                  class="pointer-events-none"
+                  class="inline-flex items-center gap-[4px] pointer-events-none"
                 >
-                  {{ env }}
-                </Tag>
+                  <Tag>{{ getEnvDisplayName(env) }}</Tag>
+                  <Tag
+                    v-if="envByName.get(env)?.kind === 'feature'"
+                    class="shrink-0 bg-[#E2F5F7] text-[#3A9EAA]"
+                    size="small"
+                  >
+                    {{ $t('特性') }}
+                  </Tag>
+                </span>
                 <Popover theme="light">
                   <Tag v-if="row.scopeEnvNames?.length > 2"> +{{ row.scopeEnvNames?.length - 2 }} </Tag>
                   <template #content>
-                    <Tag
-                      v-for="(env, index) in row.scopeEnvNames?.slice(2)"
+                    <span
+                      v-for="(env, index) in row.scopeEnvNames.slice(2)"
                       :key="index"
-                      class="mr-[4px]"
+                      class="inline-flex items-center gap-[4px] mr-[4px]"
                     >
-                      {{ env }}
-                    </Tag>
+                      <Tag>{{ getEnvDisplayName(env) }}</Tag>
+                      <Tag
+                        v-if="envByName.get(env)?.kind === 'feature'"
+                        class="shrink-0 bg-[#E2F5F7] text-[#3A9EAA]"
+                        size="small"
+                      >
+                        {{ $t('特性') }}
+                      </Tag>
+                    </span>
                   </template>
                 </Popover>
               </div>
@@ -281,6 +295,7 @@
   </Skeleton>
   <ComponentsSideSlider
     v-model="isShow"
+    :app-env-list="envList"
     :btn-loading="updating"
     :data="curComponent"
     module-type="app"
@@ -301,6 +316,7 @@
   import { ComponentData } from '~/components/modules/components-sideSlider.vue';
   import Layout from '~/components/skeleton/skeleton-layout';
   import { useElementHeight } from '~/composables/use-element-height';
+  import useEnvManager from '~/composables/use-env-manager';
   import usePageConf from '~/composables/use-page';
   import { ISelectKey, ITableFilterItem, useTableSearchSelect } from '~/composables/use-search';
   import { useSearchPlaceholder } from '~/composables/use-search-placeholder';
@@ -312,6 +328,8 @@
 
   const { t } = useI18n();
   const appDetailStore = useAppDetail();
+  const { envList, getAppEnvList } = useEnvManager();
+  const envByName = computed(() => new Map(envList.value.map(env => [env.name, env])));
   const { createPlaceholder } = useSearchPlaceholder();
   // 表格数据
   const componentList = computed<ComponentOutputObj[]>(() => {
@@ -343,7 +361,11 @@
     }
     return Array.from(typeSet).map(item => ({ name: item, id: item })) as ITableFilterItem[];
   });
-  const evnOptions = computed<ITableFilterItem[]>(() => {
+  function getEnvDisplayName(name: string) {
+    return envByName.value.get(name)?.displayName || name;
+  }
+
+  const envOptions = computed<ITableFilterItem[]>(() => {
     const envSet = new Set<string>();
 
     for (const component of componentList.value) {
@@ -354,7 +376,10 @@
       }
     }
 
-    return Array.from(envSet).map(item => ({ name: item, id: item })) as ITableFilterItem[];
+    return Array.from(envSet, id => {
+      const displayName = getEnvDisplayName(id);
+      return { id, name: envByName.value.get(id)?.kind === 'feature' ? `${displayName}（${t('特性')}）` : displayName };
+    });
   });
   const searchSelectData = computed<ISelectKey<ComponentOutputObj>[]>(() => [
     {
@@ -379,7 +404,7 @@
       multiple: true,
       placeholder: t('可用环境'),
       field: 'scopeEnvNames',
-      children: evnOptions.value,
+      children: envOptions.value,
       handleFilter: (item, values) => {
         // 检查是否选中了"所有环境"且组件是全局的
         if (values.some(v => v.id === t('所有环境')) && item.scopeType === 'global') {
@@ -611,6 +636,7 @@
 
   onBeforeMount(() => {
     handleFetchList();
+    getAppEnvList(appDetailStore.appID);
   });
 </script>
 

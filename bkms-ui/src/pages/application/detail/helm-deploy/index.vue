@@ -146,6 +146,7 @@
         </Exception>
         <deployHistory
           v-else
+          :env-display-name="curEnvItem?.displayName"
           :env-name="curEnv"
           :initial-loading="deployHistoryLoading"
           :lane-name="curLaneName"

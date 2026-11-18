@@ -18,7 +18,10 @@
 
 <template>
   <div class="flex h-full min-h-0 flex-col">
-    <FlexRow class="mb-[16px] flex-shrink-0 bg-[#EAEBF0] px-[12px] py-[8px] shadow-[0_2px_4px_0_#0000001a]">
+    <FlexRow
+      class="mb-[16px] flex-shrink-0 bg-[#EAEBF0] px-[12px] py-[8px] shadow-[0_2px_4px_0_#0000001a]"
+      rclass="flex items-center gap-[8px]"
+    >
       <template #left>
         <div class="flex">
           <EnvSelectPanel
@@ -34,6 +37,14 @@
           class="bkms-icon bkms-icon-full-screen text-[16px] bg-[#fafbfd] cursor-pointer p-[4px] rounded-[4px] hover:text-[#3A84FF]"
           @click="handleFullScreen"
         ></i>
+        <a
+          v-if="standaloneMonitorUrl"
+          :aria-label="$t('在新标签页打开')"
+          class="bkms-icon bkms-icon-jump-link text-[16px] bg-[#fafbfd] cursor-pointer p-[4px] rounded-[4px] hover:text-[#3A84FF]"
+          :href="standaloneMonitorUrl"
+          rel="noopener noreferrer"
+          target="_blank"
+        ></a>
       </template>
     </FlexRow>
     <div
@@ -41,7 +52,7 @@
       class="min-h-0 flex-1 bg-white"
     >
       <MonitorIframe
-        v-if="currentApm && !apmConfigMissing"
+        v-if="isIframeMounted"
         ref="monitorIframeRef"
         :url="iframeUrl"
         @route-change="handleRouteChange"
@@ -108,11 +119,7 @@
   import FlexRow from '~/components/flex-row.vue';
   import MonitorIframe from '~/components/monitor-iframe.vue';
   import { envDetailLocation } from '~/composables/use-env-manager';
-  import {
-    type MonitorIframeObservabilityType,
-    type MonitorIframeSetParamsPayload,
-    useMonitorIframe,
-  } from '~/composables/use-monitor-iframe';
+  import { type MonitorIframeSetParamsPayload, useMonitorIframe } from '~/composables/use-monitor-iframe';
   import { useUrlQuerySync } from '~/composables/use-url-query-sync';
   import { useAppDetail } from '~/stores/app-detail';
   import { useDeployEnvStore } from '~/stores/deploy-env';
@@ -125,6 +132,8 @@
       }>;
     };
   };
+
+  const DEFAULT_SERVICE_DASHBOARD = 'service-default-overview';
 
   const appDetailStore = useAppDetail();
   const router = useRouter();
@@ -156,19 +165,64 @@
 
   // monitor-iframe 公共能力：URL 构建（内部自取 bizId；apm_nav_list:false 隐藏 APM 导航栏面包屑，服务观测场景由页面自持导航）
   const { buildIframeUrl } = useMonitorIframe('service', { needMenu: false, apm_nav_list: false });
-  // iframe URL：初始化（observabilityQuery 就绪）后构建，传给 monitor-iframe 渲染
+  // iframe src 只在冷启动时构建，后续视图变化由监控回报。
   const iframeUrl = ref('');
+  const iframeRouteHash = ref('');
+  const iframeTarget = ref<{ filters: MonitorIframeSetParamsPayload; pending?: { appChanged: boolean } }>();
 
-  const serviceName = ref('');
   const apmConfigMissing = ref(false);
   const isInitializingEnvFromUrl = ref(false);
 
   const currentApm = ref<GetEnvApmOutput | null>(null);
 
-  // iframe v-if 挂载状态（currentApm && !apmConfigMissing）与其上一状态记录：
-  // 用于区分「iframe 冷启动（首次进入 / v-if 卸载后重建，需以新 URL 整体重建）」与「持续挂载热更新（URL 锁定 + postMessage 下发参数）」
   const isIframeMounted = computed(() => !!currentApm.value && !apmConfigMissing.value);
-  let prevIframeMounted = false;
+
+  function isApplicationView(hash: string) {
+    return /^#\/apm\/application\/?(?:\?|$)/.test(hash);
+  }
+
+  const standaloneMonitorUrl = computed(() => {
+    if (!isIframeMounted.value || !iframeUrl.value) return '';
+    let url: URL;
+    try {
+      url = new URL(iframeUrl.value);
+    } catch {
+      return '';
+    }
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return '';
+    for (const key of ['needMenu', 'apm_nav_list', 'parentOrigin']) {
+      url.searchParams.delete(key);
+    }
+    const hash = iframeRouteHash.value || url.hash;
+    const target = iframeTarget.value;
+    if (!target?.pending) {
+      url.hash = hash;
+      return url.href;
+    }
+
+    // 确认前使用目标过滤条件，只沿用最近视图中可跨环境复用的参数。
+    const path = hash.split('?', 1)[0];
+    const latestParams = new URLSearchParams(hash.slice(path.length + 1));
+    const keepApplicationView = !target.filters['filter-service_name'] && isApplicationView(path);
+    const keepPath = keepApplicationView || /^#\/apm\/service(?:\/|$)/.test(path);
+    const params = new URLSearchParams({
+      ...target.filters,
+      sceneId: keepApplicationView ? 'apm_application' : 'apm_service',
+    });
+    const viewKeys = ['from', 'to', 'interval', 'timezone', 'refreshInterval'];
+    if (keepPath) {
+      viewKeys.push('dashboardId', 'sceneType');
+    } else {
+      params.set('dashboardId', DEFAULT_SERVICE_DASHBOARD);
+      params.set('sceneType', DEFAULT_APM_CONFIG.sceneType);
+    }
+    for (const key of viewKeys) {
+      const value = latestParams.get(key);
+      if (value !== null) params.set(key, value);
+    }
+    url.hash = `${keepPath ? path : '#/apm/service'}?${params}`;
+    return url.href;
+  });
 
   // 全屏 iframe 容器
   function handleFullScreen() {
@@ -188,11 +242,6 @@
     router.push(envDetailLocation(envId, 'observability'));
   }
 
-  // 优先当前环境绑定的 APM name，没有则使用环境名
-  const apmAppName = computed(() => {
-    return currentApm.value?.name || curEnv.value;
-  });
-
   // 解析 URL 中的 iframe 观测参数（route-change 同步回写），异常/非对象/数组（如 JSON.parse('[1,2]')）返回空
   const parsedApmQuery = computed<ApmQueryParams>(() => {
     const raw = fields.apmQuery.value;
@@ -203,14 +252,6 @@
     } catch {
       return {};
     }
-  });
-
-  // 观测参数：初始为静态占位（异步依赖未就绪），异步依赖（currentApm/serviceName）就绪后由主 watch 的 computeObservabilityQuery() 更新为正确值
-  // 后续参数变更通过 monitorIframeRef.sendSetParams 下发，不重载 iframe
-  const observabilityQuery = ref<MonitorIframeObservabilityType>({
-    ...DEFAULT_APM_CONFIG,
-    dashboardId: 'service-default-overview',
-    'filter-app_name': '',
   });
 
   // APM 配置指引文档链接
@@ -227,31 +268,27 @@
     return `${import.meta.env.BK_DOC_URL}${docPath}`;
   });
 
-  /**
-   * 计算观测参数：其余字段由 URL 恢复；filter 恒用当前环境派生值（apmAppName / serviceName）
-   * 注意：改为手动调用后，调用时机决定了 iframe src 的更新时机（避免 route-change 回写导致 iframe 频繁重载）
-   */
-  function computeObservabilityQuery() {
-    const {
-      'filter-app_name': _queryAppName,
-      'filter-service_name': _queryServiceName,
-      ...restApmQuery
-    } = parsedApmQuery.value;
-    const result = {
-      ...DEFAULT_APM_CONFIG,
-      dashboardId: 'service-default-overview',
-      ...restApmQuery,
-      'filter-app_name': apmAppName.value,
-      'filter-service_name': serviceName.value,
-    };
-    return result;
-  }
-
-  /** iframe 内部状态变化：同步完整观测参数到 URL apmQuery 字段（供刷新/分享恢复） */
+  /** iframe 内部状态变化：记录当前视图并同步观测参数，供新标签打开、刷新和分享。 */
   function handleRouteChange(payload: { hash: string; href: string; query: Record<string, unknown> }) {
-    const { query } = payload;
-    if (!query || Object.keys(query).length === 0) return;
-    fields.apmQuery.value = JSON.stringify(query);
+    const { hash, query } = payload;
+    if (query && Object.keys(query).length > 0) {
+      fields.apmQuery.value = JSON.stringify(query);
+    }
+    if (typeof hash !== 'string' || !hash.startsWith('#/')) return;
+    iframeRouteHash.value = hash;
+
+    const target = iframeTarget.value;
+    if (!target?.pending) return;
+    const appName = query?.['filter-app_name'] ?? query?.app_name;
+    const service = query?.['filter-service_name'] ?? query?.service_name ?? '';
+    // 跨应用切换找不到对应服务时，监控也可能回到目标应用视图。
+    if (
+      appName === target.filters['filter-app_name'] &&
+      (service === target.filters['filter-service_name'] ||
+        (target.pending.appChanged && service === '' && isApplicationView(hash)))
+    ) {
+      target.pending = undefined;
+    }
   }
 
   // 跳转到 APM 配置指引文档
@@ -267,7 +304,7 @@
   // 当前环境变化：并发拉取 APM 实例与服务名，name/id 同取自 curEnvItem，保证 filter-app_name / filter-service_name 同时就绪（避免 set-params 多次下发）
   // fetchSeq 序号：并发切换环境时丢弃过期请求结果，防止旧环境数据覆盖新状态
   let fetchSeq = 0;
-  const fetchApmData = async (): Promise<null | { apmName: string; seq: number; service: string }> => {
+  const fetchApmData = async (): Promise<null | { filters: MonitorIframeSetParamsPayload; seq: number }> => {
     const seq = ++fetchSeq;
     const env = trpcDeployStore.curEnvItem;
     if (!env?.id || !env.name || !appDetailStore.appID) return null;
@@ -286,10 +323,19 @@
     if (seq !== fetchSeq) return null;
     apmConfigMissing.value = configMissing;
     currentApm.value = apm;
-    const serviceNameValue = service?.serviceName ?? '';
-    serviceName.value = serviceNameValue;
+    if (!isIframeMounted.value) {
+      iframeUrl.value = '';
+      iframeRouteHash.value = '';
+      iframeTarget.value = undefined;
+    }
     // 返回 seq：主 watch 需在 fetch 返回后的每个 await 恢复点复查，覆盖 fetchApmData 内部的过期拦截到副作用执行间的空窗
-    return { seq, apmName: apm?.name || env.name, service: serviceNameValue };
+    return {
+      filters: {
+        'filter-app_name': apm?.name || env.name,
+        'filter-service_name': service?.serviceName ?? '',
+      },
+      seq,
+    };
   };
 
   // URL 中的 env → 初始化当前环境（首次进入时生效）；curEnv → 写回 URL（首次默认环境与用户切换环境都写入，便于分享直达）
@@ -325,17 +371,11 @@
       if (!result) return;
       // fetchApmData 仅在「返回瞬间仍为最新」时返回结果，但其后副作用（router.replace / buildIframeUrl）仍含 await，
       // 期间可能有更新的环境切换插入，故每次 await 恢复后复查 seq，过期即整体丢弃（与 env/detail.vue buildUrlSeq 同思路）
-      const isStale = () => result.seq !== fetchSeq;
+      const { filters, seq } = result;
+      const isStale = () => seq !== fetchSeq;
       if (isStale()) return;
-      // 2. 派生数据就绪后重新计算观测参数（filter 恒用派生值）
-      observabilityQuery.value = computeObservabilityQuery();
-      const merged: ApmQueryParams = {
-        ...parsedApmQuery.value,
-        'filter-app_name': result.apmName,
-        // 无条件覆盖：service 为空也显式写空串，清掉 URL 残留的旧环境服务名（避免刷新/分享串环境）
-        'filter-service_name': result.service,
-      };
-      // 3. 快照写入 URL（env + apmQuery，供刷新/分享恢复；显式携带当前 env 避免覆盖并发写入）
+      const merged = { ...parsedApmQuery.value, ...filters };
+      // 快照写入 URL（env + apmQuery，供刷新/分享恢复；显式携带当前 env 避免覆盖并发写入）
       await router.replace({
         query: {
           ...route.query,
@@ -343,22 +383,23 @@
           apmQuery: JSON.stringify(merged),
         },
       });
-      if (isStale()) return;
-      // 4. 判断 iframe 是否需冷启动（首次进入，或经历 v-if 卸载重建——如切到无 APM 环境后再切回）：
-      //    冷启动时 iframe 处于加载期，sendSetParams 会被静默丢弃（isIframeReady=false），必须以新 URL 整体重建
-      const needRebuildIframe = !prevIframeMounted && isIframeMounted.value;
-      prevIframeMounted = isIframeMounted.value;
-      // 5. 重建/初始化走 buildIframeUrl（iframe 首载即带正确参数）；已初始化且持续挂载时 URL 锁定，参数变更仅走 postMessage（二者二选一）
-      if (iframeUrl.value && !needRebuildIframe) {
-        // service 为空也显式下发空串：平台语义「空串=无过滤/清除」，防止 iframe 内部残留上一环境的服务筛选（与 URL 快照/URL 构建路径一致）
-        const payload: MonitorIframeSetParamsPayload = {
-          'filter-app_name': result.apmName,
-          'filter-service_name': result.service,
-        };
-        monitorIframeRef.value?.sendSetParams(payload);
+      if (isStale() || !isIframeMounted.value) return;
+      // 冷启动构建 URL，持续挂载时通过 postMessage 更新过滤条件。
+      if (iframeUrl.value) {
+        const previousFilters = iframeTarget.value?.filters;
+        const appChanged = filters['filter-app_name'] !== previousFilters?.['filter-app_name'];
+        if (appChanged || filters['filter-service_name'] !== previousFilters?.['filter-service_name']) {
+          iframeTarget.value = { filters, pending: { appChanged } };
+        }
+        monitorIframeRef.value?.sendSetParams(filters);
       } else {
-        const url = await buildIframeUrl(observabilityQuery.value);
+        const url = await buildIframeUrl({
+          ...DEFAULT_APM_CONFIG,
+          dashboardId: DEFAULT_SERVICE_DASHBOARD,
+          ...merged,
+        });
         if (!isStale()) {
+          iframeTarget.value = { filters };
           iframeUrl.value = url;
         }
       }

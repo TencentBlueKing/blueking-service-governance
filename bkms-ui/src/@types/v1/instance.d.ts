@@ -520,6 +520,10 @@ export interface AppInstanceOutputObj {
    * 状态，由 pod.status.phase 等解析获得
    */
   status?: string;
+  /**
+   * 实例所属的工作负载版本（Pod 的 controller-revision-hash 标签）
+   */
+  workloadRevision?: string;
 }
 
 export interface PublishStatusOutputObj {

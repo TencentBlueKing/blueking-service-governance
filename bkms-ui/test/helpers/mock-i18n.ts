@@ -38,8 +38,11 @@ export async function i18nMockFactory() {
   };
 }
 
-/** render() 的 global.mocks 对象：模板中的 $t 直译 */
-export const i18nGlobalMocks = { $t: (s: string) => s };
+/** render() 的 global.mocks 对象：模板中的 $t 直译，支持 {n} 位置插值 */
+export const i18nGlobalMocks = {
+  $t: (key: string, values: unknown[] = []) =>
+    key.replace(/\{(\d+)\}/g, (placeholder, index: string) => String(values[Number(index)] ?? placeholder)),
+};
 
 /**
  * render() 的 global.plugins 插件：通过 globalProperties 注入 $t 直译。

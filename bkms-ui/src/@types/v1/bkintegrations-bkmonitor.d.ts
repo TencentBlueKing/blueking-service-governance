@@ -14,7 +14,7 @@ export interface GetApmServiceNameRequest {
   envName: string;
 }
 
-export interface RankInstancesRequest {
+export type RankInstancesRequest = RankInstancesQueryInput & {
   /**
    * 应用 ID
    */
@@ -23,31 +23,7 @@ export interface RankInstancesRequest {
    * 环境名称
    */
   envName: string;
-  /**
-   * 取前 N 个实例，1~50，默认 10
-   */
-  limit?: number;
-  /**
-   * 排名方向，默认 top
-   */
-  rankType?: "top" | "bottom";
-  /**
-   * 排名时间范围的开始时间（Unix 时间戳，秒）
-   */
-  startTime: number;
-  /**
-   * 排名时间范围的结束时间（Unix 时间戳，秒）
-   */
-  endTime: number;
-  /**
-   * 子查询步长（秒），最小 60，默认 60
-   */
-  interval?: number;
-  /**
-   * 汇聚方法，默认 sum
-   */
-  method?: "sum" | "max" | "min" | "count" | "avg";
-}
+};
 
 export type GetInstanceTimeSeriesRequest = GetInstanceTimeSeriesQueryInput & {
   /**
@@ -390,6 +366,46 @@ export interface DeleteUserGroupRequest {
 
 export interface GetApmServiceNameResp {
   data?: GetApmServiceNameOutput;
+}
+
+export interface RankInstancesQueryInput {
+  /**
+   * EndTime 排名时间范围的结束时间（Unix 时间戳，秒）
+   */
+  endTime: number;
+  /**
+   * Instances 候选实例（Pod）名称，过滤空白后最多 50 个；为空时在最新部署的工作负载的全部 Pod 中排名，
+   * 非空时只在这批 Pod 中排名，不校验实例是否属于该环境
+   */
+  instances?: string[];
+  /**
+   * Interval 子查询步长（秒），最小为 60 秒，建议与图表汇聚周期一致
+   */
+  interval?: number;
+  /**
+   * Limit 取前 N 个实例，取值 1~50，默认 10
+   */
+  limit?: number;
+  /**
+   * Method 同一 Pod 内多个容器的数据如何合并，默认 sum，建议与图表汇聚方法一致
+   */
+  method?: "sum" | "max" | "min" | "count" | "avg";
+  /**
+   * RankBy 排名指标，默认 cpu_limit_usage：
+   * - cpu_limit_usage: CPU 使用率（用量 / limits）
+   * - memory_limit_usage: 内存使用率（Working Set / limits）
+   * - cpu_usage: CPU 用量（核数）
+   * - memory_usage: 内存用量（Working Set，字节）
+   */
+  rankBy?: "cpu_limit_usage" | "memory_limit_usage" | "cpu_usage" | "memory_usage";
+  /**
+   * RankType 排名方向：top 按排名指标平均值从高到低、bottom 从低到高，默认 top
+   */
+  rankType?: "top" | "bottom";
+  /**
+   * StartTime 排名时间范围的开始时间（Unix 时间戳，秒）
+   */
+  startTime: number;
 }
 
 export interface RankInstancesResp {
@@ -1053,7 +1069,11 @@ export interface InstanceRankOutput {
    */
   instance?: string;
   /**
-   * Value 时间范围内的平均 CPU 使用量（核数）
+   * Unit 排名指标的单位：percent（0~1）、cores、bytes
+   */
+  unit?: string;
+  /**
+   * Value 排名指标在时间范围内的平均值（原始单位）
    */
   value?: number;
 }

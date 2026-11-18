@@ -24,6 +24,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io"
+	"strings"
 	"time"
 
 	"github.com/TencentBlueKing/bk-apigateway-sdks/core/bkapi"
@@ -47,7 +48,7 @@ type ApiClient struct {
 }
 
 // New 创建 Client，根据配置返回真实客户端或 stub 客户端
-// 需注意：使用平台账号进行认证
+// 需注意：默认使用平台账号认证；独立部署的制品库使用制品库账号的 Basic 认证
 // ref: https://github.com/TencentBlueKing/bk-repo/blob/master/docs/apidoc-user/common/common.md
 func New(operator string) (Client, error) {
 	// 测试时使用 stub 客户端
@@ -56,8 +57,12 @@ func New(operator string) (Client, error) {
 		return NewStub(operator), nil
 	}
 
+	scheme := "Platform"
+	if config.G.FeatureIntegrations.EnableIndependentBkRepo {
+		scheme = "Basic"
+	}
 	authorization := fmt.Sprintf(
-		"Platform %s", base64.StdEncoding.EncodeToString(
+		"%s %s", scheme, base64.StdEncoding.EncodeToString(
 			[]byte(fmt.Sprintf("%s:%s", config.G.BKRepo.Username, config.G.BKRepo.Password)),
 		),
 	)
@@ -111,9 +116,10 @@ func (c *ApiClient) CreateUserToProject(
 // CreateProject 创建制品库项目
 // ref: https://github.com/TencentBlueKing/bk-repo/blob/master/docs/apidoc-user/repo/project.md
 func (c *ApiClient) CreateProject(ctx context.Context, projectID string) error {
+	name := trimProjectTenantPrefix(ctx, projectID)
 	body := map[string]any{
-		"name":        projectID,
-		"displayName": projectID,
+		"name":        name,
+		"displayName": name,
 		"description": "蓝鲸服务治理",
 	}
 
@@ -209,4 +215,18 @@ func (c *ApiClient) handleOperation(
 func (c *ApiClient) handleOperationWithoutResult(ctx context.Context, apiOperation define.Operation) error {
 	_, err := c.handleOperation(ctx, apiOperation)
 	return err
+}
+
+// trimProjectTenantPrefix 去掉项目 ID 的租户前缀，得到创建项目时使用的项目名。
+// 多租户模式下制品库的项目 ID 为 {tenantID}.{name}，创建时只能传 name（带前缀会报参数非法），
+// 由制品库自动补上租户前缀。
+func trimProjectTenantPrefix(ctx context.Context, projectID string) string {
+	if !config.G.Tenant.EnableMultiTenantMode {
+		return projectID
+	}
+	tenantID, ok := tenant.GetTenantID(ctx)
+	if !ok {
+		return projectID
+	}
+	return strings.TrimPrefix(projectID, tenantID+".")
 }

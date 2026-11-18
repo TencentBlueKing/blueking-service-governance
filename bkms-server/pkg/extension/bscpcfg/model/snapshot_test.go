@@ -31,7 +31,6 @@ var _ = Describe("Snapshot", func() {
 		return &model.Snapshot{
 			Metadata: &model.Metadata{
 				AppID:        "test-app",
-				Enable:       true,
 				MountPath:    "/data/bscp",
 				WorkloadName: "test-workload",
 			},

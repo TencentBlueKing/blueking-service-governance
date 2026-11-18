@@ -188,6 +188,10 @@ type BatchProgress struct {
 	OldImageTag string `bson:"oldImageTag"`
 	// NewImageTag 新镜像标签
 	NewImageTag string `bson:"newImageTag"`
+	// WorkloadUpdateRevision 工作负载 status.updateRevision，新版本实例所在的版本；轮询任务读到工作负载前为空
+	WorkloadUpdateRevision string `bson:"workloadUpdateRevision,omitempty"`
+	// WorkloadCurrentRevision 工作负载 status.currentRevision，旧版本实例所在的版本；轮询任务读到工作负载前为空
+	WorkloadCurrentRevision string `bson:"workloadCurrentRevision,omitempty"`
 }
 
 // BuildAutoDeployInfo 表示构建阶段透传到部署记录中的构建信息快照。
@@ -322,4 +326,12 @@ func (r *Record) IsBatchReleasing() bool {
 		return false
 	}
 	return r.GetReleaseMode() == ReleaseModeCanary && r.Status == StatusDeploying
+}
+
+// BatchCount 分批发布的批次总数，没有发布策略快照时为 0
+func (r *Record) BatchCount() int {
+	if r.ReleaseStrategy == nil {
+		return 0
+	}
+	return len(r.ReleaseStrategy.Batches)
 }

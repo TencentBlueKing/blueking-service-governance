@@ -322,6 +322,7 @@ var _ = Describe("BkMonitor Serializer", func() {
 				}, false),
 				Entry("all optional fields set", serializer.RankInstancesQueryInput{
 					Limit:     50,
+					RankBy:    "memory_usage",
 					RankType:  "bottom",
 					StartTime: 1781366400,
 					EndTime:   1781452799,
@@ -345,6 +346,26 @@ var _ = Describe("BkMonitor Serializer", func() {
 					StartTime: 1781366400,
 					EndTime:   1781452799,
 				}, true),
+				Entry("rankBy cpu_limit_usage", serializer.RankInstancesQueryInput{
+					RankBy:    "cpu_limit_usage",
+					StartTime: 1781366400,
+					EndTime:   1781452799,
+				}, false),
+				Entry("rankBy memory_limit_usage", serializer.RankInstancesQueryInput{
+					RankBy:    "memory_limit_usage",
+					StartTime: 1781366400,
+					EndTime:   1781452799,
+				}, false),
+				Entry("rankBy cpu_usage", serializer.RankInstancesQueryInput{
+					RankBy:    "cpu_usage",
+					StartTime: 1781366400,
+					EndTime:   1781452799,
+				}, false),
+				Entry("unsupported rankBy", serializer.RankInstancesQueryInput{
+					RankBy:    "network_receive",
+					StartTime: 1781366400,
+					EndTime:   1781452799,
+				}, true),
 				Entry("invalid rankType", serializer.RankInstancesQueryInput{
 					RankType:  "middle",
 					StartTime: 1781366400,
@@ -355,6 +376,26 @@ var _ = Describe("BkMonitor Serializer", func() {
 					StartTime: 1781366400,
 					EndTime:   1781452799,
 				}, true),
+				Entry("instances at the upper limit", serializer.RankInstancesQueryInput{
+					Instances: makeInstances(serializer.MaxInstances),
+					StartTime: 1781366400,
+					EndTime:   1781452799,
+				}, false),
+				Entry("instances exceed the upper limit", serializer.RankInstancesQueryInput{
+					Instances: makeInstances(serializer.MaxInstances + 1),
+					StartTime: 1781366400,
+					EndTime:   1781452799,
+				}, true),
+				Entry("blank instances are not counted", serializer.RankInstancesQueryInput{
+					Instances: append(makeInstances(serializer.MaxInstances), "", "  "),
+					StartTime: 1781366400,
+					EndTime:   1781452799,
+				}, false),
+				Entry("only blank instances", serializer.RankInstancesQueryInput{
+					Instances: []string{"", "  "},
+					StartTime: 1781366400,
+					EndTime:   1781452799,
+				}, false),
 			)
 		})
 
@@ -367,14 +408,27 @@ var _ = Describe("BkMonitor Serializer", func() {
 				}
 				input.Normalize()
 				Expect(input.Limit).To(Equal(serializer.DefaultRankLimit))
+				Expect(input.RankBy).To(Equal("cpu_limit_usage"))
 				Expect(input.RankType).To(Equal(serializer.RankTypeTop))
 				Expect(input.Interval).To(Equal(serializer.DefaultInterval))
 				Expect(input.Method).To(Equal("sum"))
+				Expect(input.Instances).To(BeEmpty())
+			})
+
+			It("trims instances and drops blank ones", func() {
+				input := serializer.RankInstancesQueryInput{
+					Instances: []string{" pod-a ", "", "  ", "pod-b"},
+					StartTime: 1781366400,
+					EndTime:   1781452799,
+				}
+				input.Normalize()
+				Expect(input.Instances).To(Equal([]string{"pod-a", "pod-b"}))
 			})
 
 			It("keeps specified values", func() {
 				input := serializer.RankInstancesQueryInput{
 					Limit:     5,
+					RankBy:    "memory_usage",
 					RankType:  serializer.RankTypeBottom,
 					StartTime: 1781366400,
 					EndTime:   1781452799,
@@ -383,6 +437,7 @@ var _ = Describe("BkMonitor Serializer", func() {
 				}
 				input.Normalize()
 				Expect(input.Limit).To(Equal(5))
+				Expect(input.RankBy).To(Equal("memory_usage"))
 				Expect(input.RankType).To(Equal(serializer.RankTypeBottom))
 				Expect(input.Interval).To(Equal(int64(300)))
 				Expect(input.Method).To(Equal("max"))

@@ -21,7 +21,9 @@ package scope
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/samber/lo"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkiam/actions"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkiam/role"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/iam/types"
 )
@@ -35,7 +37,7 @@ var _ = Describe("BKMSRoleScopesGenerator", func() {
 	It("should render admin scopes covering workspace / app / env actions", func() {
 		g := BKMSRoleScopesGenerator{WorkspaceID: wsID, WorkspaceName: wsName, TplRoleCode: role.BuiltinRoleCode.Admin}
 		scopes := g.Generate()
-		Expect(scopes).To(HaveLen(5))
+		Expect(scopes).To(HaveLen(6))
 
 		// All scopes must be tagged with the configured BKMS system id.
 		for _, s := range scopes {
@@ -52,6 +54,13 @@ var _ = Describe("BKMSRoleScopesGenerator", func() {
 		Expect(scopes[0].Resources[0].Type).To(Equal(types.WorkspaceResourceType))
 		Expect(scopes[0].Resources[0].Paths[0][0].ID).To(Equal(wsID))
 		Expect(scopes[0].Resources[0].Paths[0][0].Name).To(Equal(wsName))
+
+		// Last scope: app-env actions bound to both app and env on the workspace node.
+		appEnv := scopes[len(scopes)-1]
+		Expect(appEnv.Resources).To(HaveLen(2))
+		Expect(appEnv.Resources[0].Type).To(Equal(types.AppResourceType))
+		Expect(appEnv.Resources[1].Type).To(Equal(types.EnvResourceType))
+		Expect(appEnv.Resources[1].Paths[0][0].ID).To(Equal(wsID))
 	})
 
 	It("should render developer scopes (no delete on workspace)", func() {
@@ -66,6 +75,24 @@ var _ = Describe("BKMSRoleScopesGenerator", func() {
 		// Developer should only have view on workspace (no edit / delete).
 		Expect(scopes[0].Actions).To(ConsistOf(types.Action{ID: "view_workspace"}))
 	})
+
+	DescribeTable("should grant app-env actions by role",
+		func(roleCode string, expected ...string) {
+			g := BKMSRoleScopesGenerator{WorkspaceID: wsID, WorkspaceName: wsName, TplRoleCode: roleCode}
+			scopes := g.Generate()
+			Expect(scopes).NotTo(BeEmpty())
+
+			granted := lo.Map(scopes[len(scopes)-1].Actions, func(a types.Action, _ int) string { return a.ID })
+			Expect(granted).To(ConsistOf(expected))
+		},
+		Entry("admin", role.BuiltinRoleCode.Admin,
+			actions.AppEnvAction.View, actions.AppEnvAction.Edit, actions.AppEnvAction.Deploy),
+		Entry("developer", role.BuiltinRoleCode.Developer,
+			actions.AppEnvAction.View, actions.AppEnvAction.Edit, actions.AppEnvAction.Deploy),
+		Entry("sre", role.BuiltinRoleCode.SRE,
+			actions.AppEnvAction.View, actions.AppEnvAction.Edit, actions.AppEnvAction.Deploy),
+		Entry("operator only views", role.BuiltinRoleCode.Operator, actions.AppEnvAction.View),
+	)
 
 	It("should render empty scopes for unknown role code (anonymous fallback)", func() {
 		g := BKMSRoleScopesGenerator{WorkspaceID: wsID, WorkspaceName: wsName, TplRoleCode: "unknown-role"}

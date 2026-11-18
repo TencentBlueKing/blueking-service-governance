@@ -158,7 +158,8 @@ var _ = Describe("Status.BatchPhase", func() {
 			firstBatchWorkload, batchrelease.BatchPhaseUpdating),
 		Entry("paused temporarily",
 			batchrelease.Status{
-				Phase: "Running", CurrentStepIndex: lo.ToPtr(int64(0)), CurrentStepPhase: "PausedTemporarily",
+				Phase: "Running", Paused: "temporary", CurrentStepIndex: lo.ToPtr(int64(0)),
+				CurrentStepPhase: "PausedTemporarily",
 			},
 			firstBatchWorkload, batchrelease.BatchPhaseTimedPaused),
 		Entry("temporary paused flag",
@@ -166,9 +167,28 @@ var _ = Describe("Status.BatchPhase", func() {
 			firstBatchWorkload, batchrelease.BatchPhaseTimedPaused),
 		Entry("paused permanently",
 			batchrelease.Status{
-				Phase: "Running", CurrentStepIndex: lo.ToPtr(int64(0)), CurrentStepPhase: "PausedPermanently",
+				Phase: "Running", Paused: "true", CurrentStepIndex: lo.ToPtr(int64(0)),
+				CurrentStepPhase: "PausedPermanently",
 			},
 			firstBatchWorkload, batchrelease.BatchPhaseManualPaused),
+		Entry("continued from a permanent pause before Kourse handles it",
+			batchrelease.Status{
+				Phase: "Running", Paused: "false", CurrentStepIndex: lo.ToPtr(int64(0)),
+				CurrentStepPhase: "PausedPermanently",
+			},
+			firstBatchWorkload, batchrelease.BatchPhaseUpdating),
+		Entry("continued from a timed pause before Kourse handles it",
+			batchrelease.Status{
+				Phase: "Running", Paused: "false", CurrentStepIndex: lo.ToPtr(int64(0)),
+				CurrentStepPhase: "PausedTemporarily",
+			},
+			firstBatchWorkload, batchrelease.BatchPhaseUpdating),
+		Entry("skipped the remaining batches before Kourse handles it",
+			batchrelease.Status{
+				Phase: "Running", Paused: "false", CurrentStepIndex: lo.ToPtr(int64(2)),
+				CurrentStepPhase: "PausedPermanently",
+			},
+			firstBatchWorkload, batchrelease.BatchPhaseUpdating),
 		Entry("paused by user while scaling",
 			batchrelease.Status{
 				Phase: "Running", Paused: "true", CurrentStepIndex: lo.ToPtr(int64(0)),

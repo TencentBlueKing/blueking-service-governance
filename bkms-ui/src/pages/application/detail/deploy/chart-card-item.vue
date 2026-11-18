@@ -338,13 +338,16 @@
       valueScale = result.scale;
       unitSuffix = result.suffix;
     }
-    /** 截断至两位小数（不四舍五入），不足补零。
-     *  用 toFixed(20) 获取完整小数表示避免精度丢失，再 split/slice 截断。 */
-    function truncFixed2(n: number): string {
-      const s = n.toFixed(20);
-      const dot = s.indexOf('.');
-      if (dot === -1) return `${s}.00`;
-      return `${s.slice(0, dot)}.${s.slice(dot + 1, dot + 3)}`;
+    const isCpuUsage = props.metricKey === 'cpu_usage';
+    const fractionDigits = isCpuUsage ? 5 : 2;
+    /** 截断至指定小数位，不足补零。 */
+    function truncFixed(value: number): string {
+      const decimal = isCpuUsage ? value.toString() : value.toFixed(20);
+      if (isCpuUsage && decimal.includes('e')) {
+        return value.toLocaleString('en-US', { minimumFractionDigits: fractionDigits, useGrouping: false });
+      }
+      const [integer, fraction = ''] = decimal.split('.');
+      return `${integer}.${fraction.slice(0, fractionDigits).padEnd(fractionDigits, '0')}`;
     }
     const rows: LegendRow[] = (chartLegend ?? [])
       .filter(item => seriesByName.has(item.name) || seriesByName.has(item.alias ?? ''))
@@ -356,7 +359,7 @@
           (!!seriesItem && (seriesItem.instance ?? '').startsWith('__CMP__'));
         const stat = seriesItem?.stat;
         const fmt = (v: number | undefined) =>
-          v != null ? truncFixed2(v * percentScale * valueScale) + unitSuffix : '';
+          v != null ? truncFixed(v * percentScale * valueScale) + unitSuffix : '';
         return {
           name: item.name,
           alias: item.alias ?? item.name,

@@ -31,3 +31,21 @@ export interface ExtendedEnv {
   name: string;
   type?: string;
 }
+
+export interface SaveVersionPreview {
+  content: string;
+  currentVersion: number;
+  fileName: string;
+  lang: string;
+  originalContent: string;
+}
+
+/**
+ * 保存确认弹窗的完整快照：预览内容 + 保存目标定位。
+ * envName 为空表示默认文件，仅按环境保存时使用。
+ */
+export interface SaveVersionSnapshot extends SaveVersionPreview {
+  appID: string;
+  envName?: string;
+  id: string;
+}

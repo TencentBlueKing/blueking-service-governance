@@ -1,0 +1,138 @@
+{
+  "system_id": "{{ .BKMSSystemID }}",
+  "enabled": true,
+  "operations": [
+    {
+      "operation": "upsert_action",
+      "data": {
+        "id": "view_app_in_env",
+        "name": "查看应用在环境中的数据",
+        "name_en": "view app in env",
+        "description": "查看应用在环境中的实例、日志、事件、配置与部署记录",
+        "description_en": "view instances, logs, events, configs and deployments of an app in an env",
+        "type": "view",
+        "related_resource_types": [
+          {
+            "system_id": "{{ .BKMSSystemID }}",
+            "id": "app",
+            "name_alias": "",
+            "name_alias_en": "",
+            "selection_mode": "instance",
+            "related_instance_selections": [
+              {
+                "system_id": "{{ .BKMSSystemID }}",
+                "id": "app_list"
+              }
+            ]
+          },
+          {
+            "system_id": "{{ .BKMSSystemID }}",
+            "id": "env",
+            "name_alias": "",
+            "name_alias_en": "",
+            "selection_mode": "instance",
+            "related_instance_selections": [
+              {
+                "system_id": "{{ .BKMSSystemID }}",
+                "id": "env_list"
+              }
+            ]
+          }
+        ],
+        "related_actions": [
+          "view_workspace"
+        ],
+        "version": 1
+      }
+    },
+    {
+      "operation": "upsert_action",
+      "data": {
+        "id": "edit_app_in_env",
+        "name": "编辑应用在环境中的配置",
+        "name_en": "edit app in env",
+        "description": "修改应用在环境中的配置，不触发发布",
+        "description_en": "edit configs of an app in an env without deploying",
+        "type": "edit",
+        "related_resource_types": [
+          {
+            "system_id": "{{ .BKMSSystemID }}",
+            "id": "app",
+            "name_alias": "",
+            "name_alias_en": "",
+            "selection_mode": "instance",
+            "related_instance_selections": [
+              {
+                "system_id": "{{ .BKMSSystemID }}",
+                "id": "app_list"
+              }
+            ]
+          },
+          {
+            "system_id": "{{ .BKMSSystemID }}",
+            "id": "env",
+            "name_alias": "",
+            "name_alias_en": "",
+            "selection_mode": "instance",
+            "related_instance_selections": [
+              {
+                "system_id": "{{ .BKMSSystemID }}",
+                "id": "env_list"
+              }
+            ]
+          }
+        ],
+        "related_actions": [
+          "view_workspace",
+          "view_app_in_env"
+        ],
+        "version": 1
+      }
+    },
+    {
+      "operation": "upsert_action",
+      "data": {
+        "id": "deploy_app_to_env",
+        "name": "部署应用到环境",
+        "name_en": "deploy app to env",
+        "description": "部署、回滚、下架应用，或在环境中操作应用实例",
+        "description_en": "deploy, roll back or undeploy an app, or operate its instances in an env",
+        "type": "manage",
+        "related_resource_types": [
+          {
+            "system_id": "{{ .BKMSSystemID }}",
+            "id": "app",
+            "name_alias": "",
+            "name_alias_en": "",
+            "selection_mode": "instance",
+            "related_instance_selections": [
+              {
+                "system_id": "{{ .BKMSSystemID }}",
+                "id": "app_list"
+              }
+            ]
+          },
+          {
+            "system_id": "{{ .BKMSSystemID }}",
+            "id": "env",
+            "name_alias": "",
+            "name_alias_en": "",
+            "selection_mode": "instance",
+            "related_instance_selections": [
+              {
+                "system_id": "{{ .BKMSSystemID }}",
+                "id": "env_list"
+              }
+            ]
+          }
+        ],
+        "related_actions": [
+          "view_workspace",
+          "view_app_in_env",
+          "edit_app_in_env"
+        ],
+        "version": 1
+      }
+    }
+  ]
+}

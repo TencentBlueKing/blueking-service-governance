@@ -49,7 +49,6 @@ var _ = Describe("MetadataStore", func() {
 			It("should create successfully", func() {
 				meta := &model.Metadata{
 					AppID:        testAppID,
-					Enable:       true,
 					MountPath:    "/data/bscp",
 					WorkloadKind: "Deployment",
 					WorkloadName: "test-workload",
@@ -62,7 +61,6 @@ var _ = Describe("MetadataStore", func() {
 				// 验证写入
 				stored, err := store.Get(ctx, model.ByApp(testAppID))
 				Expect(err).NotTo(HaveOccurred())
-				Expect(stored.Enable).To(BeTrue())
 				Expect(stored.MountPath).To(Equal("/data/bscp"))
 				Expect(stored.WorkloadKind).To(Equal("Deployment"))
 				Expect(stored.WorkloadName).To(Equal("test-workload"))

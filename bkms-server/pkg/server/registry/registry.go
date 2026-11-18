@@ -31,11 +31,13 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	releasestrategyhooks "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/releasestrategy/hooks"
 	polarisenvvars "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris/envvars"
+	cfgswitchmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/cfgswitch/model"
 	depenvvars "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/envvars"
 	depinit "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/model/initdata"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
 	alertstrategyhooks "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/bkmonitor/alert/strategy/hooks"
 	appdefaultshooks "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appdefaults/hooks"
+	frameworkcfgtmplhooks "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/frameworkcfgtmpl/hooks"
 	envvarhooks "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars/hooks"
 )
 
@@ -113,7 +115,9 @@ func (r *Registry) registerStoreHooks() {
 	appcfghooks.RegisterDeleteHooks(r.DB)
 	alertstrategyhooks.RegisterUpdateHooks(r.DB)
 	appdefaultshooks.RegisterPreDeleteHooks(r.DB)
+	frameworkcfgtmplhooks.RegisterPreDeleteHooks(r.DB)
 	releasestrategyhooks.RegisterPreDeleteHooks(r.DB)
+	cfgswitchmodel.RegisterPreDeleteHooks(r.DB)
 }
 
 // initStoreData 初始化 Store 中的基础数据，例如依赖服务的数据。

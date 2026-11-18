@@ -21,6 +21,8 @@ package bscpcfg
 
 import (
 	"github.com/gin-gonic/gin"
+
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
 )
 
 // Handler 包含应用配置管理路由所需的视图方法。
@@ -46,15 +48,17 @@ type Handler interface {
 
 // Register 注册应用配置管理的 Gin v2 路由。
 func Register(rg *gin.RouterGroup, h Handler) {
+	g := rg.Group("/apps/:appID/bscpcfg", ginutils.RequireBSCP())
+
 	// Metadata 操作
-	rg.POST("/apps/:appID/bscpcfg/metadata", h.InitMetadata)
-	rg.PATCH("/apps/:appID/bscpcfg/metadata", h.PatchMetadata)
-	rg.GET("/apps/:appID/bscpcfg/metadata", h.GetMetadata)
-	rg.DELETE("/apps/:appID/bscpcfg/metadata", h.DeleteMetadata)
+	g.POST("/metadata", h.InitMetadata)
+	g.PATCH("/metadata", h.PatchMetadata)
+	g.GET("/metadata", h.GetMetadata)
+	g.DELETE("/metadata", h.DeleteMetadata)
 
 	// EnvBinding 操作
-	rg.GET("/apps/:appID/bscpcfg/envs", h.ListEnvBindings)
-	rg.POST("/apps/:appID/bscpcfg/envs/:envName/binding", h.CreateEnvBinding)
-	rg.DELETE("/apps/:appID/bscpcfg/envs/:envName/binding", h.DeleteEnvBinding)
-	rg.GET("/apps/:appID/bscpcfg/envs/:envName/binding", h.GetEnvBinding)
+	g.GET("/envs", h.ListEnvBindings)
+	g.POST("/envs/:envName/binding", h.CreateEnvBinding)
+	g.DELETE("/envs/:envName/binding", h.DeleteEnvBinding)
+	g.GET("/envs/:envName/binding", h.GetEnvBinding)
 }

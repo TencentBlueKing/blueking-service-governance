@@ -131,7 +131,7 @@
           width="150"
         >
           <template #default="{ row }">
-            {{ envNameMapping?.[row?.group?.envName] || '--' }}
+            {{ getOperationEnvDisplayName(row?.group) }}
           </template>
         </TableColumn>
         <TableColumn
@@ -223,7 +223,7 @@
   import { convertToYaml, formatTimeByTimezone, mapKeys } from '~/common/util';
   import MsEditor from '~/components/monaco-editor/ms-editor.vue';
   import Layout from '~/components/skeleton/skeleton-layout';
-  import useEnvManager from '~/composables/use-env-manager';
+  import { getOperationEnvDisplayName } from '~/composables/use-operation-audit';
   import useSearchFilter from '~/composables/use-search-filter';
   import { useSearchPlaceholder } from '~/composables/use-search-placeholder';
   import useTableEmpty from '~/composables/use-table-empty';
@@ -242,7 +242,6 @@
   // 引入国际化
   const { t } = useI18n();
   const { createPlaceholder } = useSearchPlaceholder();
-  const { envNameMapping, generateEnvNameMapping, handleGetEnvList } = useEnvManager();
   const spaceStore = useSpaceStore();
   const { maxHeight } = useDynamicsHeight(96, ['.header-right', '.container-header']);
 
@@ -304,12 +303,6 @@
   const { setTypeToError, clearErrorType, curExceptionType } = useTableEmpty({
     filters: [searchValue, dateRange],
   });
-
-  /** 生成环境名称映射关系 */
-  async function GenerateEnvNameMapping() {
-    await handleGetEnvList();
-    generateEnvNameMapping();
-  }
 
   function getResultDisplayName(result: string): string {
     const displayName = operationFilters.value?.operationResults?.find(item => item.value === result)?.displayName;
@@ -383,7 +376,6 @@
   onMounted(() => {
     handleListRecord();
     initFilterOptions();
-    GenerateEnvNameMapping();
   });
 </script>
 

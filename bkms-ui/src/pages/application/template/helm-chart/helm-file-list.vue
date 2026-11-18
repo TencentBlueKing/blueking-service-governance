@@ -183,6 +183,7 @@
   import FileFormSideslider from './file-form-sideslider.vue';
 
   import type { CreateDefInput, DefDetailObj } from '~/@types/v1/app-config-file-defs';
+  import type { Config } from '~/api/interceptors';
 
   interface FileDetailChangeEvent {
     fileDetail: DefDetailObj | null;
@@ -269,7 +270,7 @@
   }
 
   // 获取文件详情
-  async function fetchFileDetail(defID: string) {
+  async function fetchFileDetail(defID: string, { preserveContent = false } = {}) {
     const fileInfo = fileList.value.find(item => item.id === defID);
     if (!fileInfo) return;
     try {
@@ -278,8 +279,9 @@
           appID: appDetailStore.appID,
           id: defID,
         },
-        { needRes: true },
+        { needRes: true, interceptorErr: !preserveContent },
       );
+      if (defID !== activeDefID.value) return;
       const fileDetail = result.item || null;
       if (fileDetail?.contentSourceType === 'bscp' && fileDetail.bscpConfig) {
         await loadConfigContent(fileDetail);
@@ -292,23 +294,25 @@
         fileInfo: fileDetail || fileInfo,
       });
       return fileDetail;
-    } catch {
+    } catch (error) {
+      if (defID !== activeDefID.value) return;
+      if (preserveContent) throw error;
       emits('file-detail-change', {
         fileDetail: null,
         fileInfo,
       });
     } finally {
-      emits('loading-change', false);
+      if (defID === activeDefID.value && !preserveContent) emits('loading-change', false);
     }
   }
 
   // 获取文件列表
-  async function fetchFileList() {
+  async function fetchFileList(config?: Config) {
     try {
       loading.value = true;
       const ret = await AppConfigFileDefsService.listDefaultFilesWithDef(
         { appID: appDetailStore.appID },
-        { needRes: true },
+        { needRes: true, ...config },
       );
       fileList.value = (ret.items || []).filter(file => file.configKind === 'framework' && file.id && file.fileId);
       treeFileList.value = convertToTreeStructure(fileList.value);
@@ -538,8 +542,8 @@
   );
 
   /** 保存或回滚后刷新当前详情；仅刷新列表时保留编辑中的内容。 */
-  function refetchCurrentFile() {
-    if (activeDefID.value) return fetchFileDetail(activeDefID.value);
+  function refetchCurrentFile(options?: { preserveContent?: boolean }) {
+    if (activeDefID.value) return fetchFileDetail(activeDefID.value, options);
   }
 
   defineExpose({

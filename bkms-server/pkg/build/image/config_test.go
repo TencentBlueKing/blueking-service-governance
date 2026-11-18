@@ -69,3 +69,39 @@ var _ = Describe("RepositoryConfig image build mode", func() {
 		Expect(cfg.EffectiveImageBuildMode()).To(Equal(ImageBuildModePlatform))
 	})
 })
+
+var _ = Describe("RepositoryConfig.ValidateDockerBuildArgs", func() {
+	It("accepts nil config and empty args", func() {
+		var nilCfg *RepositoryConfig
+		Expect(nilCfg.ValidateDockerBuildArgs()).To(Succeed())
+		Expect((&RepositoryConfig{}).ValidateDockerBuildArgs()).To(Succeed())
+	})
+
+	It("accepts values with spaces, quotes and dollar signs", func() {
+		cfg := &RepositoryConfig{DockerBuildArgs: map[string]string{
+			"GREETING": "it's hello world",
+			"PRICE":    "$5",
+			"EMPTY":    "",
+		}}
+
+		Expect(cfg.ValidateDockerBuildArgs()).To(Succeed())
+	})
+
+	DescribeTable("rejects args that break line-based passing",
+		func(args map[string]string, msg string) {
+			err := (&RepositoryConfig{DockerBuildArgs: args}).ValidateDockerBuildArgs()
+
+			Expect(err).To(MatchError(ContainSubstring(msg)))
+		},
+		Entry("empty key", map[string]string{"": "1"}, `key ""`),
+		Entry("key with equal sign", map[string]string{"A=B": "1"}, `key "A=B"`),
+		Entry("key with newline", map[string]string{"A\nB": "1"}, `key "A\nB"`),
+		// 值里独占一行的结束标记会提前闭合脚本中的 heredoc
+		Entry(
+			"value closing the heredoc",
+			map[string]string{"A": "1\nBKMS_BUILD_ARGS_EOF\ntouch /tmp/pwned"},
+			"value of A must not contain line breaks",
+		),
+		Entry("value with carriage return", map[string]string{"A": "1\r"}, "value of A must not contain line breaks"),
+	)
+})

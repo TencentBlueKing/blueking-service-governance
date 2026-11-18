@@ -28,14 +28,21 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 )
 
-// Required resolves the tenant header for every authenticated business request.
+// Required resolves the tenant for every authenticated business request.
 //
 // 单租模式下仅接受空 tenant 或 default，并统一写回 default 到上下文；
-// 多租模式下要求显式传入 tenant header，并在写入上下文前校验用户是否属于该租户。
+// 多租模式下未传 tenant header 时使用登录态中的租户，登录态也没有租户（如 access token 调用）时必须显式传入，
+// 并在写入上下文前校验用户是否属于该租户。
 func Required(enableMultiTenantMode bool, verifier Verifier) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// 先按模式规范化 header：单租只接受空/default，多租必须显式传入。
-		tenantID, err := ValidateTenantMode(c.Request.Header.Get(HeaderTenantID), enableMultiTenantMode)
+		requested := c.Request.Header.Get(HeaderTenantID)
+		if enableMultiTenantMode && requested == "" {
+			if user, userErr := auth.GetUser(c.Request.Context()); userErr == nil {
+				requested = user.GetTenantID()
+			}
+		}
+		// 先按模式规范化：单租只接受空/default，多租必须能确定租户。
+		tenantID, err := ValidateTenantMode(requested, enableMultiTenantMode)
 		if err != nil {
 			abortWithStatus(c, tenantStatusCode(err), err.Error())
 			return

@@ -70,5 +70,43 @@
         ]
       }
     ]
+  },
+  {
+    "system": "{{ .BKMSSystemID }}",
+    "actions": [
+      {
+        "id": "view_app_in_env"
+      }
+    ],
+    "resources": [
+      {
+        "system": "{{ .BKMSSystemID }}",
+        "type": "app",
+        "paths": [
+          [
+            {
+              "system": "{{ .BKMSSystemID }}",
+              "type": "workspace",
+              "id": "{{ .WorkspaceID }}",
+              "name": "{{ .WorkspaceName }}"
+            }
+          ]
+        ]
+      },
+      {
+        "system": "{{ .BKMSSystemID }}",
+        "type": "env",
+        "paths": [
+          [
+            {
+              "system": "{{ .BKMSSystemID }}",
+              "type": "workspace",
+              "id": "{{ .WorkspaceID }}",
+              "name": "{{ .WorkspaceName }}"
+            }
+          ]
+        ]
+      }
+    ]
   }
 ]

@@ -88,6 +88,24 @@ export interface RevokeWorkspaceAdminRequest {
   workspaceID: string;
 }
 
+export interface ListPlatCfgSwitchesRequest {
+  /**
+   * 工作空间 ID
+   */
+  workspaceID: string;
+}
+
+export type UpdatePlatCfgSwitchRequest = UpdatePlatCfgSwitchInput & {
+  /**
+   * 工作空间 ID
+   */
+  workspaceID: string;
+  /**
+   * 开关标识：bscp / rainbowTConf
+   */
+  key: string;
+};
+
 export interface GetPlatWorkspaceImageRegistryRequest {
   /**
    * 工作空间 ID
@@ -146,6 +164,21 @@ export interface GrantAdminInput {
   isTemporary: boolean;
 }
 
+export interface PlatCfgSwitchListResponse {
+  data?: PlatCfgSwitchOutput[];
+}
+
+export interface UpdatePlatCfgSwitchInput {
+  /**
+   * 是否开启；使用指针以区分字段缺失与显式传 false
+   */
+  enabled: boolean;
+}
+
+export interface PlatCfgSwitchResponse {
+  data?: PlatCfgSwitchOutput;
+}
+
 export interface ImageRegistryResponse {
   data?: ImageRegistryOutput;
 }
@@ -186,6 +219,29 @@ export interface ImageRegistryOutput {
    * 镜像账号，配置缺失时为空
    */
   username?: string;
+}
+
+export interface PlatCfgSwitchOutput {
+  /**
+   * 是否开启
+   */
+  enabled?: boolean;
+  /**
+   * 开关标识：bscp / rainbowTConf
+   */
+  key?: string;
+  /**
+   * 展示名称
+   */
+  name?: string;
+  /**
+   * 最近修改时间，从未设置过时为 null
+   */
+  updatedAt?: string;
+  /**
+   * 最近修改人，从未设置过时为空
+   */
+  updater?: string;
 }
 
 export interface RoleStatusOutput {

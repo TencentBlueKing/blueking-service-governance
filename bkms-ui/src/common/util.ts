@@ -277,7 +277,13 @@ export interface IMonacoEditorErrorMarkerItem {
   startColumn: number;
   startLineNumber: number;
 }
-export const validateYAML = (yamlString: string): IMonacoEditorErrorMarkerItem[] => {
+
+/**
+ * 校验 YAML：默认既校验语法，又要求每个文档的根节点是 key-value 结构（values.yaml 类配置的要求）。
+ * 普通配置文件只关心能否解析，调用方应把 requireMapRoot 传 false，
+ * 否则根节点为字符串、数字等合法标量的 YAML 会被误判为错误。
+ */
+export const validateYAML = (yamlString: string, requireMapRoot = true): IMonacoEditorErrorMarkerItem[] => {
   const markers: IMonacoEditorErrorMarkerItem[] = [];
   try {
     const docs: unknown[] = [];
@@ -285,7 +291,7 @@ export const validateYAML = (yamlString: string): IMonacoEditorErrorMarkerItem[]
     // 校验每个 YAML 文档解析后是否为合法的 key-value 结构（object/map）
     // 如果解析结果是纯字符串、数字等非对象类型，说明格式不符合 values.yaml 的要求
     for (const doc of docs) {
-      if (doc !== null && doc !== undefined && typeof doc !== 'object') {
+      if (requireMapRoot && doc !== null && doc !== undefined && typeof doc !== 'object') {
         markers.push({
           severity: monaco.MarkerSeverity.Error,
           message: `cannot unmarshal !!${typeof doc} \`${String(doc).substring(0, 50)}\` into map[string]interface {}`,

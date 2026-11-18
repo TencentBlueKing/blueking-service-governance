@@ -20,6 +20,8 @@ package bkintegrations
 
 import (
 	"github.com/gin-gonic/gin"
+
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
 )
 
 // Handler contains views required by external platform integration Gin routes.
@@ -89,7 +91,7 @@ type Handler interface {
 	GetEnvApm(c *gin.Context)
 	// GetInstanceTimeSeries 查询实例监控指标时序数据
 	GetInstanceTimeSeries(c *gin.Context)
-	// RankInstances 按平均 CPU 使用量查询环境实例的 Top / Bottom N
+	// RankInstances 按指定指标的平均值查询环境实例的 Top / Bottom N
 	RankInstances(c *gin.Context)
 	// ListDashboardDirectoryTree 获取蓝鲸监控仪表盘数据
 	ListDashboardDirectoryTree(c *gin.Context)
@@ -111,10 +113,11 @@ type Handler interface {
 // Register registers Gin external platform integration routes.
 func Register(rg *gin.RouterGroup, h Handler) {
 	// --- BSCP 相关路由 ---
-	rg.GET("/bscp/bizs", h.ListBSCPBizs)
-	rg.GET("/bscp/bizs/:bizID/services", h.ListBSCPServices)
-	rg.GET("/bscp/bizs/:bizID/services/:serviceID/configs", h.ListBSCPConfigs)
-	rg.GET("/bscp/bizs/:bizID/services/:serviceID/configs/:configID", h.GetBSCPConfig)
+	bscpGroup := rg.Group("/bscp", ginutils.RequireBSCP())
+	bscpGroup.GET("/bizs", h.ListBSCPBizs)
+	bscpGroup.GET("/bizs/:bizID/services", h.ListBSCPServices)
+	bscpGroup.GET("/bizs/:bizID/services/:serviceID/configs", h.ListBSCPConfigs)
+	bscpGroup.GET("/bizs/:bizID/services/:serviceID/configs/:configID", h.GetBSCPConfig)
 
 	// --- BKCC 相关路由 ---
 	rg.GET("/bkcc/businesses/authorized", h.ListBKCCAuthorizedBusinesses)
@@ -145,7 +148,7 @@ func Register(rg *gin.RouterGroup, h Handler) {
 	rg.PUT("/envs/:envID/bkmonitor/apms/:apmID", h.BindApmToEnv)
 	rg.GET("/envs/:envID/bkmonitor/apms", h.GetEnvApm)
 	rg.POST("/apps/:appID/envs/:envName/bkmonitor/instance-time-series", h.GetInstanceTimeSeries)
-	rg.GET("/apps/:appID/envs/:envName/bkmonitor/instance-ranks", h.RankInstances)
+	rg.POST("/apps/:appID/envs/:envName/bkmonitor/instance-ranks", h.RankInstances)
 	rg.GET("/workspaces/:workspaceID/bkmonitor/dashboards", h.ListDashboardDirectoryTree)
 
 	// --- BkHCM 相关路由 ---

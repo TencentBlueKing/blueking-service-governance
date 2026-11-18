@@ -54,6 +54,12 @@ const MEMORY_TO_MIB: Record<string, number> = {
   K: 1000 / 1024 ** 2,
 };
 
+/** 以十进制核数回显（200m → 0.2）。无法解析时原样返回。 */
+export function formatCpuCores(value: string) {
+  const cores = parseCpuCores(value);
+  return cores === null ? value : String(cores);
+}
+
 /** 内存值转 MiB，用于 Requests / Limits 等量比较。无法解析时返回 null。 */
 export function parseMemoryToMiB(value?: string): null | number {
   const normalized = value?.trim();

@@ -38,10 +38,10 @@ import (
 )
 
 const (
-	// 默认流水线构建镜像 Code
-	defaultPipelineBuilderImageCode = "tlinux3_ci"
+	// 默认流水线构建镜像 Code。构建机是 DOCKER 类型，镜像来自蓝盾镜像商店
+	defaultPipelineBuilderImageCode = "bkci"
 	// 默认流水线构建镜像版本
-	defaultPipelineBuilderImageVersion = "2.*"
+	defaultPipelineBuilderImageVersion = "1.*"
 
 	pipelineTmplCtxKeyImageCode    = "builderImageCode"
 	pipelineTmplCtxKeyImageVersion = "builderImageVersion"

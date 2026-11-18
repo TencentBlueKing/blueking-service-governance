@@ -1,0 +1,8 @@
+[
+  {
+    "dropIndexes": "rainbow_tconf_entries",
+    "index": [
+      "idx_appID"
+    ]
+  }
+]

@@ -28,6 +28,7 @@ import (
 	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/pkg/errors"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
@@ -100,6 +101,42 @@ var _ = Describe("BCS API Client", func() {
 		})
 	})
 
+	It("create project", func() {
+		PatchConvey("test", GinkgoT(), func() {
+			projectID := uuid.New().String()
+			projectCode := stringx.Random(6)
+			projectName := stringx.Random(6)
+			bizID := stringx.Random(6)
+
+			resultJson := fmt.Sprintf(
+				`{"data": {"projectID": "%s","projectCode": "%s","name": "%s","kind": "k8s","businessID": "%s","isOffline": false}}`,
+				projectID,
+				projectCode,
+				projectName,
+				bizID,
+			)
+			result := make(map[string]any)
+			Expect(json.Unmarshal([]byte(resultJson), &result)).To(BeNil())
+			Mock((*ApiClient).handleOperation).Return(result, nil).Build()
+
+			project, err := cli.CreateProject(ctx, CreateProjectInput{
+				Name:        projectName,
+				ProjectCode: projectCode,
+				Kind:        "k8s",
+				BusinessID:  bizID,
+			})
+			Expect(err).To(BeNil())
+			Expect(*project).To(Equal(Project{
+				ID:        projectID,
+				Code:      projectCode,
+				Name:      projectName,
+				Kind:      "k8s",
+				BizID:     bizID,
+				IsOffline: false,
+			}))
+		})
+	})
+
 	It("get project", func() {
 		PatchConvey("test", GinkgoT(), func() {
 			projectID := uuid.New().String()
@@ -131,6 +168,57 @@ var _ = Describe("BCS API Client", func() {
 				Description: Description,
 				IsOffline:   false,
 			}))
+		})
+	})
+
+	It("get project does not treat http-level errors as project not found", func() {
+		PatchConvey("test", GinkgoT(), func() {
+			Mock((*ApiClient).handleOperation).
+				Return(nil, errors.New("call bcs api get_project failed, http code: 404, err: page not found")).
+				Build()
+
+			_, err := cli.GetProject(ctx, "missing")
+			Expect(err).To(HaveOccurred())
+			Expect(errors.Is(err, ErrProjectNotFound)).To(BeFalse())
+		})
+	})
+
+	It("get project does not treat other business codes as project not found", func() {
+		PatchConvey("test", GinkgoT(), func() {
+			Mock((*ApiClient).handleOperation).Return(nil, &apiError{
+				Code:    40403,
+				Message: "项目不存在或无权限",
+			}).Build()
+
+			_, err := cli.GetProject(ctx, "missing")
+			Expect(err).To(HaveOccurred())
+			Expect(errors.Is(err, ErrProjectNotFound)).To(BeFalse())
+		})
+	})
+
+	DescribeTable("get project maps business not found error to project not found",
+		func(code int, message string) {
+			PatchConvey("test", GinkgoT(), func() {
+				Mock((*ApiClient).handleOperation).Return(nil, &apiError{
+					Code:    code,
+					Message: message,
+				}).Build()
+
+				_, err := cli.GetProject(ctx, "missing")
+				Expect(errors.Is(err, ErrProjectNotFound)).To(BeTrue())
+			})
+		},
+		Entry("returned by bcs-project-manager", 40404, "项目不存在"),
+		Entry("forwarded by bcs-api-gateway", 1405516, "project is not exists"),
+	)
+
+	It("get project returns error when data is empty", func() {
+		PatchConvey("test", GinkgoT(), func() {
+			Mock((*ApiClient).handleOperation).Return(map[string]any{}, nil).Build()
+
+			_, err := cli.GetProject(ctx, "missing")
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("empty"))
 		})
 	})
 

@@ -214,6 +214,17 @@ svcConf:
     enableBkLoginUserinfoAuth: false
     # 用 bk-user 校验用户所属租户/状态
     enableBkUserTenantVerify: false
+    # 制品库为独立部署：不接入权限中心，接口使用制品库账号 Basic 认证，制品库成员需在制品库侧自行管理
+    enableIndependentBkRepo: false
+    # 关闭 BSCP 对接，未部署 BSCP 的环境设为 true
+    # 关闭期间创建的工作空间没有 BSCP 绑定，重新启用后需逐个执行 bind-bscp-project 命令补绑
+    disableBSCP: false
+    # 是否让 BCS 项目与蓝盾项目解耦。
+    # true：蓝盾始终新建；新建容器则创建 BCS 项目，绑定已有容器则绑定已有 BCS 项目
+    #     （绑定已有项目时只会拉取 BCS 授权的项目）。
+    # false：新建/绑定都按蓝盾项目处理，BCS ID/Code 复用蓝盾项目
+    #     （绑定已有项目时拉取 BCS 和蓝盾授权项目的交集）。
+    enableIndependentBCSProject: false
   # 蓝鲸 API 环境配置
   bkApiStages:
     # BSCP
@@ -261,13 +272,14 @@ svcConf:
     pipelineTmpl:
       baseDir: /app/assets/pipeline_templates
       # 流水线模板使用的构建机镜像标识，为空时由 bkci 模板加载逻辑决定默认值
-      builderImageCode: "tlinux3_ci"
+      builderImageCode: "bkci"
       # 流水线模板使用的构建机镜像版本，为空时由 bkci 模板加载逻辑决定默认值
-      builderImageVersion: "2.*"
+      builderImageVersion: "1.*"
   # 蓝盾制品库配置，用于项目 & 仓库初始化
   bkrepo:
     baseUrl: https://bkrepo.example.com
-    # 管理账号配置，需由制品库管理员提供
+    # 管理账号配置，需由制品库管理员提供：默认为平台账号（AccessKey / SecretKey），
+    # 开启 featureIntegrations.enableIndependentBkRepo 时为制品库管理员的用户名 / 密码
     username: bkms
     password: <masked>
     # 仓库初始化配置

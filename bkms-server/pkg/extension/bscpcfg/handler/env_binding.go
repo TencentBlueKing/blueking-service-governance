@@ -58,7 +58,7 @@ func (h *Handler) CreateEnvBinding(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	app, env, err := perm.ValidateAppEnvByName(ctx, h.registry, uri.AppID, uri.EnvName, perm.TypeEdit)
+	app, env, err := h.validateAppEnv(ctx, uri.AppID, uri.EnvName, perm.TypeEdit)
 	if err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return
@@ -123,7 +123,7 @@ func (h *Handler) DeleteEnvBinding(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	app, _, err := perm.ValidateAppEnvByName(ctx, h.registry, uri.AppID, uri.EnvName, perm.TypeEdit)
+	app, _, err := h.validateAppEnv(ctx, uri.AppID, uri.EnvName, perm.TypeEdit)
 	if err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return
@@ -171,7 +171,7 @@ func (h *Handler) GetEnvBinding(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	app, _, err := perm.ValidateAppEnvByName(ctx, h.registry, uri.AppID, uri.EnvName, perm.TypeView)
+	app, _, err := h.validateAppEnv(ctx, uri.AppID, uri.EnvName, perm.TypeView)
 	if err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return
@@ -224,7 +224,7 @@ func (h *Handler) ListEnvBindings(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	app, err := perm.ValidateAppByID(ctx, h.registry, uri.AppID, perm.TypeView)
+	app, err := h.validateApp(ctx, uri.AppID, perm.TypeView)
 	if err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return

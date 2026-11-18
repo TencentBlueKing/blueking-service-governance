@@ -30,12 +30,12 @@
         <Button
           v-bk-tooltips="{
             content: isBscp ? $t('来源于 BSCP 的文件仅能查看，不能编辑') : $t('校验未通过'),
-            disabled: !isSaveDisabled,
+            disabled: !isBscp && isValidate,
             placement: 'left',
           }"
           :disabled="isSaveDisabled"
           theme="primary"
-          @click="showSaveVersionDialog = true"
+          @click="handleBeforeSave"
           >{{ $t('保存') }}</Button
         >
       </div>
@@ -46,7 +46,7 @@
   <SaveVersionConfirmDialog
     ref="saveVersionDialogRef"
     v-model:is-show="showSaveVersionDialog"
-    :next-version="nextVersion"
+    :preview="savePreview"
     @confirm="handleSaveVersionConfirm"
   />
 </template>
@@ -63,6 +63,7 @@
   import { useSpaceStore } from '~/stores/space';
 
   import type { DefDetailObj } from '~/@types/v1/app-config-file-defs';
+  import type { SaveVersionSnapshot } from '~/pages/application/detail/app-config/components/types';
 
   const { t } = useI18n();
   const spaceStore = useSpaceStore();
@@ -73,41 +74,35 @@
   const curFileInfo = ref<DefDetailObj | null>(null);
 
   // 保存版本确认弹窗
-  const showSaveVersionDialog = ref(false);
+  const savePreview = ref<null | SaveVersionSnapshot>(null);
+  const showSaveVersionDialog = computed({
+    get: () => savePreview.value !== null,
+    set: visible => {
+      if (!visible) savePreview.value = null;
+    },
+  });
   const saveVersionDialogRef = ref<InstanceType<typeof SaveVersionConfirmDialog> | null>(null);
+
+  function handleBeforeSave() {
+    const preview = editorRef.value?.getSavePreview();
+    if (preview && appDetailStore.appID) {
+      savePreview.value = { ...preview, appID: appDetailStore.appID };
+    }
+  }
 
   function handleCurFileInfoChange(fileInfo: DefDetailObj | null) {
     curFileInfo.value = fileInfo;
   }
 
-  /** 下一版本号：当前文件的 currentVersion + 1 */
-  const nextVersion = computed(() => {
-    return Number(curFileInfo.value?.currentVersion || 0) + 1;
-  });
-
-  async function handleSave(description: string = '') {
-    const value = editorRef.value?.getValue() || '';
-    if (!curFileInfo.value?.id) return;
-    await AppConfigFileDefsService.updateAppConfigFileDefContent(
-      {
-        appID: appDetailStore.appID,
-        id: curFileInfo.value.id,
-        content: value,
-        currentVersion: curFileInfo.value.currentVersion ?? 0,
-        description,
-      },
-      { needRes: true, interceptorErr: false },
-    );
-    editorRef.value?.markAsSaved();
-    await editorRef.value?.refreshFileList();
-    Message({ theme: 'success', message: t('文件内容更新成功') });
-  }
-
   /** 保存版本确认回调 */
   async function handleSaveVersionConfirm(description: string) {
+    if (!savePreview.value) return;
+    const { appID, content, currentVersion, id } = savePreview.value;
     try {
-      await handleSave(description);
-      showSaveVersionDialog.value = false;
+      await AppConfigFileDefsService.updateAppConfigFileDefContent(
+        { appID, content, currentVersion, description, id },
+        { needRes: true, interceptorErr: false },
+      );
     } catch (err) {
       saveVersionDialogRef.value?.stopLoading();
       if (hasErrorCode(err, 'APP_CONFIG_FILE_VERSION_CONFLICT')) {
@@ -115,7 +110,19 @@
           theme: 'error',
           message: t('当前配置已被他人更新。为避免数据被覆盖，请刷新页面获取最新版本后重新编辑。'),
         });
+      } else {
+        Message({ theme: 'error', message: t('保存失败，请稍后重试') });
       }
+      return;
+    }
+
+    editorRef.value?.markAsSaved(content);
+    showSaveVersionDialog.value = false;
+    try {
+      await editorRef.value?.refreshFileList({ afterSave: true });
+      Message({ theme: 'success', message: t('文件内容更新成功') });
+    } catch {
+      Message({ theme: 'warning', message: t('配置已保存，获取最新配置失败，请刷新页面重试') });
     }
   }
 
@@ -131,6 +138,6 @@
   });
 
   const isSaveDisabled = computed(() => {
-    return !isValidate.value || isBscp.value;
+    return !editorRef.value?.isSaveReady || !isValidate.value;
   });
 </script>

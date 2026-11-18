@@ -1,0 +1,8 @@
+[
+  {
+    "dropIndexes": "workspace_cfg_switches",
+    "index": [
+      "idx_workspaceID_key"
+    ]
+  }
+]

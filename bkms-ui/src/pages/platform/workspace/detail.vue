@@ -19,6 +19,7 @@
 <template>
   <section class="min-h-full bg-[#F5F7FA]">
     <MsHeader
+      class="!shadow-none"
       :title="t('空间详情')"
       :trigger-back="handleBack"
     >
@@ -26,7 +27,15 @@
       <span class="text-[16px] leading-[24px] text-[#979ba5]">{{ workspaceTitle }}</span>
     </MsHeader>
 
-    <div class="p-[24px]">
+    <TabHeader
+      v-model:active-tab="activeTab"
+      :tabs="tabs"
+    />
+
+    <div
+      v-show="activeTab === 'overview'"
+      class="p-[24px]"
+    >
       <!-- 加载失败 -->
       <Exception
         v-if="isError"
@@ -277,6 +286,13 @@
       </Skeleton>
     </div>
 
+    <FeatureManagement
+      v-if="hasOpenedFeatures"
+      :key="workspaceID"
+      :active="activeTab === 'features'"
+      :workspace-id="workspaceID"
+    />
+
     <ImageRegistryDialog
       v-model:is-show="isImageRegistryDialogShow"
       :registry="imageRegistry"
@@ -300,10 +316,12 @@
   import Layout from '~/components/skeleton/skeleton-layout';
   import Skeleton from '~/components/skeleton/skeleton.vue';
   import StatusIcon from '~/components/status-icon.vue';
+  import TabHeader from '~/components/tab-header.vue';
   import { useSpaceStore } from '~/stores/space';
   import { useUserStore } from '~/stores/user';
 
   import ProbeDetailItem from '../../application/detail/app-config/components/probe-detail-item.vue';
+  import FeatureManagement from './components/feature-management.vue';
   import ImageRegistryDialog from './components/image-registry-dialog.vue';
 
   import type { ImageRegistryOutput, WorkspaceInfoOutput } from '~/@types/v1/platmgt';
@@ -313,6 +331,14 @@
   const router = useRouter();
   const spaceStore = useSpaceStore();
   const userStore = useUserStore();
+
+  const activeTab = ref('overview');
+  /** 首次进入特性管理时挂载组件，切回概览后保留列表状态和尚未完成的提交。 */
+  const hasOpenedFeatures = ref(false);
+  const tabs = computed(() => [
+    { name: 'overview', label: t('概览') },
+    { name: 'features', label: t('特性管理') },
+  ]);
 
   // --- state ---
   const workspaceDetail = ref<null | WorkspaceInfoOutput>(null);
@@ -360,6 +386,19 @@
     const name = (workspaceDetail.value?.displayName || workspaceDetail.value?.id || workspaceID.value).trim();
     return Array.from(name)[0] || '--';
   });
+
+  /** 拉取镜像仓库。失败时返回 failed，避免和「确实未配置」共用同一个空值 */
+  async function fetchImageRegistry(id: string) {
+    try {
+      const registry = await PlatmgtService.getPlatWorkspaceImageRegistry(
+        { workspaceID: id },
+        { interceptorErr: false, validateCode: false },
+      );
+      return { registry, failed: false };
+    } catch {
+      return { registry: null, failed: true };
+    }
+  }
 
   /** 查询当前用户空间管理员状态，驱动快捷操作按钮的展示状态 */
   async function fetchWorkspaceAdminStatus(id: string) {
@@ -411,26 +450,6 @@
     }
   }
 
-  /** 拉取镜像仓库。失败时返回 failed，避免和「确实未配置」共用同一个空值 */
-  async function fetchImageRegistry(id: string) {
-    try {
-      const registry = await PlatmgtService.getPlatWorkspaceImageRegistry(
-        { workspaceID: id },
-        { interceptorErr: false, validateCode: false },
-      );
-      return { registry, failed: false };
-    } catch {
-      return { registry: null, failed: true };
-    }
-  }
-
-  /** 仓库状态未知时不打开弹窗，弹窗会把空配置默认成平台仓库 */
-  function handleEditImageRegistry() {
-    if (imageRegistryLoadFailed.value) return;
-
-    isImageRegistryDialogShow.value = true;
-  }
-
   function handleBack() {
     router.push({
       name: 'platformItem',
@@ -438,6 +457,13 @@
         menuName: 'workspace',
       },
     });
+  }
+
+  /** 仓库状态未知时不打开弹窗，弹窗会把空配置默认成平台仓库 */
+  function handleEditImageRegistry() {
+    if (imageRegistryLoadFailed.value) return;
+
+    isImageRegistryDialogShow.value = true;
   }
 
   /** 授予当前用户空间管理员身份，isTemporary=true 表示临时管理员 */
@@ -511,6 +537,9 @@
     return true;
   }
 
+  watch(activeTab, tab => {
+    if (tab === 'features') hasOpenedFeatures.value = true;
+  });
   watch(workspaceID, fetchWorkspaceDetail);
 
   onMounted(async () => {

@@ -156,6 +156,11 @@ func genPipelineBuildParams(
 		return nil, errors.Errorf("code repo config not found")
 	}
 
+	// 存量配置未经过写入时的校验，发起构建前再拦一次，避免构建参数突破脚本中的 heredoc
+	if err := cfg.CodeRepo.ValidateDockerBuildArgs(); err != nil {
+		return nil, errors.Wrapf(err, "validate docker build args of %s", app.ID)
+	}
+
 	// 构建目录默认值为项目根目录，如果用户有设置，需要确保没有多余的后缀
 	buildDir := lo.Ternary(cfg.CodeRepo.SourceDir == "", ".", strings.TrimSuffix(cfg.CodeRepo.SourceDir, "/"))
 	// 蓝盾要求的 dockerfile path 是相对于工作空间的，这里需要进行拼接

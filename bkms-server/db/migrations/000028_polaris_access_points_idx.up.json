@@ -1,0 +1,92 @@
+[
+  {
+    "createIndexes": "polaris_access_points",
+    "indexes": [
+      {
+        "key": {
+          "workspaceID": 1,
+          "name": 1
+        },
+        "name": "idx_workspaceID_name",
+        "unique": true
+      },
+      {
+        "key": {
+          "tenantID": 1
+        },
+        "name": "tenantID_1"
+      }
+    ]
+  },
+  {
+    "createIndexes": "polaris_cluster_bindings",
+    "indexes": [
+      {
+        "key": {
+          "workspaceID": 1,
+          "clusterID": 1
+        },
+        "name": "idx_workspaceID_clusterID",
+        "unique": true
+      },
+      {
+        "key": {
+          "workspaceID": 1,
+          "accessPointID": 1
+        },
+        "name": "idx_workspaceID_accessPointID"
+      },
+      {
+        "key": {
+          "tenantID": 1
+        },
+        "name": "tenantID_1"
+      }
+    ]
+  },
+  {
+    "createIndexes": "cluster_addon_install_tasks",
+    "indexes": [
+      {
+        "key": {
+          "clusterID": 1,
+          "namespace": 1,
+          "addonName": 1,
+          "createdAt": -1
+        },
+        "name": "idx_clusterID_namespace_addonName_createdAt"
+      },
+      {
+        "key": {
+          "clusterID": 1,
+          "namespace": 1,
+          "addonName": 1
+        },
+        "name": "idx_clusterID_namespace_addonName_running",
+        "unique": true,
+        "partialFilterExpression": {
+          "status": {
+            "$eq": "running"
+          }
+        }
+      },
+      {
+        "key": {
+          "tenantID": 1
+        },
+        "name": "tenantID_1"
+      }
+    ]
+  },
+  {
+    "createIndexes": "polaris_configs",
+    "indexes": [
+      {
+        "key": {
+          "accessPointID": 1
+        },
+        "name": "idx_accessPointID"
+      }
+    ]
+  }
+]

@@ -18,11 +18,13 @@
 /**
  * monaco-editor 的 vitest 专用 stub：
  * monaco-editor 包体积大、依赖 worker 环境，且其入口在 vitest（SSR 解析）下无法定位；
- * 组件测试的模块加载链（common/util 等）仅 import 但不触达 monaco API，极简替身即可。
+ * 仅提供组件测试所需的语言元数据入口与错误级别，编辑器实例由专项用例 mock。
  * 由 vite.config.mts test.alias 指向本文件，仅影响 vitest，不影响构建。
  */
 const editorStub = {};
 
 export default editorStub;
 export const editor = editorStub;
+export const languages = { getLanguages: (): { extensions?: string[]; id: string }[] => [] };
+export const MarkerSeverity = { Error: 8 };
 export const Uri = { parse: (v: string) => ({ toString: () => v }) };

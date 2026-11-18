@@ -95,9 +95,9 @@ export interface CreateWorkspaceInput {
    */
   bkCCBizID?: number;
   /**
-   * 蓝盾项目 ID;
-   * 创建时，新建容器项目，无需填写
-   * 创建时，绑定已有容器项目，必填.
+   * 蓝盾项目 ID / 绑定容器项目时的 BCS 项目 code。
+   * 创建时，新建容器项目，无需填写。
+   * 创建时，绑定已有容器项目，必填。
    */
   bkCIProjectID?: string;
   /**

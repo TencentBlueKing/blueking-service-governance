@@ -126,6 +126,8 @@ logging:
 development:
   useStubPerm: true
   allowSetUserInHeader: true
+featureIntegrations:
+  enableIndependentBCSProject: true
 `
 			err := os.WriteFile(configFile, []byte(configContent), 0o644)
 			Expect(err).NotTo(HaveOccurred())
@@ -147,6 +149,7 @@ development:
 			Expect(cfg.Account.AuthEnvName).To(Equal("test"))
 			Expect(cfg.Account.BackendType).To(Equal("bk_token"))
 			Expect(cfg.Tenant.EnableMultiTenantMode).To(BeFalse())
+			Expect(cfg.FeatureIntegrations.EnableIndependentBCSProject).To(BeTrue())
 			Expect(cfg.BkMonitor.GatewayEndpoint).To(Equal("https://bk-monitor.example.com"))
 			Expect(config.G.Encrypt.Secret).To(Equal(originalSecret))
 			Expect(cfg.Mongo.Username).To(Equal("testuser"))
@@ -240,9 +243,50 @@ asynq:
 			Expect(cfg.Account.AuthEnvName).To(Equal("prod"))
 			Expect(cfg.Account.BackendType).To(Equal("bk_token"))
 			Expect(cfg.Tenant.EnableMultiTenantMode).To(BeFalse())
+			Expect(cfg.FeatureIntegrations.EnableIndependentBCSProject).To(BeFalse())
 			Expect(cfg.BkMonitor.GatewayEndpoint).To(Equal("https://bk-monitor.example.com"))
 			Expect(cfg.BKCI.PipelineTmpl.BuilderImageCode).To(BeEmpty())
 			Expect(cfg.BKCI.PipelineTmpl.BuilderImageVersion).To(BeEmpty())
+			Expect(cfg.Polaris.AllowWorkspaceAccessPoints).To(BeFalse())
+			Expect(cfg.Network.EgressIPs).To(BeEmpty())
+		})
+
+		It("should successfully load explicit polaris access point and network config values", func() {
+			configContent := `
+bkApp:
+  code: test-app
+  secret: test-secret
+account:
+  authBaseURL: http://auth.example.com
+  loginURL: http://login.example.com
+polaris:
+  address: 10.0.0.1:8091
+  allowWorkspaceAccessPoints: true
+network:
+  egressIPs:
+    - 10.0.0.1
+    - 10.0.0.2
+metrics:
+  port: 8081
+httpServer:
+  address: 127.0.0.1
+  port: 32303
+asynq:
+  redis:
+    host: localhost
+    port: 6380
+`
+			err := os.WriteFile(configFile, []byte(configContent), 0o644)
+			Expect(err).NotTo(HaveOccurred())
+
+			cfg, err := config.Load(ctx, configFile)
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(cfg.Polaris).To(Equal(config.PolarisConfig{
+				Address:                    "10.0.0.1:8091",
+				AllowWorkspaceAccessPoints: true,
+			}))
+			Expect(cfg.Network.EgressIPs).To(Equal([]string{"10.0.0.1", "10.0.0.2"}))
 		})
 
 		It("should successfully load explicit tenant config values", func() {
@@ -473,6 +517,7 @@ asynq:
 			Expect(cfg.Account.LoginURL).To(Equal("https://paas.example.com/login"))
 			Expect(cfg.FeatureIntegrations.EnableBkLoginUserinfoAuth).To(BeTrue())
 			Expect(cfg.FeatureIntegrations.EnableBkUserTenantVerify).To(BeTrue())
+			Expect(cfg.FeatureIntegrations.EnableIndependentBCSProject).To(BeFalse())
 			Expect(cfg.BkApiStages.BkLogin).To(Equal("prod"))
 			Expect(cfg.BkApiStages.BkUser).To(Equal("test"))
 		})

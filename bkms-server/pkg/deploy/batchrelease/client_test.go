@@ -193,7 +193,7 @@ var _ = Describe("RolloutClient", func() {
 				"metadata":   map[string]any{"name": "demo", "namespace": "demo-ns"},
 				"status": map[string]any{
 					"phase":      "Running",
-					"paused":     "false",
+					"paused":     "temporary",
 					"stepStatus": map[string]any{"currentStepIndex": 0, "currentStepPhase": "PausedTemporarily"},
 				},
 			}

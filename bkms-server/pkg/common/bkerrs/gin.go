@@ -77,6 +77,10 @@ func WriteError(c *gin.Context, err error) {
 	if errors.As(err, &unauthErr) && unauthErr.IsUnauthenticated() {
 		err = Wrap(err, ErrCodeUnauthenticated, "get auth user from request failed")
 	}
+	// 上层 Wrap 会覆盖错误码与 details，需在输出时还原 BSCP 未启用的错误明细
+	if errors.Is(err, ErrBSCPDisabled) {
+		err = WrapBSCPDisabled(err)
+	}
 
 	var bkErr *Error
 	if errors.As(err, &bkErr) {

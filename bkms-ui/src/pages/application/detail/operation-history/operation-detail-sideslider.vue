@@ -95,11 +95,11 @@
   import { convertToYaml, formatTimeByTimezone } from '~/common/util';
   import MsEditor from '~/components/monaco-editor/ms-editor.vue';
   import StatusDotIcon from '~/components/status-dot-icon.vue';
+  import { getOperationEnvDisplayName } from '~/composables/use-operation-audit';
 
   import type { OperationRecordOutputObj } from '~/@types/v1/operation-audit';
 
   const props = defineProps<{
-    envNameMapping: Record<string, string>;
     record?: OperationRecordOutputObj;
     resultDisplayName: string;
   }>();
@@ -134,7 +134,7 @@
       {
         field: 'envName',
         label: t('环境'),
-        value: props.envNameMapping[row.group?.envName || ''] || row.group?.envName || '--',
+        value: getOperationEnvDisplayName(row.group),
       },
       { field: 'resourceID', label: t('目标实例'), value: row.resourceID || '--' },
       { field: 'username', label: t('操作人'), value: row.username || '--' },

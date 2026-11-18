@@ -1,0 +1,14 @@
+[
+  {
+    "createIndexes": "rainbow_tconf_entries",
+    "indexes": [
+      {
+        "key": {
+          "appID": 1
+        },
+        "name": "idx_appID",
+        "unique": true
+      }
+    ]
+  }
+]

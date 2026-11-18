@@ -32,6 +32,7 @@ import (
 	svccfg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/utils/crypto"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/tenant"
 	genericstore "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/registry"
 )
@@ -135,6 +136,83 @@ var _ = Describe("WorkspaceStore", func() {
 			duplicateWorkspace := workspaceA
 			duplicateWorkspace.DisplayName = "重复 ID 的工作空间"
 			Expect(store.Create(ctx, &duplicateWorkspace)).To(MatchError(genericstore.ErrDuplicate))
+		})
+
+		It("should return ErrWorkspaceConflict when creating a duplicate workspace ID", func() {
+			Expect(Create(ctx, store, &workspaceA)).To(Succeed())
+
+			duplicateWorkspace := workspaceA
+			duplicateWorkspace.DisplayName = "重复 ID 的工作空间"
+			err := Create(ctx, store, &duplicateWorkspace)
+			Expect(err).To(MatchError(ErrWorkspaceConflict))
+			Expect(err.Error()).To(ContainSubstring(workspaceA.ID))
+		})
+	})
+
+	Context("EnsureIDAvailable", func() {
+		It("should pass when the workspace ID is not used", func() {
+			Expect(EnsureIDAvailable(ctx, store, workspaceA.ID)).To(Succeed())
+		})
+
+		It("should return ErrWorkspaceAlreadyExists when the workspace ID is used", func() {
+			Expect(Create(ctx, store, &workspaceA)).To(Succeed())
+
+			err := EnsureIDAvailable(ctx, store, workspaceA.ID)
+			Expect(err).To(MatchError(ErrWorkspaceAlreadyExists))
+			Expect(err.Error()).To(ContainSubstring(workspaceA.ID))
+		})
+
+		It("should return ErrWorkspaceAlreadyExists when the workspace ID is used by another tenant", func() {
+			otherTenantCtx := tenant.WithTenantID(context.Background(), "other-tenant")
+			Expect(Create(otherTenantCtx, store, &workspaceA)).To(Succeed())
+
+			Expect(EnsureIDAvailable(ctx, store, workspaceA.ID)).To(MatchError(ErrWorkspaceAlreadyExists))
+		})
+	})
+
+	Context("BCS project binding", func() {
+		It("should return ErrWorkspaceConflict when creating workspace with duplicate bcs project code", func() {
+			workspaceA.BkSystems.BkBCSProjectCode = "shared-bcs-project"
+			Expect(Create(ctx, store, &workspaceA)).To(Succeed())
+
+			workspaceB.BkSystems.BkBCSProjectCode = "shared-bcs-project"
+			err := Create(ctx, store, &workspaceB)
+			Expect(err).To(MatchError(ErrWorkspaceConflict))
+			Expect(err.Error()).To(ContainSubstring("bkSystems.bkBcsProjectCode"))
+		})
+
+		It("should reject the same bcs project code across tenants", func() {
+			workspaceA.BkSystems.BkBCSProjectCode = "shared-bcs-project"
+			Expect(Create(ctx, store, &workspaceA)).To(Succeed())
+
+			workspaceB.BkSystems.BkBCSProjectCode = "shared-bcs-project"
+			otherTenantCtx := tenant.WithTenantID(context.Background(), "other-tenant")
+			Expect(Create(otherTenantCtx, store, &workspaceB)).To(MatchError(ErrWorkspaceConflict))
+		})
+
+		It("should allow multiple workspaces without bcs project code", func() {
+			Expect(Create(ctx, store, &workspaceA)).To(Succeed())
+			Expect(Create(ctx, store, &workspaceB)).To(Succeed())
+		})
+
+		It("should find the bound workspace by bcs project id or code across tenants", func() {
+			workspaceA.BkSystems.BkBCSProjectCode = "bcs-code-a"
+			Expect(Create(ctx, store, &workspaceA)).To(Succeed())
+
+			otherTenantCtx := tenant.WithTenantID(context.Background(), "other-tenant")
+			_, err := store.Get(otherTenantCtx, ByBCSProject("bk-bcs-project-1", ""))
+			Expect(err).To(MatchError(ErrWorkspaceNotFound))
+
+			ws, err := store.Get(otherTenantCtx, genericstore.TenantAll(), ByBCSProject("bk-bcs-project-1", ""))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ws.ID).To(Equal(workspaceA.ID))
+
+			ws, err = store.Get(otherTenantCtx, genericstore.TenantAll(), ByBCSProject("", "bcs-code-a"))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ws.ID).To(Equal(workspaceA.ID))
+
+			_, err = store.Get(ctx, genericstore.TenantAll(), ByBCSProject("", ""))
+			Expect(err).To(MatchError(ErrWorkspaceNotFound))
 		})
 	})
 

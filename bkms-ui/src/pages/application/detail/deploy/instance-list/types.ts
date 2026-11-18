@@ -66,8 +66,11 @@ export interface InstancePodWatchEvent {
   type: 'ADDED' | 'DELETED' | 'ENDED' | 'MODIFIED';
 }
 
+/** 行操作白名单：运行时校验与 InstanceRowAction 类型共用同一份定义，避免两处手写漂移。 */
+export const INSTANCE_ROW_ACTIONS = ['gray', 'log', 'login', 'monitor', 'weight', 'weterm'] as const;
+
 /** 行操作类型 */
-export type InstanceRowAction = 'gray' | 'log' | 'login' | 'monitor' | 'weight';
+export type InstanceRowAction = (typeof INSTANCE_ROW_ACTIONS)[number];
 
 /** 行操作事件载荷 */
 export interface InstanceRowActionPayload {
@@ -105,4 +108,9 @@ export type InstanceWatchEvent = InstancePluginWatchEvent | InstancePodWatchEven
 export interface MonitorInstanceGroup {
   envName: string;
   instances: string[];
+}
+
+/** 判断外部传入的 action 是否为受支持的行操作 */
+export function isInstanceRowAction(action: unknown): action is InstanceRowAction {
+  return typeof action === 'string' && (INSTANCE_ROW_ACTIONS as readonly string[]).includes(action);
 }

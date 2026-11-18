@@ -16,8 +16,9 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
-import { flushPromises, mount } from '@vue/test-utils';
+import { flushPromises, mount, shallowMount } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import AppOrchestrate from '~/pages/application/detail/base-info/helm/app-orchestrate.vue';
 import HelmFileList from '~/pages/application/template/helm-chart/helm-file-list.vue';
 
 import { i18nGlobalMocks } from '../helpers/mock-i18n';
@@ -31,6 +32,9 @@ const mocks = vi.hoisted(() => ({
   create: vi.fn(),
   message: vi.fn(),
   bscp: vi.fn(),
+  saveContent: vi.fn(),
+  refreshList: vi.fn(),
+  refreshDetail: vi.fn(),
 }));
 vi.mock('vue-i18n', async importOriginal => ({
   ...(await importOriginal<object>()),
@@ -51,17 +55,22 @@ vi.mock('~/api/modules/v1', () => ({
     getAppConfigFileDefDetail: mocks.detail,
     updateHelmFile: mocks.update,
     createAppConfigFileDef: mocks.create,
+    updateAppConfigFileDefContent: mocks.saveContent,
   },
 }));
 vi.mock('bkui-vue', () => {
   const container = { template: '<div><slot /></div>' };
   return {
-    Button: container,
+    Button: { name: 'Button', template: '<button><slot /></button>' },
+    Divider: container,
     Exception: container,
     Loading: container,
     Message: mocks.message,
     OverflowTitle: container,
+    Popover: container,
     PopConfirm: container,
+    ResizeLayout: { ...container, name: 'ResizeLayout' },
+    Select: { ...container, Option: container },
     Tag: container,
     Tree: {
       props: ['data', 'children'],
@@ -73,13 +82,22 @@ vi.mock('bkui-vue/lib/icon', () => ({
   Del: { template: '<button />' },
   InfoLine: { template: '<span />' },
   Plus: { template: '<span />' },
+  Upload: { template: '<span />' },
   EditLine: { template: '<button data-edit>Edit</button>' },
 }));
 vi.mock('~/pages/application/template/helm-chart/file-form-sideslider.vue', () => ({
   default: { name: 'FileFormSideslider', props: ['visible', 'currentFile', 'isEdit', 'loading'], template: '<div />' },
 }));
+vi.mock('~/components/monaco-editor/ms-editor.vue', () => ({
+  default: {
+    name: 'MsEditor',
+    props: ['modelValue'],
+    template: `<textarea :value="modelValue" @input="$emit('update:modelValue', $event.target.value)" />`,
+  },
+}));
 
 let wrapper: ReturnType<typeof mount<typeof HelmFileList>> | undefined;
+let orchestrateWrapper: ReturnType<typeof shallowMount<typeof AppOrchestrate>> | undefined;
 const binding = { bizID: '2', serviceID: '15', id: '301' };
 let savedFile: DefDetailObj;
 type FileFormData = Omit<CreateDefInput, 'configKind'>;
@@ -106,6 +124,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   wrapper?.unmount();
+  orchestrateWrapper?.unmount();
 });
 
 function formData(): FileFormData {
@@ -118,6 +137,38 @@ function formData(): FileFormData {
     bscpConfig: { ...binding },
     description: 'update binding',
   };
+}
+
+function mountOrchestrate(stubFileList = false) {
+  orchestrateWrapper = shallowMount(AppOrchestrate, {
+    global: {
+      mocks: i18nGlobalMocks,
+      directives: { 'bk-tooltips': {} },
+      stubs: {
+        Orchestrate: false,
+        HelmFileList: stubFileList
+          ? {
+              template: '<div />',
+              methods: { fetchFileList: mocks.refreshList, refetchCurrentFile: mocks.refreshDetail },
+            }
+          : false,
+        ResizeLayout: {
+          data: () => ({ asideRef: { hidden: false } }),
+          template: '<div><slot name="main" /></div>',
+        },
+        MsEditor: false,
+        Button: false,
+        Tree: false,
+        SaveVersionConfirmDialog: {
+          name: 'SaveVersionConfirmDialog',
+          props: ['isShow', 'preview'],
+          template: '<div />',
+        },
+      },
+      renderStubDefaultSlot: true,
+    },
+  });
+  return orchestrateWrapper;
 }
 
 async function openEditor() {
@@ -139,6 +190,74 @@ async function openEditor() {
   await flushPromises();
   return wrapper.getComponent({ name: 'FileFormSideslider' });
 }
+
+it('Helm 编排按已加载的覆盖层预览并提交，列表刷新不改变保存基准版本', async () => {
+  const view = mountOrchestrate(true);
+  const file: DefDetailObj = {
+    ...savedFile,
+    fileType: 'overlay',
+    editableContentField: 'overlayContent',
+    content: 'image: app\nreplicas: 1',
+    overlayContent: 'replicas: 1',
+  };
+  const fileList = view.getComponent(HelmFileList);
+  fileList.vm.$emit('file-list-change', [file]);
+  fileList.vm.$emit('file-detail-change', { fileInfo: file, fileDetail: file });
+  await flushPromises();
+  await view.get('textarea').setValue('replicas: 2');
+  fileList.vm.$emit('file-list-change', [{ ...file, currentVersion: 9 }]);
+  await flushPromises();
+
+  const saveButton = view.findAll('button').find(button => button.text() === '保存');
+  expect(saveButton).toBeDefined();
+  await saveButton!.trigger('click');
+  const dialog = view.getComponent({ name: 'SaveVersionConfirmDialog' });
+  expect(dialog.props('preview')).toMatchObject({
+    fileName: 'values.yaml',
+    originalContent: 'replicas: 1',
+    content: 'replicas: 2',
+    currentVersion: 3,
+  });
+  expect(mocks.saveContent).not.toHaveBeenCalled();
+
+  dialog.vm.$emit('confirm', 'scale up');
+  await flushPromises();
+  expect(mocks.saveContent).toHaveBeenCalledExactlyOnceWith(
+    { appID: 'app-id', id: 'def-id', content: 'replicas: 2', currentVersion: 3, description: 'scale up' },
+    { needRes: true, interceptorErr: false },
+  );
+  expect(mocks.refreshList).toHaveBeenCalledOnce();
+  expect(mocks.refreshDetail).toHaveBeenCalledOnce();
+  expect(dialog.props('isShow')).toBe(false);
+});
+
+it.each(['list', 'detail'] as const)('Helm 编排保存后 %s 刷新失败时保留内容并禁用保存', async refresh => {
+  savedFile = { ...savedFile, editableContentField: 'content' };
+  const view = mountOrchestrate();
+  await flushPromises();
+  await view.get('textarea').setValue('replicas: 2');
+  const saveButton = view.findAll('button').find(button => button.text() === '保存')!;
+  await saveButton.trigger('click');
+  const dialog = view.getComponent({ name: 'SaveVersionConfirmDialog' });
+  expect(dialog.props('isShow')).toBe(true);
+  mocks.saveContent.mockImplementationOnce(async () => {
+    savedFile = { ...savedFile, currentVersion: 4, content: 'replicas: 2' };
+    return { currentVersion: 4 };
+  });
+  mocks[refresh].mockRejectedValueOnce(new Error('refresh unavailable'));
+  dialog.vm.$emit('confirm', 'scale up');
+  await flushPromises();
+
+  expect(dialog.props('isShow')).toBe(false);
+  expect(view.get('textarea').element.value).toBe('replicas: 2');
+  expect(view.get('textarea').attributes('readonly')).toBeDefined();
+  expect(saveButton.attributes('disabled')).toBeDefined();
+  expect(mocks.message).toHaveBeenCalledExactlyOnceWith({
+    theme: 'warning',
+    message: '配置已保存，获取最新配置失败，请刷新页面重试',
+  });
+  expect(mocks.saveContent).toHaveBeenCalledOnce();
+});
 
 describe('Helm 文件保存', () => {
   it.each([

@@ -24,8 +24,10 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	"github.com/samber/lo"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris/accesspoint"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
@@ -52,6 +54,7 @@ type ConfigStore = store.GenericStore[PolarisConfig]
 //
 // 索引（由 golang-migrate 维护）：
 // - 唯一：appID + name
+// - accessPointID：删除接入点前查询仍固定使用它的配置
 var ConfigMeta = store.Meta[PolarisConfig]{
 	Collection:   "polaris_configs",
 	TenantScoped: true,
@@ -82,6 +85,11 @@ func ByApp(appID string) store.Opt {
 	return store.Where("appID", appID)
 }
 
+// ByAccessPoint 匹配固定使用指定接入点的北极星配置
+func ByAccessPoint(accessPointID string) store.Opt {
+	return store.Where("accessPointID", accessPointID)
+}
+
 // ByName 按应用 ID 和配置名称匹配北极星配置
 func ByName(appID, name string) store.Opt {
 	return store.Combine(ByApp(appID), store.Where("name", name))
@@ -101,6 +109,21 @@ func ListByEnv(ctx context.Context, db *mongo.Database, appID, envName string) (
 		}
 	}
 	return result, nil
+}
+
+var _ accesspoint.ConfigUsageLister = ListConfigUsagesByAccessPoint
+
+// ListConfigUsagesByAccessPoint 列出固定使用指定接入点的北极星配置，供删除接入点前检查
+func ListConfigUsagesByAccessPoint(
+	ctx context.Context, db *mongo.Database, accessPointID string,
+) ([]accesspoint.ConfigUsage, error) {
+	configs, err := store.Of(db, ConfigMeta).List(ctx, ByAccessPoint(accessPointID))
+	if err != nil {
+		return nil, errors.Wrapf(err, "list polaris configs using access point %s", accessPointID)
+	}
+	return lo.Map(configs, func(c PolarisConfig, _ int) accesspoint.ConfigUsage {
+		return accesspoint.ConfigUsage{AppID: c.AppID, ConfigName: c.Name}
+	}), nil
 }
 
 // UpdateConfig 根据应用 ID 和配置名称更新 updateData 中给出的字段；没有待更新的字段时直接返回，

@@ -68,12 +68,11 @@ var _ = Describe("Manager", func() {
 
 	Describe("InitMetadata", func() {
 		Context("when called for the first time", func() {
-			It("should create metadata with enable and post hook", func() {
+			It("should create metadata with post hook", func() {
 				meta, err := mgr.InitMetadata(ctx, newInitParams())
 				Expect(err).NotTo(HaveOccurred())
 				Expect(meta).NotTo(BeNil())
 				Expect(meta.AppID).To(Equal(testAppID))
-				Expect(meta.Enable).To(BeTrue())
 				Expect(meta.PostHookID).NotTo(BeEmpty())
 				Expect(meta.Operator).To(Equal("tester"))
 			})
@@ -177,7 +176,7 @@ var _ = Describe("Manager", func() {
 		})
 
 		It("should return ErrMetadataNotFound when metadata does not exist", func() {
-			err := mgr.PatchMetadata(ctx, "non-existent-app", map[string]any{"enable": false})
+			err := mgr.PatchMetadata(ctx, "non-existent-app", map[string]any{"mountPath": "/data/other"})
 			Expect(err).To(MatchError(model.ErrMetadataNotFound))
 		})
 	})
@@ -232,7 +231,6 @@ var _ = Describe("Manager", func() {
 func createTestMetadata(ctx context.Context, metas *model.MetadataStore, appID string) {
 	err := metas.Create(ctx, &model.Metadata{
 		AppID:        appID,
-		Enable:       true,
 		MountPath:    "/data/bscp",
 		WorkloadName: "test-workload",
 		Operator:     "tester",

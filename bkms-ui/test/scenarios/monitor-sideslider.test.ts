@@ -25,6 +25,7 @@ import { fetchMonitorMetric } from '~/pages/application/detail/deploy/monitor-ch
 import MonitorSideslider from '~/pages/application/detail/deploy/monitor-sideslider.vue';
 
 import type * as BkDatePicker from '@blueking/date-picker';
+import type { EnvOutputObj } from '~/@types/env';
 import type { MonitorInstanceGroup } from '~/pages/application/detail/deploy/instance-list/types';
 import type { MonitorInstance, MonitorMetricTimeSeries } from '~/pages/application/detail/deploy/monitor-chart-bridge';
 
@@ -39,6 +40,7 @@ const mocks = vi.hoisted(() => ({
   message: vi.fn(),
   registerPoll: vi.fn<(callback: () => Promise<void>) => void>(),
 }));
+const envList = vi.hoisted((): Pick<EnvOutputObj, 'displayName' | 'kind' | 'name'>[] => []);
 
 vi.mock('vue-i18n', () => ({
   useI18n: () => ({
@@ -54,7 +56,7 @@ vi.mock('~/api/modules/v1', () => ({
 }));
 vi.mock('~/modules/i18n', () => ({ i18n: { global: { t: (key: string) => key } } }));
 vi.mock('~/stores/app-detail', () => ({ useAppDetail: () => ({ appID: 'demo-app' }) }));
-vi.mock('~/stores/deploy-env', () => ({ useDeployEnvStore: () => ({ currentEnv: 'prod' }) }));
+vi.mock('~/stores/deploy-env', () => ({ useDeployEnvStore: () => ({ currentEnv: 'prod', envList }) }));
 vi.mock('~/composables/use-interval', () => ({
   default: (callback: () => Promise<void>) => {
     mocks.registerPoll(callback);
@@ -122,21 +124,28 @@ vi.mock('~/pages/application/detail/deploy/chart-card-item.vue', async () => {
   };
 });
 vi.mock('@blueking/table', async () => {
-  const { defineComponent, h } = await import('vue');
+  const { defineComponent, h, inject, provide, toRef } = await import('vue');
+  const tableData = Symbol('tableData');
   return {
     Table: defineComponent({
       name: 'SummaryTableStub',
       props: { data: { type: Array, default: () => [] } },
-      setup(props) {
-        return () =>
-          h(
-            'table',
-            { 'data-testid': 'summary' },
-            props.data.map(row => h('tr', JSON.stringify(row))),
-          );
+      setup(props, { slots }) {
+        provide(tableData, toRef(props, 'data'));
+        return () => h('div', slots.default?.());
       },
     }),
-    TableColumn: { render: () => null },
+    TableColumn: defineComponent({
+      props: { field: { type: String, required: true } },
+      setup(props, { slots }) {
+        const rows = inject(tableData, toRef([]));
+        return () =>
+          h('div', { 'data-field': props.field }, [
+            slots.header?.(),
+            ...rows.value.map(row => h('div', { 'data-cell': '' }, slots.default?.({ row }))),
+          ]);
+      },
+    }),
   };
 });
 vi.mock('bkui-vue', async () => {
@@ -301,6 +310,8 @@ async function mountSlider(
   });
   await flushPromises();
   const selects = () => wrapper.findAllComponents({ name: 'SelectStub' });
+  const select = (option: number | string) => selects().find(item => item.find(`option[value="${option}"]`).exists())!;
+  const instanceSelect = () => selects().find(item => item.props('customContent'))!;
   const charts = () => wrapper.findAllComponents({ name: 'ChartCardStub' });
   const chart = (metricKey = 'cpu_limit_usage') => charts().find(item => item.props('metricKey') === metricKey)!;
   if (isShow) {
@@ -309,8 +320,11 @@ async function mountSlider(
   }
   return {
     wrapper,
-    selects,
+    select,
+    instanceSelect,
     chart,
+    sortHeader: (field: string) => wrapper.get<HTMLButtonElement>(`[data-field="${field}"] button`),
+    cells: (field: string) => wrapper.findAll(`[data-field="${field}"] [data-cell]`).map(cell => cell.text()),
     rows: () => wrapper.getComponent({ name: 'SummaryTableStub' }).props('data'),
     async emitMetric(metricKey: string, data: MonitorMetricTimeSeries, queryId = chart(metricKey).props('queryId')) {
       chart(metricKey).vm.$emit('metric-data', { metricKey, data, queryId });
@@ -319,7 +333,8 @@ async function mountSlider(
   };
 }
 
-const rank = (names: string[]) => names.map((instance, index) => ({ instance, value: names.length - index }));
+const rank = (names: string[]) =>
+  names.map((instance, index) => ({ instance, value: (names.length - index) / (names.length + 1), unit: 'percent' }));
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -331,8 +346,11 @@ function deferred<T>() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  envList.length = 0;
   vi.setSystemTime(new Date(2026, 10, 5, 12));
-  mocks.rankInstances.mockResolvedValue(rank(['pod-1', 'pod-2']));
+  mocks.rankInstances.mockImplementation(({ instances: candidates, limit }: { instances?: string[]; limit: number }) =>
+    Promise.resolve(rank(candidates?.slice(0, limit) ?? ['pod-1', 'pod-2'])),
+  );
   mocks.getInstanceTimeSeries.mockImplementation((query: { instances: string[]; metricKey: string }) =>
     Promise.resolve({ [query.metricKey]: metric(query.instances) }),
   );
@@ -359,6 +377,7 @@ describe('实例监控侧栏', () => {
         endTime: dayjs().unix(),
         interval: 96,
         limit: 10,
+        rankBy: 'cpu_limit_usage',
         rankType: 'top',
         method: 'sum',
       });
@@ -391,8 +410,8 @@ describe('实例监控侧栏', () => {
   });
 
   it('手动固定汇聚周期后图表宽度变化不额外请求', async () => {
-    const { wrapper, selects, chart } = await mountSlider();
-    selects()[2].vm.$emit('update:modelValue', 60);
+    const { wrapper, select, chart } = await mountSlider();
+    select(60).vm.$emit('update:modelValue', 60);
     await flushPromises();
     chart().vm.$emit('plot-width-change', 500);
     await flushPromises();
@@ -402,24 +421,31 @@ describe('实例监控侧栏', () => {
     wrapper.unmount();
   });
 
-  it('Limit 键入期间不查询，回车和步进各提交一轮，重开后恢复默认值', async () => {
-    const { wrapper, chart } = await mountSlider();
+  it('勾选后 Limit 键入期间不查询，提交时限制排名结果并保留勾选', async () => {
+    const candidates = ['pod-0', 'pod-1'];
+    const { wrapper, chart, instanceSelect } = await mountSlider({ prod: candidates });
     const limitInput = wrapper.get<HTMLInputElement>('input[type="number"]');
 
-    for (const value of ['2', '25']) {
+    expect(limitInput.element.disabled).toBe(false);
+    const help = wrapper.get('[aria-label^="所有图表按"]');
+    for (const value of ['2', '1']) {
       limitInput.element.value = value;
       await limitInput.trigger('input');
       await flushPromises();
       expect(chart().props('queryEnabled')).toBe(true);
       expect(mocks.rankInstances).toHaveBeenCalledTimes(1);
       expect(mocks.getInstanceTimeSeries).toHaveBeenCalledTimes(8);
+      expect(help.attributes('aria-label')).toContain('取前 10 个实例');
     }
 
     await limitInput.trigger('keydown', { key: 'Enter' });
     await flushPromises();
     expect(mocks.rankInstances).toHaveBeenCalledTimes(2);
-    expect(mocks.rankInstances).toHaveBeenLastCalledWith(expect.objectContaining({ limit: 25 }));
+    expect(mocks.rankInstances).toHaveBeenLastCalledWith(expect.objectContaining({ limit: 1, instances: candidates }));
     expect(mocks.getInstanceTimeSeries).toHaveBeenCalledTimes(16);
+    expect(chart().props('instances')).toEqual(instances(['pod-0']));
+    expect(instanceSelect().props('modelValue')).toEqual(candidates.map(name => instanceKey(name)));
+    expect(help.attributes('aria-label')).toContain('取前 1 个实例');
 
     await limitInput.trigger('change');
     await limitInput.trigger('blur');
@@ -430,12 +456,13 @@ describe('实例监控侧栏', () => {
     const limitComponent = wrapper
       .findAllComponents({ name: 'InputStub' })
       .find(input => input.props('type') === 'number')!;
-    limitComponent.vm.$emit('update:modelValue', 26);
-    limitComponent.vm.$emit('change', 26);
+    limitComponent.vm.$emit('update:modelValue', 2);
+    limitComponent.vm.$emit('change', 2);
     await flushPromises();
     expect(mocks.rankInstances).toHaveBeenCalledTimes(3);
-    expect(mocks.rankInstances).toHaveBeenLastCalledWith(expect.objectContaining({ limit: 26 }));
+    expect(mocks.rankInstances).toHaveBeenLastCalledWith(expect.objectContaining({ limit: 2, instances: candidates }));
     expect(mocks.getInstanceTimeSeries).toHaveBeenCalledTimes(24);
+    expect(chart().props('instances')).toEqual(instances(candidates));
 
     await wrapper.setProps({ isShow: false });
     await wrapper.setProps({ isShow: true });
@@ -443,7 +470,7 @@ describe('实例监控侧栏', () => {
     await flushPromises();
     expect(wrapper.get<HTMLInputElement>('input[type="number"]').element.value).toBe('10');
     expect(mocks.rankInstances).toHaveBeenCalledTimes(4);
-    expect(mocks.rankInstances).toHaveBeenLastCalledWith(expect.objectContaining({ limit: 10 }));
+    expect(mocks.rankInstances).toHaveBeenLastCalledWith(expect.objectContaining({ limit: 10, instances: candidates }));
     wrapper.unmount();
   });
 
@@ -483,12 +510,12 @@ describe('实例监控侧栏', () => {
     vi.useRealTimers();
     vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
     vi.setSystemTime(new Date(2026, 10, 5, 12));
-    const { wrapper, chart, selects } = await mountSlider();
+    const { wrapper, chart, select } = await mountSlider();
     const limitInput = wrapper.get<HTMLInputElement>('input[type="number"]');
     limitInput.element.value = '20';
     await limitInput.trigger('input');
-    selects()[1].vm.$emit('update:modelValue', 'bottom');
-    selects()[3].vm.$emit('update:modelValue', 'avg');
+    select('bottom').vm.$emit('update:modelValue', 'bottom');
+    select('avg').vm.$emit('update:modelValue', 'avg');
     await limitInput.trigger('blur');
     await flushPromises();
     const previousQueryId = chart().props('queryId');
@@ -540,22 +567,23 @@ describe('实例监控侧栏', () => {
     wrapper.unmount();
   });
 
-  it('关闭手选监控并取消列表勾选后，再次打开使用排名结果', async () => {
-    const { wrapper, selects, chart } = await mountSlider({ prod: ['pod-0'] });
-    expect(mocks.rankInstances).not.toHaveBeenCalled();
+  it('关闭监控并取消列表勾选后，再次打开恢复全量排名', async () => {
+    const { wrapper, instanceSelect, chart } = await mountSlider({ prod: ['pod-0'] });
+    expect(mocks.rankInstances).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ instances: ['pod-0'] }));
     expect(chart().props('instances')).toEqual(instances(['pod-0']));
-    expect(selects()[1].props('disabled')).toBe(true);
+    expect(mocks.getInstanceTimeSeries).toHaveBeenCalledTimes(8);
 
     await wrapper.setProps({ isShow: false });
     await wrapper.setProps({ initialSelection: undefined, isShow: true });
     chart().vm.$emit('plot-width-change', 450);
     await flushPromises();
 
-    expect(selects()[0].props('modelValue')).toEqual([]);
-    expect(selects()[1].props('disabled')).toBe(false);
-    expect(mocks.rankInstances).toHaveBeenCalledExactlyOnceWith(
-      expect.objectContaining({ limit: 10, rankType: 'top' }),
+    expect(instanceSelect().props('modelValue')).toEqual([]);
+    expect(mocks.rankInstances).toHaveBeenCalledTimes(2);
+    expect(mocks.rankInstances).toHaveBeenLastCalledWith(
+      expect.objectContaining({ limit: 10, rankBy: 'cpu_limit_usage', rankType: 'top' }),
     );
+    expect(mocks.rankInstances.mock.lastCall?.[0]).not.toHaveProperty('instances');
     expect(chart().props('instances')).toEqual(instances(['pod-1', 'pod-2']));
     expect(mocks.getInstanceTimeSeries).toHaveBeenCalledTimes(16);
     for (const [query] of mocks.getInstanceTimeSeries.mock.calls.slice(-8)) {
@@ -565,20 +593,47 @@ describe('实例监控侧栏', () => {
   });
 
   it('初始打开复用 2000 个实例快照，未搜索不渲染候选', async () => {
-    const { wrapper, selects } = await mountSlider();
+    const { wrapper, instanceSelect } = await mountSlider();
     expect(mocks.listAppInstances).not.toHaveBeenCalled();
     expect(wrapper.findAll('[data-testid="instance-candidate"]')).toHaveLength(0);
     expect(wrapper.get('[data-testid="instance-selector"]').attributes('data-placeholder')).toBe('全部实例（2000）');
-    expect(selects()[0].props('modelValue')).toEqual([]);
+    expect(instanceSelect().props('modelValue')).toEqual([]);
     await wrapper.get('input[placeholder="输入实例名称搜索"]').setValue('pod-');
     expect(wrapper.findAll('[data-testid="instance-candidate"]')).toHaveLength(100);
     expect(wrapper.text()).toContain('仅展示前 100 个结果，请缩小搜索范围');
     wrapper.unmount();
   });
 
-  it('保留隐藏选择，限制 50 个手选实例，清空后恢复排名', async () => {
-    const { wrapper, selects, chart } = await mountSlider({ prod: ['pod-1999'] });
-    expect(mocks.rankInstances).not.toHaveBeenCalled();
+  it('多环境实例树分组展示环境名称，实例键和监控查询使用内部名', async () => {
+    const envNames = ['dev', 'feat-preview-123', 'test'];
+    envList.push(
+      { name: 'dev', displayName: '开发环境', kind: 'standard' },
+      { name: 'feat-preview-123', displayName: '预览环境', kind: 'feature' },
+      { name: 'test', kind: 'standard' },
+    );
+    mocks.rankInstances.mockResolvedValue(rank(['web-0']));
+    const { wrapper } = await mountSlider(
+      undefined,
+      envNames.map(envName => ({ envName, instances: ['web-0'] })),
+    );
+
+    await wrapper.get('input[placeholder="输入实例名称搜索"]').setValue('web-0');
+    const displayNames = ['开发环境', '预览环境', 'test'];
+    expect(wrapper.getComponent({ name: 'TreeStub' }).props('data')).toEqual(
+      envNames.map((envName, index) => ({
+        id: `env:${envName}`,
+        name: displayNames[index],
+        children: [{ id: instanceKey('web-0', envName), name: 'web-0' }],
+      })),
+    );
+    expect(mocks.rankInstances.mock.calls.map(([query]) => query.envName)).toEqual(envNames);
+    expect(new Set(mocks.getInstanceTimeSeries.mock.calls.map(([query]) => query.envName))).toEqual(new Set(envNames));
+    wrapper.unmount();
+  });
+
+  it('保留隐藏选择，以最多 50 个手选实例为排名候选，清空后恢复全量排名', async () => {
+    const { wrapper, instanceSelect, chart } = await mountSlider({ prod: ['pod-1999'] });
+    expect(mocks.rankInstances).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ instances: ['pod-1999'] }));
     expect(mocks.getInstanceTimeSeries).toHaveBeenCalledTimes(8);
     expect(chart().props('instances')).toEqual(instances(['pod-1999']));
     await wrapper.get('input[placeholder="输入实例名称搜索"]').setValue('pod-');
@@ -589,59 +644,204 @@ describe('实例监控侧栏', () => {
     tree.vm.$emit('node-checked', [...nodes, { id: instanceKey('pod-49'), name: 'pod-49' }]);
     await flushPromises();
     expect(mocks.message).toHaveBeenCalledWith({ theme: 'warning', message: '最多选择 50 个实例' });
-    expect(selects()[0].props('modelValue')).toHaveLength(50);
-    expect(selects()[0].props('modelValue')).toContain(instanceKey('pod-1999'));
-    selects()[0].vm.$emit('toggle', false);
+    expect(instanceSelect().props('modelValue')).toHaveLength(50);
+    expect(instanceSelect().props('modelValue')).toContain(instanceKey('pod-1999'));
+    expect(mocks.rankInstances).toHaveBeenCalledTimes(1);
+    instanceSelect().vm.$emit('toggle', false);
     await flushPromises();
-    expect(chart().props('instances')).toHaveLength(50);
-    expect(selects()[1].props('disabled')).toBe(true);
-    expect(mocks.rankInstances).not.toHaveBeenCalled();
-    selects()[0].vm.$emit('clear');
-    selects()[0].vm.$emit('toggle', false);
+    expect(chart().props('instances')).toHaveLength(10);
+    expect(mocks.rankInstances).toHaveBeenCalledTimes(2);
+    expect(mocks.rankInstances).toHaveBeenLastCalledWith(
+      expect.objectContaining({ instances: ['pod-1999', ...nodes.map(node => node.name)], limit: 10 }),
+    );
+    expect(instanceSelect().props('modelValue')).toHaveLength(50);
+    instanceSelect().vm.$emit('clear');
+    instanceSelect().vm.$emit('toggle', false);
     await flushPromises();
     expect(chart().props('instances')).toEqual(instances(['pod-1', 'pod-2']));
-    expect(selects()[1].props('disabled')).toBe(false);
-    expect(mocks.rankInstances).toHaveBeenCalledTimes(1);
+    expect(mocks.rankInstances).toHaveBeenCalledTimes(3);
+    expect(mocks.rankInstances.mock.lastCall?.[0]).not.toHaveProperty('instances');
     wrapper.unmount();
   });
 
-  it('汇总表遵守排名顺序，复用图表的最新值并保留缺少指标的实例', async () => {
-    mocks.rankInstances.mockResolvedValueOnce(rank(['pod-b', 'pod-a', 'pod-empty']));
-    mocks.getInstanceTimeSeries.mockImplementation((query: { metricKey: string }) =>
+  it('汇总表显示排序指标的排名值和其余指标的时序最新值，均向上取两位小数', async () => {
+    mocks.rankInstances.mockResolvedValueOnce([
+      { instance: 'pod-b', value: 0.75, unit: 'percent' },
+      { instance: 'pod-a', value: 0.29, unit: 'percent' },
+      { instance: 'pod-empty', value: 0.000032, unit: 'percent' },
+    ]);
+    const smallCpuUsage = 1.7002083333323982e-4;
+    const cpuMetric = {
+      unit: 'cores',
+      series: [
+        ...(metric(['pod-a'], 'cores', 0).series ?? []),
+        ...(metric(['pod-b'], 'cores', smallCpuUsage).series ?? []),
+      ],
+    };
+    const memoryLimitMetric = {
+      unit: 'percent',
+      series: [
+        ...(metric(['pod-a'], 'percent', 0.25).series ?? []),
+        ...(metric(['pod-b'], 'percent', 0.0000000012).series ?? []),
+      ],
+    };
+    const memoryUsageBytes = 1.501 * 1024 ** 2;
+    const memoryUsageMetric = {
+      unit: 'bytes',
+      series: [
+        ...(metric(['pod-a'], 'bytes', 0).series ?? []),
+        ...(metric(['pod-b'], 'bytes', memoryUsageBytes).series ?? []),
+      ],
+    };
+    const metrics: Record<string, MonitorMetricTimeSeries> = {
+      cpu_usage: cpuMetric,
+      memory_limit_usage: memoryLimitMetric,
+      memory_usage: memoryUsageMetric,
+    };
+    mocks.getInstanceTimeSeries.mockImplementation(({ metricKey }: { metricKey: string }) =>
       Promise.resolve({
-        [query.metricKey]: metric(['pod-a', 'pod-b'], query.metricKey.includes('limit') ? 'percent' : 'cores', 0.25),
+        [metricKey]:
+          metrics[metricKey] ?? metric(['pod-a', 'pod-b'], metricKey.includes('limit') ? 'percent' : 'cores', 0.25),
       }),
     );
-    const { wrapper, rows } = await mountSlider();
+    const { wrapper, rows, cells } = await mountSlider();
     expect(mocks.getInstanceTimeSeries).toHaveBeenCalledTimes(8);
     expect(rows()).toEqual([
-      { name: 'pod-b', cpuLimitUsageRate: 25, memLimitUsageRate: 25, cpuUsage: 0.25, memUsage: 0.25 },
-      { name: 'pod-a', cpuLimitUsageRate: 25, memLimitUsageRate: 25, cpuUsage: 0.25, memUsage: 0.25 },
+      {
+        name: 'pod-b',
+        cpuLimitUsageRate: 75,
+        memLimitUsageRate: 0.00000012,
+        cpuUsage: smallCpuUsage,
+        memUsage: memoryUsageBytes,
+      },
+      { name: 'pod-a', cpuLimitUsageRate: 29, memLimitUsageRate: 25, cpuUsage: 0, memUsage: 0 },
       {
         name: 'pod-empty',
-        cpuLimitUsageRate: undefined,
+        cpuLimitUsageRate: 0.0032,
         memLimitUsageRate: undefined,
         cpuUsage: undefined,
         memUsage: undefined,
       },
     ]);
+    expect(cells('cpuLimitUsageRate')).toEqual(['75.00%', '29.00%', '0.01%']);
+    expect(cells('memLimitUsageRate')).toEqual(['0.01%', '25.00%', '-']);
+    expect(cells('cpuUsage')).toEqual(['0.01', '0.00', '-']);
+    expect(cells('memUsage')).toEqual(['1.51', '0.00', '-']);
     wrapper.unmount();
   });
 
-  it('排名为空时不请求任何时序', async () => {
+  it('勾选后排序下拉框和表头使用同一批候选，各次排名只触发一轮时序', async () => {
+    const candidates = ['pod-1', 'pod-2', 'pod-memory', 'pod-cpu', 'pod-exact-cpu', 'pod-tiny-cpu'];
+    const { wrapper, select, sortHeader, chart, rows, cells, instanceSelect } = await mountSlider({ prod: candidates });
+    const rankBy = select('cpu_limit_usage');
+    const rankType = select('bottom');
+    const memoryUsageHeader = sortHeader('memUsage');
+    const cpuUsageHeader = sortHeader('cpuUsage');
+
+    expect(rankBy.props('disabled')).toBe(false);
+    expect(rankType.props('disabled')).toBe(false);
+    expect(memoryUsageHeader.element.disabled).toBe(false);
+    expect(cpuUsageHeader.element.disabled).toBe(false);
+    const help = wrapper.get('[aria-label^="所有图表按"]');
+    expect(sortHeader('cpuLimitUsageRate').attributes('aria-pressed')).toBe('true');
+    expect(help.attributes('aria-label')).toBe(
+      '所有图表按「CPU 使用率」的 SUM 汇聚结果在所选时段内的均值降序，取前 10 个实例',
+    );
+
+    await rankType.setValue('bottom');
+    await flushPromises();
+    expect(mocks.rankInstances).toHaveBeenLastCalledWith(
+      expect.objectContaining({ instances: candidates, rankBy: 'cpu_limit_usage', rankType: 'bottom' }),
+    );
+    expect(mocks.rankInstances).toHaveBeenCalledTimes(2);
+
+    mocks.rankInstances.mockResolvedValueOnce([{ instance: 'pod-memory', value: 1.5 * 1024 ** 2, unit: 'bytes' }]);
+    await rankBy.setValue('memory_usage');
+    await flushPromises();
+    expect(rankType.props('modelValue')).toBe('bottom');
+    expect(mocks.rankInstances).toHaveBeenLastCalledWith(
+      expect.objectContaining({ instances: candidates, rankBy: 'memory_usage', rankType: 'bottom' }),
+    );
+    expect(mocks.rankInstances).toHaveBeenCalledTimes(3);
+    expect(memoryUsageHeader.attributes('aria-pressed')).toBe('true');
+    expect(sortHeader('cpuLimitUsageRate').attributes('aria-pressed')).toBe('false');
+    expect(help.attributes('aria-label')).toContain('「内存用量」的 SUM 汇聚结果在所选时段内的均值升序');
+    expect(cells('memUsage')).toEqual(['1.50']);
+    expect(chart().props('instances')).toEqual(instances(['pod-memory']));
+    expect(mocks.getInstanceTimeSeries).toHaveBeenCalledTimes(24);
+    for (const [query] of mocks.getInstanceTimeSeries.mock.calls.slice(-8)) {
+      expect(query.instances).toEqual(['pod-memory']);
+    }
+
+    await memoryUsageHeader.trigger('click');
+    await flushPromises();
+    expect(rankType.props('modelValue')).toBe('top');
+    expect(mocks.rankInstances).toHaveBeenLastCalledWith(
+      expect.objectContaining({ instances: candidates, rankBy: 'memory_usage', rankType: 'top' }),
+    );
+    expect(mocks.rankInstances).toHaveBeenCalledTimes(4);
+
+    await memoryUsageHeader.trigger('click');
+    await flushPromises();
+    expect(rankType.props('modelValue')).toBe('bottom');
+    expect(mocks.rankInstances).toHaveBeenCalledTimes(5);
+
+    mocks.rankInstances.mockResolvedValueOnce([
+      { instance: 'pod-cpu', value: 1.251, unit: 'cores' },
+      { instance: 'pod-exact-cpu', value: 0.07, unit: 'cores' },
+      { instance: 'pod-tiny-cpu', value: 1.234e-7, unit: 'cores' },
+    ]);
+    await cpuUsageHeader.trigger('click');
+    await flushPromises();
+    expect(rankBy.props('modelValue')).toBe('cpu_usage');
+    expect(rankType.props('modelValue')).toBe('top');
+    expect(mocks.rankInstances).toHaveBeenLastCalledWith(
+      expect.objectContaining({ instances: candidates, rankBy: 'cpu_usage', rankType: 'top' }),
+    );
+    expect(mocks.rankInstances).toHaveBeenCalledTimes(6);
+    expect(mocks.getInstanceTimeSeries).toHaveBeenCalledTimes(48);
+    expect(rows()).toMatchObject([{ cpuUsage: 1.251 }, { cpuUsage: 0.07 }, { cpuUsage: 1.234e-7 }]);
+    expect(cells('cpuUsage')).toEqual(['1.26', '0.07', '0.01']);
+    expect(chart().props('instances')).toEqual(instances(['pod-cpu', 'pod-exact-cpu', 'pod-tiny-cpu']));
+
+    expect(instanceSelect().props('modelValue')).toEqual(candidates.map(name => instanceKey(name)));
+
+    instanceSelect().vm.$emit('clear');
+    await flushPromises();
+    expect(mocks.rankInstances).toHaveBeenCalledTimes(7);
+    expect(mocks.rankInstances).toHaveBeenLastCalledWith(
+      expect.objectContaining({ rankBy: 'cpu_usage', rankType: 'top' }),
+    );
+    expect(mocks.rankInstances.mock.lastCall?.[0]).not.toHaveProperty('instances');
+
+    await wrapper.setProps({ isShow: false });
+    await wrapper.setProps({ isShow: true });
+    chart().vm.$emit('plot-width-change', 450);
+    await flushPromises();
+    expect(rankBy.props('modelValue')).toBe('cpu_limit_usage');
+    expect(mocks.rankInstances).toHaveBeenLastCalledWith(
+      expect.objectContaining({ rankBy: 'cpu_limit_usage', rankType: 'top', limit: 10 }),
+    );
+    wrapper.unmount();
+  });
+
+  it('已勾选实例的排名结果为空时不请求任何时序', async () => {
     mocks.rankInstances.mockResolvedValueOnce([]);
-    const { wrapper, chart, rows } = await mountSlider();
-    expect(mocks.rankInstances).toHaveBeenCalledTimes(1);
+    const { wrapper, chart, instanceSelect, rows } = await mountSlider({ prod: ['pod-0', 'pod-1'] });
+    expect(mocks.rankInstances).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ instances: ['pod-0', 'pod-1'] }),
+    );
     expect(mocks.getInstanceTimeSeries).not.toHaveBeenCalled();
     expect(chart().props('instances')).toEqual([]);
     expect(rows()).toEqual([]);
+    expect(instanceSelect().props('modelValue')).toEqual([instanceKey('pod-0'), instanceKey('pod-1')]);
     wrapper.unmount();
   });
 
   it('多环境合并排名后按环境查询，保留同名实例及全局顺序', async () => {
     mocks.rankInstances
-      .mockResolvedValueOnce([{ instance: 'web-0', value: 1 }])
-      .mockResolvedValueOnce([{ instance: 'web-0', value: 2 }]);
+      .mockResolvedValueOnce([{ instance: 'web-0', value: 0.25, unit: 'percent' }])
+      .mockResolvedValueOnce([{ instance: 'web-0', value: 0.5, unit: 'percent' }]);
     mocks.getInstanceTimeSeries.mockImplementation(
       (query: { envName: string; instances: string[]; metricKey: string }) =>
         Promise.resolve({ [query.metricKey]: metric(query.instances, 'cores', query.envName === 'dev' ? 1 : 2) }),
@@ -652,22 +852,25 @@ describe('实例监控侧栏', () => {
     ]);
     expect(mocks.rankInstances.mock.calls.map(([query]) => query.envName)).toEqual(['dev', 'prod']);
     expect(chart().props('instances')).toEqual([...instances(['web-0']), ...instances(['web-0'], 'dev')]);
-    expect(rows().map((row: { cpuUsage: number; name: string }) => [row.name, row.cpuUsage])).toEqual([
-      ['prod/web-0', 2],
-      ['dev/web-0', 1],
+    expect(rows()).toMatchObject([
+      { name: 'prod/web-0', cpuLimitUsageRate: 50, cpuUsage: 2 },
+      { name: 'dev/web-0', cpuLimitUsageRate: 25, cpuUsage: 1 },
     ]);
     expect(mocks.getInstanceTimeSeries).toHaveBeenCalledTimes(16);
     wrapper.unmount();
   });
 
-  it('时间对比沿用当前名单，调整时间范围则用新参数重查排名和时序', async () => {
-    const { wrapper, chart, selects } = await mountSlider();
+  it('时间对比沿用勾选后的排名名单，调整时间范围时按原候选重查排名', async () => {
+    const candidates = ['pod-0', 'pod-1'];
+    mocks.rankInstances.mockResolvedValueOnce(rank(['pod-1']));
+    const { wrapper, chart, select } = await mountSlider({ prod: candidates });
     const initialInstances = chart().props('instances');
+    expect(initialInstances).toEqual(instances(['pod-1']));
     wrapper.getComponent({ name: 'SwitcherStub' }).vm.$emit('update:modelValue', true);
     await nextTick();
-    selects()[4].vm.$emit('update:modelValue', [3600]);
+    select(86400).vm.$emit('update:modelValue', [86400]);
     await flushPromises();
-    expect(chart().props('compareOffsets')).toEqual([3600]);
+    expect(chart().props('compareOffsets')).toEqual([86400]);
     expect(chart().props('instances')).toBe(initialInstances);
     expect(mocks.rankInstances).toHaveBeenCalledTimes(1);
     const from = dayjs().subtract(3, 'hour');
@@ -678,31 +881,31 @@ describe('实例监控侧栏', () => {
     await flushPromises();
     const time = { startTime: from.unix(), endTime: to.unix(), interval: 60 };
     expect(mocks.rankInstances).toHaveBeenCalledTimes(2);
-    expect(mocks.rankInstances).toHaveBeenLastCalledWith(expect.objectContaining(time));
+    expect(mocks.rankInstances).toHaveBeenLastCalledWith(expect.objectContaining({ ...time, instances: candidates }));
     expect(mocks.getInstanceTimeSeries).toHaveBeenLastCalledWith(expect.objectContaining(time));
     wrapper.unmount();
   });
 
   it('过期排名不会发起时序，旧图表结果也不会覆盖新汇总', async () => {
     const { promise, resolve } = deferred<ReturnType<typeof rank>>();
-    const { wrapper, chart, selects, rows, emitMetric } = await mountSlider();
+    const { wrapper, chart, select, rows, emitMetric } = await mountSlider();
     const oldQueryId = chart().props('queryId');
     mocks.rankInstances.mockReturnValueOnce(promise).mockResolvedValueOnce(rank(['pod-new']));
-    selects()[3].vm.$emit('update:modelValue', 'max');
+    await select('memory_limit_usage').setValue('memory_limit_usage');
     await flushPromises();
-    selects()[3].vm.$emit('update:modelValue', 'avg');
+    await select('cpu_limit_usage').setValue('cpu_limit_usage');
     await flushPromises();
     resolve(rank(['pod-stale']));
     await flushPromises();
     await emitMetric('cpu_usage', metric(['pod-new'], 'cores', 99), oldQueryId);
     expect(chart().props('instances')).toEqual(instances(['pod-new']));
-    expect(rows()[0]).toMatchObject({ name: 'pod-new', cpuUsage: 1 });
+    expect(rows()[0]).toMatchObject({ name: 'pod-new', cpuLimitUsageRate: 50, cpuUsage: 1 });
     expect(mocks.getInstanceTimeSeries).toHaveBeenCalledTimes(16);
     wrapper.unmount();
   });
 
   it('实例快照更新只改变搜索候选，保留已提交的手选实例', async () => {
-    const { wrapper, chart, selects } = await mountSlider({ prod: ['pod-0'] });
+    const { wrapper, chart, instanceSelect, select } = await mountSlider({ prod: ['pod-0'] });
     const committed = chart().props('queryId');
     await wrapper.setProps({
       instanceGroups: [{ envName: 'prod', instances: ['pod-new-0'] }],
@@ -711,11 +914,16 @@ describe('实例监控侧栏', () => {
     await flushPromises();
     expect(wrapper.findAll('[data-testid="instance-candidate"]')).toHaveLength(1);
     expect(wrapper.get('[data-testid="instance-candidate"]').attributes('value')).toBe(instanceKey('pod-new-0'));
-    expect(selects()[0].props('modelValue')).toEqual([instanceKey('pod-0')]);
+    expect(instanceSelect().props('modelValue')).toEqual([instanceKey('pod-0')]);
     expect(chart().props('queryId')).toBe(committed);
     expect(chart().props('instances')).toEqual(instances(['pod-0']));
-    expect(mocks.rankInstances).not.toHaveBeenCalled();
+    expect(mocks.rankInstances).toHaveBeenCalledTimes(1);
     expect(mocks.getInstanceTimeSeries).toHaveBeenCalledTimes(8);
+    await select('bottom').setValue('bottom');
+    await flushPromises();
+    expect(mocks.rankInstances).toHaveBeenLastCalledWith(
+      expect.objectContaining({ instances: ['pod-0'], rankType: 'bottom' }),
+    );
     wrapper.unmount();
   });
 });

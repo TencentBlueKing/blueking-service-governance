@@ -96,7 +96,7 @@
                   }"
                   :class="[FIELD_VALUE_BASE_CLASS, { [FIELD_VALUE_MODIFIED_CLASS]: getDefaultValueTip('cpuRequests') }]"
                 >
-                  {{ formModel.cpuRequests ? $t('{0} 核', [getCoreCount(formModel.cpuRequests)]) : '--' }}
+                  {{ formModel.cpuRequests ? $t('{0} 核', [formatCpuCores(formModel.cpuRequests)]) : '--' }}
                 </span>
               </template>
             </FieldItem>
@@ -116,7 +116,7 @@
                   }"
                   :class="[FIELD_VALUE_BASE_CLASS, { [FIELD_VALUE_MODIFIED_CLASS]: getDefaultValueTip('cpuLimits') }]"
                 >
-                  {{ formModel.cpuLimits ? $t('{0} 核', [getCoreCount(formModel.cpuLimits)]) : '--' }}
+                  {{ formModel.cpuLimits ? $t('{0} 核', [formatCpuCores(formModel.cpuLimits)]) : '--' }}
                 </span>
               </template>
             </FieldItem>
@@ -207,18 +207,15 @@
               label="CPU 预留 (Requests)"
               property="cpuRequests"
             >
-              <Select v-model="formModel.cpuRequests">
-                <Select.Option
-                  v-for="option in getCpuOptions(formModel.cpuRequests)"
-                  :key="option"
-                  :label="$t('{0} 核', [getCoreCount(option)])"
-                  :value="option"
-                />
-              </Select>
+              <ResourceQuantitySelect
+                kind="cpu"
+                :model-value="formModel.cpuRequests"
+                @update:model-value="updateQuantity('cpuRequests', $event)"
+              />
               <FieldResetHint
                 :show-reset="shouldShowResetIcon('cpuRequests')"
                 :tip="getDefaultValueTip('cpuRequests')"
-                @reset="handleResetField('cpuRequests')"
+                @reset="resetQuantity('cpuRequests')"
               />
             </Form.FormItem>
             <Form.FormItem
@@ -226,18 +223,15 @@
               label="CPU 限制 (Limits)"
               property="cpuLimits"
             >
-              <Select v-model="formModel.cpuLimits">
-                <Select.Option
-                  v-for="option in getCpuOptions(formModel.cpuLimits)"
-                  :key="option"
-                  :label="$t('{0} 核', [getCoreCount(option)])"
-                  :value="option"
-                />
-              </Select>
+              <ResourceQuantitySelect
+                kind="cpu"
+                :model-value="formModel.cpuLimits"
+                @update:model-value="updateQuantity('cpuLimits', $event)"
+              />
               <FieldResetHint
                 :show-reset="shouldShowResetIcon('cpuLimits')"
                 :tip="getDefaultValueTip('cpuLimits')"
-                @reset="handleResetField('cpuLimits')"
+                @reset="resetQuantity('cpuLimits')"
               />
             </Form.FormItem>
           </div>
@@ -249,18 +243,15 @@
               label="内存预留 (Requests)"
               property="memoryRequests"
             >
-              <Select v-model="formModel.memoryRequests">
-                <Select.Option
-                  v-for="option in MEMORY_OPTIONS"
-                  :key="option"
-                  :label="option"
-                  :value="option"
-                />
-              </Select>
+              <ResourceQuantitySelect
+                kind="memory"
+                :model-value="formModel.memoryRequests"
+                @update:model-value="updateQuantity('memoryRequests', $event)"
+              />
               <FieldResetHint
                 :show-reset="shouldShowResetIcon('memoryRequests')"
                 :tip="getDefaultValueTip('memoryRequests')"
-                @reset="handleResetField('memoryRequests')"
+                @reset="resetQuantity('memoryRequests')"
               />
             </Form.FormItem>
             <Form.FormItem
@@ -268,18 +259,15 @@
               label="内存限制 (Limits)"
               property="memoryLimits"
             >
-              <Select v-model="formModel.memoryLimits">
-                <Select.Option
-                  v-for="option in MEMORY_OPTIONS"
-                  :key="option"
-                  :label="option"
-                  :value="option"
-                />
-              </Select>
+              <ResourceQuantitySelect
+                kind="memory"
+                :model-value="formModel.memoryLimits"
+                @update:model-value="updateQuantity('memoryLimits', $event)"
+              />
               <FieldResetHint
                 :show-reset="shouldShowResetIcon('memoryLimits')"
                 :tip="getDefaultValueTip('memoryLimits')"
-                @reset="handleResetField('memoryLimits')"
+                @reset="resetQuantity('memoryLimits')"
               />
             </Form.FormItem>
           </div>
@@ -318,11 +306,12 @@
 <script lang="ts" setup>
   import { computed, ref, watch } from 'vue';
 
-  import { Button, Form, Input, Select } from 'bkui-vue';
+  import { Button, Form, Input } from 'bkui-vue';
   import { PlacementEnum } from 'bkui-vue/lib/shared';
   import { useI18n } from 'vue-i18n';
   import { AppSpecResourcesInput, AppSpecResourcesOutput, EnvAppSpecResourcesInput } from '~/@types/v1/app-spec';
   import { AppSpecService } from '~/api/modules/v1';
+  import { formatCpuCores, parseCpuCores, parseMemoryToMiB } from '~/common/resource-quantity';
   import BkmsContent from '~/components/bkms-content.vue';
   import FieldItem from '~/components/field-item.vue';
   import UnderLineTips from '~/components/under-line-tips.vue';
@@ -333,6 +322,7 @@
   import EnvScopeTag from './env-scope-tag.vue';
   import FieldResetHint from './field-reset-hint.vue';
   import ModifiedFieldLabel from './modified-field-label.vue';
+  import ResourceQuantitySelect from './resource-quantity-select.vue';
   import { createFieldAccessors, createFillEnvFormData, pickFields, useAppSpecSection } from './use-app-spec-section';
 
   import type { ExtendedEnv } from './types';
@@ -341,11 +331,12 @@
   const FIELD_VALUE_BASE_CLASS = 'text-[12px] text-[#313238]';
   const FIELD_VALUE_MODIFIED_CLASS = 'border-b border-dashed border-b-[#313238]';
 
-  type FieldKey = 'cpuLimits' | 'cpuRequests' | 'memoryLimits' | 'memoryRequests' | 'replicas';
-
+  type FieldKey = 'replicas' | QuantityField;
   interface Props {
     currentEnv: ExtendedEnv | null;
   }
+
+  type QuantityField = 'cpuLimits' | 'cpuRequests' | 'memoryLimits' | 'memoryRequests';
 
   const FORM_DEFAULTS: AppSpecResourcesInput = {
     replicas: 1,
@@ -358,9 +349,6 @@
   const ALL_FIELD_KEYS: FieldKey[] = ['replicas', 'cpuRequests', 'cpuLimits', 'memoryRequests', 'memoryLimits'];
 
   const FIELD_ACCESSORS = createFieldAccessors<AppSpecResourcesInput, FieldKey>(ALL_FIELD_KEYS, FORM_DEFAULTS);
-
-  const CPU_OPTIONS = ['0.1', '0.2', '0.5', '1', '2', '4', '8', '16', '32'];
-  const MEMORY_OPTIONS = ['256Mi', '512Mi', '1Gi', '2Gi', '4Gi', '8Gi', '16Gi', '32Gi', '64Gi'];
 
   const props = defineProps<Props>();
 
@@ -413,27 +401,15 @@
       // --- 数据转换 ---
       buildDefaultPayload: model => pickFields(model, ALL_FIELD_KEYS),
 
-      /** 每个字段独立判断：仅当该字段自身有差异且未被重置时才传值，否则传 null */
-      buildEnvPayload: (model, isFieldDiff, isFieldReset) => {
+      // 资源字段重置时回到默认值并移除覆盖标记，重置后再次修改产生的新差异仍需保存。
+      buildEnvPayload: (model, isFieldNeedSave) => {
         return {
           replicas:
-            !isAutoScaleEnabled.value && isFieldDiff('replicas') && !isFieldReset('replicas')
-              ? model.replicas
-              : (null as unknown as number),
-          cpuRequests:
-            isFieldDiff('cpuRequests') && !isFieldReset('cpuRequests')
-              ? model.cpuRequests
-              : (null as unknown as string),
-          cpuLimits:
-            isFieldDiff('cpuLimits') && !isFieldReset('cpuLimits') ? model.cpuLimits : (null as unknown as string),
-          memoryRequests:
-            isFieldDiff('memoryRequests') && !isFieldReset('memoryRequests')
-              ? model.memoryRequests
-              : (null as unknown as string),
-          memoryLimits:
-            isFieldDiff('memoryLimits') && !isFieldReset('memoryLimits')
-              ? model.memoryLimits
-              : (null as unknown as string),
+            !isAutoScaleEnabled.value && isFieldNeedSave('replicas') ? model.replicas : (null as unknown as number),
+          cpuRequests: isFieldNeedSave('cpuRequests') ? model.cpuRequests : (null as unknown as string),
+          cpuLimits: isFieldNeedSave('cpuLimits') ? model.cpuLimits : (null as unknown as string),
+          memoryRequests: isFieldNeedSave('memoryRequests') ? model.memoryRequests : (null as unknown as string),
+          memoryLimits: isFieldNeedSave('memoryLimits') ? model.memoryLimits : (null as unknown as string),
         };
       },
 
@@ -447,6 +423,7 @@
   );
 
   const {
+    formRef,
     saving,
     resetting,
     loading,
@@ -463,27 +440,21 @@
     handleSave,
   } = appSpecSection;
 
-  /** 内存值（如 '256Mi', '2Gi'）转 MiB，用于 Limits >= Requests 校验 */
-  const parseMemoryToMiB = (value: string): number => {
-    const match = value.match(/^(\d+(?:\.\d+)?)(Mi|Gi)$/);
-    if (!match) return 0;
-    const num = parseFloat(match[1]);
-    return match[2] === 'Gi' ? num * 1024 : num;
-  };
+  /** 创建 Limits ≥ Requests 的表单校验规则：两侧均有值才比较，按 CPU 核数 / 内存 MiB 统一量纲，解析失败提示格式错误。 */
+  function createLimitRule(kind: 'cpu' | 'memory', label: string) {
+    const parse = kind === 'cpu' ? parseCpuCores : parseMemoryToMiB;
+    const error = computed(() => {
+      const request = formModel.value[`${kind}Requests`];
+      const limit = formModel.value[`${kind}Limits`];
+      if (!request.trim() || !limit.trim()) return '';
 
-  /** CPU 值转核数；兼容 Kubernetes 毫核格式（如 200m = 0.2 核）。 */
-  const getCoreCount = (value: string): number => {
-    const milliCoreMatch = value.match(/^(\d+(?:\.\d+)?)m$/);
-    return milliCoreMatch ? Number(milliCoreMatch[1]) / 1000 : Number(value);
-  };
-
-  /** 将 CLI 写入的自定义 CPU 值加入下拉框，并过滤与其等量的预设项。 */
-  const getCpuOptions = (currentValue: string): string[] => {
-    if (!currentValue || CPU_OPTIONS.includes(currentValue)) return CPU_OPTIONS;
-
-    const currentCoreCount = getCoreCount(currentValue);
-    return [currentValue, ...CPU_OPTIONS.filter(option => getCoreCount(option) !== currentCoreCount)];
-  };
+      const requestValue = parse(request);
+      const limitValue = parse(limit);
+      if (requestValue === null || limitValue === null) return t('格式错误');
+      return limitValue < requestValue ? t('{0} Limits 不能小于 Requests', [label]) : '';
+    });
+    return { validator: () => !error.value, message: () => error.value, trigger: 'change' };
+  }
 
   const rules = {
     replicas: [
@@ -495,44 +466,53 @@
     ],
     cpuRequests: [
       {
-        validator: () => formModel.value.cpuRequests.length > 0,
+        validator: () => !!formModel.value.cpuRequests.trim(),
         message: `CPU Requests${t('不能为空')}`,
         trigger: 'change',
       },
     ],
     cpuLimits: [
       {
-        validator: () => formModel.value.cpuLimits.length > 0,
+        validator: () => !!formModel.value.cpuLimits.trim(),
         message: `CPU Limits${t('不能为空')}`,
         trigger: 'change',
       },
-      {
-        validator: () => getCoreCount(formModel.value.cpuLimits) >= getCoreCount(formModel.value.cpuRequests),
-        message: t('{0} Limits 不能小于 Requests', [t('CPU')]),
-        trigger: 'change',
-      },
+      createLimitRule('cpu', t('CPU')),
     ],
     memoryRequests: [
       {
-        validator: () => formModel.value.memoryRequests.length > 0,
+        validator: () => !!formModel.value.memoryRequests.trim(),
         message: `${t('内存')} Requests${t('不能为空')}`,
         trigger: 'change',
       },
     ],
     memoryLimits: [
       {
-        validator: () => formModel.value.memoryLimits.length > 0,
+        validator: () => !!formModel.value.memoryLimits.trim(),
         message: `${t('内存')} Limits${t('不能为空')}`,
         trigger: 'change',
       },
-      {
-        validator: () =>
-          parseMemoryToMiB(formModel.value.memoryLimits) >= parseMemoryToMiB(formModel.value.memoryRequests),
-        message: t('{0} Limits 不能小于 Requests', [t('内存')]),
-        trigger: 'change',
-      },
+      createLimitRule('memory', t('内存')),
     ],
   };
+
+  /** 单项恢复为默认值后，联动重校验该字段及其对应的限制字段。 */
+  function resetQuantity(field: QuantityField) {
+    handleResetField(field);
+    revalidateQuantity(field);
+  }
+
+  /** 联动重校验：改动 Requests / 恢复任一侧都可能影响 Limits ≥ Requests 的比较结果，需同时刷新两者。 */
+  function revalidateQuantity(field: QuantityField) {
+    const limit = field.startsWith('cpu') ? 'cpuLimits' : 'memoryLimits';
+    formRef.value?.validate(field === limit ? field : [field, limit]).catch(() => false);
+  }
+
+  /** 写入选定的资源规格值（预设档位或自定义确认值）并触发联动重校验。 */
+  function updateQuantity(field: QuantityField, value: string) {
+    formModel.value[field] = value;
+    revalidateQuantity(field);
+  }
 
   /** GPA 自动扩缩容接管实例数时，资源规格页不再展示实例数的环境覆盖标识。 */
   const shouldShowResetIcon = (field: FieldKey) =>
@@ -572,7 +552,7 @@
 
     // 针对不同字段类型格式化默认值显示
     if (field === 'cpuRequests' || field === 'cpuLimits') {
-      return t('默认值：{0}', [t('{0} 核', [getCoreCount(defaultValue as string)])]);
+      return t('默认值：{0}', [t('{0} 核', [formatCpuCores(defaultValue as string)])]);
     }
     return t('默认值：{0}', [defaultValue]);
   };

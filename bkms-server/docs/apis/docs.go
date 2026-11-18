@@ -7927,7 +7927,7 @@ const docTemplate = `{
                         "BkUserCredential": []
                     }
                 ],
-                "description": "返回环境 / 泳道最新部署记录的分批发布进度，进度由部署轮询任务写入，不实时请求集群；\n没有部署记录或最新记录不是分批发布时 data 为 null",
+                "description": "返回环境 / 泳道最新部署记录的分批发布进度\n没有部署记录或最新记录不是分批发布时 data 为 null",
                 "produces": [
                     "application/json"
                 ],
@@ -8145,7 +8145,7 @@ const docTemplate = `{
             }
         },
         "/apps/{appID}/envs/{envName}/bkmonitor/instance-ranks": {
-            "get": {
+            "post": {
                 "security": [
                     {
                         "BkUserInfo": []
@@ -8154,13 +8154,16 @@ const docTemplate = `{
                         "BkUserCredential": []
                     }
                 ],
+                "consumes": [
+                    "application/json"
+                ],
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "bkintegrations-bkmonitor"
                 ],
-                "summary": "按平均 CPU 使用量查询环境实例的 Top / Bottom N",
+                "summary": "按指定指标的平均值查询环境实例的 Top / Bottom N",
                 "operationId": "RankInstances",
                 "parameters": [
                     {
@@ -8178,53 +8181,13 @@ const docTemplate = `{
                         "required": true
                     },
                     {
-                        "type": "integer",
-                        "description": "取前 N 个实例，1~50，默认 10",
-                        "name": "limit",
-                        "in": "query"
-                    },
-                    {
-                        "enum": [
-                            "top",
-                            "bottom"
-                        ],
-                        "type": "string",
-                        "description": "排名方向，默认 top",
-                        "name": "rankType",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "排名时间范围的开始时间（Unix 时间戳，秒）",
-                        "name": "startTime",
-                        "in": "query",
-                        "required": true
-                    },
-                    {
-                        "type": "integer",
-                        "description": "排名时间范围的结束时间（Unix 时间戳，秒）",
-                        "name": "endTime",
-                        "in": "query",
-                        "required": true
-                    },
-                    {
-                        "type": "integer",
-                        "description": "子查询步长（秒），最小 60，默认 60",
-                        "name": "interval",
-                        "in": "query"
-                    },
-                    {
-                        "enum": [
-                            "sum",
-                            "max",
-                            "min",
-                            "count",
-                            "avg"
-                        ],
-                        "type": "string",
-                        "description": "汇聚方法，默认 sum",
-                        "name": "method",
-                        "in": "query"
+                        "description": "查询参数",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/serializer.RankInstancesQueryInput"
+                        }
                     }
                 ],
                 "responses": {
@@ -12390,6 +12353,146 @@ const docTemplate = `{
                 }
             }
         },
+        "/apps/{appID}/rainbow-tconf": {
+            "get": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "description": "未配置时 url 为空；应用所在空间未开启七彩石配置开关时不可用",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "rainbowtconf"
+                ],
+                "summary": "获取应用的七彩石入口",
+                "operationId": "GetRainbowTConf",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "应用 ID",
+                        "name": "appID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.RainbowTConfResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "description": "地址仅支持 https；应用所在空间未开启七彩石配置开关时不可用",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "rainbowtconf"
+                ],
+                "summary": "设置应用的七彩石入口",
+                "operationId": "PutRainbowTConf",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "应用 ID",
+                        "name": "appID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "七彩石页面地址",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/serializer.PutRainbowTConfInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.RainbowTConfResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "description": "删除后应用回到未配置状态；未配置时调用同样返回成功；应用所在空间未开启七彩石配置开关时不可用",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "rainbowtconf"
+                ],
+                "summary": "删除应用的七彩石入口",
+                "operationId": "DeleteRainbowTConf",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "应用 ID",
+                        "name": "appID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.RainbowTConfEmptyOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
         "/apps/{appID}/recommended-image-tag": {
             "get": {
                 "security": [
@@ -14981,6 +15084,49 @@ const docTemplate = `{
                 }
             }
         },
+        "/envs/{envID}/polaris-operator": {
+            "get": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "polaris-access-points"
+                ],
+                "summary": "获取环境的北极星组件状态",
+                "operationId": "GetEnvPolarisOperator",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "环境 ID",
+                        "name": "envID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.PolarisOperatorResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
         "/envs/{envID}/port-pools": {
             "get": {
                 "security": [
@@ -15168,6 +15314,41 @@ const docTemplate = `{
                 "responses": {
                     "200": {
                         "description": "OK"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
+        "/frontend-features": {
+            "get": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "description": "返回由部署配置决定的功能开关，前端据此决定页面入口是否展示",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "frontend-features"
+                ],
+                "summary": "获取前端功能开关",
+                "operationId": "GetFrontendFeatures",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.FrontendFeaturesResponse"
+                        }
                     },
                     "400": {
                         "description": "Bad Request",
@@ -15797,6 +15978,112 @@ const docTemplate = `{
                     },
                     "500": {
                         "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
+        "/plat-mgt/workspaces/{workspaceID}/cfg-switches": {
+            "get": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "platmgt"
+                ],
+                "summary": "查询空间的配置开关列表（配置管理 BSCP、七彩石），从未设置过的开关为关闭状态",
+                "operationId": "ListPlatCfgSwitches",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.PlatCfgSwitchListResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
+        "/plat-mgt/workspaces/{workspaceID}/cfg-switches/{key}": {
+            "put": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "description": "关闭配置管理（BSCP）后，该空间下应用的配置管理接口全部不可用，且之后的部署不再注入 BSCP 容器",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "platmgt"
+                ],
+                "summary": "设置空间的一项配置开关",
+                "operationId": "UpdatePlatCfgSwitch",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "开关标识：bscp / rainbowTConf",
+                        "name": "key",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "开关取值",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/serializer.UpdatePlatCfgSwitchInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.PlatCfgSwitchResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
                         "schema": {
                             "$ref": "#/definitions/bkerrs.GinErrorOutput"
                         }
@@ -18754,6 +19041,50 @@ const docTemplate = `{
                 }
             }
         },
+        "/workspaces/{workspaceID}/cfg-switches": {
+            "get": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "description": "开关由平台管理员在平台管理中设置，前端据此决定是否展示配置管理（BSCP）、七彩石等 tab；未设置时为 false",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "cfgswitch"
+                ],
+                "summary": "获取空间的配置开关",
+                "operationId": "GetCfgSwitches",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.CfgSwitchesResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
         "/workspaces/{workspaceID}/components": {
             "get": {
                 "security": [
@@ -19547,6 +19878,344 @@ const docTemplate = `{
                 }
             }
         },
+        "/workspaces/{workspaceID}/framework-config-templates": {
+            "get": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "description": "返回平台内置模板与空间自定义模板，每个框架、语言先列内置模板（TAF 没有内置模板）；不返回模板内容",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "framework-config-templates"
+                ],
+                "summary": "查询工作空间框架配置模板列表",
+                "operationId": "ListWorkspaceFrameworkConfigTemplates",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "框架：trpc、taf",
+                        "name": "framework",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "语言：go、cpp",
+                        "name": "language",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.ListTemplatesOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "framework-config-templates"
+                ],
+                "summary": "新建工作空间框架配置模板",
+                "operationId": "CreateWorkspaceFrameworkConfigTemplate",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "框架配置模板",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/serializer.CreateTemplateInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.TemplateOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    },
+                    "409": {
+                        "description": "同一框架、语言下模板名称已存在，或并发设置了其它默认模板",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
+        "/workspaces/{workspaceID}/framework-config-templates/{templateID}": {
+            "get": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "framework-config-templates"
+                ],
+                "summary": "查询工作空间框架配置模板详情",
+                "operationId": "GetWorkspaceFrameworkConfigTemplate",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "模板 ID，内置模板为 builtin-{framework}-{language}",
+                        "name": "templateID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.TemplateOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "description": "框架与语言不可修改；平台内置模板只读",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "framework-config-templates"
+                ],
+                "summary": "编辑工作空间框架配置模板",
+                "operationId": "UpdateWorkspaceFrameworkConfigTemplate",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "模板 ID",
+                        "name": "templateID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "框架配置模板",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/serializer.UpdateTemplateInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.TemplateOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    },
+                    "409": {
+                        "description": "同一框架、语言下模板名称已存在，或并发设置了其它默认模板",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "description": "删除默认模板后，该框架、语言回落到平台内置模板（TAF 没有内置模板，则不再有默认模板）；平台内置模板不能删除",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "framework-config-templates"
+                ],
+                "summary": "删除工作空间框架配置模板",
+                "operationId": "DeleteWorkspaceFrameworkConfigTemplate",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "模板 ID",
+                        "name": "templateID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_workload_appmodelcore_frameworkcfgtmpl_serializer.EmptyOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
+        "/workspaces/{workspaceID}/framework-config-templates/{templateID}/default": {
+            "put": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "description": "创建应用时默认使用该模板；对平台内置模板调用表示恢复使用平台默认模板",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "framework-config-templates"
+                ],
+                "summary": "设为默认框架配置模板",
+                "operationId": "SetWorkspaceFrameworkConfigTemplateDefault",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "模板 ID，内置模板为 builtin-{framework}-{language}",
+                        "name": "templateID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.TemplateOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    },
+                    "409": {
+                        "description": "并发设置了其它默认模板",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
         "/workspaces/{workspaceID}/info": {
             "put": {
                 "security": [
@@ -19712,6 +20381,518 @@ const docTemplate = `{
                     },
                     "500": {
                         "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
+        "/workspaces/{workspaceID}/polaris-access-points": {
+            "get": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "description": "允许空间自建接入点时返回空间自建接入点",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "polaris-access-points"
+                ],
+                "summary": "获取空间的北极星接入点列表",
+                "operationId": "ListPolarisAccessPoints",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.AccessPointListResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "description": "保存前服务端重新执行连通测试，失败或北极星开启了客户端鉴权时拒绝；Token 选填，加密存储。\n传入 clusterIDs 时同时把这些集群绑定到该接入点",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "polaris-access-points"
+                ],
+                "summary": "创建北极星接入点",
+                "operationId": "CreatePolarisAccessPoint",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "接入点",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/serializer.AccessPointCreateInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.AccessPointResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
+        "/workspaces/{workspaceID}/polaris-access-points/connectivity-test": {
+            "post": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "description": "依次检查网络、鉴权开关、Token，返回失败的原因与北极星上的命名空间，整体 10 秒超时。\n传入已有接入点 ID 且 token 为空时使用已保存的 Token，并记录本次结果",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "polaris-access-points"
+                ],
+                "summary": "测试北极星接入点连通性",
+                "operationId": "TestPolarisAccessPointConnectivity",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "接入地址",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/serializer.ConnectivityTestInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.ConnectivityTestResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
+        "/workspaces/{workspaceID}/polaris-access-points/network-info": {
+            "get": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "description": "返回平台访问北极星的出口 IP，用户需要把它们加入自建北极星的白名单",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "polaris-access-points"
+                ],
+                "summary": "获取平台访问北极星的网络信息",
+                "operationId": "GetPolarisAccessPointNetworkInfo",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.NetworkInfoResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
+        "/workspaces/{workspaceID}/polaris-access-points/{accessPointID}": {
+            "delete": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "description": "接入点仍绑定集群，或仍有北极星配置固定使用它时拒绝删除",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "polaris-access-points"
+                ],
+                "summary": "删除北极星接入点",
+                "operationId": "DeletePolarisAccessPoint",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "接入点 ID",
+                        "name": "accessPointID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.EmptyResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "description": "字段缺省表示不修改；客户端地址或 Token 变化时重新执行连通测试，失败时拒绝保存。\n接入点被北极星配置使用时仍允许修改地址，集群组件会显示为需要更新。\n传入 clusterIDs 时全量替换该接入点绑定的集群",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "polaris-access-points"
+                ],
+                "summary": "更新北极星接入点",
+                "operationId": "UpdatePolarisAccessPoint",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "接入点 ID",
+                        "name": "accessPointID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "待修改的字段",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/serializer.AccessPointUpdateInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.AccessPointResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
+        "/workspaces/{workspaceID}/polaris-access-points/{accessPointID}/namespaces": {
+            "get": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "description": "实时读取空间自建接入点上的北极星命名空间，并过滤系统命名空间 Polaris",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "polaris-access-points"
+                ],
+                "summary": "获取北极星接入点的命名空间",
+                "operationId": "ListPolarisAccessPointNamespaces",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "接入点 ID",
+                        "name": "accessPointID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.NamespacesResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
+        "/workspaces/{workspaceID}/polaris-access-points/{accessPointID}/operator-installs": {
+            "post": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "description": "集群必须已绑定该接入点；每个集群创建一个异步任务，同一集群同时只允许一个运行中的任务。",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "polaris-access-points"
+                ],
+                "summary": "安装或更新北极星组件",
+                "operationId": "InstallPolarisOperators",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "接入点 ID",
+                        "name": "accessPointID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "目标集群与 chart 版本",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/serializer.OperatorInstallInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.OperatorTaskListResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
+        "/workspaces/{workspaceID}/polaris-clusters": {
+            "get": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "description": "候选集群为空间 BCS 项目下的全部非共享集群，含没有环境的集群；先列出有环境的集群，同类按集群 ID 排序。",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "polaris-access-points"
+                ],
+                "summary": "获取北极星集群绑定视图",
+                "operationId": "ListPolarisClusters",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.PolarisClusterListResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
+        "/workspaces/{workspaceID}/polaris-operators": {
+            "get": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "description": "返回候选集群的组件状态、与接入点不一致的参数、最近的安装任务，以及可选的 chart 版本。",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "polaris-access-points"
+                ],
+                "summary": "获取北极星组件状态视图",
+                "operationId": "ListPolarisOperators",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.PolarisOperatorListResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
                         "schema": {
                             "$ref": "#/definitions/bkerrs.GinErrorOutput"
                         }
@@ -20606,6 +21787,36 @@ const docTemplate = `{
         }
     },
     "definitions": {
+        "accesspoint.FailureReason": {
+            "type": "string",
+            "enum": [
+                "networkUnreachable",
+                "clientAuthEnabled",
+                "tokenInvalid"
+            ],
+            "x-enum-varnames": [
+                "FailureNetworkUnreachable",
+                "FailureClientAuthEnabled",
+                "FailureTokenInvalid"
+            ]
+        },
+        "accesspoint.OperatorStatus": {
+            "type": "string",
+            "enum": [
+                "ready",
+                "installing",
+                "failed",
+                "outdated",
+                "not_installed"
+            ],
+            "x-enum-varnames": [
+                "OperatorStatusReady",
+                "OperatorStatusInstalling",
+                "OperatorStatusFailed",
+                "OperatorStatusOutdated",
+                "OperatorStatusNotInstalled"
+            ]
+        },
         "admin.RoleCode": {
             "type": "string",
             "enum": [
@@ -22454,6 +23665,9 @@ const docTemplate = `{
         "github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_workload_appmodelcore_appspec_serializer.EmptyOutput": {
             "type": "object"
         },
+        "github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_workload_appmodelcore_frameworkcfgtmpl_serializer.EmptyOutput": {
+            "type": "object"
+        },
         "github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_workload_envvars_serializer.EmptyOutput": {
             "type": "object"
         },
@@ -22462,6 +23676,19 @@ const docTemplate = `{
         },
         "github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_workload_networking_serializer.EmptyOutput": {
             "type": "object"
+        },
+        "installtask.Status": {
+            "type": "string",
+            "enum": [
+                "running",
+                "succeeded",
+                "failed"
+            ],
+            "x-enum-varnames": [
+                "StatusRunning",
+                "StatusSucceeded",
+                "StatusFailed"
+            ]
         },
         "runtimemod.PublicModView": {
             "type": "object",
@@ -22525,6 +23752,140 @@ const docTemplate = `{
                 "ReasonInvalidStack",
                 "ReasonIncompleteLanguage"
             ]
+        },
+        "serializer.AccessPointCreateInput": {
+            "type": "object",
+            "required": [
+                "clientHosts",
+                "consoleURL",
+                "name"
+            ],
+            "properties": {
+                "clientHosts": {
+                    "description": "客户端地址，IP 或域名，1 ~ 10 个；OpenAPI 端口固定为 8090，SDK 端口固定为 8091",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "clusterIDs": {
+                    "description": "绑定到该接入点的集群 ID；缺省表示不绑定集群",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "consoleURL": {
+                    "description": "北极星控制台地址，IP:Port 或域名，缺省协议时补 http://",
+                    "type": "string"
+                },
+                "name": {
+                    "description": "接入点名称，空间内唯一",
+                    "type": "string"
+                },
+                "token": {
+                    "description": "北极星鉴权 Token，选填",
+                    "type": "string"
+                }
+            }
+        },
+        "serializer.AccessPointListResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/serializer.AccessPointOutput"
+                    }
+                }
+            }
+        },
+        "serializer.AccessPointOutput": {
+            "type": "object",
+            "properties": {
+                "boundClusterCount": {
+                    "description": "绑定的集群数量",
+                    "type": "integer"
+                },
+                "clientHosts": {
+                    "description": "客户端地址",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "consoleURL": {
+                    "description": "北极星控制台地址",
+                    "type": "string"
+                },
+                "hasToken": {
+                    "description": "是否填写了 Token",
+                    "type": "boolean"
+                },
+                "id": {
+                    "description": "接入点 ID",
+                    "type": "string"
+                },
+                "lastConnectivity": {
+                    "description": "最近一次连通测试结果，从未测试时为 null",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/serializer.ConnectivityResultOutput"
+                        }
+                    ]
+                },
+                "name": {
+                    "description": "接入点名称",
+                    "type": "string"
+                },
+                "updatedAt": {
+                    "description": "最近修改时间",
+                    "type": "string"
+                },
+                "updater": {
+                    "description": "最近修改人",
+                    "type": "string"
+                }
+            }
+        },
+        "serializer.AccessPointResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/serializer.AccessPointOutput"
+                }
+            }
+        },
+        "serializer.AccessPointUpdateInput": {
+            "type": "object",
+            "properties": {
+                "clientHosts": {
+                    "description": "客户端地址",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "clusterIDs": {
+                    "description": "绑定到该接入点的集群 ID，全量替换；显式传空数组表示解除全部绑定",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "consoleURL": {
+                    "description": "北极星控制台地址",
+                    "type": "string"
+                },
+                "name": {
+                    "description": "接入点名称",
+                    "type": "string"
+                },
+                "token": {
+                    "description": "北极星鉴权 Token；显式传空字符串表示清除",
+                    "type": "string"
+                }
+            }
         },
         "serializer.AddWorkspaceUserInput": {
             "type": "object",
@@ -23265,6 +24626,10 @@ const docTemplate = `{
                 },
                 "status": {
                     "description": "状态，由 pod.status.phase 等解析获得",
+                    "type": "string"
+                },
+                "workloadRevision": {
+                    "description": "实例所属的工作负载版本（Pod 的 controller-revision-hash 标签）",
                     "type": "string"
                 }
             }
@@ -24409,6 +25774,14 @@ const docTemplate = `{
                 "updatedReplicas": {
                     "description": "已更新为新版本的实例数",
                     "type": "integer"
+                },
+                "workloadCurrentRevision": {
+                    "description": "旧版本：工作负载 status.currentRevision；尚未读到工作负载时为空",
+                    "type": "string"
+                },
+                "workloadUpdateRevision": {
+                    "description": "新版本：工作负载 status.updateRevision，实例 workloadRevision 与之相等即为新版本实例；尚未读到工作负载时为空",
+                    "type": "string"
                 }
             }
         },
@@ -24967,6 +26340,27 @@ const docTemplate = `{
                 }
             }
         },
+        "serializer.CfgSwitchesOutput": {
+            "type": "object",
+            "properties": {
+                "bscp": {
+                    "description": "是否开启配置管理（BSCP）",
+                    "type": "boolean"
+                },
+                "rainbowTConf": {
+                    "description": "是否展示七彩石",
+                    "type": "boolean"
+                }
+            }
+        },
+        "serializer.CfgSwitchesResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/serializer.CfgSwitchesOutput"
+                }
+            }
+        },
         "serializer.ChartVersionOutputObj": {
             "type": "object",
             "properties": {
@@ -25429,6 +26823,121 @@ const docTemplate = `{
                 "level": {
                     "description": "冲突级别：none 无冲突，warn 软冲突（可保存），error 硬冲突（禁止保存）",
                     "type": "string"
+                }
+            }
+        },
+        "serializer.ConnectivityResultOutput": {
+            "type": "object",
+            "properties": {
+                "checkedAt": {
+                    "description": "测试时间",
+                    "type": "string"
+                },
+                "clientAuth": {
+                    "description": "是否开启客户端鉴权",
+                    "type": "boolean"
+                },
+                "consoleAuth": {
+                    "description": "是否开启控制台鉴权",
+                    "type": "boolean"
+                },
+                "message": {
+                    "description": "失败原因或提示信息",
+                    "type": "string"
+                },
+                "ok": {
+                    "description": "是否通过",
+                    "type": "boolean"
+                },
+                "reason": {
+                    "description": "失败的原因，通过时为空：networkUnreachable 网络不通 / clientAuthEnabled 开启了客户端鉴权 / tokenInvalid Token 无效",
+                    "enum": [
+                        "networkUnreachable",
+                        "clientAuthEnabled",
+                        "tokenInvalid"
+                    ],
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/accesspoint.FailureReason"
+                        }
+                    ]
+                }
+            }
+        },
+        "serializer.ConnectivityTestInput": {
+            "type": "object",
+            "required": [
+                "clientHosts",
+                "consoleURL"
+            ],
+            "properties": {
+                "clientHosts": {
+                    "description": "客户端地址",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "consoleURL": {
+                    "description": "北极星控制台地址",
+                    "type": "string"
+                },
+                "id": {
+                    "description": "已有接入点的 ID",
+                    "type": "string"
+                },
+                "token": {
+                    "description": "北极星鉴权 Token",
+                    "type": "string"
+                }
+            }
+        },
+        "serializer.ConnectivityTestOutput": {
+            "type": "object",
+            "properties": {
+                "clientAuth": {
+                    "description": "是否开启客户端鉴权",
+                    "type": "boolean"
+                },
+                "consoleAuth": {
+                    "description": "是否开启控制台鉴权",
+                    "type": "boolean"
+                },
+                "message": {
+                    "description": "失败原因或提示信息",
+                    "type": "string"
+                },
+                "namespaces": {
+                    "description": "北极星上的命名空间（已过滤系统命名空间 Polaris），网络不通时为空",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "ok": {
+                    "description": "是否通过",
+                    "type": "boolean"
+                },
+                "reason": {
+                    "description": "失败的原因，通过时为空：networkUnreachable 网络不通 / clientAuthEnabled 开启了客户端鉴权 / tokenInvalid Token 无效",
+                    "enum": [
+                        "networkUnreachable",
+                        "clientAuthEnabled",
+                        "tokenInvalid"
+                    ],
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/accesspoint.FailureReason"
+                        }
+                    ]
+                }
+            }
+        },
+        "serializer.ConnectivityTestResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/serializer.ConnectivityTestOutput"
                 }
             }
         },
@@ -26549,6 +28058,44 @@ const docTemplate = `{
                 }
             }
         },
+        "serializer.CreateTemplateInput": {
+            "type": "object",
+            "required": [
+                "content",
+                "fileName",
+                "framework",
+                "language",
+                "name"
+            ],
+            "properties": {
+                "content": {
+                    "description": "框架配置文件内容",
+                    "type": "string"
+                },
+                "fileName": {
+                    "description": "框架配置文件名，规则与应用配置文件名一致",
+                    "type": "string",
+                    "maxLength": 64,
+                    "minLength": 1
+                },
+                "framework": {
+                    "description": "框架：trpc、taf",
+                    "type": "string"
+                },
+                "isDefault": {
+                    "description": "是否设为创建应用时默认使用的模板",
+                    "type": "boolean"
+                },
+                "language": {
+                    "description": "语言：go、cpp",
+                    "type": "string"
+                },
+                "name": {
+                    "description": "模板名称，同一框架、同一语言下不能重复，不能为「平台默认」",
+                    "type": "string"
+                }
+            }
+        },
         "serializer.CreateWorkspaceComponentInput": {
             "type": "object",
             "required": [
@@ -26610,7 +28157,7 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "bkCIProjectID": {
-                    "description": "蓝盾项目 ID;\n创建时，新建容器项目，无需填写\n创建时，绑定已有容器项目，必填.",
+                    "description": "蓝盾项目 ID / 绑定容器项目时的 BCS 项目 code。\n创建时，新建容器项目，无需填写。\n创建时，绑定已有容器项目，必填。",
                     "type": "string"
                 },
                 "description": {
@@ -27180,6 +28727,9 @@ const docTemplate = `{
                     "type": "string"
                 }
             }
+        },
+        "serializer.EmptyResponse": {
+            "type": "object"
         },
         "serializer.EnvAppDeployStatusOutput": {
             "type": "object",
@@ -28019,6 +29569,23 @@ const docTemplate = `{
                     "items": {
                         "type": "string"
                     }
+                }
+            }
+        },
+        "serializer.FrontendFeaturesOutput": {
+            "type": "object",
+            "properties": {
+                "polarisWorkspaceAccessPoint": {
+                    "description": "是否允许空间自建北极星接入点并按集群绑定。为 false 时前端隐藏接入点管理、集群绑定、组件安装等入口，\n所有集群都使用平台托管接入点",
+                    "type": "boolean"
+                }
+            }
+        },
+        "serializer.FrontendFeaturesResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/serializer.FrontendFeaturesOutput"
                 }
             }
         },
@@ -29477,8 +31044,12 @@ const docTemplate = `{
                     "description": "Instance 实例（Pod）名称",
                     "type": "string"
                 },
+                "unit": {
+                    "description": "Unit 排名指标的单位：percent（0~1）、cores、bytes",
+                    "type": "string"
+                },
                 "value": {
-                    "description": "Value 时间范围内的平均 CPU 使用量（核数）",
+                    "description": "Value 排名指标在时间范围内的平均值（原始单位）",
                     "type": "number"
                 }
             }
@@ -30470,6 +32041,17 @@ const docTemplate = `{
                 }
             }
         },
+        "serializer.ListTemplatesOutput": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/serializer.TemplateOutputObj"
+                    }
+                }
+            }
+        },
         "serializer.ListTopologyNodeEventsOutput": {
             "type": "object",
             "properties": {
@@ -30643,9 +32225,6 @@ const docTemplate = `{
                 "createdAt": {
                     "type": "string"
                 },
-                "enable": {
-                    "type": "boolean"
-                },
                 "mountPath": {
                     "type": "string"
                 },
@@ -30702,6 +32281,37 @@ const docTemplate = `{
                 },
                 "status": {
                     "type": "string"
+                }
+            }
+        },
+        "serializer.NamespacesResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "serializer.NetworkInfoOutput": {
+            "type": "object",
+            "properties": {
+                "egressIPs": {
+                    "description": "平台访问北极星的出口 IP，需加入北极星白名单",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "serializer.NetworkInfoResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/serializer.NetworkInfoOutput"
                 }
             }
         },
@@ -30886,6 +32496,84 @@ const docTemplate = `{
                 "username": {
                     "description": "操作人用户名",
                     "type": "string"
+                }
+            }
+        },
+        "serializer.OperatorInstallInput": {
+            "type": "object",
+            "required": [
+                "chartVersion",
+                "clusterIDs"
+            ],
+            "properties": {
+                "chartVersion": {
+                    "description": "chart 版本",
+                    "type": "string"
+                },
+                "clusterIDs": {
+                    "description": "目标集群 ID，必须已绑定该接入点",
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "serializer.OperatorTaskListResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/serializer.OperatorTaskOutput"
+                    }
+                }
+            }
+        },
+        "serializer.OperatorTaskOutput": {
+            "type": "object",
+            "properties": {
+                "chartVersion": {
+                    "description": "chart 版本",
+                    "type": "string"
+                },
+                "clusterID": {
+                    "description": "目标集群 ID",
+                    "type": "string"
+                },
+                "finishedAt": {
+                    "description": "结束时间，运行中为 null",
+                    "type": "string"
+                },
+                "id": {
+                    "description": "任务 ID",
+                    "type": "string"
+                },
+                "message": {
+                    "description": "失败原因等补充信息",
+                    "type": "string"
+                },
+                "operator": {
+                    "description": "发起人",
+                    "type": "string"
+                },
+                "startedAt": {
+                    "description": "开始时间",
+                    "type": "string"
+                },
+                "status": {
+                    "description": "任务状态",
+                    "enum": [
+                        "running",
+                        "succeeded",
+                        "failed"
+                    ],
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/installtask.Status"
+                        }
+                    ]
                 }
             }
         },
@@ -31507,6 +33195,114 @@ const docTemplate = `{
                 }
             }
         },
+        "serializer.PlatCfgSwitchListResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/serializer.PlatCfgSwitchOutput"
+                    }
+                }
+            }
+        },
+        "serializer.PlatCfgSwitchOutput": {
+            "type": "object",
+            "properties": {
+                "enabled": {
+                    "description": "是否开启",
+                    "type": "boolean"
+                },
+                "key": {
+                    "description": "开关标识：bscp / rainbowTConf",
+                    "type": "string"
+                },
+                "name": {
+                    "description": "展示名称",
+                    "type": "string"
+                },
+                "updatedAt": {
+                    "description": "最近修改时间，从未设置过时为 null",
+                    "type": "string"
+                },
+                "updater": {
+                    "description": "最近修改人，从未设置过时为空",
+                    "type": "string"
+                }
+            }
+        },
+        "serializer.PlatCfgSwitchResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/serializer.PlatCfgSwitchOutput"
+                }
+            }
+        },
+        "serializer.PolarisClusterEnvOutput": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "description": "环境 ID",
+                    "type": "string"
+                },
+                "isFeature": {
+                    "description": "是否为特性环境",
+                    "type": "boolean"
+                },
+                "name": {
+                    "description": "环境名称",
+                    "type": "string"
+                }
+            }
+        },
+        "serializer.PolarisClusterListResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/serializer.PolarisClusterOutput"
+                    }
+                }
+            }
+        },
+        "serializer.PolarisClusterOutput": {
+            "type": "object",
+            "properties": {
+                "accessPointID": {
+                    "description": "绑定的自建接入点 ID；未绑定为空，此时集群不能使用北极星",
+                    "type": "string"
+                },
+                "accessPointName": {
+                    "description": "绑定的自建接入点名称，未绑定为空",
+                    "type": "string"
+                },
+                "clusterID": {
+                    "description": "集群 ID",
+                    "type": "string"
+                },
+                "clusterName": {
+                    "description": "集群名称",
+                    "type": "string"
+                },
+                "clusterStatus": {
+                    "description": "集群状态",
+                    "type": "string"
+                },
+                "envs": {
+                    "description": "集群上的空间环境（含特性环境）",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/serializer.PolarisClusterEnvOutput"
+                    }
+                },
+                "inUse": {
+                    "description": "集群上是否有环境被北极星配置使用；为 true 时不能解绑或换绑",
+                    "type": "boolean"
+                }
+            }
+        },
         "serializer.PolarisConfigOutputObj": {
             "type": "object",
             "properties": {
@@ -31717,6 +33513,100 @@ const docTemplate = `{
                 "name": {
                     "description": "配置名称",
                     "type": "string"
+                }
+            }
+        },
+        "serializer.PolarisOperatorListOutput": {
+            "type": "object",
+            "properties": {
+                "chartVersions": {
+                    "description": "可选的 chart 版本，从新到旧",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "operators": {
+                    "description": "候选集群的组件状态",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/serializer.PolarisOperatorOutput"
+                    }
+                }
+            }
+        },
+        "serializer.PolarisOperatorListResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/serializer.PolarisOperatorListOutput"
+                }
+            }
+        },
+        "serializer.PolarisOperatorOutput": {
+            "type": "object",
+            "properties": {
+                "accessPointID": {
+                    "description": "集群绑定的自建接入点 ID，未绑定为空",
+                    "type": "string"
+                },
+                "chartVersion": {
+                    "description": "已安装的 chart 版本，未安装为空",
+                    "type": "string"
+                },
+                "clusterID": {
+                    "description": "集群 ID",
+                    "type": "string"
+                },
+                "driftFields": {
+                    "description": "与接入点期望值不一致的 values 键，仅 outdated 时非空",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "installed": {
+                    "description": "是否已安装",
+                    "type": "boolean"
+                },
+                "lastTask": {
+                    "description": "最近一次安装任务，没有任务时为 null",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/serializer.OperatorTaskOutput"
+                        }
+                    ]
+                },
+                "namespace": {
+                    "description": "helm release 所在命名空间，未安装为空",
+                    "type": "string"
+                },
+                "releaseName": {
+                    "description": "helm release 名称，未安装为空",
+                    "type": "string"
+                },
+                "status": {
+                    "description": "组件状态",
+                    "enum": [
+                        "ready",
+                        "installing",
+                        "failed",
+                        "outdated",
+                        "not_installed"
+                    ],
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/accesspoint.OperatorStatus"
+                        }
+                    ]
+                }
+            }
+        },
+        "serializer.PolarisOperatorResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/serializer.PolarisOperatorOutput"
                 }
             }
         },
@@ -32586,6 +34476,111 @@ const docTemplate = `{
                     "items": {
                         "type": "integer"
                     }
+                }
+            }
+        },
+        "serializer.PutRainbowTConfInput": {
+            "type": "object",
+            "required": [
+                "url"
+            ],
+            "properties": {
+                "url": {
+                    "description": "七彩石页面地址，仅支持 https",
+                    "type": "string"
+                }
+            }
+        },
+        "serializer.RainbowTConfEmptyOutput": {
+            "type": "object"
+        },
+        "serializer.RainbowTConfOutput": {
+            "type": "object",
+            "properties": {
+                "updatedAt": {
+                    "description": "最近修改时间，未配置时为 null",
+                    "type": "string"
+                },
+                "updater": {
+                    "description": "最近修改人，未配置时为空",
+                    "type": "string"
+                },
+                "url": {
+                    "description": "七彩石页面地址，未配置时为空",
+                    "type": "string"
+                }
+            }
+        },
+        "serializer.RainbowTConfResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/serializer.RainbowTConfOutput"
+                }
+            }
+        },
+        "serializer.RankInstancesQueryInput": {
+            "type": "object",
+            "required": [
+                "endTime",
+                "startTime"
+            ],
+            "properties": {
+                "endTime": {
+                    "description": "EndTime 排名时间范围的结束时间（Unix 时间戳，秒）",
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "instances": {
+                    "description": "Instances 候选实例（Pod）名称，过滤空白后最多 50 个；为空时在最新部署的工作负载的全部 Pod 中排名，\n非空时只在这批 Pod 中排名，不校验实例是否属于该环境",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "interval": {
+                    "description": "Interval 子查询步长（秒），最小为 60 秒，建议与图表汇聚周期一致",
+                    "type": "integer"
+                },
+                "limit": {
+                    "description": "Limit 取前 N 个实例，取值 1~50，默认 10",
+                    "type": "integer",
+                    "maximum": 50,
+                    "minimum": 1
+                },
+                "method": {
+                    "description": "Method 同一 Pod 内多个容器的数据如何合并，默认 sum，建议与图表汇聚方法一致",
+                    "type": "string",
+                    "enum": [
+                        "sum",
+                        "max",
+                        "min",
+                        "count",
+                        "avg"
+                    ]
+                },
+                "rankBy": {
+                    "description": "RankBy 排名指标，默认 cpu_limit_usage：\n  - cpu_limit_usage: CPU 使用率（用量 / limits）\n  - memory_limit_usage: 内存使用率（Working Set / limits）\n  - cpu_usage: CPU 用量（核数）\n  - memory_usage: 内存用量（Working Set，字节）",
+                    "type": "string",
+                    "enum": [
+                        "cpu_limit_usage",
+                        "memory_limit_usage",
+                        "cpu_usage",
+                        "memory_usage"
+                    ]
+                },
+                "rankType": {
+                    "description": "RankType 排名方向：top 按排名指标平均值从高到低、bottom 从低到高，默认 top",
+                    "type": "string",
+                    "enum": [
+                        "top",
+                        "bottom"
+                    ]
+                },
+                "startTime": {
+                    "description": "StartTime 排名时间范围的开始时间（Unix 时间戳，秒）",
+                    "type": "integer",
+                    "minimum": 1
                 }
             }
         },
@@ -34169,6 +36164,67 @@ const docTemplate = `{
                 }
             }
         },
+        "serializer.TemplateOutput": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/serializer.TemplateOutputObj"
+                }
+            }
+        },
+        "serializer.TemplateOutputObj": {
+            "type": "object",
+            "properties": {
+                "builtin": {
+                    "description": "是否为平台内置模板，内置模板只读",
+                    "type": "boolean"
+                },
+                "content": {
+                    "description": "框架配置文件内容，列表接口不返回",
+                    "type": "string"
+                },
+                "createdAt": {
+                    "description": "创建时间，内置模板为空",
+                    "type": "string"
+                },
+                "creator": {
+                    "description": "创建人，内置模板为空",
+                    "type": "string"
+                },
+                "fileName": {
+                    "description": "框架配置文件名",
+                    "type": "string"
+                },
+                "framework": {
+                    "description": "框架",
+                    "type": "string"
+                },
+                "id": {
+                    "description": "模板 ID，内置模板为 builtin-{framework}-{language}",
+                    "type": "string"
+                },
+                "isDefault": {
+                    "description": "是否为所在框架、语言的默认模板",
+                    "type": "boolean"
+                },
+                "language": {
+                    "description": "语言",
+                    "type": "string"
+                },
+                "name": {
+                    "description": "模板名称",
+                    "type": "string"
+                },
+                "updatedAt": {
+                    "description": "更新时间，内置模板为空",
+                    "type": "string"
+                },
+                "updater": {
+                    "description": "最近修改人，内置模板为空",
+                    "type": "string"
+                }
+            }
+        },
         "serializer.ThresholdConfigInput": {
             "type": "object",
             "required": [
@@ -35211,6 +37267,18 @@ const docTemplate = `{
                 }
             }
         },
+        "serializer.UpdatePlatCfgSwitchInput": {
+            "type": "object",
+            "required": [
+                "enabled"
+            ],
+            "properties": {
+                "enabled": {
+                    "description": "是否开启；使用指针以区分字段缺失与显式传 false",
+                    "type": "boolean"
+                }
+            }
+        },
         "serializer.UpdatePortPoolInput": {
             "type": "object",
             "required": [
@@ -35261,6 +37329,34 @@ const docTemplate = `{
                             "$ref": "#/definitions/serializer.ScopedEnvVarOutputObj"
                         }
                     ]
+                }
+            }
+        },
+        "serializer.UpdateTemplateInput": {
+            "type": "object",
+            "required": [
+                "content",
+                "fileName",
+                "name"
+            ],
+            "properties": {
+                "content": {
+                    "description": "框架配置文件内容",
+                    "type": "string"
+                },
+                "fileName": {
+                    "description": "框架配置文件名，规则与应用配置文件名一致",
+                    "type": "string",
+                    "maxLength": 64,
+                    "minLength": 1
+                },
+                "isDefault": {
+                    "description": "是否设为创建应用时默认使用的模板；不传不修改，取消默认后回落到平台默认模板，TAF 没有平台默认模板",
+                    "type": "boolean"
+                },
+                "name": {
+                    "description": "模板名称，同一框架、同一语言下不能重复，不能为「平台默认」",
+                    "type": "string"
                 }
             }
         },

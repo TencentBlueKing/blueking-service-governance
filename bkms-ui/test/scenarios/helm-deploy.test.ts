@@ -25,7 +25,7 @@
  *   4. 预览发现未定义变量 → 预检弹窗「仍然部署」进预览（deploy-application.vue）
  *   5. 预检弹窗「取消」停留配置步骤（deploy-application.vue）
  *   6. 部署历史第 1 页首行禁用回滚、非首行可点并弹出回滚弹窗（deploy-history.vue）
- *   7. 回滚弹窗确认成功（preview-rollback.vue）
+ *   7. 回滚弹窗显示环境名称，按内部名预览并确认回滚（preview-rollback.vue）
  *   8. 目标环境被移出可见名单时阻止预览
  *   9. 预览后名单变化时阻止创建部署
  *
@@ -149,9 +149,15 @@ vi.mock('~/pages/application/detail/helm-deploy/preview-rollback.vue', async () 
   const { defineComponent } = await import('vue');
   return {
     default: defineComponent({
-      props: { isShow: Boolean },
+      props: {
+        envDisplayName: { type: String, default: '' },
+        envName: { type: String, default: '' },
+        isShow: Boolean,
+      },
       emits: ['success'],
-      template: '<div data-testid="preview-rollback-stub" v-if="isShow">回滚应用</div>',
+      template: `<div v-if="isShow" data-testid="preview-rollback-stub" :data-env-name="envName">
+        {{ envDisplayName }}
+      </div>`,
     }),
   };
 });
@@ -195,7 +201,11 @@ vi.mock('~/pages/application/detail/helm-deploy/deploy-history.vue', async () =>
   return {
     default: defineComponent({
       name: 'DeployHistoryStub',
-      template: '<div data-testid="deploy-history-stub">部署历史</div>',
+      props: {
+        envDisplayName: { type: String, default: '' },
+        envName: { type: String, default: '' },
+      },
+      template: '<div data-testid="deploy-history-stub" :data-env-name="envName">{{ envDisplayName }}</div>',
     }),
   };
 });
@@ -386,7 +396,7 @@ describe('部署历史与回滚：入口与确认', () => {
       '~/pages/application/detail/helm-deploy/deploy-history.vue',
     );
     render(deployHistory, {
-      props: { envName: 'env-1', laneName: '', skipInitialFetch: false },
+      props: { envDisplayName: '需求联调', envName: 'feat-demo', laneName: '', skipInitialFetch: false },
       global: { plugins: [createPinia(), i18nPlugin] },
     });
     // 表格行渲染完成（stub 表格 + 插槽列）
@@ -396,30 +406,42 @@ describe('部署历史与回滚：入口与确认', () => {
     expect(rollbackBtns[0]).toBeDisabled();
     expect(rollbackBtns[1]).toBeEnabled();
     await userEvent.click(rollbackBtns[1]);
-    expect(await screen.findByTestId('preview-rollback-stub')).toBeTruthy();
+    const preview = await screen.findByTestId('preview-rollback-stub');
+    expect(preview).toHaveTextContent('需求联调');
+    expect(preview).toHaveAttribute('data-env-name', 'feat-demo');
   });
 
-  it('当用户在回滚弹窗确认时，应调用回滚接口、提示回滚成功并关闭弹窗', async () => {
-    mocks.previewRollbackHelmDeploy.mockResolvedValue({ current: 'a: 1', target: 'a: 0' });
-    // preview-rollback 的文件级 stub 仅供 deploy-history 场景使用，此处取真实组件
-    const { default: previewRollback } = await vi.importActual<{ default: typeof PreviewRollback }>(
-      '~/pages/application/detail/helm-deploy/preview-rollback.vue',
-    );
-    const { emitted } = render(previewRollback, {
-      props: { isShow: true, appName: 'app-a', envName: 'env-1', deployID: 'deploy-0', trafficLaneName: '' },
-      global: { plugins: [createPinia(), i18nPlugin] },
-    });
-    // 打开即拉取回滚预览（Dialog @shown），diff 就绪后确定按钮可用
-    await waitFor(() => expect(mocks.previewRollbackHelmDeploy).toHaveBeenCalled());
-    const confirmBtn = await screen.findByRole('button', { name: '确定' });
-    await waitFor(() => expect(confirmBtn).toBeEnabled());
-    await userEvent.click(confirmBtn);
-    await waitFor(() => expect(mocks.rollbackHelmDeploy).toHaveBeenCalledTimes(1));
-    await waitFor(() =>
-      expect(mocks.message).toHaveBeenCalledWith(expect.objectContaining({ theme: 'success', message: '回滚成功' })),
-    );
-    await waitFor(() => expect(emitted('success')).toBeTruthy());
-  });
+  it.each([
+    { envName: 'env-1', envDisplayName: '环境一', expectedName: '环境一' },
+    { envName: 'feat-demo', envDisplayName: '需求联调', expectedName: '需求联调' },
+    { envName: 'feat-legacy', envDisplayName: '', expectedName: 'feat-legacy' },
+  ])(
+    '回滚标题应显示 $expectedName，预览和确认请求应使用 $envName',
+    async ({ envName, envDisplayName, expectedName }) => {
+      mocks.previewRollbackHelmDeploy.mockResolvedValue({ current: 'a: 1', target: 'a: 0' });
+      const { default: previewRollback } = await vi.importActual<{ default: typeof PreviewRollback }>(
+        '~/pages/application/detail/helm-deploy/preview-rollback.vue',
+      );
+      const { emitted } = render(previewRollback, {
+        props: { isShow: true, appName: 'app-a', envName, envDisplayName, deployID: 'deploy-0', trafficLaneName: '' },
+        global: { plugins: [createPinia(), i18nPlugin] },
+      });
+      expect(await screen.findByText(expectedName)).toBeVisible();
+      await waitFor(() =>
+        expect(mocks.previewRollbackHelmDeploy).toHaveBeenCalledWith(expect.objectContaining({ envName }), {
+          needRes: true,
+        }),
+      );
+      const confirmBtn = await screen.findByRole('button', { name: '确定' });
+      await waitFor(() => expect(confirmBtn).toBeEnabled());
+      await userEvent.click(confirmBtn);
+      await waitFor(() =>
+        expect(mocks.rollbackHelmDeploy).toHaveBeenCalledWith(expect.objectContaining({ envName }), { needRes: true }),
+      );
+      expect(mocks.message).toHaveBeenCalledWith(expect.objectContaining({ theme: 'success', message: '回滚成功' }));
+      expect(emitted('success')).toBeTruthy();
+    },
+  );
 });
 
 describe('Helm 部署容器页：更新入口状态机', () => {
@@ -441,5 +463,8 @@ describe('Helm 部署容器页：更新入口状态机', () => {
     // 环境选择 stub 自动 emit → 拉泳道与部署历史 → latestDeployStatus = pending-upgrade
     const updateBtn = await screen.findByRole('button', { name: '更新' });
     await waitFor(() => expect(updateBtn).toBeDisabled());
+    const deployHistory = await screen.findByTestId('deploy-history-stub');
+    expect(deployHistory).toHaveTextContent('环境一');
+    expect(deployHistory).toHaveAttribute('data-env-name', 'env-1');
   });
 });

@@ -20,6 +20,7 @@ package handler
 
 import (
 	"context"
+	"net/http"
 	"net/url"
 	"strings"
 
@@ -78,7 +79,8 @@ func (h *Handler) CreateAppInstanceWeTerm(c *gin.Context) {
 		audit.WithAppID(target.app.ID),
 		audit.WithEnvName(uriInput.EnvName),
 	)
-	ginutils.OK(c, serializer.CreateAppInstanceWeTermOutput{
+	// 使用 PureJSON 避免链接中的 & 被转义为 \u0026，保证响应里的链接可直接复制使用
+	c.PureJSON(http.StatusOK, serializer.CreateAppInstanceWeTermOutput{
 		Data: &serializer.WeTermInfoOutputObj{URL: weTermURL},
 	})
 }

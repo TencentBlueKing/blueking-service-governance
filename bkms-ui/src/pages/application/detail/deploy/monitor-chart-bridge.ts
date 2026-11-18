@@ -21,7 +21,7 @@ import type { App } from 'vue';
 import { BkintegrationsBkmonitorService } from '~/api/modules/v1';
 import { i18n } from '~/modules/i18n';
 
-import type { MetricTimeSeries, TimeSeriesItem } from '~/@types/v1/bkintegrations-bkmonitor';
+import type { MetricTimeSeries, RankInstancesRequest, TimeSeriesItem } from '~/@types/v1/bkintegrations-bkmonitor';
 
 export type MonitorAggregationMethod = 'avg' | 'count' | 'max' | 'min' | 'sum';
 
@@ -45,12 +45,18 @@ export interface MonitorMetricTimeSeries extends MetricTimeSeries {
   series?: MonitorTimeSeriesItem[];
 }
 
+export type MonitorRankBy = NonNullable<RankInstancesRequest['rankBy']>;
 export type MonitorRankType = 'bottom' | 'top';
 
 /** 请求按环境拆分，结果保留环境归属，用于图例和汇总表匹配。 */
 export interface MonitorTimeSeriesItem extends TimeSeriesItem {
   _color?: string;
   envName?: string;
+}
+
+export interface RankedMonitorInstance extends MonitorInstance {
+  unit?: string;
+  value?: number;
 }
 
 /** 以 target.data 中的时间快照为准，与本轮排名请求保持一致。 */
@@ -79,7 +85,9 @@ interface MonitorQueryTime {
 
 interface MonitorRankingQuery extends MonitorQueryTime {
   envNames: string[];
+  instances?: MonitorInstance[];
   limit?: number;
+  rankBy: MonitorRankBy;
   rankType?: MonitorRankType;
 }
 
@@ -127,15 +135,7 @@ const COMPARE_PALETTE: string[] = [
 /** 按环境查指标时序，只传已解析的实例名单。 */
 export async function fetchMonitorMetric(query: MonitorMetricQuery): Promise<MonitorMetricTimeSeries | undefined> {
   const { appID, metricKey, startTime, endTime, interval } = query;
-  const envToInstances = new Map<string, string[]>();
-  // 同名 Pod 可以属于不同环境，按环境分组后再传原始实例名。
-  for (const { envName, instance } of query.instances) {
-    const name = instance.trim();
-    if (!envName || !name) continue;
-    const names = envToInstances.get(envName) ?? [];
-    if (!names.includes(name)) names.push(name);
-    envToInstances.set(envName, names);
-  }
+  const envToInstances = groupMonitorInstances(query.instances);
   if (!appID || !metricKey || !envToInstances.size) return undefined;
 
   const results = await Promise.all(
@@ -159,37 +159,44 @@ export async function fetchMonitorMetric(query: MonitorMetricQuery): Promise<Mon
   return { ...first, series: results.flatMap(result => result?.series ?? []) };
 }
 
-/** 每个环境只查一次 CPU 排名，所有图表共用合并后的实例名单。 */
-export async function fetchRankedMonitorInstances(query: MonitorRankingQuery): Promise<MonitorInstance[]> {
-  const { appID, startTime, endTime, interval, limit = 10, rankType = 'top', method = 'sum' } = query;
+/** 每个环境只查一次排名，所有图表共用合并后的实例名单。 */
+export async function fetchRankedMonitorInstances(query: MonitorRankingQuery): Promise<RankedMonitorInstance[]> {
+  const { appID, startTime, endTime, interval, limit = 10, rankBy, rankType = 'top', method = 'sum' } = query;
   if (!appID) return [];
-  const envNames = [...new Set(query.envNames.filter(Boolean))];
+  const selectedByEnv = query.instances === undefined ? undefined : groupMonitorInstances(query.instances);
+  // 手选时跳过无候选实例的环境，空候选会触发该环境的全量排名。
+  const envNames = [...new Set(query.envNames)].filter(
+    envName => envName && (!selectedByEnv || selectedByEnv.has(envName)),
+  );
   const results = await Promise.all(
     envNames.map(async envName => {
+      const instances = selectedByEnv?.get(envName);
       const ranked = await BkintegrationsBkmonitorService.rankInstances({
         appID,
         envName,
+        ...(instances ? { instances } : {}),
         startTime,
         endTime,
         interval,
         limit,
+        rankBy,
         rankType,
         method,
       }).catch(() => undefined);
       return (ranked ?? []).flatMap(item => {
         const instance = item.instance?.trim();
-        return instance ? [{ envName, instance, value: item.value ?? 0 }] : [];
+        return instance ? [{ envName, instance, value: item.value, unit: item.unit }] : [];
       });
     }),
   );
 
-  // 单环境以接口顺序为准，多环境按 CPU 平均用量重排后截取全局 N。
+  // 单环境以接口顺序为准，多环境按排名指标的原始值重排后截取全局 N。
   const ranked = results.flat();
   if (envNames.length > 1) {
     const direction = rankType === 'bottom' ? 1 : -1;
-    ranked.sort((a, b) => direction * (a.value - b.value));
+    ranked.sort((a, b) => direction * ((a.value ?? 0) - (b.value ?? 0)));
   }
-  return ranked.slice(0, limit).map(({ envName, instance }) => ({ envName, instance }));
+  return ranked.slice(0, limit);
 }
 
 /** 时间对比偏移量格式化为可读标签 */
@@ -332,6 +339,19 @@ async function getInstanceTimeSeries(params: MonitorChartApiParams): Promise<Mon
   })().finally(() => inFlightRequests.delete(dedupKey));
   inFlightRequests.set(dedupKey, request);
   return request;
+}
+
+/** 同名 Pod 可以属于不同环境，按环境分组后再传原始实例名。 */
+function groupMonitorInstances(instances: MonitorInstance[]): Map<string, string[]> {
+  const envToInstances = new Map<string, string[]>();
+  for (const { envName, instance } of instances) {
+    const name = instance.trim();
+    if (!envName || !name) continue;
+    const names = envToInstances.get(envName) ?? [];
+    if (!names.includes(name)) names.push(name);
+    envToInstances.set(envName, names);
+  }
+  return envToInstances;
 }
 
 /**

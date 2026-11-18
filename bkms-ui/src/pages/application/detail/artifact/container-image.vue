@@ -92,6 +92,7 @@
         </Button>
       </Alert>
       <Table
+        ref="tableRef"
         v-bkloading="{ loading: isLoading, zIndex: 8 }"
         auto-resize
         class="mt-[16px] w-full artifact-table"
@@ -133,28 +134,33 @@
           fixed="left"
           :label="t('镜像 Tag')"
           show-overflow="tooltip"
-          :width="160"
+          :width="200"
         >
           <template #default="{ row }">
-            {{ row.tag || '--' }}
-            <Tag
-              v-if="row.isPromoted"
-              v-bk-tooltips="{
-                content: getPromotedTooltipContent(row),
-                extCls: 'promoted-tag-tooltip',
-              }"
-              class="ml-[8px]"
-              theme="success"
-            >
-              <div class="flex items-center gap-[4px] relative">
-                <Done
-                  class="absolute top-[-2px] left-[-7px]"
-                  :height="26"
-                  :width="26"
-                ></Done>
-                <span class="ml-[18px]">{{ $t('已晋级') }}</span>
-              </div>
-            </Tag>
+            <div class="flex min-w-0 items-center">
+              <span class="artifact-tag-text truncate">
+                {{ row.tag || '--' }}
+              </span>
+              <Tag
+                v-if="row.isPromoted"
+                v-bk-tooltips="{
+                  content: getPromotedTooltipContent(row),
+                  extCls: 'promoted-tag-tooltip',
+                }"
+                class="ml-[8px] shrink-0"
+                theme="success"
+                @mouseenter.stop="handlePromotedTagMouseEnter"
+              >
+                <div class="flex items-center gap-[4px] relative">
+                  <Done
+                    class="absolute top-[-2px] left-[-7px]"
+                    :height="26"
+                    :width="26"
+                  ></Done>
+                  <span class="ml-[18px]">{{ $t('已晋级') }}</span>
+                </div>
+              </Tag>
+            </div>
           </template>
         </TableColumn>
         <!-- 源材料：与构建管理一致，分支 / Tag 为纯文本，Commit 为链接 -->
@@ -233,10 +239,10 @@
               class="flex flex-wrap gap-[4px]"
             >
               <Tag
-                v-for="item in getDeployedEnvTags(row.deployedEnvs)"
+                v-for="item in groupDeployedEnvs(row.deployedEnvs, getEnvDisplayName)"
                 :key="item.key"
-                v-bk-tooltips="{ content: getEnvTooltipContent(item.envNames) }"
-                :class="envTypeTagClassMap[item.key]"
+                v-bk-tooltips="{ content: item.displayNames.join('、') }"
+                :class="item.tagClass"
               >
                 {{ item.label }}（{{ item.count }}）
               </Tag>
@@ -310,7 +316,7 @@
                 :key="env.envName"
                 :class="envTypeTagClassMap[env.envType || '']"
               >
-                {{ getEnvDisplayName(env?.envName ?? '') }}
+                {{ resolveDeployedEnvDisplayName(env, getEnvDisplayName) }}
               </Tag>
               <span v-if="!promoteRow?.deployedEnvs?.length">--</span>
             </div>
@@ -324,7 +330,7 @@
         <Tag
           v-for="envName in productionEnvNames"
           :key="envName"
-          :class="getEnvTagClass(envName)"
+          :class="envTypeTagClassMap[envNameTypeMap[envName] || '']"
         >
           {{ getEnvDisplayName(envName) }}
         </Tag>
@@ -382,13 +388,14 @@
   import { sourceMaterialText } from '~/components/code-revision/revision';
   import FieldItem from '~/components/field-item.vue';
   import Layout from '~/components/skeleton/skeleton-layout';
-  import { envTypeMap, envTypeTagClassMap } from '~/composables/use-env-manager';
+  import useAppEnvNameMapping from '~/composables/use-app-env-name-mapping';
+  import { groupDeployedEnvs, resolveDeployedEnvDisplayName } from '~/composables/use-deployed-envs';
+  import { envTypeTagClassMap } from '~/composables/use-env-manager';
   import usePageConf from '~/composables/use-page';
   import { useSearchPlaceholder } from '~/composables/use-search-placeholder';
   import useTableEmpty from '~/composables/use-table-empty';
   import useTime from '~/composables/use-time';
   import { useAppDetail } from '~/stores/app-detail';
-  import { useSpaceStore } from '~/stores/space';
 
   import DeleteImageTagDialog from './components/delete-image-tag-dialog.vue';
   import PermErrorDialog from './components/perm-error-dialog.vue';
@@ -400,16 +407,8 @@
   import 'tippy.js/themes/light.css';
 
   const ARTIFACT_POLLING_INTERVAL = 60 * 1000;
-  const DEPLOYED_ENV_TYPES = ['development', 'test', 'staging', 'production'] as const;
 
-  type DeployedEnvTag = {
-    count: number;
-    envNames: string[];
-    key: (typeof DEPLOYED_ENV_TYPES)[number];
-    label: string;
-  };
-
-  type DeployedEnvType = (typeof DEPLOYED_ENV_TYPES)[number];
+  const tableRef = ref<null | { getVxeTableInstance?: () => { closeTooltip?: () => void } }>(null);
 
   const ExpandContent = defineAsyncComponent(() => import('./components/artifact-expand.vue'));
 
@@ -418,10 +417,8 @@
   const { formatDateString, formatRelativeTime } = useTime();
 
   const appDetailStore = useAppDetail();
-  const spaceStore = useSpaceStore();
 
-  /** 环境 name → displayName 映射 */
-  const envNameDisplayMap = ref<Record<string, string>>({});
+  const { envNameDisplayMap, fetchEnvNameDisplayMap, getEnvDisplayName } = useAppEnvNameMapping();
   /** 环境 name → type 映射 */
   const envNameTypeMap = ref<Record<string, string>>({});
 
@@ -453,7 +450,15 @@
       column: { field?: string };
       row: AppImageOutputObj;
     }) => {
-      if (column.field === 'tag' && row.isPromoted) return '';
+      if (column.field === 'tag') {
+        // 截断发生在内部 .artifact-tag-text 上，单元格自身不溢出，需按内部文本溢出判断
+        const textElement = cell.querySelector<HTMLElement>('.artifact-tag-text');
+        if (textElement && textElement.scrollWidth > textElement.clientWidth) {
+          return row.tag || '';
+        }
+        // 未溢出：已晋级行"已晋级"标识自带 tooltip，抑制默认 tooltip 避免冲突
+        return row.isPromoted ? '' : undefined;
+      }
       // 源材料内容溢出时展示完整修订 + commit 短哈希，与构建管理一致
       if (column.field === 'sourceMaterial') {
         const overflowElement = cell.children[0] as HTMLElement | undefined;
@@ -543,16 +548,14 @@
     }
   }
 
-  /** 获取环境列表（仅页面初始化时调用一次） */
-  async function fetchEnvList() {
-    const envList = await EnvService.listEnvs({ workspaceID: spaceStore.currentSpace }).catch(() => []);
-    const displayMap: Record<string, string> = {};
+  /** 获取本应用可用环境列表（含特性环境）的环境类型映射，仅页面初始化时调用一次 */
+  async function fetchEnvTypeMap() {
+    if (!appDetailStore.appID) return;
+    const envList = await EnvService.listAppEnvs({ appID: appDetailStore.appID }).catch(() => []);
     const typeMap: Record<string, string> = {};
-    (envList as Array<{ displayName: string; name: string; type?: string }>).forEach(env => {
-      displayMap[env.name] = env.displayName || env.name;
-      if (env.type) typeMap[env.name] = env.type;
+    envList.forEach(env => {
+      if (env.name && env.type) typeMap[env.name] = env.type;
     });
-    envNameDisplayMap.value = displayMap;
     envNameTypeMap.value = typeMap;
   }
 
@@ -560,36 +563,6 @@
   function formatDigest(digest?: string) {
     if (!digest) return '';
     return digest.includes(':') ? digest.split(':')[1].slice(0, 8) : digest.slice(0, 8);
-  }
-
-  function getDeployedEnvTags(deployedEnvs: AppImageOutputObj['deployedEnvs']): DeployedEnvTag[] {
-    if (!deployedEnvs?.length) return [];
-
-    const typeEnvNamesMap: Record<DeployedEnvType, string[]> = {
-      development: [],
-      staging: [],
-      production: [],
-      test: [],
-    };
-
-    deployedEnvs.forEach(({ envName, envType }) => {
-      if (!envType || !DEPLOYED_ENV_TYPES.includes(envType as DeployedEnvType)) return;
-      typeEnvNamesMap[envType as DeployedEnvType].push(envName ?? '');
-    });
-
-    return DEPLOYED_ENV_TYPES.filter(envType => typeEnvNamesMap[envType].length > 0).map(envType => ({
-      count: typeEnvNamesMap[envType].length,
-      envNames: typeEnvNamesMap[envType],
-      key: envType,
-      label: envTypeMap[envType]?.name || envType,
-    }));
-  }
-  function getEnvDisplayName(envName: string) {
-    return envNameDisplayMap.value[envName] || envName;
-  }
-
-  function getEnvTagClass(envName: string) {
-    return envTypeTagClassMap[envNameTypeMap.value[envName]];
   }
 
   function getEnvTooltipContent(envNames: string[]) {
@@ -618,6 +591,14 @@
   function handleClearFilters() {
     searchValue.value = [];
     fetchArtifactList();
+  }
+
+  /**
+   * hover「已晋级」Tag 时：阻断 mouseenter 冒泡避免触发表格 tooltip，
+   * 并关闭可能已打开的表格 tooltip（如先 hover 溢出文本再移入 Tag）
+   */
+  function handlePromotedTagMouseEnter() {
+    tableRef.value?.getVxeTableInstance?.()?.closeTooltip?.();
   }
 
   /** 跳转代码仓库 commit 页 */
@@ -733,8 +714,12 @@
 
   watch(
     () => appDetailStore.appID,
-    async () => {
-      await Promise.all([fetchEnvList(), fetchArtifactList()]);
+    async appID => {
+      await Promise.all([
+        appID ? fetchEnvNameDisplayMap(appID) : Promise.resolve({}),
+        fetchEnvTypeMap(),
+        fetchArtifactList(),
+      ]);
     },
     {
       immediate: true,

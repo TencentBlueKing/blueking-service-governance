@@ -56,7 +56,7 @@ func (h *Handler) InitMetadata(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	app, err := perm.ValidateAppByID(ctx, h.registry, uri.AppID, perm.TypeEdit)
+	app, err := h.validateApp(ctx, uri.AppID, perm.TypeEdit)
 	if err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return
@@ -140,7 +140,7 @@ func (h *Handler) PatchMetadata(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	app, err := perm.ValidateAppByID(ctx, h.registry, uri.AppID, perm.TypeEdit)
+	app, err := h.validateApp(ctx, uri.AppID, perm.TypeEdit)
 	if err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return
@@ -192,7 +192,7 @@ func (h *Handler) DeleteMetadata(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	app, err := perm.ValidateAppByID(ctx, h.registry, uri.AppID, perm.TypeEdit)
+	app, err := h.validateApp(ctx, uri.AppID, perm.TypeEdit)
 	if err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return
@@ -233,7 +233,7 @@ func (h *Handler) GetMetadata(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	app, err := perm.ValidateAppByID(ctx, h.registry, uri.AppID, perm.TypeView)
+	app, err := h.validateApp(ctx, uri.AppID, perm.TypeView)
 	if err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return

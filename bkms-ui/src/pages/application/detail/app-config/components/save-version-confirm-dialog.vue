@@ -19,54 +19,120 @@
 <template>
   <Dialog
     v-model:is-show="isShow"
-    :width="480"
+    :before-close="canClose"
+    class="save-version-confirm-dialog"
+    header-align="left"
+    width="80vw"
     @hidden="handleHidden"
   >
     <template #header>
-      <div class="flex flex-col items-center">
-        <span class="text-[#313238] text-[20px] leading-[32px] text-center mt-[18px]">
-          {{ $t('保存并创建新版本') }}
+      <div class="flex flex-wrap items-center gap-[8px] pr-[24px]">
+        <span>{{ $t('保存并创建新版本') }}</span>
+        <span
+          v-if="preview?.fileName"
+          class="min-w-0 truncate text-[12px] text-[#979BA5]"
+          :title="preview.fileName"
+        >
+          {{ preview.fileName }}
         </span>
+        <Tag v-if="isUnchanged">{{ $t('内容无差异') }}</Tag>
+        <Tag
+          v-if="diffStats.added"
+          theme="success"
+        >
+          {{ $t('新增') }} +{{ diffStats.added }}
+        </Tag>
+        <Tag
+          v-if="diffStats.deleted"
+          theme="danger"
+        >
+          {{ $t('删除') }} -{{ diffStats.deleted }}
+        </Tag>
       </div>
     </template>
 
-    <div class="text-[14px] text-[#313238] mb-[16px] mt-[36px]">
-      {{ $t('保存将生成新的版本号，并记录到版本历史中，可用于后续对比和回滚。') }}
-    </div>
-
-    <!-- 版本信息 -->
-    <div class="bg-[#F5F7FA] mb-[16px] py-[12px] px-[16px] text-[12px]">
-      <ul class="leading-[20px]">
-        <li>
-          <span class="text-[#4D4F56]">{{ $t('版本号') }}：</span>
-          <span class="text-[#313238]">V{{ nextVersion }}</span>
-        </li>
-      </ul>
-    </div>
-
-    <!-- 版本描述 -->
-    <Form
-      ref="formRef"
-      form-type="vertical"
-      :model="formData"
-      :rules="rules"
-    >
-      <Form.FormItem
-        :label="$t('版本描述')"
-        property="description"
-        required
+    <template v-if="preview">
+      <Exception
+        v-if="isEmpty"
+        class="!h-auto shrink-0 py-[16px]"
+        scene="part"
+        type="empty"
       >
-        <Input
-          v-model="formData.description"
-          :placeholder="$t('请输入版本描述')"
-          :rows="3"
-          type="textarea"
-        />
-      </Form.FormItem>
-    </Form>
+        <template #title>{{ $t('还没有配置内容') }}</template>
+        <template #description>
+          <i18n-t keypath="确认后将生成空的 {version}，可供之后对比和回滚。">
+            <template #version
+              ><strong>{{ nextVersion }}</strong></template
+            >
+          </i18n-t>
+        </template>
+      </Exception>
+      <template v-else>
+        <i18n-t
+          v-if="isUnchanged"
+          class="mb-[12px] shrink-0 leading-[22px]"
+          keypath="与当前已保存内容一致。确认后仍会生成 {version}。"
+          tag="p"
+        >
+          <template #version
+            ><strong>{{ nextVersion }}</strong></template
+          >
+        </i18n-t>
+        <i18n-t
+          v-else
+          class="mb-[12px] shrink-0 leading-[22px]"
+          keypath="请先核对与当前版本的差异。确认后将生成 {version}，并记入版本历史。"
+          tag="p"
+        >
+          <template #version
+            ><strong>{{ nextVersion }}</strong></template
+          >
+        </i18n-t>
+        <div
+          class="min-h-[80px] overflow-hidden"
+          :style="{ height: `${diffHeight}px` }"
+        >
+          <MsEditor
+            v-if="isShow"
+            is-diff
+            :lang="preview.lang"
+            :model-value="preview.content"
+            :options="diffOptions"
+            :original="preview.originalContent"
+            readonly
+            :show-copy="false"
+            :target-title="$t('即将保存 {0}', [nextVersion])"
+            :title="
+              preview.currentVersion ? $t('当前版本 {0}', [`V${preview.currentVersion}`]) : $t('当前内容（尚无版本）')
+            "
+            @diff-stats="handleDiffStats"
+          />
+        </div>
+      </template>
+      <Form
+        ref="formRef"
+        class="mt-[12px] shrink-0"
+        form-type="vertical"
+        :model="formData"
+        :rules="rules"
+      >
+        <Form.FormItem
+          :label="$t('{0} 版本描述', [nextVersion])"
+          property="description"
+          required
+        >
+          <Input
+            v-model="formData.description"
+            :placeholder="$t('请输入版本描述')"
+            :rows="3"
+            type="textarea"
+          />
+        </Form.FormItem>
+      </Form>
+    </template>
 
     <template #footer>
-      <div class="flex justify-center">
+      <div class="flex justify-end">
         <Button
           class="mr-[8px]"
           :loading="loading"
@@ -75,7 +141,10 @@
         >
           {{ $t('确认保存') }}
         </Button>
-        <Button @click="handleHidden">
+        <Button
+          :disabled="loading"
+          @click="isShow = false"
+        >
           {{ $t('取消') }}
         </Button>
       </div>
@@ -84,22 +153,43 @@
 </template>
 
 <script lang="ts" setup>
-  import { reactive, ref } from 'vue';
+  import { computed, reactive, ref } from 'vue';
 
-  import { Button, Dialog, Form, Input } from 'bkui-vue';
+  import { Button, Dialog, Exception, Form, Input, Tag } from 'bkui-vue';
+  import { useI18n } from 'vue-i18n';
+  import MsEditor from '~/components/monaco-editor/ms-editor.vue';
 
-  interface Props {
-    /** 下一版本号 = currentVersion + 1 */
-    nextVersion?: number;
-  }
+  import type { SaveVersionPreview } from './types';
+  import type { editor } from 'monaco-editor';
 
-  withDefaults(defineProps<Props>(), {
-    nextVersion: 1,
-  });
+  const props = defineProps<{ preview: null | SaveVersionPreview }>();
 
   const emit = defineEmits<{ (e: 'confirm', description: string): void }>();
 
   const isShow = defineModel<boolean>('isShow', { default: false });
+  const { t } = useI18n();
+  const nextVersion = computed(() => `V${(props.preview?.currentVersion ?? 0) + 1}`);
+  const isEmpty = computed(() => props.preview?.originalContent === '' && props.preview.content === '');
+  const isUnchanged = computed(
+    () => props.preview && !isEmpty.value && props.preview.originalContent === props.preview.content,
+  );
+  const diffStats = ref({ added: 0, deleted: 0 });
+  const diffOptions = {
+    diffWordWrap: 'off',
+    ignoreTrimWhitespace: false,
+    lineHeight: 20,
+    renderSideBySide: true,
+    useInlineViewWhenSpaceIsLimited: false,
+  } satisfies editor.IDiffEditorConstructionOptions;
+  const diffHeight = computed(() => {
+    const countLines = (content: string) => content.split(/\r\n|\r|\n/).length;
+    const rows = Math.max(
+      4,
+      countLines(props.preview?.originalContent ?? ''),
+      countLines(props.preview?.content ?? ''),
+    );
+    return 40 + rows * diffOptions.lineHeight + 12;
+  });
 
   /** 表单数据 */
   const formData = reactive({
@@ -107,32 +197,42 @@
   });
 
   /** 表单校验规则 */
-  const rules = {
+  const rules = computed(() => ({
     description: [
       {
-        message: '请输入版本描述',
+        message: t('请输入版本描述'),
         required: true,
         trigger: 'blur',
         validator: (val: string) => val.trim().length > 0,
       },
     ],
-  };
+  }));
 
   /** 表单 ref */
   const formRef = ref<InstanceType<typeof Form> | null>(null);
   const loading = ref(false);
+  const canClose = () => !loading.value;
 
   /** 确认保存 */
   async function handleConfirm() {
-    const valid = await formRef.value
-      ?.validate()
-      .then(() => true)
-      .catch(() => false);
-    if (!valid) return;
-
+    if (loading.value || !formRef.value) return;
     loading.value = true;
+    try {
+      await formRef.value.validate();
+    } catch {
+      stopLoading();
+      return;
+    }
     emit('confirm', formData.description.trim());
     // 由父组件负责关闭弹窗（在 handleSave 成功后）
+  }
+
+  function handleDiffStats({ added, deleted }: { added: number; deleted: number }) {
+    // Monaco 会把空文本的占位行也计入差异。
+    diffStats.value = {
+      added: props.preview?.content ? added : 0,
+      deleted: props.preview?.originalContent ? deleted : 0,
+    };
   }
 
   /** 停止 loading */
@@ -144,26 +244,53 @@
 
   /** 关闭弹窗 */
   function handleHidden() {
-    isShow.value = false;
-    loading.value = false;
+    stopLoading();
     formData.description = '';
+    diffStats.value = { added: 0, deleted: 0 };
     formRef.value?.clearValidate();
   }
 </script>
 
 <style lang="postcss" scoped>
-  :deep(.bk-dialog-header) {
-    padding-top: 48px;
+  .save-version-confirm-dialog :deep(.bk-modal-wrapper) {
+    max-width: 90vw;
   }
 
-  :deep(.bk-dialog-content) {
-    padding: 0 32px;
+  .save-version-confirm-dialog :deep(.bk-modal-body) {
+    display: flex;
+    flex-direction: column;
+    max-height: 90vh;
   }
 
-  :deep(.bk-dialog-footer) {
-    border: none;
+  .save-version-confirm-dialog :deep(.bk-modal-header),
+  .save-version-confirm-dialog :deep(.bk-modal-footer) {
+    flex-shrink: 0;
+  }
+
+  .save-version-confirm-dialog :deep(.bk-modal-content),
+  .save-version-confirm-dialog :deep(.bk-dialog-content) {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  .save-version-confirm-dialog :deep(.bk-modal-content > div) {
+    display: flex !important;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  .save-version-confirm-dialog :deep(.bk-modal-content) {
+    overflow-y: auto;
+  }
+
+  .save-version-confirm-dialog :deep(.bk-dialog-content) {
+    margin-bottom: 0;
+  }
+
+  .save-version-confirm-dialog :deep(.bk-dialog-footer) {
+    padding-bottom: 16px;
     background-color: unset;
-    padding-bottom: 24px;
-    padding-top: 0;
+    border: none;
   }
 </style>
