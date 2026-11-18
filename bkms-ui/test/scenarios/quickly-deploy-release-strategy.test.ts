@@ -31,7 +31,7 @@
  *   10. 主工作负载为 Deployment：分批发布按钮禁用（仅 GameDeployment 支持）
  *   11. 主工作负载为 GameDeployment：分批发布可用
  *   12. 点下拉内「新建策略」：叠加新建策略抽屉；保存后抽屉关闭、自动选中新策略并刷新发布预览
- *   13. 点「查看」：打开已选策略查看抽屉；未选策略时置灰不可点
+ *   13. 点「查看」：打开已选策略查看抽屉；未选策略时置灰不可点；部署页查看抽屉为纯查看，页脚只保留「关闭」
  *   14. 策略末批未到全量：提示收尾为「最后自动全量」，预览不补齐全量批、底部提示剩余实例自动更新
  *   15. 两批策略（25% → 100%）：提示保留首批灰度阶段，不误判为单批全量
  *   16. 主工作负载资格检查完成前：分批发布禁用；返回 Deployment 后仍禁用
@@ -50,7 +50,8 @@
  *   - 「请选择发布策略」校验错误文案经 bkui tooltip 渲染，以 .bk-form-item.is-error 态断言（组件库内部类名，jsdom 例外）
  *   - 新建策略抽屉叠加层级由 bkui Modal 的全局递增 zIndex 保证，jsdom 无视觉信号，仅断言两层抽屉同时存在于 DOM
  */
-import { defineComponent, ref } from 'vue';
+import { defineComponent, h, ref } from 'vue';
+import type { SetupContext } from 'vue';
 
 import userEvent from '@testing-library/user-event';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/vue';
@@ -248,6 +249,38 @@ const CodeRevisionFieldStub = defineComponent({
   template: '<div data-testid="code-revision-field-stub"></div>',
 });
 
+/** 递归收集插槽子节点纯文本（批次实例数值），供 i18n-t stub 拼接插值。 */
+function collectText(node: unknown): string {
+  if (typeof node === 'string') return node;
+  if (typeof node === 'number') return String(node);
+  const children = (node as null | { children?: unknown })?.children;
+  if (typeof children === 'string') return children;
+  if (Array.isArray(children)) return children.map(collectText).join('');
+  return '';
+}
+
+/**
+ * 发布预览的实例分数文案走 `<i18n-t keypath="新版本 {0} · 旧版本 {1}">`，
+ * 共享 I18nTStub 只直译 keypath、不处理插值，这里把默认插槽子节点文本按序替换占位符。
+ */
+const I18nTWithSlots = {
+  name: 'releaseStrategyI18nT',
+  props: {
+    keypath: { type: String, default: '' },
+    tag: { type: String, default: 'span' },
+  },
+  setup(props: { keypath: string; tag: string }, { slots }: SetupContext) {
+    return () => {
+      const children = slots.default?.() ?? [];
+      let text = props.keypath;
+      for (let i = children.length - 1; i >= 0; i -= 1) {
+        text = text.replace(new RegExp(`\\{${i}\\}`), collectText(children[i]));
+      }
+      return h(props.tag || 'span', text);
+    };
+  },
+};
+
 /** 复刻宿主接线：点击「提交部署」经 defineExpose.submit 走完整校验 + 部署链路 */
 const Harness = defineComponent({
   components: { QuicklyDeployForm },
@@ -307,7 +340,7 @@ async function renderForm(isFederationEnv = false) {
   return render(Harness, {
     props: { isFederationEnv },
     global: {
-      components: { CodeRevisionField: CodeRevisionFieldStub },
+      components: { CodeRevisionField: CodeRevisionFieldStub, 'i18n-t': I18nTWithSlots },
       // 与 src/modules/global.ts 对齐：注册 v-bk-tooltips 指令
       directives: { 'bk-tooltips': bkTooltips },
       mocks: { $t: translate },
@@ -663,7 +696,10 @@ describe('部署表单：抽屉内新建发布策略', () => {
     const header = await screen.findByTestId('strategy-sideslider-header');
     expect(within(header).getByText('查看策略')).toBeInTheDocument();
     expect(within(header).getByText('生产谨慎发布')).toBeInTheDocument();
-    // 查看态页脚提供「克隆为空间策略」入口
-    expect(screen.getByText('克隆为空间策略')).toBeInTheDocument();
+    // 部署页的查看抽屉为纯查看（readonly）：页脚只保留「关闭」，不提供克隆 / 预览入口，
+    // 克隆入口在「发布策略」管理页，避免在部署流程中派生新策略
+    expect(screen.getByRole('button', { name: '关闭' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '克隆为空间策略' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '预览策略' })).not.toBeInTheDocument();
   });
 });

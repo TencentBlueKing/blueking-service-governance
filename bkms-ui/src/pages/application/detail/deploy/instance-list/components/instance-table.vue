@@ -78,8 +78,7 @@
           <TableException
             :type="curExceptionType"
             @refresh="handleRefresh"
-          >
-          </TableException>
+          />
         </template>
 
         <!-- prepend：跨页选择信息条 -->
@@ -627,7 +626,6 @@
           :width="150"
         >
           <template #default="{ row }: { row: AppInstanceOutputObj }">
-            <div class="flex items-center gap-[16px]">
             <div class="flex items-center gap-[16px]">
               <Button
                 v-bk-tooltips="{

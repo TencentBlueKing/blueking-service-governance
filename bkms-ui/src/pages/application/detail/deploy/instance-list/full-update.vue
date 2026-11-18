@@ -317,7 +317,7 @@
       @success="handleStrategyCreated"
     />
 
-    <!-- 查看策略：叠加在部署抽屉之上的独立抽屉，展示已选策略详情，可克隆为空间策略 -->
+    <!-- 查看策略：叠加在部署抽屉之上的独立抽屉，仅展示已选策略详情（readonly → 页脚只保留「关闭」） -->
     <StrategySideslider
       v-model:is-show="viewStrategyVisible"
       :existing-names="existingStrategyNames"

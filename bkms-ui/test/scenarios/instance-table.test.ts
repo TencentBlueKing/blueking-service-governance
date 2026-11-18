@@ -16,15 +16,25 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
+/**
+ * 场景级测试：实例列表（热更新列 / WeTerm 入口 / 监控选择快照）。
+ *
+ * 路径清单（V = 9，判定节点 8 + 1）：
+ *   1 热更新成功记录：状态文案「已更新」+ 详情四字段 + 结果「成功」
+ *   2 热更新失败记录：状态文案「更新失败」+ 结果「失败」+ 失败原因
+ *   3 无热更新记录：单元格占位符 --
+ *   4 热更新详情字段缺省：四项均回落 --
+ *   5 未知热更新状态：原样展示且不渲染状态点
+ *   6 运行中实例点击 WeTERM：向上抛出 weterm 行操作
+ *   7 非运行中实例点击 WeTERM：不抛出行操作
+ *   8 实例总数不变但集合替换：重新通知父组件 data-loaded
+ *
+ * 数据由父组件通过 data 传入（外部数据模式），不连接 API / SSE；仅隔离表格与 UI 组件契约，
+ * 不渲染真实 Popover / Dropdown 内部实现。
+ */
 import { defineComponent, h } from 'vue';
 import type { VNodeChild } from 'vue';
 
-/**
- * 场景级测试：实例列表热更新列。
- *
- * 路径清单（V = 5）：成功记录、失败记录、无记录占位符、未知状态、详情字段缺省值。
- * 热更新数据由父组件通过 data 传入；本文件只隔离表格与 UI 组件契约，不连接 API、SSE 或真实 Popover。
- */
 import { fireEvent, render, screen, within } from '@testing-library/vue';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 
