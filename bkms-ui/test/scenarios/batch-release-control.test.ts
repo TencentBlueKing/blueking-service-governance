@@ -296,9 +296,15 @@ function buttonLabelsOf(banner: HTMLElement) {
     .map(button => button.textContent?.trim() ?? '');
 }
 
-/** 写操作统一带 { interceptorErr: false }，错误由横幅自己提示。 */
+/**
+ * 写操作统一带 { interceptorErr: false }，并携带确认时捕获的 deployID（后端据此核对目标），
+ * 错误由横幅自己提示。
+ */
 function expectOperateCalledWith(action: string) {
-  expect(mocks.operate).toHaveBeenCalledWith({ action, appID: 'app-a', envName: 'prod' }, { interceptorErr: false });
+  expect(mocks.operate).toHaveBeenCalledWith(
+    { action, appID: 'app-a', deployID: 'deploy-1', envName: 'prod' },
+    { interceptorErr: false },
+  );
 }
 
 /** 挂载后等待首轮「最新部署状态 + 进度」返回，再返回横幅节点。 */
@@ -647,6 +653,27 @@ describe('实例列表分批发布控制：横幅与操作', () => {
     }
   });
 
+  it('当 canary 记录的进度接口返回空时，骨架占位必须收起（loading 需复位）', async () => {
+    // 首次加载 / 切换环境后进度接口返回空：quickly skeleton 若因 token 双重自增不复位会永久挂在页面上。
+    mocks.progress.mockResolvedValue(null);
+    mountPage();
+
+    await screen.findByRole('button', { name: '部署' });
+    await waitFor(() => expect(mocks.progress).toHaveBeenCalled());
+    await waitFor(() => expect(screen.queryByTestId('batch-release-skeleton')).toBeNull());
+    expect(screen.queryByTestId('batch-release-banner')).toBeNull();
+  });
+
+  it('当 canary 记录的进度接口报错时，骨架占位同样必须收起', async () => {
+    mocks.progress.mockRejectedValue(new Error('timeout'));
+    mountPage();
+
+    await screen.findByRole('button', { name: '部署' });
+    await waitFor(() => expect(mocks.progress).toHaveBeenCalled());
+    await waitFor(() => expect(screen.queryByTestId('batch-release-skeleton')).toBeNull());
+    expect(screen.queryByTestId('batch-release-banner')).toBeNull();
+  });
+
   it('当分批发布失败时，应展示失败原因并提供重试与回滚入口', async () => {
     mocks.progress.mockResolvedValue(buildProgress({ message: '2 个实例健康检查未通过', status: 'failed' }));
     mocks.latest.mockResolvedValue({
@@ -751,6 +778,46 @@ describe('实例列表分批发布控制：横幅与操作', () => {
     );
     await waitFor(() => expect(mocks.progress).toHaveBeenCalledTimes(2));
     expect(screen.getByTestId('batch-release-banner')).toHaveAttribute('data-kind', 'updating');
+  });
+
+  it('当确认框打开后发布记录已由 A 切换到 B 时，确认不得对 B 发起操作请求', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      mountPage();
+      const banner = await findBanner();
+
+      // 用户在发布 A（deploy-1）上打开「回滚」确认框但暂不确认
+      await userEvent.click(within(banner).getByRole('button', { name: '回滚' }));
+      await waitFor(() => expect(mocks.infoBox).toHaveBeenCalledTimes(1));
+      const confirmConfig = mocks.infoBox.mock.calls[0][0];
+
+      // 期间其他操作员在同一环境发起了发布 B：latest-status 与进度都切换为 deploy-2
+      mocks.latest.mockResolvedValue({
+        deployID: 'deploy-2',
+        inProgressReleaseMode: 'canary',
+        releaseMode: 'canary',
+        stage: 'deploy',
+        status: 'deploying',
+      });
+      mocks.progress.mockResolvedValue(buildProgress({ deployID: 'deploy-2' }));
+      await vi.advanceTimersByTimeAsync(5000);
+      await waitFor(() =>
+        expect(mocks.progress).toHaveBeenCalledWith({ appID: 'app-a', envName: 'prod' }, { interceptorErr: false }),
+      );
+      await waitFor(() => expect(mocks.progress.mock.results.length).toBeGreaterThan(1));
+
+      // 此时确认原弹窗：不得对发布 B 发起回滚
+      confirmConfig.onConfirm();
+      await waitFor(() =>
+        expect(mocks.message).toHaveBeenCalledWith({
+          theme: 'warning',
+          message: '发布记录已变更，请确认最新状态后重试',
+        }),
+      );
+      expect(mocks.operate).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('当操作请求未返回时，横幅操作应置灰且不重复发起请求', async () => {

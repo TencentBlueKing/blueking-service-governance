@@ -37,7 +37,7 @@ import {
   shouldFetchBatchReleaseProgress,
 } from '../batch-release';
 
-import type { BatchReleaseProgressOutputObj, LatestDeployStatus } from '~/@types/v1/deploy';
+import type { BatchReleaseProgressOutputObj, LatestDeployStatus, OperateBatchReleaseRequest } from '~/@types/v1/deploy';
 
 /**
  * 进度回查的等待上限。
@@ -133,16 +133,20 @@ export function useBatchReleaseControl(options: UseBatchReleaseControlOptions) {
 
   /**
    * 直接回查进度（不做门控），用于操作成功后的即时刷新。
+   *
+   * 请求世代由调用方统一分配：refresh 需要在发起前抢先拿到 token 才能判断收尾时是否仍是「最新一轮」，
+   * 若本函数再自增一次，refresh 的 finally 中 token === requestToken 恒为假，loading 将永远不复位。
+   *
    * @param latest 本轮最新的部署状态，仅用于判断「空进度」是否为稳定结果
+   * @param token 调用方已分配的请求世代；缺省时自行分配（独立调用场景）
    */
-  async function fetchProgress(latest?: LatestDeployStatus | null) {
+  async function fetchProgress(latest?: LatestDeployStatus | null, token = ++requestToken) {
     const appID = options.getAppID();
     const envName = options.getEnvName();
     if (!options.isEnabled() || !appID || !envName) {
       reset();
       return;
     }
-    const token = ++requestToken;
     const result = await DeployService.getBatchReleaseProgress({ appID, envName }, { interceptorErr: false }).catch(
       error => {
         // 失败保留上一次快照，不打断页面。
@@ -178,7 +182,8 @@ export function useBatchReleaseControl(options: UseBatchReleaseControlOptions) {
     const token = ++requestToken;
     loading.value = true;
     try {
-      await withTimeout(fetchProgress(latest), PROGRESS_REFETCH_TIMEOUT);
+      // 复用本轮 token：fetchProgress 不能再自增，否则下面的收尾判断永远不成立。
+      await withTimeout(fetchProgress(latest, token), PROGRESS_REFETCH_TIMEOUT);
     } finally {
       if (token === requestToken) loading.value = false;
     }
@@ -194,11 +199,30 @@ export function useBatchReleaseControl(options: UseBatchReleaseControlOptions) {
     }
   }
 
-  /** 请求失败时提示并回查纠偏，不改变本地进度快照。 */
-  async function operate(action: BatchReleaseAction) {
+  /**
+   * 执行分批发布写操作。
+   *
+   * @param action 操作类型
+   * @param expectedDeployID 用户看到并确认时的部署记录 ID；缺省取当前进度快照的 deployID。
+   *   确认弹窗可能停留很久，期间同环境可能已被其他人发起新的发布；此时写请求若不带目标校验，
+   *   就会落到新记录上（例如对 B 执行本来针对 A 的回滚）。因此发起前必须核对目标是否已变化。
+   */
+  async function operate(action: BatchReleaseAction, expectedDeployID?: string) {
     const appID = options.getAppID();
     const envName = options.getEnvName();
     if (!appID || !envName || pendingAction.value) return;
+
+    // 确认时的目标已失效（部署记录被替换 / 进度已刷新）：直接放弃，要求用户基于新状态重新确认。
+    const targetDeployID = expectedDeployID ?? progress.value?.deployID ?? '';
+    const currentDeployID = progress.value?.deployID ?? '';
+    if (targetDeployID && currentDeployID && targetDeployID !== currentDeployID) {
+      Message({
+        theme: 'warning',
+        message: t('发布记录已变更，请确认最新状态后重试'),
+      });
+      await withTimeout(fetchProgress(), PROGRESS_REFETCH_TIMEOUT);
+      return;
+    }
 
     const currentView = view.value;
     pendingAction.value = action;
@@ -206,7 +230,10 @@ export function useBatchReleaseControl(options: UseBatchReleaseControlOptions) {
       pendingAction.value = null;
     }, PENDING_ACTION_WATCHDOG);
     try {
-      await DeployService.operateBatchRelease({ action, appID, envName }, { interceptorErr: false });
+      // 带上确认时的 deployID：后端据此核对目标，避免「检查与写入之间」的竞争窗口。
+      const payload: OperateBatchReleaseRequest = { action, appID, envName };
+      if (targetDeployID) payload.deployID = targetDeployID;
+      await DeployService.operateBatchRelease(payload, { interceptorErr: false });
       // 操作期间切换了应用/环境：结果已不属于当前页面，直接丢弃。
       if (appID !== options.getAppID() || envName !== options.getEnvName()) return;
 
@@ -236,11 +263,19 @@ export function useBatchReleaseControl(options: UseBatchReleaseControlOptions) {
     }
   }
 
-  /** 点击横幅操作：需要二次确认的先弹 InfoBox，其余直接执行。 */
+  /**
+   * 点击横幅操作：需要二次确认的先弹 InfoBox，其余直接执行。
+   *
+   * 打开确认框时立刻捕获「应用 / 环境 / 部署记录」三元组，确认回调只认这份快照：
+   * 弹窗可能长时间停留，期间环境或发布记录都可能变化，不能等到确认时才重新读取上下文。
+   */
   function handleAction(item: BatchReleaseBannerAction) {
     if (item.disabled || pendingAction.value) return;
+    const targetAppID = options.getAppID();
+    const targetEnvName = options.getEnvName();
+    const targetDeployID = progress.value?.deployID ?? '';
     if (!item.confirm) {
-      void operate(item.action);
+      void operate(item.action, targetDeployID);
       return;
     }
     const { confirm } = item;
@@ -260,7 +295,15 @@ export function useBatchReleaseControl(options: UseBatchReleaseControlOptions) {
       cancelText: t('取消'),
       confirmButtonTheme: confirm.confirmTheme,
       onConfirm: () => {
-        void operate(item.action);
+        // 弹窗期间切换了应用 / 环境：原确认目标已不存在，直接丢弃而不是对当前环境发写请求。
+        if (targetAppID !== options.getAppID() || targetEnvName !== options.getEnvName()) {
+          Message({
+            theme: 'warning',
+            message: t('环境已切换，请确认最新状态后重试'),
+          });
+          return;
+        }
+        void operate(item.action, targetDeployID);
       },
     });
   }
