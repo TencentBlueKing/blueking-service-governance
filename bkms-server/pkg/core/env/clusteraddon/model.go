@@ -64,7 +64,7 @@ type ClusterAddonDef struct {
 // DefaultNamespaceValue 默认命名空间
 const DefaultNamespaceValue = "bcs-system"
 
-// ClusterTarget Addon 所在的目标集群。环境维度与集群维度的接口分别由 TargetOfEnv、TargetOfCluster 构造，
+// ClusterTarget Addon 所在的目标集群
 // 之后的查询、安装逻辑共用
 type ClusterTarget struct {
 	// ClusterID BCS 集群 ID
@@ -73,13 +73,13 @@ type ClusterTarget struct {
 	IsFederation bool
 }
 
-// TargetOfEnv 返回环境所在的集群
-func TargetOfEnv(env *envmodel.Environment) ClusterTarget {
+// TargetFromEnv 返回环境所在的集群
+func TargetFromEnv(env *envmodel.Environment) ClusterTarget {
 	return ClusterTarget{ClusterID: env.Cluster.ClusterID, IsFederation: env.Cluster.IsFederation}
 }
 
-// TargetOfCluster 返回指定的集群，是否为联邦集群按配置的联邦 Host 集群 ID 列表判断，与创建环境时一致
-func TargetOfCluster(clusterID string) ClusterTarget {
+// TargetFromClusterID 返回指定的集群，是否为联邦集群按配置的联邦 Host 集群 ID 列表判断，与创建环境时一致
+func TargetFromClusterID(clusterID string) ClusterTarget {
 	return ClusterTarget{
 		ClusterID:    clusterID,
 		IsFederation: (&cluster.Config{ClusterID: clusterID}).IsFederation(),

@@ -155,7 +155,7 @@ func InspectRequiredAddons(
 	// 同一 namespace 的 Release 列表在本次检查中只读取一次，包括空列表。
 	releasesByNamespace := make(map[string][]*helm.Release)
 	// 只检查适用于目标环境、且当前应用必选的组件。
-	for _, def := range ApplicableAddonDefs(defs, TargetOfEnv(env)) {
+	for _, def := range ApplicableAddonDefs(defs, TargetFromEnv(env)) {
 		if !lo.Some(def.RequiredForAppTypes, addonAppTypes) {
 			continue
 		}

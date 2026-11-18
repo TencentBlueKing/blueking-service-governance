@@ -16,7 +16,6 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
-// Package handler contains Gin handlers for cluster-addon APIs.
 package handler
 
 import (
@@ -24,113 +23,70 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/pkg/errors"
-	"github.com/samber/lo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	clusteraddon "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/clusteraddon"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/clusteraddon/serializer"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/helm"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/misc/audit"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/perm"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
-// Handler handles Gin cluster-addon API requests.
-type Handler struct {
-	registry *storereg.Registry
-}
-
-// New creates a Handler.
-func New(registry *storereg.Registry) *Handler {
-	return &Handler{registry: registry}
-}
-
-func (h *Handler) addonDefs() *clusteraddon.ClusterAddonDefStore {
-	return store.Of(h.registry.DB, clusteraddon.ClusterAddonDefMeta)
-}
-
-// ListClusterAddons 查询可安装的集群插件列表。
+// ListClusterAddons 查询空间集群的集群插件列表及各插件在集群上的安装状态。
 //
-//	@ID			ListClusterAddons
-//	@Summary	查询可安装的集群插件列表
-//	@Tags		cluster-addon
-//	@Produce	json
-//	@Security	BkUserInfo
-//	@Security	BkUserCredential
-//	@Param		envID		path		string	true	"环境 ID"
-//	@Param		namespace	query		string	false	"命名空间，默认为插件定义中的 defaultNamespace"
-//	@Success	200			{object}	serializer.ListClusterAddonsOutput
-//	@Failure	400			{object}	bkerrs.GinErrorOutput
-//	@Router		/envs/{envID}/cluster-addons [get]
+//	@ID				ListClusterAddons
+//	@Summary		查询空间集群的集群插件及安装状态
+//	@Description	返回适用于该集群的全部插件（含未安装的），每项带安装状态、当前 chart 版本与 values。
+//	@Description	集群必须是空间绑定的 BCS 项目下的非共享集群
+//	@Tags			cluster-addon
+//	@Produce		json
+//	@Security		BkUserInfo
+//	@Security		BkUserCredential
+//	@Param			workspaceID	path		string	true	"工作空间 ID"
+//	@Param			clusterID	path		string	true	"BCS 集群 ID"
+//	@Param			namespace	query		string	false	"命名空间，默认为插件定义中的 defaultNamespace"
+//	@Success		200			{object}	serializer.ListClusterAddonsOutput
+//	@Failure		400			{object}	bkerrs.GinErrorOutput
+//	@Router			/workspaces/{workspaceID}/clusters/{clusterID}/cluster-addons [get]
 func (h *Handler) ListClusterAddons(c *gin.Context) {
-	var uriInput serializer.EnvURIInput
+	var uriInput serializer.WorkspaceClusterURIInput
 	var queryInput serializer.ListClusterAddonsQueryInput
 	if err := ginutils.BindURIQuery(c, &uriInput, &queryInput); err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return
 	}
 
-	ctx := c.Request.Context()
-
-	env, err := perm.ValidateEnvByID(ctx, h.registry, uriInput.EnvID, perm.TypeView)
-	if err != nil {
+	if _, err := h.validateCluster(
+		c.Request.Context(), uriInput.WorkspaceID, uriInput.ClusterID, perm.TypeView,
+	); err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return
 	}
 
-	if env.Cluster.ClusterID == "" {
-		bkerrs.AbortWithErr(c, bkerrs.Errorf(bkerrs.ErrCodeInvalidArgument,
-			"environment %s has no cluster configured", uriInput.EnvID))
-		return
-	}
-
-	h.respondAddonList(c, clusteraddon.TargetOfEnv(env), queryInput.Namespace)
+	h.respondAddonList(c, clusteraddon.TargetFromClusterID(uriInput.ClusterID), queryInput.Namespace)
 }
 
-// respondAddonList 查询目标集群上的插件列表并写入响应，环境维度与集群维度的列表接口共用
-func (h *Handler) respondAddonList(c *gin.Context, target clusteraddon.ClusterTarget, namespace string) {
-	ctx := c.Request.Context()
-
-	addonDefs, err := clusteraddon.ListDefs(ctx, h.addonDefs())
-	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list cluster addon defs"))
-		return
-	}
-
-	repoIndex, repoErr := clusteraddon.FetchRepoIndex()
-	if repoErr != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(repoErr, bkerrs.ErrCodeInternalServerError, "fetch helm repo index"))
-		return
-	}
-
-	addons := clusteraddon.BuildAddonInfoList(ctx, addonDefs, target, namespace, repoIndex)
-
-	ginutils.OK(c, &serializer.ListClusterAddonsOutput{
-		Addons: lo.Map(addons, func(addon *clusteraddon.ClusterAddonInfo, _ int) *serializer.ClusterAddonInfoOutput {
-			return new(serializer.ClusterAddonInfoOutput).FromModel(*addon)
-		}),
-	})
-}
-
-// UpsertClusterAddon 部署/更新集群插件。
+// UpsertClusterAddon 在空间集群上部署/更新集群插件。
 //
-//	@ID			UpsertClusterAddon
-//	@Summary	部署/更新集群插件
-//	@Tags		cluster-addon
-//	@Accept		json
-//	@Produce	json
-//	@Security	BkUserInfo
-//	@Security	BkUserCredential
-//	@Param		envID		path		string								true	"环境 ID"
-//	@Param		addonName	path		string								true	"插件名称"
-//	@Param		body		body		serializer.UpsertClusterAddonInput	true	"请求体"
-//	@Success	201			{object}	nil
-//	@Failure	400			{object}	bkerrs.GinErrorOutput
-//	@Router		/envs/{envID}/cluster-addons/{addonName} [post]
+//	@ID				UpsertClusterAddon
+//	@Summary		在空间集群上部署/更新集群插件
+//	@Description	集群必须是空间绑定的 BCS 项目下的非共享集群，可以没有环境。
+//	@Description	与环境维度的接口共用安装锁，同一集群命名空间内的同一插件同时只允许一个安装或卸载操作。
+//	@Tags			cluster-addon
+//	@Accept			json
+//	@Produce		json
+//	@Security		BkUserInfo
+//	@Security		BkUserCredential
+//	@Param			workspaceID	path		string								true	"工作空间 ID"
+//	@Param			clusterID	path		string								true	"BCS 集群 ID"
+//	@Param			addonName	path		string								true	"插件名称"
+//	@Param			body		body		serializer.UpsertClusterAddonInput	true	"请求体"
+//	@Success		201			{object}	nil
+//	@Failure		400			{object}	bkerrs.GinErrorOutput
+//	@Router			/workspaces/{workspaceID}/clusters/{clusterID}/cluster-addons/{addonName} [post]
 func (h *Handler) UpsertClusterAddon(c *gin.Context) {
-	var uriInput serializer.EnvAddonURIInput
+	var uriInput serializer.WorkspaceClusterAddonURIInput
 	var jsonInput serializer.UpsertClusterAddonInput
 	if err := ginutils.BindURIJSON(c, &uriInput, &jsonInput); err != nil {
 		bkerrs.AbortWithErr(c, err)
@@ -139,19 +95,15 @@ func (h *Handler) UpsertClusterAddon(c *gin.Context) {
 
 	ctx := c.Request.Context()
 
-	env, err := perm.ValidateEnvByID(ctx, h.registry, uriInput.EnvID, perm.TypeEdit)
+	ws, err := h.validateCluster(ctx, uriInput.WorkspaceID, uriInput.ClusterID, perm.TypeEdit)
 	if err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return
 	}
 
-	if env.Cluster.ClusterID == "" {
-		bkerrs.AbortWithErr(c, bkerrs.Errorf(bkerrs.ErrCodeInvalidArgument,
-			"environment %s has no cluster configured", uriInput.EnvID))
-		return
-	}
-
-	if err = h.upsertAddon(ctx, clusteraddon.TargetOfEnv(env), uriInput.AddonName, jsonInput); err != nil {
+	if err = h.upsertAddon(
+		ctx, clusteraddon.TargetFromClusterID(uriInput.ClusterID), uriInput.AddonName, jsonInput,
+	); err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return
 	}
@@ -162,129 +114,33 @@ func (h *Handler) UpsertClusterAddon(c *gin.Context) {
 		audit.ResourceTypeClusterAddon,
 		uriInput.AddonName,
 		audit.WithDataAfter(map[string]any{
+			"clusterID":    uriInput.ClusterID,
 			"chartVersion": jsonInput.ChartVersion,
 			"values":       jsonInput.Values,
 		}),
-		audit.WithWorkspaceID(env.WorkspaceID),
-		audit.WithEnvName(env.Name),
+		audit.WithWorkspaceID(ws.ID),
 	)
 
 	ginutils.JSON(c, 201, nil)
 }
 
-// upsertAddon 在目标集群上加锁安装或更新插件，环境维度与集群维度的安装接口共用，返回的错误已包装为 API 错误
-func (h *Handler) upsertAddon(
+// validateCluster 校验空间权限，并校验集群是空间绑定的 BCS 项目下的非共享集群，返回的错误已包装为 API 错误
+func (h *Handler) validateCluster(
 	ctx context.Context,
-	target clusteraddon.ClusterTarget,
-	addonName string,
-	input serializer.UpsertClusterAddonInput,
-) error {
-	addonDef, err := h.addonDefs().Get(ctx, clusteraddon.ByName(addonName))
+	workspaceID, clusterID string,
+	permType perm.Type,
+) (*workspace.Workspace, error) {
+	ws, err := perm.ValidateWorkspaceByID(ctx, h.registry, workspaceID, permType)
 	if err != nil {
-		if errors.Is(err, clusteraddon.ErrClusterAddonDefNotFound) {
-			return bkerrs.Errorf(bkerrs.ErrCodeNotFound, "cluster addon %s not found", addonName)
+		return nil, err
+	}
+	if _, err = clusteraddon.GetCluster(ctx, ws.BkSystems.BkBCSProjectID, clusterID); err != nil {
+		if errors.Is(err, clusteraddon.ErrClusterNotFound) {
+			return nil, bkerrs.Wrapf(err, bkerrs.ErrCodeNotFound, "cluster %s not found in workspace %s",
+				clusterID, workspaceID)
 		}
-		return bkerrs.Wrapf(err, bkerrs.ErrCodeInternalServerError, "get cluster addon def %s", addonName)
+		return nil, bkerrs.Wrapf(err, bkerrs.ErrCodeInternalServerError, "get cluster %s of workspace %s",
+			clusterID, workspaceID)
 	}
-
-	namespace := addonDef.GetNamespace(input.Namespace)
-
-	installLock := clusteraddon.NewInstallLock(target.ClusterID, namespace, addonName)
-	if ok := installLock.Acquire(ctx); !ok {
-		return bkerrs.New(bkerrs.ErrCodeAborted, "concurrent install/update conflict occurred")
-	}
-	defer installLock.Release(ctx)
-
-	if err = clusteraddon.InstallOrUpgradeClusterAddon(
-		ctx, addonDef, target, namespace, input.ChartVersion, input.Values,
-	); err != nil {
-		if errors.Is(err, clusteraddon.ErrAddonNotApplicable) {
-			return bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, "deploy cluster addon")
-		}
-		return bkerrs.Wrapf(err, bkerrs.ErrCodeInternalServerError, "deploy cluster addon %s", addonName)
-	}
-	return nil
-}
-
-// DeleteClusterAddon 卸载集群插件。
-//
-//	@ID			DeleteClusterAddon
-//	@Summary	卸载集群插件
-//	@Tags		cluster-addon
-//	@Produce	json
-//	@Security	BkUserInfo
-//	@Security	BkUserCredential
-//	@Param		envID		path		string	true	"环境 ID"
-//	@Param		addonName	path		string	true	"插件名称"
-//	@Param		namespace	query		string	false	"命名空间，默认为插件定义中的 defaultNamespace"
-//	@Success	200			{object}	serializer.DeleteClusterAddonOutput
-//	@Failure	400			{object}	bkerrs.GinErrorOutput
-//	@Router		/envs/{envID}/cluster-addons/{addonName} [delete]
-func (h *Handler) DeleteClusterAddon(c *gin.Context) {
-	var uriInput serializer.EnvAddonURIInput
-	var queryInput serializer.DeleteClusterAddonQueryInput
-	if err := ginutils.BindURIQuery(c, &uriInput, &queryInput); err != nil {
-		bkerrs.AbortWithErr(c, err)
-		return
-	}
-
-	ctx := c.Request.Context()
-
-	env, err := perm.ValidateEnvByID(ctx, h.registry, uriInput.EnvID, perm.TypeEdit)
-	if err != nil {
-		bkerrs.AbortWithErr(c, err)
-		return
-	}
-
-	clusterID := env.Cluster.ClusterID
-	if clusterID == "" {
-		bkerrs.AbortWithErr(c, bkerrs.Errorf(bkerrs.ErrCodeInvalidArgument,
-			"environment %s has no cluster configured", uriInput.EnvID))
-		return
-	}
-
-	addonDef, err := h.addonDefs().Get(
-		ctx, clusteraddon.ByName(uriInput.AddonName),
-	)
-	if err != nil {
-		if errors.Is(err, clusteraddon.ErrClusterAddonDefNotFound) {
-			bkerrs.AbortWithErr(
-				c,
-				bkerrs.Errorf(bkerrs.ErrCodeNotFound, "cluster addon %s not found", uriInput.AddonName),
-			)
-			return
-		}
-		bkerrs.AbortWithErr(c, bkerrs.Wrapf(err, bkerrs.ErrCodeInternalServerError,
-			"get cluster addon def %s", uriInput.AddonName))
-		return
-	}
-
-	namespace := addonDef.GetNamespace(queryInput.Namespace)
-
-	installLock := clusteraddon.NewInstallLock(clusterID, namespace, uriInput.AddonName)
-	if ok := installLock.Acquire(ctx); !ok {
-		bkerrs.AbortWithErr(c, bkerrs.New(bkerrs.ErrCodeAborted, "concurrent uninstall conflict occurred"))
-		return
-	}
-	defer installLock.Release(ctx)
-
-	if err = clusteraddon.UninstallClusterAddon(ctx, addonDef, clusterID, namespace); err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrapf(err, bkerrs.ErrCodeInternalServerError,
-			"uninstall cluster addon %s", uriInput.AddonName))
-		return
-	}
-
-	go audit.AddOperationRecordAsync(
-		c.Request.Context(),
-		audit.OperationTypeUninstall,
-		audit.ResourceTypeClusterAddon,
-		uriInput.AddonName,
-		audit.WithWorkspaceID(env.WorkspaceID),
-		audit.WithEnvName(env.Name),
-	)
-
-	ginutils.OK(c, serializer.DeleteClusterAddonOutput{
-		Status:  string(helm.StatusUninstalled),
-		Message: "addon uninstalled successfully",
-	})
+	return ws, nil
 }

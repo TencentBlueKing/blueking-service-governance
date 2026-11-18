@@ -28,13 +28,13 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bcs"
 )
 
-// ErrClusterNotInWorkspace 集群不是空间绑定的 BCS 项目下的非共享集群
-var ErrClusterNotInWorkspace = errors.New("cluster is not a dedicated cluster of the workspace bcs project")
+// ErrClusterNotFound 集群不存在于 BCS 项目下，或是共享集群
+var ErrClusterNotFound = errors.New("cluster not found in bcs project or is shared")
 
-// ListWorkspaceClusters 返回空间下的集群列表
+// ListClusters 返回 BCS 项目下可安装集群插件的集群，即全部非共享集群
 //
-// 共享集群上的集群级组件由平台维护，空间不能安装或更新,从返回列表中筛掉。空间未绑定 BCS 项目时返回空列表
-func ListWorkspaceClusters(ctx context.Context, bcsProjectID string) ([]bcs.Cluster, error) {
+// 共享集群上的集群级组件由平台维护，空间不能安装或更新，因此筛掉。bcsProjectID 为空（空间未绑定 BCS 项目）时返回空列表
+func ListClusters(ctx context.Context, bcsProjectID string) ([]bcs.Cluster, error) {
 	if bcsProjectID == "" {
 		return nil, nil
 	}
@@ -53,17 +53,17 @@ func ListWorkspaceClusters(ctx context.Context, bcsProjectID string) ([]bcs.Clus
 	return lo.Filter(clusters, func(c bcs.Cluster, _ int) bool { return !c.IsShared }), nil
 }
 
-// GetWorkspaceCluster 返回空间下的指定集群
-// 不在范围内时返回 ErrClusterNotInWorkspace
-func GetWorkspaceCluster(ctx context.Context, bcsProjectID, clusterID string) (*bcs.Cluster, error) {
-	clusters, err := ListWorkspaceClusters(ctx, bcsProjectID)
+// GetCluster 返回 BCS 项目下指定的可安装集群插件的集群
+// 集群不存在或是共享集群时返回 ErrClusterNotFound
+func GetCluster(ctx context.Context, bcsProjectID, clusterID string) (*bcs.Cluster, error) {
+	clusters, err := ListClusters(ctx, bcsProjectID)
 	if err != nil {
 		return nil, err
 	}
 	found, ok := lo.Find(clusters, func(c bcs.Cluster) bool { return c.ID == clusterID })
 	if !ok {
 		return nil, errors.Wrapf(
-			ErrClusterNotInWorkspace,
+			ErrClusterNotFound,
 			"find cluster %s in bcs project %s",
 			clusterID,
 			bcsProjectID,

@@ -20443,7 +20443,7 @@ paths:
       - env
   /envs/{envID}/cluster-addons:
     get:
-      operationId: ListClusterAddons
+      operationId: ListEnvClusterAddons
       parameters:
       - description: 环境 ID
         in: path
@@ -20468,12 +20468,12 @@ paths:
       security:
       - BkUserInfo: []
       - BkUserCredential: []
-      summary: 查询可安装的集群插件列表
+      summary: 查询环境所在集群的集群插件列表
       tags:
       - cluster-addon
   /envs/{envID}/cluster-addons/{addonName}:
     delete:
-      operationId: DeleteClusterAddon
+      operationId: DeleteEnvClusterAddon
       parameters:
       - description: 环境 ID
         in: path
@@ -20503,13 +20503,13 @@ paths:
       security:
       - BkUserInfo: []
       - BkUserCredential: []
-      summary: 卸载集群插件
+      summary: 卸载环境所在集群上的集群插件
       tags:
       - cluster-addon
     post:
       consumes:
       - application/json
-      operationId: UpsertClusterAddon
+      operationId: UpsertEnvClusterAddon
       parameters:
       - description: 环境 ID
         in: path
@@ -20539,7 +20539,7 @@ paths:
       security:
       - BkUserInfo: []
       - BkUserCredential: []
-      summary: 部署/更新集群插件
+      summary: 在环境所在集群上部署/更新集群插件
       tags:
       - cluster-addon
   /envs/{envID}/port-pools:
@@ -23023,7 +23023,7 @@ paths:
       description: |-
         返回适用于该集群的全部插件（含未安装的），每项带安装状态、当前 chart 版本与 values。
         集群必须是空间绑定的 BCS 项目下的非共享集群
-      operationId: ListWorkspaceClusterAddons
+      operationId: ListClusterAddons
       parameters:
       - description: 工作空间 ID
         in: path
@@ -23063,7 +23063,7 @@ paths:
       description: |-
         集群必须是空间绑定的 BCS 项目下的非共享集群，可以没有环境。
         与环境维度的接口共用安装锁，同一集群命名空间内的同一插件同时只允许一个安装或卸载操作。
-      operationId: UpsertWorkspaceClusterAddon
+      operationId: UpsertClusterAddon
       parameters:
       - description: 工作空间 ID
         in: path

@@ -14938,8 +14938,8 @@ const docTemplate = `{
                 "tags": [
                     "cluster-addon"
                 ],
-                "summary": "查询可安装的集群插件列表",
-                "operationId": "ListClusterAddons",
+                "summary": "查询环境所在集群的集群插件列表",
+                "operationId": "ListEnvClusterAddons",
                 "parameters": [
                     {
                         "type": "string",
@@ -14990,8 +14990,8 @@ const docTemplate = `{
                 "tags": [
                     "cluster-addon"
                 ],
-                "summary": "部署/更新集群插件",
-                "operationId": "UpsertClusterAddon",
+                "summary": "在环境所在集群上部署/更新集群插件",
+                "operationId": "UpsertEnvClusterAddon",
                 "parameters": [
                     {
                         "type": "string",
@@ -15044,8 +15044,8 @@ const docTemplate = `{
                 "tags": [
                     "cluster-addon"
                 ],
-                "summary": "卸载集群插件",
-                "operationId": "DeleteClusterAddon",
+                "summary": "卸载环境所在集群上的集群插件",
+                "operationId": "DeleteEnvClusterAddon",
                 "parameters": [
                     {
                         "type": "string",
@@ -19060,7 +19060,7 @@ const docTemplate = `{
                     "cluster-addon"
                 ],
                 "summary": "查询空间集群的集群插件及安装状态",
-                "operationId": "ListWorkspaceClusterAddons",
+                "operationId": "ListClusterAddons",
                 "parameters": [
                     {
                         "type": "string",
@@ -19120,7 +19120,7 @@ const docTemplate = `{
                     "cluster-addon"
                 ],
                 "summary": "在空间集群上部署/更新集群插件",
-                "operationId": "UpsertWorkspaceClusterAddon",
+                "operationId": "UpsertClusterAddon",
                 "parameters": [
                     {
                         "type": "string",

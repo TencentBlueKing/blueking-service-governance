@@ -32,7 +32,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bcs"
 )
 
-var _ = Describe("Workspace clusters", func() {
+var _ = Describe("Non-shared clusters", func() {
 	var ctx context.Context
 
 	BeforeEach(func() {
@@ -58,13 +58,13 @@ var _ = Describe("Workspace clusters", func() {
 		).Build()
 	}
 
-	Describe("ListWorkspaceClusters", func() {
-		It("returns only dedicated clusters of the bcs project", func() {
-			mockey.PatchConvey("dedicated clusters", GinkgoT(), func() {
+	Describe("ListClusters", func() {
+		It("returns only non-shared clusters of the bcs project", func() {
+			mockey.PatchConvey("non-shared clusters", GinkgoT(), func() {
 				var queried []string
 				mockProjectClusters(&queried)
 
-				clusters, err := clusteraddon.ListWorkspaceClusters(ctx, "project-id")
+				clusters, err := clusteraddon.ListClusters(ctx, "project-id")
 				Expect(err).NotTo(HaveOccurred())
 				Expect(clusters).To(HaveLen(1))
 				Expect(clusters[0].ID).To(Equal("BCS-K8S-00001"))
@@ -72,12 +72,12 @@ var _ = Describe("Workspace clusters", func() {
 			})
 		})
 
-		It("returns an empty list without querying bcs when the workspace has no bcs project", func() {
+		It("returns an empty list without querying bcs when the bcs project id is empty", func() {
 			mockey.PatchConvey("no bcs project", GinkgoT(), func() {
 				var queried []string
 				mockProjectClusters(&queried)
 
-				clusters, err := clusteraddon.ListWorkspaceClusters(ctx, "")
+				clusters, err := clusteraddon.ListClusters(ctx, "")
 				Expect(err).NotTo(HaveOccurred())
 				Expect(clusters).To(BeEmpty())
 				Expect(queried).To(BeEmpty())
@@ -90,37 +90,37 @@ var _ = Describe("Workspace clusters", func() {
 				mockStubBCS()
 				mockey.Mock((*bcs.StubApiClient).ListClustersByProject).Return(nil, cause).Build()
 
-				_, err := clusteraddon.ListWorkspaceClusters(ctx, "project-id")
+				_, err := clusteraddon.ListClusters(ctx, "project-id")
 				Expect(errors.Is(err, cause)).To(BeTrue())
 				Expect(err.Error()).To(ContainSubstring("project-id"))
 			})
 		})
 	})
 
-	Describe("GetWorkspaceCluster", func() {
-		DescribeTable("finds dedicated clusters of the bcs project only",
+	Describe("GetCluster", func() {
+		DescribeTable("finds non-shared clusters of the bcs project only",
 			func(projectID, clusterID string, found bool) {
-				mockey.PatchConvey("get workspace cluster", GinkgoT(), func() {
+				mockey.PatchConvey("get non-shared cluster", GinkgoT(), func() {
 					var queried []string
 					mockProjectClusters(&queried)
 
-					cluster, err := clusteraddon.GetWorkspaceCluster(ctx, projectID, clusterID)
+					cluster, err := clusteraddon.GetCluster(ctx, projectID, clusterID)
 					if !found {
-						Expect(errors.Is(err, clusteraddon.ErrClusterNotInWorkspace)).To(BeTrue())
+						Expect(errors.Is(err, clusteraddon.ErrClusterNotFound)).To(BeTrue())
 						return
 					}
 					Expect(err).NotTo(HaveOccurred())
 					Expect(cluster.ID).To(Equal(clusterID))
 				})
 			},
-			Entry("dedicated cluster", "project-id", "BCS-K8S-00001", true),
+			Entry("non-shared cluster", "project-id", "BCS-K8S-00001", true),
 			Entry("shared cluster", "project-id", "BCS-K8S-00002", false),
 			Entry("cluster outside the project", "project-id", "BCS-K8S-00003", false),
-			Entry("workspace without bcs project", "", "BCS-K8S-00001", false),
+			Entry("empty bcs project id", "", "BCS-K8S-00001", false),
 		)
 	})
 
-	Describe("TargetOfCluster", func() {
+	Describe("TargetFromClusterID", func() {
 		var origin []string
 
 		BeforeEach(func() {
@@ -134,7 +134,7 @@ var _ = Describe("Workspace clusters", func() {
 
 		DescribeTable("detects federation clusters from config",
 			func(clusterID string, isFederation bool) {
-				Expect(clusteraddon.TargetOfCluster(clusterID)).To(Equal(clusteraddon.ClusterTarget{
+				Expect(clusteraddon.TargetFromClusterID(clusterID)).To(Equal(clusteraddon.ClusterTarget{
 					ClusterID: clusterID, IsFederation: isFederation,
 				}))
 			},
