@@ -212,14 +212,15 @@ describe('业务配置 · 七彩石', () => {
     expect(await screen.findByText('暂未配置七彩石')).toBeVisible();
   });
 
-  it('查看权限缺失且无申请组信息时提示联系空间管理员', async () => {
+  it('查看权限缺失时与其他查询失败一致，展示加载失败且不出现空态和申请入口', async () => {
     mocks.get.mockRejectedValue(permissionDenied());
     await openPage();
 
-    expect(screen.getByText('没有权限查看七彩石配置')).toBeVisible();
-    expect(screen.getByText('请联系空间管理员')).toBeVisible();
-    expect(screen.queryByRole('link', { name: '申请成为开发者' })).toBeNull();
+    expect(screen.getByText('七彩石配置加载失败')).toBeVisible();
     expect(screen.queryByText('暂未配置七彩石')).toBeNull();
+    expect(screen.queryByRole('link', { name: '申请成为开发者' })).toBeNull();
+    expect(screen.getByRole('button', { name: '配置七彩石' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '重试' })).toBeVisible();
   });
 
   it('保存权限缺失时提供申请入口并保留原配置', async () => {
