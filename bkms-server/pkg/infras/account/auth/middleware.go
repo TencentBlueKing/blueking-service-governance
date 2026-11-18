@@ -37,11 +37,6 @@ import (
 )
 
 const (
-	// BackendBkTicket 使用 bk_ticket 完成用户认证。
-	BackendBkTicket = config.AuthBackendBkTicket
-	// BackendBkToken 使用 bk_token 完成用户认证。
-	BackendBkToken = config.AuthBackendBkToken
-
 	// authTimeout 调用认证后端服务的超时时间。
 	authTimeout = 10 * time.Second
 )
@@ -234,7 +229,7 @@ func getUserFromHeaders(request *http.Request) (User, error) {
 }
 
 func newCredential(backendType, userCredential string) UserCredential {
-	if backendType == BackendBkTicket {
+	if backendType == config.AuthBackendBkTicket {
 		return UserCredential{BkTicket: userCredential}
 	}
 	return UserCredential{BkToken: userCredential}

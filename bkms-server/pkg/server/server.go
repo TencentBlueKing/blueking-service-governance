@@ -110,8 +110,6 @@ import (
 	platworkspaceimageregh "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/platmgt/workspace/imageregistry/handler"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/basic"
 	basichandler "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/basic/handler"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/platconfig"
-	platconfighandler "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/platconfig/handler"
 	storereg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appdefaults"
 	appdefaultshandler "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appdefaults/handler"
@@ -202,19 +200,17 @@ func RegisterRouter(ctx context.Context, cfg config.Config, serverRole string) (
 	buildtrigger.RegisterCallback(callbackGroup, buildTriggerHandler)
 
 	// Register authenticated business APIs under /v1.
-	// 以下 Group 的所有 API 均要求请求必须携带有效身份信息，通用中间件统一挂在 authed 上
+	// 以下 Group 的所有 API 均要求请求必须携带有效身份信息
+	v1 := r.Group("/bkms/v1/bkms-server")
 	requiredAuth, err := auth.Required(authConfig, tokenClient)
 	if err != nil {
 		return nil, errors.Wrap(err, "new required auth middleware")
 	}
-	authed := r.Group("/bkms/v1/bkms-server")
-	authed.Use(bkerrs.ErrorHandler(), requiredAuth)
-
-	// 直接注册在 authed 上的 API 不校验租户头，用于前端确定租户之前就需要调用的接口
-	platconfig.Register(authed, platconfighandler.New(&cfg))
-
-	v1 := authed.Group("")
-	v1.Use(tenant.Required(cfg.Tenant.EnableMultiTenantMode, tenantVerifier))
+	v1.Use(
+		bkerrs.ErrorHandler(),
+		requiredAuth,
+		tenant.Required(cfg.Tenant.EnableMultiTenantMode, tenantVerifier),
+	)
 	app.Register(v1, apphandler.New(storereg.G()))
 	deploy.Register(v1, deployhandler.New(storereg.G()))
 	workspace.Register(v1, workspacehandler.New(storereg.G()))

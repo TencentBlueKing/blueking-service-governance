@@ -45,7 +45,7 @@ const (
 // AccountConfig 是和用户账号鉴权、用户 Token 获取相关的配置项集合
 type AccountConfig struct {
 	// AuthBaseURL 是 auth 服务的基础 URL，通常由蓝鲸网关服务提供，usertoken 令牌相关功能使用。
-	// 改用 SSM（见 SSMBaseURL）时不再需要，其余情况必填
+	// 使用 SSM（见 SSMBaseURL）时不再需要，其余情况必填
 	AuthBaseURL string `validate:"omitempty,url"`
 	// LoginURL 是登录页根地址，不含路径，用于拼接 /plain/ 跳转
 	LoginURL string `validate:"required,url"`

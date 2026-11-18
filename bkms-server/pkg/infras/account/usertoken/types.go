@@ -28,6 +28,12 @@ import (
 	"github.com/spf13/cast"
 )
 
+// 签发 token 时使用的用户凭证名称，同时也是浏览器中保存该凭证的 cookie 名
+const (
+	CredentialBkTicket = "bk_ticket"
+	CredentialBkToken  = "bk_token"
+)
+
 // TokenClient is the interface for managing user access tokens.
 type TokenClient interface {
 	// CredentialName returns the name of the user credential GetToken needs, which is also the name

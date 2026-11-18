@@ -25,16 +25,9 @@ import (
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 )
 
-// 签发 token 时使用的用户凭证名称，同时也是浏览器中保存该凭证的 cookie 名
-const (
-	CredentialBkTicket = "bk_ticket"
-	CredentialBkToken  = "bk_token"
-)
-
 // NewTokenClient 根据账号配置选择 token 服务，选择规则见 config.AccountConfig.UseSSMTokenService。
 //
-// 登录态为 bk_token 但未配置 SSM 地址时回退到 API 网关 token 服务（需要 bk_ticket），
-// 是为了兼容此前未显式配置 backendType（默认 bk_token）的存量部署。
+// 登录态为 bk_token 但未配置 SSM 地址时回退到 API 网关 token 服务（需要 bk_ticket）
 // 返回的 client 同时用于签发和校验 token，两种服务签发的 token 互不认可，切换后需重新获取。
 func NewTokenClient(ctx context.Context, account config.AccountConfig, app config.BkAppConfig) TokenClient {
 	if account.UseSSMTokenService() {

@@ -28,6 +28,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/stretchr/testify/mock"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/usertoken"
 )
@@ -38,7 +39,7 @@ var _ = Describe("GetCurrentUser", func() {
 	BeforeEach(func() {
 		gin.SetMode(gin.TestMode)
 		optionalAuth, err := auth.Optional(auth.Config{
-			BackendType:          auth.BackendBkToken,
+			BackendType:          config.AuthBackendBkToken,
 			LoginURL:             "http://login.example.com",
 			AllowSetUserInHeader: true,
 		}, nil)

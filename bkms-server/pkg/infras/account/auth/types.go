@@ -28,10 +28,6 @@ const (
 
 	// CredKeyAccessToken 认证凭据类型：access_token
 	CredKeyAccessToken = "access_token"
-	// CredKeyBkTicket 认证凭据类型：bk_ticket
-	CredKeyBkTicket = usertoken.CredentialBkTicket
-	// CredKeyBkToken 认证凭据类型：bk_token
-	CredKeyBkToken = usertoken.CredentialBkToken
 )
 
 // RequestUser 表示请求上下文中的用户身份。
@@ -111,9 +107,9 @@ func (c UserCredential) CredKey() string {
 	case c.AccessToken != "":
 		return CredKeyAccessToken
 	case c.BkTicket != "":
-		return CredKeyBkTicket
+		return usertoken.CredentialBkTicket
 	case c.BkToken != "":
-		return CredKeyBkToken
+		return usertoken.CredentialBkToken
 	default:
 		return ""
 	}
