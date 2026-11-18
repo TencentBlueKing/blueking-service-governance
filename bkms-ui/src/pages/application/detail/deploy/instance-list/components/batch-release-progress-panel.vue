@@ -536,6 +536,13 @@
     &:last-child .bk-step-number::after {
       display: none;
     }
+
+    .bk-step-icondone {
+      svg {
+        position: relative;
+        top: 1px;
+      }
+    }
   }
 
   .batch-release-progress-banner :deep(.bk-button-default) {
