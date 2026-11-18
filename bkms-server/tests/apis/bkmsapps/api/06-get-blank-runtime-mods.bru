@@ -16,12 +16,13 @@ assert {
 }
 
 tests {
-  test("should support only configFileMerge", () => {
+  test("should support only platformBuild and configFileMerge", () => {
     const data = res.body.data;
     expect(data.type).to.equal("bkmsApp");
     expect(data.framework).to.equal("blank");
+    expect(data.language).to.equal("go");
     Object.entries(data.mods).forEach(([id, mod]) => {
-      expect(mod.supported, id).to.equal(id === "configFileMerge");
+      expect(mod.supported, id).to.equal(id === "configFileMerge" || id === "platformBuild");
     });
   });
 }

@@ -45,7 +45,7 @@ type TemplateURIInput struct {
 type ListTemplatesQueryInput struct {
 	// 框架：trpc、taf，不填返回全部
 	Framework string `form:"framework"`
-	// 语言：go、cpp，不填返回全部
+	// 语言：go、cpp、python，不填返回全部
 	Language string `form:"language"`
 }
 
@@ -53,7 +53,7 @@ type ListTemplatesQueryInput struct {
 type CreateTemplateInput struct {
 	// 框架：trpc、taf
 	Framework string `json:"framework" binding:"required"`
-	// 语言：go、cpp
+	// 语言：go、cpp、python
 	Language string `json:"language" binding:"required"`
 	// 模板名称，同一框架、同一语言下不能重复，不能为「平台默认」
 	Name string `json:"name" binding:"required"`

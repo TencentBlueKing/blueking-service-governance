@@ -4354,7 +4354,7 @@ definitions:
         description: 是否设为创建应用时默认使用的模板
         type: boolean
       language:
-        description: 语言：go、cpp
+        description: 语言：go、cpp、python
         type: string
       name:
         description: 模板名称，同一框架、同一语言下不能重复，不能为「平台默认」
@@ -23685,7 +23685,7 @@ paths:
         in: query
         name: framework
         type: string
-      - description: 语言：go、cpp
+      - description: 语言：go、cpp、python
         in: query
         name: language
         type: string

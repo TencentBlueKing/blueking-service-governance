@@ -19913,7 +19913,7 @@ const docTemplate = `{
                     },
                     {
                         "type": "string",
-                        "description": "语言：go、cpp",
+                        "description": "语言：go、cpp、python",
                         "name": "language",
                         "in": "query"
                     }
@@ -28087,7 +28087,7 @@ const docTemplate = `{
                     "type": "boolean"
                 },
                 "language": {
-                    "description": "语言：go、cpp",
+                    "description": "语言：go、cpp、python",
                     "type": "string"
                 },
                 "name": {
