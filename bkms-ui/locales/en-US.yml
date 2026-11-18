@@ -1674,7 +1674,7 @@ Key 不能重复: Key 不能重复
 请输入镜像 Tag: Please enter the image tag
 镜像 Tag 删除成功: Image tag deleted successfully
 该操作不可恢复，请输入镜像 Tag：{0} 进行确认: "This operation cannot be undone. Please enter the image tag: {0} to confirm"
-应用最近的部署记录中未检测到该镜像 Tag 的使用，但是镜像 Tag 一旦删除后无法找回: In the recent deployment record of the application, the use of the image tag was not detected, but once the image tag is deleted, it cannot be recovered
+当前各环境生效部署都没有使用该镜像 Tag。但删除后无法恢复，之后也不能再部署或回滚到这个 Tag。: None of the active deployments in any environment is currently using this image tag. However, once deleted, it cannot be recovered, and you will no longer be able to deploy or roll back to this tag.
 镜像 Tag 删除失败: Image tag deletion failed
 "删除需要具备写权限的凭证。跳转到：{0} 配置凭证后重试。": "Delete requires write permission credentials. Please go to {0} to configure credentials and try again."
 去配置: Configure
