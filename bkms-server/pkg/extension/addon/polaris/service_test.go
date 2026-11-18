@@ -21,8 +21,10 @@ package polaris_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
+	"github.com/TencentBlueKing/gopkg/stringx"
 	"github.com/bytedance/mockey"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -203,6 +205,74 @@ var _ = Describe("PolarisConfigService", func() {
 				Expect(stored.GetEnvState(environment.Name).AppliedFields).To(BeNil())
 				Expect(stored.EnvWeights[environment.Name]).To(Equal(polaris.DefaultEnvWeight))
 			})
+		})
+	})
+
+	Describe("Service name length in scope envs", func() {
+		var sharedEnv *bkmsenv.Environment
+
+		BeforeEach(func() {
+			// 30 + "-" + 13 位配置名 + "-polaris-service" = 60，带 "fab12-" 前缀后为 66
+			app.Name = strings.Repeat("a", 30)
+			sharedEnv = &bkmsenv.Environment{
+				Name:        "feat-" + stringx.Random(6),
+				WorkspaceID: app.WorkspaceID,
+				Kind:        bkmsenv.EnvironmentKindFeature,
+				OwnerAppID:  app.ID,
+				SourceEnvID: environment.ID,
+				ResourceKey: "fab12",
+				Cluster:     environment.Cluster,
+			}
+			Expect(envService.Create(ctx, sharedEnv)).To(Succeed())
+		})
+
+		newConfig := func(scopeEnvNames ...string) *polaris.PolarisConfig {
+			return &polaris.PolarisConfig{
+				AppID: app.ID,
+				Properties: polaris.Properties{
+					InstanceKey: "k1", PolarisName: "svc", PolarisNamespace: "Test",
+					PolarisToken: "t1", ServicePort: 8080, Operator: "owner",
+				},
+				ScopeEnvNames: scopeEnvNames,
+			}
+		}
+
+		It("accepts names that fit in the source env", func() {
+			Expect(service.Create(ctx, app, newConfig(environment.Name), false)).To(Succeed())
+		})
+
+		It("rejects names too long even in a standard env", func() {
+			app.Name = strings.Repeat("a", 34)
+			err := service.Create(ctx, app, newConfig(environment.Name), false)
+			Expect(errors.Is(err, polaris.ErrInvalidResourceName)).To(BeTrue())
+		})
+
+		It("rejects creating a config before creating the polaris service", func() {
+			mockey.PatchConvey("reject too long name", GinkgoT(), func() {
+				createSvc := mockey.Mock((*polaris.PolarisPlatformManager).CreateService).Return(
+					&polaris.CreatePolarisServiceResult{}, nil,
+				).Build()
+
+				err := service.Create(ctx, app, newConfig(environment.Name, sharedEnv.Name), true)
+				Expect(errors.Is(err, polaris.ErrInvalidResourceName)).To(BeTrue())
+				Expect(polaris.IsClientRequestError(err)).To(BeTrue())
+				Expect(createSvc.Times()).To(BeZero())
+				Expect(configStore.List(ctx, polaris.ByApp(app.ID))).To(BeEmpty())
+			})
+		})
+
+		It("rejects adding the env to the scope of an existing config", func() {
+			config := newConfig(environment.Name)
+			Expect(service.Create(ctx, app, config, false)).To(Succeed())
+
+			_, err := service.Update(ctx, app, config, &polaris.ConfigUpdateData{
+				ScopeEnvNames: []string{environment.Name, sharedEnv.Name},
+			})
+			Expect(errors.Is(err, polaris.ErrInvalidResourceName)).To(BeTrue())
+
+			stored, getErr := configStore.Get(ctx, polaris.ByName(app.ID, config.Name))
+			Expect(getErr).NotTo(HaveOccurred())
+			Expect(stored.ScopeEnvNames).To(Equal([]string{environment.Name}))
 		})
 	})
 

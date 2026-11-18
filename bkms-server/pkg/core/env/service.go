@@ -87,6 +87,13 @@ func (s *EnvService) Update(
 
 	// 更新集群信息时, 需要检查环境是否有部署应用
 	if updateData.ClusterID != nil || updateData.Namespace != nil {
+		// 共用命名空间的关系在创建时确定，迁移会绕过同一来源环境、同一工作空间的前提，只能重建
+		if environment.SharesNamespace() && namespaceChanged(environment.Cluster, finalCluster) {
+			return errors.Wrapf(
+				model.ErrSharedNamespaceUnsupported,
+				"cannot change cluster or namespace of env %s, recreate it instead", environment.Name,
+			)
+		}
 		appCount := len(environment.AppIDs)
 		if appCount != 0 {
 			return errors.Errorf("environment has %d apps, cannot update cluster", appCount)
@@ -134,7 +141,7 @@ func (s *EnvService) checkNoNamespaceSharers(
 	ctx context.Context, environment *model.Environment, finalCluster model.BizCluster,
 ) error {
 	current := environment.Cluster
-	if current.ClusterID == finalCluster.ClusterID && current.Namespace == finalCluster.Namespace {
+	if !namespaceChanged(current, finalCluster) {
 		return nil
 	}
 	sharers, err := model.ListNamespaceSharers(ctx, s.db, environment.ID, current.ClusterID, current.Namespace)
@@ -149,6 +156,11 @@ func (s *EnvService) checkNoNamespaceSharers(
 		ErrEnvHasNamespaceSharers,
 		"feature environments [%s] share namespace %s", strings.Join(names, ", "), current.Namespace,
 	)
+}
+
+// namespaceChanged 判断集群或命名空间是否实际发生变化
+func namespaceChanged(current, final model.BizCluster) bool {
+	return current.ClusterID != final.ClusterID || current.Namespace != final.Namespace
 }
 
 // applyClusterUpdate 将 partial update 中的集群字段合并到现有 BizCluster，返回合并后的结果。
