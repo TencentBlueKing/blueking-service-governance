@@ -76,45 +76,19 @@
         </Exception>
         <Exception
           v-else-if="loadState.status === 'error'"
-          class="m-auto"
+          class="m-auto large-exception py-[18px]"
           scene="part"
           type="500"
         >
-          <template #description>{{ $t('七彩石配置加载失败') }}</template>
+          <template #description>
+            <span class="text-[14px]">{{ $t('七彩石配置加载失败') }}</span>
+          </template>
           <Button
             theme="primary"
             @click="loadConfig"
           >
             {{ $t('重试') }}
           </Button>
-        </Exception>
-        <Exception
-          v-else-if="loadState.status === 'forbidden'"
-          class="m-auto"
-          scene="part"
-          type="403"
-        >
-          <template #description>
-            <div>{{ $t('没有权限查看七彩石配置') }}</div>
-            <div v-if="!loadState.applyUrl">{{ $t('请联系空间管理员') }}</div>
-          </template>
-          <div class="flex items-center gap-[12px]">
-            <a
-              v-if="loadState.applyUrl"
-              :href="loadState.applyUrl"
-              rel="noopener noreferrer"
-              target="_blank"
-            >
-              {{ $t('申请成为开发者') }}
-            </a>
-            <Button
-              text
-              theme="primary"
-              @click="loadConfig"
-            >
-              {{ $t('重试') }}
-            </Button>
-          </div>
         </Exception>
       </div>
     </div>
@@ -133,26 +107,58 @@
         @submit="saveConfig"
       >
         <Form.FormItem
+          v-if="hasSavedUrl"
+          :label="$t('启用七彩石')"
+        >
+          <div class="flex items-start gap-[8px]">
+            <Switcher
+              v-model="draftEnabled"
+              :aria-checked="draftEnabled"
+              :aria-describedby="draftEnabled ? undefined : 'rainbow-disable-hint'"
+              :aria-disabled="saving"
+              :aria-label="$t('启用七彩石')"
+              class="shrink-0"
+              :disabled="saving"
+              role="switch"
+              theme="primary"
+              @keydown.space.prevent="!saving && (draftEnabled = !draftEnabled)"
+            />
+            <p
+              v-if="!draftEnabled"
+              id="rainbow-disable-hint"
+              class="text-[12px] leading-[20px] text-[#979ba5]"
+            >
+              {{ $t('关闭后，当前应用将不再嵌入七彩石页面，七彩石上的原有配置不受影响。') }}
+            </p>
+          </div>
+        </Form.FormItem>
+        <Form.FormItem
+          v-if="!hasSavedUrl || draftEnabled"
+          :class="{ 'is-error': validationError }"
           :label="$t('七彩石页面地址')"
           required
         >
           <Input
             v-model="draftUrl"
-            :aria-invalid="Boolean(validationError)"
+            aria-describedby="rainbow-url-hint rainbow-url-error"
             :aria-label="$t('七彩石页面地址')"
             :disabled="saving"
             :placeholder="$t('请输入')"
             @input="validationError = ''"
           />
           <p
-            v-if="validationError"
+            id="rainbow-url-hint"
+            class="mt-[8px] text-[12px] leading-[20px] text-[#979ba5]"
+          >
+            {{ $t('只支持 https。建议填写适配 iframe、没有顶部导航的七彩石页面地址。') }}
+          </p>
+          <p
+            v-show="validationError"
+            id="rainbow-url-error"
             class="mt-[4px] text-[12px] text-[#ea3636]"
             role="alert"
           >
             {{ validationError }}
-          </p>
-          <p class="mt-[8px] text-[12px] leading-[20px] text-[#979ba5]">
-            {{ $t('只支持 https。建议填写适配 iframe、没有顶部导航的七彩石页面地址。') }}
           </p>
         </Form.FormItem>
       </Form>
@@ -193,16 +199,14 @@
 </template>
 
 <script lang="ts">
-  import type { RainbowTConfOutput } from '~/@types/v1/rainbowtconf';
-
-  // 页面重新挂载时，仍需等待同一应用此前发出的保存请求。
-  const pendingSaves = new Map<string, Promise<RainbowTConfOutput>>();
+  // 以 appID 为键记录进行中的保存请求：页面重新挂载时，仍需等待同一应用此前发出的保存请求。
+  const pendingSaves = new Map<string, Promise<string>>();
 </script>
 
 <script setup lang="ts">
   import { computed, onBeforeUnmount, ref, watch } from 'vue';
 
-  import { Button, Dialog, Exception, Form, Input, Message } from 'bkui-vue';
+  import { Button, Dialog, Exception, Form, Input, Message, Switcher } from 'bkui-vue';
   import { useI18n } from 'vue-i18n';
   import { RainbowtconfService } from '~/api/modules/v1/rainbowtconf';
   import { showApiErrorMessage } from '~/common/util';
@@ -210,6 +214,7 @@
   import { useUrlQuerySync } from '~/composables/use-url-query-sync';
   import { useAppDetail } from '~/stores/app-detail';
 
+  // 后端错误响应结构（仅声明本页用到的字段）
   interface ApiError {
     error?: {
       code?: string;
@@ -217,29 +222,41 @@
     };
   }
 
-  type LoadState =
-    (PermissionDenied & { status: 'forbidden' }) | { status: 'error' | 'loading' } | { status: 'ready'; url: string };
+  // 页面加载状态：ready（url 为已配置的页面地址）、loading、error
+  type LoadState = { status: 'error' | 'loading' } | { status: 'ready'; url: string };
 
+  // IAM 无权限信息，applyUrl 为申请加入用户组的链接（可能为空）
   interface PermissionDenied {
     applyUrl: string;
   }
 
+  // 应用详情「业务配置」页：加载七彩石配置并以 iframe 嵌入，支持配置 / 停用 / 修改
   const { t } = useI18n();
   const appDetail = useAppDetail();
+
+  // 页面加载状态，及是否已有保存过的地址
   const loadState = ref<LoadState>({ status: 'loading' });
+  const hasSavedUrl = computed(() => loadState.value.status === 'ready' && Boolean(loadState.value.url));
+
+  // 弹窗状态：开关与地址草稿、校验错误、保存时的无权限提示
   const dialogVisible = ref(false);
+  const draftEnabled = ref(true);
   const draftUrl = ref('');
   const validationError = ref('');
   const savePermission = ref<null | PermissionDenied>(null);
   const saving = ref(false);
+
+  // 请求版本号：递增使旧响应失效，避免过期请求覆盖当前状态
   let requestRevision = 0;
 
+  // 唯一页签「七彩石」，选中态与地址栏 query 同步
   const rainbowTab = 'rainbow';
   const tabList = computed(() => [{ name: rainbowTab, label: t('七彩石') }]);
   const {
     fields: { activeTab },
   } = useUrlQuerySync({ activeTab: { queryKey: 'activeTab', data: { allowed: [rainbowTab], default: rainbowTab } } });
 
+  // 从接口错误解析 IAM 无权限信息并拼接申请链接；非权限错误返回 null
   function getPermissionDenied(cause: unknown): null | PermissionDenied {
     const { error } = (cause || {}) as ApiError;
     const detail = Array.isArray(error?.details)
@@ -252,10 +269,12 @@
     return { applyUrl: group && iamUrl ? `${iamUrl}/apply-join-user-group?id=${encodeURIComponent(group)}` : '' };
   }
 
+  // 判断响应是否仍属于当前应用的最新一次请求
   function isCurrentRequest(revision: number, appID: string) {
     return revision === requestRevision && appID === appDetail.appID;
   }
 
+  // 拉取七彩石配置；若同应用存在未完成的保存请求，先等其结束后再读
   async function loadConfig() {
     const { appID } = appDetail;
     const revision = ++requestRevision;
@@ -275,53 +294,68 @@
 
       // 接口只返回后端已验证的 HTTPS 地址。使用原始地址保留路径、查询和 hash。
       loadState.value = { status: 'ready', url: config.url ?? '' };
-    } catch (cause) {
+    } catch {
       if (!isCurrentRequest(revision, appID)) return;
-
-      const permission = getPermissionDenied(cause);
-      loadState.value = permission ? { status: 'forbidden', ...permission } : { status: 'error' };
+      loadState.value = { status: 'error' };
     }
   }
 
+  // 打开配置弹窗，以当前配置初始化草稿
   function openDialog() {
     if (loadState.value.status !== 'ready') return;
+    draftEnabled.value = true;
     draftUrl.value = loadState.value.url;
     validationError.value = '';
     savePermission.value = null;
     dialogVisible.value = true;
   }
 
+  // 保存配置；已保存且关闭「启用」开关时改为删除配置
   async function saveConfig() {
     const { appID } = appDetail;
     if (!appID || pendingSaves.has(appID) || !dialogVisible.value || loadState.value.status !== 'ready') return;
 
+    // 关闭启用 → 删除；否则保存草稿地址
+    const shouldDelete = hasSavedUrl.value && !draftEnabled.value;
     const url = draftUrl.value.trim();
-    validationError.value = validateUrl(url);
+    validationError.value = shouldDelete ? '' : validateUrl(url);
     if (validationError.value) return;
 
     const revision = requestRevision;
     saving.value = true;
     savePermission.value = null;
     try {
-      const pendingSave = RainbowtconfService.putRainbowTConf({ appID, url }, { interceptorErr: false });
+      const pendingSave = shouldDelete
+        ? RainbowtconfService.deleteRainbowTConf({ appID }, { interceptorErr: false }).then(() => '')
+        : RainbowtconfService.putRainbowTConf({ appID, url }, { interceptorErr: false }).then(
+            config => config.url ?? '',
+          );
       pendingSaves.set(appID, pendingSave);
-      const config = await pendingSave;
+      const savedUrl = await pendingSave;
       if (!isCurrentRequest(revision, appID)) return;
 
-      loadState.value = { status: 'ready', url: config.url ?? '' };
+      loadState.value = { status: 'ready', url: savedUrl };
       dialogVisible.value = false;
       Message({ message: t('保存成功'), theme: 'success' });
     } catch (cause) {
       if (!isCurrentRequest(revision, appID)) return;
 
       savePermission.value = getPermissionDenied(cause);
-      if (!savePermission.value) showApiErrorMessage(cause);
+      if (savePermission.value) return;
+
+      // 后端校验不通过时回填为表单校验错误
+      if (!shouldDelete && (cause as ApiError | null)?.error?.code === 'INVALID_ARGUMENT') {
+        validationError.value = t('七彩石页面地址不合法，请检查后重试');
+      } else {
+        showApiErrorMessage(cause);
+      }
     } finally {
       pendingSaves.delete(appID);
       if (isCurrentRequest(revision, appID)) saving.value = false;
     }
   }
 
+  // 校验地址：必填、不超过 2048 字符、须为显式主机且不含用户名密码的 HTTPS 地址
   function validateUrl(url: string) {
     if (!url) return t('请输入七彩石页面地址');
     if (Array.from(url).length > 2048) return t('七彩石页面地址不能超过 2048 个字符');

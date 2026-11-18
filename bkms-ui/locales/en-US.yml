@@ -2104,10 +2104,13 @@ HostPort 目前仅对绑定联邦集群的环境生效: HostPort currently only 
 业务配置: Business Configuration
 七彩石: Rainbow
 配置七彩石: Configure Rainbow
+启用七彩石: Enable Rainbow
+关闭后，当前应用将不再嵌入七彩石页面，七彩石上的原有配置不受影响。: After you turn it off, this application no longer embeds the Rainbow page. Existing settings in Rainbow are unaffected.
 暂未配置七彩石: Rainbow has not been configured
 配置页面地址后，会在下方嵌入七彩石页面。: The Rainbow page will appear below after you save its URL.
 七彩石页面地址: Rainbow page URL
 请输入七彩石页面地址: Enter the Rainbow page URL
+七彩石页面地址不合法，请检查后重试: Enter a valid Rainbow page URL and try again
 只支持 https。建议填写适配 iframe、没有顶部导航的七彩石页面地址。: Use an HTTPS URL for a Rainbow page that supports iframe embedding and has no top navigation.
 请输入有效的 HTTPS 地址: Enter a valid HTTPS URL
 七彩石页面地址不能超过 2048 个字符: The Rainbow page URL must be 2048 characters or fewer

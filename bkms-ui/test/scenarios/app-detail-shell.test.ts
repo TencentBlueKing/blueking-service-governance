@@ -61,6 +61,7 @@ const mocks = vi.hoisted(() => ({
   detail: vi.fn(),
   runtime: vi.fn(),
   cfgSwitches: vi.fn(),
+  deleteRainbowTConf: vi.fn(),
   getRainbowTConf: vi.fn(),
   putRainbowTConf: vi.fn(),
   push: vi.fn(),
@@ -119,6 +120,7 @@ vi.mock('~/api/modules/v1/cfgswitch', () => ({
 }));
 vi.mock('~/api/modules/v1/rainbowtconf', () => ({
   RainbowtconfService: {
+    deleteRainbowTConf: mocks.deleteRainbowTConf,
     getRainbowTConf: mocks.getRainbowTConf,
     putRainbowTConf: mocks.putRainbowTConf,
   },
@@ -775,20 +777,24 @@ describe('应用详情壳层：七彩石空间开关', () => {
   it.each([true, false])('业务配置直达等待空间开关，再决定是否保留链接（已开启：%s）', async enabled => {
     let resolveSwitch!: (value: CfgSwitchesOutput) => void;
     mocks.cfgSwitches.mockReturnValue(new Promise<CfgSwitchesOutput>(resolve => (resolveSwitch = resolve)));
-    const { router, wrapper } = await mountShellWithHistory('a', businessPage);
+    const { router, wrapper } = await mountShellWithHistory('a', { ...businessPage, renderDetailPage: true });
     try {
       expect(mocks.cfgSwitches.mock.calls.map(([params]) => params.workspaceID)).toEqual(['ws-1']);
       expect(router.currentRoute.value.params.menuName).toBe('businessConfig');
       expect(router.currentRoute.value.query).toEqual({ activeTab: 'rainbow' });
       expect(menuKeys(wrapper)).not.toContain('businessConfig');
-      expect(wrapper.find('[data-test="application-page"]').exists()).toBe(false);
+      expect(mocks.getRainbowTConf).not.toHaveBeenCalled();
+      expect(wrapper.find('iframe[title="七彩石"]').exists()).toBe(false);
 
       resolveSwitch({ bscp: true, rainbowTConf: enabled });
       await flushPromises();
       expect(router.currentRoute.value.params.menuName).toBe(enabled ? 'businessConfig' : 'info');
       expect(router.currentRoute.value.query).toEqual(enabled ? { activeTab: 'rainbow' } : {});
       expect(menuKeys(wrapper).includes('businessConfig')).toBe(enabled);
-      expect(wrapper.find('[data-test="application-page"]').exists()).toBe(true);
+      expect(mocks.getRainbowTConf).toHaveBeenCalledTimes(enabled ? 1 : 0);
+      expect(mocks.putRainbowTConf).not.toHaveBeenCalled();
+      expect(mocks.deleteRainbowTConf).not.toHaveBeenCalled();
+      expect(wrapper.find('iframe[title="七彩石"]').exists()).toBe(enabled);
 
       router.back();
       await flushPromises();

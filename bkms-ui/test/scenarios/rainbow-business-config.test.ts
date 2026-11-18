@@ -29,10 +29,17 @@ import { i18nGlobalMocks } from '../helpers/mock-i18n';
 
 import type * as BkuiVue from 'bkui-vue';
 
-const mocks = vi.hoisted(() => ({ get: vi.fn(), put: vi.fn(), message: vi.fn(), showApiErrorMessage: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  delete: vi.fn(),
+  get: vi.fn(),
+  message: vi.fn(),
+  put: vi.fn(),
+  showApiErrorMessage: vi.fn(),
+}));
 const savedUrl = 'https://config.example.test/console/#/project/1?env=prod&tab=config';
 const updatedUrl = 'https://config.example.test/console/#/project/2?env=test&tab=config';
 const businessConfigPath = '/space/app/demo/trpc/businessConfig';
+const disableHint = '关闭后，当前应用将不再嵌入七彩石页面，七彩石上的原有配置不受影响。';
 
 vi.mock('vue-i18n', async () => (await import('../helpers/mock-i18n')).i18nMockFactory());
 vi.mock('~/stores/app-detail', async () => {
@@ -41,7 +48,11 @@ vi.mock('~/stores/app-detail', async () => {
   return { useAppDetail: () => store };
 });
 vi.mock('~/api/modules/v1/rainbowtconf', () => ({
-  RainbowtconfService: { getRainbowTConf: mocks.get, putRainbowTConf: mocks.put },
+  RainbowtconfService: {
+    deleteRainbowTConf: mocks.delete,
+    getRainbowTConf: mocks.get,
+    putRainbowTConf: mocks.put,
+  },
 }));
 vi.mock('~/common/util', () => ({ showApiErrorMessage: mocks.showApiErrorMessage }));
 vi.mock('bkui-vue', async importOriginal => ({
@@ -49,10 +60,10 @@ vi.mock('bkui-vue', async importOriginal => ({
   Message: mocks.message,
 }));
 
-function deferredConfig() {
-  let resolve!: (value: { url: string }) => void;
+function deferred<T>() {
+  let resolve!: (value: T) => void;
   let reject!: (reason: unknown) => void;
-  const promise = new Promise<{ url: string }>((resolvePromise, rejectPromise) => {
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
     resolve = resolvePromise;
     reject = rejectPromise;
   });
@@ -86,6 +97,10 @@ async function submit() {
   await flushPromises();
 }
 
+function toggleRainbow() {
+  return fireEvent.click(screen.getByRole('switch', { name: '启用七彩石' }));
+}
+
 describe('业务配置 · 七彩石', () => {
   beforeEach(() => {
     vi.resetAllMocks();
@@ -106,6 +121,7 @@ describe('业务配置 · 七彩石', () => {
     expect(screen.getByText('七彩石', { selector: '.bk-tab-header--active > div' })).toBeVisible();
     expect(screen.getByText('暂未配置七彩石')).toBeVisible();
     expect(await openDialog()).toHaveValue('');
+    expect(screen.queryByRole('switch', { name: '启用七彩石' })).toBeNull();
     await fireEvent.click(screen.getByRole('button', { name: '取消' }));
     const input = await openDialog(1);
     await fireEvent.update(input, `  ${savedUrl}  `);
@@ -115,6 +131,8 @@ describe('业务配置 · 七彩石', () => {
     expect(screen.getByTitle('七彩石')).toHaveAttribute('src', savedUrl);
     expect(screen.queryByText('暂未配置七彩石')).toBeNull();
     expect(mocks.get).toHaveBeenCalledTimes(1);
+    expect(await openDialog()).toHaveValue(savedUrl);
+    expect(screen.getByRole('switch', { name: '启用七彩石' })).toBeChecked();
   });
 
   it.each([
@@ -137,8 +155,34 @@ describe('业务配置 · 七彩石', () => {
     expect(screen.getByTitle('七彩石')).toHaveAttribute('src', savedUrl);
   });
 
-  it('保存失败时保留旧 iframe 和输入内容，重试后展示修改后的页面', async () => {
+  it('后端地址校验错误显示在输入框下，编辑后清除并可再次提交', async () => {
     const failure = { error: { code: 'INVALID_ARGUMENT', message: 'invalid url' } };
+    mocks.get.mockResolvedValue({ url: savedUrl });
+    mocks.put.mockRejectedValueOnce(failure).mockResolvedValueOnce({ url: updatedUrl });
+    await openPage();
+
+    const input = await openDialog();
+    const rejectedUrl = `${updatedUrl}&invalid=1`;
+    await fireEvent.update(input, rejectedUrl);
+    await submit();
+    expect(screen.getByRole('alert')).toHaveTextContent('七彩石页面地址不合法，请检查后重试');
+    expect(mocks.showApiErrorMessage).not.toHaveBeenCalled();
+    expect(input).toHaveAttribute('aria-describedby', expect.stringContaining('rainbow-url-error'));
+    expect(input.closest('.bk-form-item')).toHaveClass('is-error');
+    expect(input).toHaveValue(rejectedUrl);
+    expect(screen.getByTitle('七彩石')).toHaveAttribute('src', savedUrl);
+
+    await fireEvent.update(input, updatedUrl);
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(input.closest('.bk-form-item')).not.toHaveClass('is-error');
+    await submit();
+    expect(mocks.put).toHaveBeenLastCalledWith({ appID: 'app-one', url: updatedUrl }, { interceptorErr: false });
+    expect(screen.getByTitle('七彩石')).toHaveAttribute('src', updatedUrl);
+    expect(mocks.get).toHaveBeenCalledTimes(1);
+  });
+
+  it('保存出现一般错误时保留旧 iframe 和输入内容，重试后展示修改后的页面', async () => {
+    const failure = { error: { code: 'INTERNAL_SERVER_ERROR', message: 'save failed' } };
     mocks.get.mockResolvedValue({ url: savedUrl });
     mocks.put.mockRejectedValueOnce(failure).mockResolvedValueOnce({ url: updatedUrl });
     await openPage();
@@ -147,6 +191,7 @@ describe('业务配置 · 七彩石', () => {
     await fireEvent.update(input, updatedUrl);
     await submit();
     expect(mocks.showApiErrorMessage).toHaveBeenCalledWith(failure);
+    expect(screen.queryByRole('alert')).toBeNull();
     expect(input).toHaveValue(updatedUrl);
     expect(screen.getByTitle('七彩石')).toHaveAttribute('src', savedUrl);
 
@@ -193,8 +238,99 @@ describe('业务配置 · 七彩石', () => {
     expect(screen.getByTitle('七彩石')).toHaveAttribute('src', savedUrl);
   });
 
+  it('关闭开关只修改草稿，重新开启恢复输入，取消后保留原地址', async () => {
+    mocks.get.mockResolvedValue({ url: savedUrl });
+    await openPage();
+
+    const input = await openDialog();
+    await fireEvent.update(input, updatedUrl);
+    await toggleRainbow();
+    expect(screen.getByRole('switch', { name: '启用七彩石' })).not.toBeChecked();
+    expect(screen.getByText(disableHint)).toBeVisible();
+    expect(screen.queryByPlaceholderText('请输入')).toBeNull();
+    expect(screen.getByTitle('七彩石')).toHaveAttribute('src', savedUrl);
+    expect(mocks.delete).not.toHaveBeenCalled();
+
+    await toggleRainbow();
+    expect(screen.getByPlaceholderText('请输入')).toHaveValue(updatedUrl);
+    expect(screen.queryByText(disableHint)).toBeNull();
+    await toggleRainbow();
+    await fireEvent.click(screen.getByRole('button', { name: '取消' }));
+    expect(mocks.delete).not.toHaveBeenCalled();
+    expect(mocks.put).not.toHaveBeenCalled();
+    expect(await openDialog()).toHaveValue(savedUrl);
+    expect(screen.getByRole('switch', { name: '启用七彩石' })).toBeChecked();
+  });
+
+  it('确认关闭后只删除一次并直接展示空态，可以重新配置', async () => {
+    // DELETE 返回的空对象没有 data 字段，v1Fetch 解包后得到 undefined。
+    const pendingDelete = deferred<undefined>();
+    mocks.get.mockResolvedValue({ url: savedUrl });
+    mocks.delete.mockReturnValue(pendingDelete.promise);
+    mocks.put.mockResolvedValue({ url: updatedUrl });
+    await openPage();
+
+    await fireEvent.update(await openDialog(), '不合法的草稿地址');
+    await toggleRainbow();
+    await submit();
+    await submit();
+    expect(mocks.delete).toHaveBeenCalledExactlyOnceWith({ appID: 'app-one' }, { interceptorErr: false });
+    expect(mocks.put).not.toHaveBeenCalled();
+    expect(screen.getByTitle('七彩石')).toHaveAttribute('src', savedUrl);
+
+    pendingDelete.resolve(undefined);
+    await flushPromises();
+    expect(screen.getByText('暂未配置七彩石')).toBeVisible();
+    expect(screen.queryByTitle('七彩石')).toBeNull();
+    expect(mocks.get).toHaveBeenCalledTimes(1);
+    expect(mocks.message).toHaveBeenCalledWith({ message: '保存成功', theme: 'success' });
+
+    const input = await openDialog(1);
+    expect(input).toHaveValue('');
+    expect(screen.queryByRole('switch', { name: '启用七彩石' })).toBeNull();
+    await fireEvent.update(input, updatedUrl);
+    await submit();
+    expect(screen.getByTitle('七彩石')).toHaveAttribute('src', updatedUrl);
+  });
+
+  it('删除失败保留原 iframe 和关闭草稿，点击确定可以重试', async () => {
+    const failure = { error: { code: 'INTERNAL_SERVER_ERROR', message: 'delete failed' } };
+    mocks.get.mockResolvedValue({ url: savedUrl });
+    mocks.delete.mockRejectedValueOnce(failure).mockResolvedValueOnce(undefined);
+    await openPage();
+
+    await openDialog();
+    await toggleRainbow();
+    await submit();
+    expect(mocks.showApiErrorMessage).toHaveBeenCalledWith(failure);
+    expect(screen.getByRole('switch', { name: '启用七彩石' })).not.toBeChecked();
+    expect(screen.queryByPlaceholderText('请输入')).toBeNull();
+    expect(screen.getByTitle('七彩石')).toHaveAttribute('src', savedUrl);
+
+    await submit();
+    expect(mocks.delete).toHaveBeenCalledTimes(2);
+    expect(screen.getByText('暂未配置七彩石')).toBeVisible();
+  });
+
+  it('删除权限缺失沿用申请入口，保留原 iframe 和关闭草稿', async () => {
+    mocks.get.mockResolvedValue({ url: savedUrl });
+    mocks.delete.mockRejectedValue(permissionDenied('team/developer'));
+    await openPage();
+
+    await openDialog();
+    await toggleRainbow();
+    await submit();
+    expect(screen.getByRole('link', { name: '申请成为开发者' })).toHaveAttribute(
+      'href',
+      'https://iam.example.test/apply-join-user-group?id=team%2Fdeveloper',
+    );
+    expect(screen.getByRole('switch', { name: '启用七彩石' })).not.toBeChecked();
+    expect(screen.getByTitle('七彩石')).toHaveAttribute('src', savedUrl);
+    expect(mocks.showApiErrorMessage).not.toHaveBeenCalled();
+  });
+
   it('丢弃切换应用后迟到的查询结果', async () => {
-    const oldGet = deferredConfig();
+    const oldGet = deferred<{ url: string }>();
     mocks.get.mockReturnValueOnce(oldGet.promise).mockResolvedValueOnce({ url: updatedUrl });
     await openPage();
     expect(screen.queryByText('暂未配置七彩石')).toBeNull();
@@ -209,7 +345,7 @@ describe('业务配置 · 七彩石', () => {
   });
 
   it('防止重复提交，同一应用重新打开时等待保存完成后读取最新地址', async () => {
-    const oldPut = deferredConfig();
+    const oldPut = deferred<{ url: string }>();
     mocks.get.mockResolvedValueOnce({ url: savedUrl }).mockResolvedValueOnce({ url: updatedUrl });
     mocks.put.mockReturnValue(oldPut.promise);
     const page = await openPage();
@@ -234,13 +370,40 @@ describe('业务配置 · 七彩石', () => {
     expect(mocks.message).not.toHaveBeenCalled();
   });
 
-  it('离开等待保存的页面后，其他应用立即读取自己的地址', async () => {
+  it('同一应用重新打开时等待在途删除完成，再读取未配置状态', async () => {
+    const pendingDelete = deferred<undefined>();
+    mocks.get.mockResolvedValueOnce({ url: savedUrl }).mockResolvedValueOnce({ url: '' });
+    mocks.delete.mockReturnValue(pendingDelete.promise);
+    const page = await openPage();
+
+    await openDialog();
+    await toggleRainbow();
+    await submit();
+    page.unmount();
+
+    await openPage();
+    expect(mocks.get).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('button', { name: '配置七彩石' })).toBeDisabled();
+
+    pendingDelete.resolve(undefined);
+    await flushPromises();
+    expect(mocks.get).toHaveBeenCalledTimes(2);
+    expect(screen.getByText('暂未配置七彩石')).toBeVisible();
+    expect(mocks.message).not.toHaveBeenCalled();
+  });
+
+  it.each(['put', 'delete'] as const)('离开等待 %s 的页面后，其他应用立即读取自己的地址', async method => {
     const otherAppUrl = 'https://config.example.test/console/#/project/3';
-    const oldPut = deferredConfig();
+    const pendingWrite = deferred<undefined | { url: string }>();
     mocks.get.mockResolvedValueOnce({ url: savedUrl }).mockResolvedValueOnce({ url: otherAppUrl });
-    mocks.put.mockReturnValue(oldPut.promise);
+    mocks[method].mockReturnValue(pendingWrite.promise);
     const firstPage = await openPage();
-    await fireEvent.update(await openDialog(), updatedUrl);
+    const input = await openDialog();
+    if (method === 'put') {
+      await fireEvent.update(input, updatedUrl);
+    } else {
+      await toggleRainbow();
+    }
     await submit();
     firstPage.unmount();
 
@@ -251,7 +414,7 @@ describe('业务配置 · 七彩石', () => {
     await openPage();
     expect(screen.getByTitle('七彩石')).toHaveAttribute('src', otherAppUrl);
 
-    oldPut.resolve({ url: updatedUrl });
+    pendingWrite.resolve(method === 'put' ? { url: updatedUrl } : undefined);
     await flushPromises();
     expect(mocks.get).toHaveBeenCalledTimes(2);
     expect(mocks.get).toHaveBeenLastCalledWith({ appID: 'app-two' }, { interceptorErr: false });
@@ -260,7 +423,7 @@ describe('业务配置 · 七彩石', () => {
   });
 
   it('旧页面保存失败后，重新进入同一应用仍能读取并提交', async () => {
-    const oldPut = deferredConfig();
+    const oldPut = deferred<{ url: string }>();
     mocks.get.mockResolvedValue({ url: savedUrl });
     mocks.put.mockReturnValueOnce(oldPut.promise).mockResolvedValueOnce({ url: updatedUrl });
     const page = await openPage();
