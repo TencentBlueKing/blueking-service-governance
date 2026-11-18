@@ -24,6 +24,7 @@ import (
 
 	"github.com/TencentBlueKing/gopkg/collection/set"
 	"github.com/pkg/errors"
+	"k8s.io/apimachinery/pkg/util/validation"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 )
@@ -35,23 +36,21 @@ const (
 	// 共用命名空间时，附加命名以字母作前缀，确保满足 k8s 资源命名规则
 	// Q: 为什么不使用后缀
 	// A: 目前大部分派生资源名是在主工作负载名后面拼固定后缀得到的,
-	// 如 <workload>-plain-cfg、<workload>-plain-direct、<workload>-devmode-scripts
-	// 如果再加后缀，容易导致后缀拼接顺序不一致。
-	// 同时外部配日志采集、监控时通常以前缀过滤，这里也用前缀能避免规则误伤到不同特性环境。
-	featureEnvResourceKeyPrefix      = "f"
-	featureEnvResourceKeyRandLen     = 4
-	featureEnvResourceKeyCharset     = "abcdefghijklmnopqrstuvwxyz0123456789"
-	featureEnvResourceKeyMaxAttempts = 5
+	//    如 <workload>-plain-cfg、<workload>-plain-direct、<workload>-devmode-scripts
+	//    如果再加后缀，容易导致后缀拼接顺序不一致。
+	//    同时外部配日志采集、监控时通常以前缀过滤，这里也用前缀能避免规则误伤到不同特性环境。
+	resourceKeyPrefix      = "f"
+	resourceKeyRandLen     = 4
+	resourceKeyCharset     = "abcdefghijklmnopqrstuvwxyz0123456789"
+	resourceKeyMaxAttempts = 5
 )
 
-// featureEnvResourceNameMaxLen 是 K8s DNS label 的长度上限，Service 名、label 值均受此约束。
-const featureEnvResourceNameMaxLen = 63
-
-// featureEnvLongestDerivedSuffix 是从工作负载名派生的资源名中最长的固定后缀（开发模式 ConfigMap）。
-const featureEnvLongestDerivedSuffix = "-devmode-scripts"
+// longestDerivedNameSuffix 是从工作负载名派生的资源名中最长的固定后缀（开发模式 ConfigMap）。
+// 北极星资源名更长，但取决于后续加入生效范围的配置，由北极星配置保存时另行校验。
+const longestDerivedNameSuffix = "-devmode-scripts"
 
 // validateShareSourceNamespace 校验复用来源环境 namespace 的前置条件：来源环境已绑定集群命名空间，
-// 且带 resourceKey 前缀后的资源名不超过 K8s 长度上限。
+// 且带 resourceKey 前缀后，应用自身的资源名（主工作负载及其派生资源）不超过 K8s 长度上限。
 func validateShareSourceNamespace(input CreateFeatureEnvInput) error {
 	if input.SourceEnv.Cluster.ClusterID == "" || input.SourceEnv.Cluster.Namespace == "" {
 		return errors.Wrapf(
@@ -59,13 +58,14 @@ func validateShareSourceNamespace(input CreateFeatureEnvInput) error {
 			"source environment %s has no cluster namespace to share", input.SourceEnv.Name,
 		)
 	}
-	keyLen := len(featureEnvResourceKeyPrefix) + featureEnvResourceKeyRandLen
-	nameLen := keyLen + len("-") + len(input.App.Name) + len(featureEnvLongestDerivedSuffix)
-	if nameLen > featureEnvResourceNameMaxLen {
+	keyLen := len(resourceKeyPrefix) + resourceKeyRandLen
+	nameLen := keyLen + len("-") + len(input.App.Name) + len(longestDerivedNameSuffix)
+	// Service 名受 DNS-1035 label 约束，是派生资源中最严格的长度上限
+	if nameLen > validation.DNS1035LabelMaxLength {
 		return errors.Wrapf(
 			ErrInvalidFeatureEnvInput,
 			"app name %s is too long to share namespace: prefixed resource names would reach %d characters (max %d)",
-			input.App.Name, nameLen, featureEnvResourceNameMaxLen,
+			input.App.Name, nameLen, validation.DNS1035LabelMaxLength,
 		)
 	}
 	return nil
@@ -86,8 +86,8 @@ func (s *FeatureEnvService) createEnvWithResourceKey(
 		laneNames.Add(lane.LaneName)
 	}
 
-	for range featureEnvResourceKeyMaxAttempts {
-		key, genErr := genFeatureEnvResourceKey()
+	for range resourceKeyMaxAttempts {
+		key, genErr := GenResourceKey()
 		if genErr != nil {
 			return errors.Wrap(genErr, "generate feature environment resource key")
 		}
@@ -103,18 +103,18 @@ func (s *FeatureEnvService) createEnvWithResourceKey(
 	}
 	return errors.Errorf(
 		"allocate resource key for feature environment %s: no free key after %d attempts",
-		env.Name, featureEnvResourceKeyMaxAttempts,
+		env.Name, resourceKeyMaxAttempts,
 	)
 }
 
-// genFeatureEnvResourceKey 生成 "f" + 4 位 [a-z0-9] 的随机 resourceKey。
-func genFeatureEnvResourceKey() (string, error) {
-	buf := make([]byte, featureEnvResourceKeyRandLen)
+// GenResourceKey 生成 "f" + 4 位 [a-z0-9] 的随机 resourceKey。
+func GenResourceKey() (string, error) {
+	buf := make([]byte, resourceKeyRandLen)
 	if _, err := rand.Read(buf); err != nil {
 		return "", errors.Wrap(err, "read random bytes")
 	}
 	for i, b := range buf {
-		buf[i] = featureEnvResourceKeyCharset[int(b)%len(featureEnvResourceKeyCharset)]
+		buf[i] = resourceKeyCharset[int(b)%len(resourceKeyCharset)]
 	}
-	return featureEnvResourceKeyPrefix + string(buf), nil
+	return resourceKeyPrefix + string(buf), nil
 }

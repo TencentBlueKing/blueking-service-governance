@@ -514,7 +514,7 @@ var _ = Describe("FeatureEnvService", func() {
 
 		It("regenerates the resource key when it collides with another feature env", func() {
 			mockey.PatchConvey("resource-key-collision", GinkgoT(), func() {
-				mockey.Mock(bkmsenv.GenFeatureEnvResourceKey).Return(
+				mockey.Mock(bkmsenv.GenResourceKey).Return(
 					mockey.Sequence("fab12", nil).Times(2).Then("fcd34", nil),
 				).Build()
 
@@ -533,7 +533,7 @@ var _ = Describe("FeatureEnvService", func() {
 				mockey.Mock((*trafficmanager.StubTrafficManager).ListTrafficLanes).Return(
 					[]*trafficmanager.TrafficLane{{LaneName: "fab12"}}, nil,
 				).Build()
-				mockey.Mock(bkmsenv.GenFeatureEnvResourceKey).Return(
+				mockey.Mock(bkmsenv.GenResourceKey).Return(
 					mockey.Sequence("fab12", nil).Then("fcd34", nil),
 				).Build()
 
