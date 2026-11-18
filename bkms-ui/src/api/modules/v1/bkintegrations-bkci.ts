@@ -6,9 +6,23 @@
 import type { Config } from '~/api/interceptors';
 import type { NoInfer } from '~/api/ts-helpers';
 import { v1Fetch } from '~/api/clients';
-import type { ListBkCIOAuthGitProjectsRequest, BkCIOAuthGitProjectOutput, GetBkCIOAuthUrlRequest, ListBkCIPipelinesRequest, PaginatedBkCIPipelineOutput, GetBkCIPipelineRequest, BkCIPipelineDetailOutput, GetBkCIPipelineVariablesRequest, BkCIPipelineVariableOutput, ListBkCIRepositoryBranchesRequest, BkCIRepositoryRefOutput, ListBkCIRepositoryTagsRequest } from '~/@types/v1/bkintegrations-bkci';
+import type { ListBkCIBuildNodesRequest, BuildNodeCandidateOutput, ListBkCIOAuthGitProjectsRequest, BkCIOAuthGitProjectOutput, GetBkCIOAuthUrlRequest, ListBkCIPipelinesRequest, PaginatedBkCIPipelineOutput, GetBkCIPipelineRequest, BkCIPipelineDetailOutput, GetBkCIPipelineVariablesRequest, BkCIPipelineVariableOutput, ListBkCIRepositoryBranchesRequest, BkCIRepositoryRefOutput, ListBkCIRepositoryTagsRequest, GetBuildNodeBindingRequest, BuildNodeBindingStateOutput, BindBuildNodeRequest, UnbindBuildNodeRequest, EmptyOutput } from '~/@types/v1/bkintegrations-bkci';
 
 export const BkintegrationsBkciService = {
+  /**
+   * 获取工作空间蓝盾项目下可关联的第三方构建机
+   *
+   * @method GET
+   * @path /workspaces/{workspaceID}/bkci-build-nodes
+   * @tag bkintegrations-bkci
+   * @param workspaceID path string required 工作空间 ID
+   * @response 200 ListBuildNodeCandidatesOutput OK
+   * @response 400 GinErrorOutput Bad Request
+   */
+  listBkCIBuildNodes: async <Request extends ListBkCIBuildNodesRequest = ListBkCIBuildNodesRequest, ResponseData = BuildNodeCandidateOutput[]>(
+    params?: NoInfer<Request>,
+    config?: Config,
+  ) => await v1Fetch.get<Request, ResponseData>('/workspaces/{workspaceID}/bkci-build-nodes')(params, config),
   /**
    * 获取蓝盾 OAuth 授权 Git 项目列表
    *
@@ -123,4 +137,47 @@ export const BkintegrationsBkciService = {
     params?: NoInfer<Request>,
     config?: Config,
   ) => await v1Fetch.get<Request, ResponseData>('/workspaces/{workspaceID}/bkci-repositories/tags')(params, config),
+  /**
+   * 查询工作空间关联的构建机
+   *
+   * @method GET
+   * @path /workspaces/{workspaceID}/build-node-binding
+   * @tag bkintegrations-bkci
+   * @param workspaceID path string required 工作空间 ID
+   * @response 200 GetBuildNodeBindingOutput OK
+   * @response 400 GinErrorOutput Bad Request
+   */
+  getBuildNodeBinding: async <Request extends GetBuildNodeBindingRequest = GetBuildNodeBindingRequest, ResponseData = BuildNodeBindingStateOutput>(
+    params?: NoInfer<Request>,
+    config?: Config,
+  ) => await v1Fetch.get<Request, ResponseData>('/workspaces/{workspaceID}/build-node-binding')(params, config),
+  /**
+   * 关联或更换工作空间的构建机
+   *
+   * @method PUT
+   * @path /workspaces/{workspaceID}/build-node-binding
+   * @tag bkintegrations-bkci
+   * @param workspaceID path string required 工作空间 ID
+   * @param body body BindBuildNodeInput required 要关联的构建机
+   * @response 204 unknown No Content
+   * @response 400 GinErrorOutput Bad Request
+   */
+  bindBuildNode: async <Request extends BindBuildNodeRequest = BindBuildNodeRequest, ResponseData = unknown>(
+    params?: NoInfer<Request>,
+    config?: Config,
+  ) => await v1Fetch.put<Request, ResponseData>('/workspaces/{workspaceID}/build-node-binding')(params, config),
+  /**
+   * 解除工作空间的构建机关联
+   *
+   * @method DELETE
+   * @path /workspaces/{workspaceID}/build-node-binding
+   * @tag bkintegrations-bkci
+   * @param workspaceID path string required 工作空间 ID
+   * @response 200 EmptyOutput OK
+   * @response 400 GinErrorOutput Bad Request
+   */
+  unbindBuildNode: async <Request extends UnbindBuildNodeRequest = UnbindBuildNodeRequest, ResponseData = EmptyOutput>(
+    params?: NoInfer<Request>,
+    config?: Config,
+  ) => await v1Fetch.delete<Request, ResponseData>('/workspaces/{workspaceID}/build-node-binding')(params, config),
 };

@@ -18,6 +18,7 @@
 
 import appDefaultConfig from '~/pages/basic/app-default-config/index.vue';
 import basic from '~/pages/basic/base-info/basic.vue';
+import buildNode from '~/pages/basic/build-node/index.vue';
 import operationHistory from '~/pages/basic/operation-history/index.vue';
 
 import { i18n } from '../../modules/i18n';
@@ -27,7 +28,7 @@ import type { NavigationItem } from './types';
 /**
  * 空间设置导航配置
  * - 基础：基本信息、操作记录
- * - 默认配置：应用默认配置
+ * - 配置：应用默认配置、构建机
  */
 export const BASIC_NAVIGATION: NavigationItem[] = [
   {
@@ -59,6 +60,12 @@ export const BASIC_NAVIGATION: NavigationItem[] = [
         name: i18n.global.t('应用默认配置'),
         icon: 'setting-fill',
         component: appDefaultConfig,
+      },
+      {
+        key: 'buildNode',
+        name: i18n.global.t('私有构建机'),
+        icon: 'chuangjianyingyong',
+        component: buildNode,
       },
     ],
   },

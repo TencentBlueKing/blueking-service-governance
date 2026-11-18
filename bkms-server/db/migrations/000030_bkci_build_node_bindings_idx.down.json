@@ -1,0 +1,9 @@
+[
+  {
+    "dropIndexes": "bkci_build_node_bindings",
+    "index": [
+      "workspaceID_1",
+      "tenantID_1"
+    ]
+  }
+]

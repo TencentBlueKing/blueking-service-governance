@@ -58,6 +58,14 @@ type Handler interface {
 	ListBkCIRepositoryBranches(c *gin.Context)
 	// ListBkCIRepositoryTags 获取代码仓库标签列表
 	ListBkCIRepositoryTags(c *gin.Context)
+	// ListBkCIBuildNodes 获取工作空间蓝盾项目下可关联的第三方构建机
+	ListBkCIBuildNodes(c *gin.Context)
+	// GetBuildNodeBinding 查询工作空间关联的构建机
+	GetBuildNodeBinding(c *gin.Context)
+	// BindBuildNode 关联或更换工作空间的构建机
+	BindBuildNode(c *gin.Context)
+	// UnbindBuildNode 解除工作空间的构建机关联
+	UnbindBuildNode(c *gin.Context)
 
 	// --- BCS（蓝鲸容器服务）相关 API ---
 
@@ -130,6 +138,10 @@ func Register(rg *gin.RouterGroup, h Handler) {
 	rg.GET("/workspaces/:workspaceID/bkci-pipelines/:pipelineID", h.GetBkCIPipeline)
 	rg.GET("/workspaces/:workspaceID/bkci-repositories/branches", h.ListBkCIRepositoryBranches)
 	rg.GET("/workspaces/:workspaceID/bkci-repositories/tags", h.ListBkCIRepositoryTags)
+	rg.GET("/workspaces/:workspaceID/bkci-build-nodes", h.ListBkCIBuildNodes)
+	rg.GET("/workspaces/:workspaceID/build-node-binding", h.GetBuildNodeBinding)
+	rg.PUT("/workspaces/:workspaceID/build-node-binding", h.BindBuildNode)
+	rg.DELETE("/workspaces/:workspaceID/build-node-binding", h.UnbindBuildNode)
 
 	// --- BCS 相关路由 ---
 	rg.GET("/bcs/projects/authorized", h.ListBCSAuthorizedProjects)

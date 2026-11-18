@@ -161,6 +161,8 @@ const (
 	ResourceTypeDashboard ResourceType = "dashboard"
 	// ResourceTypeFrameworkConfigTemplate 空间框架配置模板
 	ResourceTypeFrameworkConfigTemplate ResourceType = "frameworkConfigTemplate"
+	// ResourceTypeBuildNode 工作空间关联的蓝盾构建机
+	ResourceTypeBuildNode ResourceType = "buildNode"
 )
 
 // AllResourceTypes 所有资源类型
@@ -175,6 +177,7 @@ var AllResourceTypes = []ResourceType{
 	ResourceTypeAlertStrategy,
 	ResourceTypeDashboard,
 	ResourceTypeFrameworkConfigTemplate,
+	ResourceTypeBuildNode,
 }
 
 // DisplayName 资源类型展示用名称 TODO 国际化
@@ -200,6 +203,8 @@ func (t ResourceType) DisplayName() string {
 		return "仪表盘"
 	case ResourceTypeFrameworkConfigTemplate:
 		return "框架配置模板"
+	case ResourceTypeBuildNode:
+		return "构建机"
 	default:
 		// 默认返回原始值
 		return string(t)

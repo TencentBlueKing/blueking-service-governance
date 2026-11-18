@@ -99,3 +99,29 @@ type Repository struct {
 	// CreatedAt 仓库创建时间
 	CreatedAt time.Time `bson:"createdAt"`
 }
+
+// BuildNodeBinding 工作空间关联的蓝盾第三方构建机，一个工作空间最多一条
+type BuildNodeBinding struct {
+	// TenantID 所属租户，由 store 层自动写入
+	TenantID string `json:"-" bson:"tenantID"`
+	// WorkspaceID 工作空间 ID
+	WorkspaceID string `bson:"workspaceID"`
+	// ProjectCode 构建机所在的蓝盾项目 Code
+	ProjectCode string `bson:"projectCode"`
+	// NodeHashID 蓝盾节点 HashId
+	NodeHashID string `bson:"nodeHashID"`
+	// AgentHashID 蓝盾 Agent HashId，下发流水线调度第三方构建机时使用
+	AgentHashID string `bson:"agentHashID"`
+	// DisplayName 关联时的节点名称快照，节点别名为空时取主机名
+	DisplayName string `bson:"displayName"`
+	// IP 关联时的节点 IP 快照
+	IP string `bson:"ip"`
+	// OSName 关联时的操作系统快照
+	OSName string `bson:"osName"`
+	// Updater 最后操作人
+	Updater string `bson:"updater"`
+	// CreatedAt 创建时间
+	CreatedAt time.Time `bson:"createdAt"`
+	// UpdatedAt 更新时间
+	UpdatedAt time.Time `bson:"updatedAt"`
+}
