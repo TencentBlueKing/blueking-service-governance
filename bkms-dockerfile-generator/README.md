@@ -55,7 +55,7 @@ Dockerfile，并将生成结果写入 `BKMS_DOCKERFILE_PATH` 指定的位置。
   不递归子目录；三种都没有时只拷源码。依赖都装进运行镜像的系统 Python，启动命令直接用 `python` 即可：
   - `uv.lock`：`uv export --no-default-groups` 导出锁定版本后用 `uv pip install --system` 安装，
     不装 `[tool.uv] default-groups` 里的任何分组（含 dev），也不装项目自身；
-  - `poetry.lock`：`poetry install --no-root --only main`，只装主依赖，不创建虚拟环境；
+  - `poetry.lock`：`poetry install --no-root --only main`，只装主依赖，不创建虚拟环境，构建目录里已有 `.venv` 也不会装进去；
   - `requirements.txt`：先确认 pip 可用，再 `python3 -m pip install -r requirements.txt`。
 
   三种方式都关闭下载缓存（uv / poetry 用 `--no-cache`，pip 用 `--no-cache-dir`）：单阶段镜像没有 builder 层隔离，
@@ -79,6 +79,19 @@ Dockerfile，并将生成结果写入 `BKMS_DOCKERFILE_PATH` 指定的位置。
   `pyproject.toml` 自行声明。构建参数在单阶段里声明为 `ARG`，`RUN` 中可直接读取。
 - 限制：Debian / Ubuntu 的系统 Python 按 PEP 668 拒绝 pip 往系统环境安装，自动安装会失败。
   使用官方 `python:*` 镜像即可避开，或自行填写构建命令。
+
+#### Docker 集成测试
+
+`make test` 只校验生成的 Dockerfile 文本。`pkg/dockerfile/testdata/python/` 下的 requirements.txt、uv、poetry
+三个示例项目会用生成的 Dockerfile 真实执行 `docker build`，确认依赖装进了系统 Python、dev 分组没有装进镜像，
+poetry 示例还会预先建好 `.venv`。这组测试需要本机 Docker 和访问 Python 包仓库的网络，默认跳过：
+
+```bash
+BKMS_DOCKERFILE_DOCKER_TEST=1 ./bin/ginkgo --label-filter=docker ./pkg/dockerfile/
+```
+
+- `BKMS_DOCKERFILE_DOCKER_TEST_RUNNER_IMAGE`：运行镜像，默认 `python:3.12-slim`，拉不到 Docker Hub 时换成可访问的地址。
+- 本机设置了 `PIP_INDEX_URL`、`UV_DEFAULT_INDEX` 时会作为构建参数传入，用于走包仓库镜像源。
 
 ### 主要输出
 

@@ -115,7 +115,8 @@ func validateBKMSGeneratedConfig(cfg Config) error {
 		EnvDockerfileRunnerImage: cfg.RunnerImage,
 		EnvImageName:             cfg.ImageName,
 	}
-	// 只有带 builder 阶段的模板才需要构建镜像；python 单阶段模板只用运行镜像
+	// go、cpp 要先在构建镜像里编译出二进制，再拷进运行镜像，所以构建镜像必填；
+	// python 不需要编译，源码直接拷进运行镜像、在里面装依赖即可，构建镜像可以不填
 	if dockerfile.RequiresBuilderImage(cfg.Language) {
 		requiredValues[EnvDockerfileBuilderImage] = cfg.BuilderImage
 	}

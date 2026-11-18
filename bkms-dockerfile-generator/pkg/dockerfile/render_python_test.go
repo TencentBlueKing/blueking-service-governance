@@ -186,6 +186,16 @@ var _ = Describe("Python Dockerfile render", func() {
 		Expect(poetryContent).To(ContainSubstring("poetry install --no-cache"))
 	})
 
+	It("keeps poetry away from an existing in-project virtualenv", func() {
+		content, err := Render(makePythonInput(poetryLockFile))
+		Expect(err).NotTo(HaveOccurred())
+
+		// 只禁止新建虚拟环境不够，项目内已有 .venv 时 poetry 仍会装进去
+		Expect(content).To(ContainSubstring(
+			"POETRY_VIRTUALENVS_CREATE=false POETRY_VIRTUALENVS_IN_PROJECT=false poetry install",
+		))
+	})
+
 	It("fails with a missing pip hint when the tool cannot be installed", func() {
 		content, err := Render(makePythonInput(uvLockFile))
 		Expect(err).NotTo(HaveOccurred())

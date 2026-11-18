@@ -74,9 +74,11 @@ const (
 		" --output-file " + uvExportedRequirementsPath +
 		" && uv pip install --system --no-cache -r " + uvExportedRequirementsPath +
 		" && rm -f " + uvExportedRequirementsPath
-	// --no-root：没有打包配置的项目安装自身会失败，平台只负责装依赖
-	poetryInstallCommand = "POETRY_VIRTUALENVS_CREATE=false poetry install --no-cache --no-interaction --no-ansi" +
-		" --no-root --only main"
+	// --no-root：没有打包配置的项目安装自身会失败，平台只负责装依赖。
+	// VIRTUALENVS_CREATE=false 只管不新建虚拟环境，构建目录里已有 .venv（源码自带或前置命令创建）时
+	// poetry 仍会装进去，启动时系统 Python 找不到依赖；IN_PROJECT=false 让它忽略项目内的 .venv
+	poetryInstallCommand = "POETRY_VIRTUALENVS_CREATE=false POETRY_VIRTUALENVS_IN_PROJECT=false" +
+		" poetry install --no-cache --no-interaction --no-ansi --no-root --only main"
 	pipInstallCommand = "python3 -m pip install --no-cache-dir -r " + requirementsFile
 )
 

@@ -176,8 +176,8 @@ var _ = Describe("Resolve", func() {
 	DescribeTable("treats blank as a framework without framework capabilities",
 		func(language string) {
 			for id, mod := range mustResolve(appruntime.FrameworkBlank, language).Public().Mods {
-				if id == runtimemod.ModConfigFileMerge {
-					// 配置文件合并是基座功能，只是策略随框架变化
+				// 配置文件合并是基座功能，只是策略随框架变化；平台构建只看语言，单独断言
+				if id == runtimemod.ModConfigFileMerge || id == runtimemod.ModPlatformBuild {
 					continue
 				}
 				Expect(mod.Supported).To(BeFalse(), string(id))
@@ -187,6 +187,24 @@ var _ = Describe("Resolve", func() {
 		Entry("cpp", appruntime.LanguageCpp),
 		Entry("nodejs", appruntime.LanguageNodeJS),
 		Entry("python", appruntime.LanguagePython),
+	)
+
+	DescribeTable("resolves platformBuild for blank by language",
+		func(language string, supported, requiresBuilderImage bool) {
+			mod := mustResolve(appruntime.FrameworkBlank, language).PlatformBuild
+			Expect(mod.Supported).To(Equal(supported))
+			if !supported {
+				Expect(mod.ReasonCode).To(Equal(runtimemod.ReasonUnsupportedStack))
+				return
+			}
+
+			Expect(mod.Props.DockerfileLanguage).To(Equal(language))
+			Expect(mod.Props.RequiresBuilderImage).To(Equal(requiresBuilderImage))
+		},
+		Entry("go", appruntime.LanguageGo, true, true),
+		Entry("python", appruntime.LanguagePython, true, false),
+		Entry("cpp", appruntime.LanguageCpp, false, false),
+		Entry("nodejs", appruntime.LanguageNodeJS, false, false),
 	)
 
 	DescribeTable("selects the config merge strategy per framework",
@@ -281,7 +299,7 @@ var _ = Describe("Public", func() {
 			}`))
 	})
 
-	It("renders blank with only configFileMerge supported", func() {
+	It("renders blank+go with only platformBuild and configFileMerge supported", func() {
 		Expect(toJSON(mustResolve(appruntime.FrameworkBlank, appruntime.LanguageGo).Public())).
 			To(MatchJSON(`{
 				"schemaVersion": 1,
@@ -291,7 +309,7 @@ var _ = Describe("Public", func() {
 				"mods": {
 					"frameworkFile":         {"supported": false, "reasonCode": "unsupported_stack"},
 					"devMode":               {"supported": false, "reasonCode": "unsupported_stack"},
-					"platformBuild":         {"supported": false, "reasonCode": "unsupported_stack"},
+					"platformBuild":         {"supported": true},
 					"adminCommand":          {"supported": false, "reasonCode": "unsupported_stack"},
 					"apmServiceName":        {"supported": false, "reasonCode": "unsupported_stack"},
 					"polarisServiceCheck":   {"supported": false, "reasonCode": "unsupported_stack"},
