@@ -1,0 +1,36 @@
+meta {
+  name: 14-trpc-spec-rejects-taf-app
+  type: http
+  seq: 14
+}
+
+put {
+  url: {{serviceURL}}/apps/{{bkmsAppTafID}}/trpc-spec
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "appModelSpec": {
+      "command": ["sleep"],
+      "trpcSpec": {"language": "cpp"}
+    }
+  }
+}
+
+assert {
+  res.status: eq 400
+  res.body: isJson
+}
+
+tests {
+  test("should reject a framework other than trpc", () => {
+    expect(JSON.stringify(res.body)).to.include("does not match");
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 10000
+}

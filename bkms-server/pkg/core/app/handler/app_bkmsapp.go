@@ -70,21 +70,31 @@ func (h *Handler) CreateBKMSApp(c *gin.Context) {
 		ID:          input.ID,
 		WorkspaceID: uriInput.WorkspaceID,
 		Name:        input.Name,
-		Type:        bkmsapp.AppTypeBKMSApp,
+		Type:        appruntime.AppTypeBKMSApp,
 		Framework:   input.Framework,
 		Language:    input.Language,
 		DisplayName: input.Name,
 		Creator:     auth.MustGetUser(ctx).ID,
 		CreatedAt:   time.Now(),
 	}
-	params := input.ToCreateParams()
+	h.createBKMSApp(c, app, input.ToCreateParams(), input.BuildConfig)
+}
+
+// createBKMSApp 校验参数、写入构建配置，再创建 bkmsApp 应用的其余数据并返回结果。
+func (h *Handler) createBKMSApp(
+	c *gin.Context,
+	app *bkmsapp.Application,
+	params *lifecycle.CreateParams,
+	buildConfigInput *serializer.BuildConfigInput,
+) {
+	ctx := c.Request.Context()
 	// 写入构建配置前先校验，参数不合法时不留下任何数据
 	if err := lifecycle.ValidateCreate(app, params); err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, "validate bkmsApp"))
 		return
 	}
 
-	buildConfig, err := h.createBuildConfig(ctx, app, input.BuildConfig)
+	buildConfig, err := h.createBuildConfig(ctx, app, buildConfigInput)
 	if err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return
@@ -133,7 +143,7 @@ func (h *Handler) UpdateAppStartupConfig(c *gin.Context) {
 		bkerrs.AbortWithErr(c, err)
 		return
 	}
-	if app.Type != bkmsapp.AppTypeBKMSApp {
+	if app.Type != appruntime.AppTypeBKMSApp {
 		bkerrs.AbortWithErr(c, bkerrs.Errorf(bkerrs.ErrCodeInvalidRequest,
 			"app type %s does not support startup-config, use trpc-spec or taf-spec", app.Type))
 		return

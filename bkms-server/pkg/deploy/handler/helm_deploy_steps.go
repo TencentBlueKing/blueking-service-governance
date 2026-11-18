@@ -28,6 +28,7 @@ import (
 
 	imagebuild "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime"
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	deploypkg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy"
 	helmdeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/helm"
@@ -198,7 +199,7 @@ func (h *Handler) execHelmAppRollbackSteps(ctx context.Context, record *helmdepl
 		WorkspaceID:     record.WorkspaceID,
 		EnvName:         record.EnvName,
 		TrafficLaneName: record.TrafficLaneName,
-		AppType:         bkmsapp.AppTypeHelm,
+		AppType:         appruntime.AppTypeHelm,
 		AppID:           record.AppID,
 		ImageTag:        record.ImageTag,
 	}); err != nil {

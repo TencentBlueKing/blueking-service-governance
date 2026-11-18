@@ -35,6 +35,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	bkciapi "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bkci"
@@ -71,7 +72,7 @@ var _ = Describe("Build Functions", func() {
 			ID:          "test-app-id",
 			Name:        "bkms-server",
 			WorkspaceID: "ws-" + stringx.Random(8),
-			Type:        bkmsapp.AppTypeTRPC,
+			Type:        appruntime.AppTypeTRPC,
 			TrpcSpec:    &bkmsapp.TrpcSpec{Language: appmodel.LanguageGo},
 		}
 

@@ -78,7 +78,7 @@ func TrpcApplication(
 		ID:          appName + stringx.Random(6),
 		Name:        appName,
 		WorkspaceID: "test-ws-" + stringx.Random(6),
-		Type:        bkmsapp.AppTypeTRPC,
+		Type:        appruntime.AppTypeTRPC, //nolint:staticcheck // bkmsApp 迁移兼容：构造存量旧类型应用
 	}
 
 	if opts.WorkspaceID != "" {
@@ -220,7 +220,7 @@ func TafApplication(
 		ID:          appName + stringx.Random(6),
 		Name:        appName,
 		WorkspaceID: "test-ws-" + stringx.Random(6),
-		Type:        bkmsapp.AppTypeTAF,
+		Type:        appruntime.AppTypeTAF, //nolint:staticcheck // bkmsApp 迁移兼容：构造存量旧类型应用
 	}
 
 	if opts.WorkspaceID != "" {

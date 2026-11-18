@@ -34,6 +34,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil/dbfactory"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/clusteraddon"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
@@ -521,7 +522,7 @@ ignored: ${LEGACY}
 		BeforeEach(func() {
 			addon = &clusteraddon.ClusterAddonDef{
 				Name: "precheck-test-addon", DisplayName: "Test operator",
-				RequiredForAppTypes: []string{bkmsapp.AppTypeTRPC},
+				RequiredForAppTypes: []string{appruntime.AppTypeTRPC},
 			}
 			Expect(clusteraddon.SaveDef(ctx, clusterAddonDefStore, addon)).To(Succeed())
 		})

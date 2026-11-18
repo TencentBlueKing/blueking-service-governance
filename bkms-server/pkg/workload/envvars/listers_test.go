@@ -30,6 +30,7 @@ import (
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	depenvvars "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/depservice/envvars"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
@@ -133,7 +134,7 @@ var _ = Describe("ListBuiltinVars", func() {
 	It("should append app-related built-in vars when app is provided", func() {
 		app := &bkmsapp.Application{
 			Name: "demo-app",
-			Type: bkmsapp.AppTypeTRPC,
+			Type: appruntime.AppTypeTRPC,
 		}
 
 		builtinVars, err := envvars.ListBuiltinVars(ctx, db, environment, app, nil)
@@ -160,14 +161,14 @@ var _ = Describe("ListBuiltinVars", func() {
 			_, ok := envVarByKey(builtinVars)[envvars.EnvVarNameContainerName]
 			Expect(ok).To(Equal(expected))
 		},
-		Entry("legacy taf", bkmsapp.AppTypeTAF, "", true),
-		Entry("bkmsApp with trpc framework", bkmsapp.AppTypeBKMSApp, "trpc", true),
-		Entry("bkmsApp with blank framework", bkmsapp.AppTypeBKMSApp, "blank", true),
-		Entry("helm", bkmsapp.AppTypeHelm, "", false),
+		Entry("legacy taf", appruntime.AppTypeTAF, "", true),
+		Entry("bkmsApp with trpc framework", appruntime.AppTypeBKMSApp, "trpc", true),
+		Entry("bkmsApp with blank framework", appruntime.AppTypeBKMSApp, "blank", true),
+		Entry("helm", appruntime.AppTypeHelm, "", false),
 	)
 
 	It("should append resource limit built-in vars when app model is provided", func() {
-		app := &bkmsapp.Application{Name: "demo-app", Type: bkmsapp.AppTypeTRPC}
+		app := &bkmsapp.Application{Name: "demo-app", Type: appruntime.AppTypeTRPC}
 		am := &appmodel.AppModel{Workload: appmodel.Workload{
 			Resources: map[string]string{"cpu": "100m-200m", "memory": "2048Mi"},
 		}}

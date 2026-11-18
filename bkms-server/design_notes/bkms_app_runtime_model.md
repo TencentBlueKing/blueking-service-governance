@@ -1,479 +1,196 @@
-# BKMSApp、技术栈与运行时能力模型迁移方案
+# bkmsApp 应用模型与运行时能力集合
 
-> 以下是用户输入的原始用于创建本方案的 prompt。
+本文介绍平台托管应用（`bkmsApp`）的数据模型、运行时能力集合（ModSet）的设计、相关包的分工与扩展方式。
+存量迁移、旧 API 兼容与待删除事项见 [bkms_app_runtime_model_migration.md](./bkms_app_runtime_model_migration.md)。
 
-```
- 我想要对平台所支持的应用类型做一次简化， pkg/core/app/app.go 目前这里面存在 AppTypeTRPC / AppTypeTAF 这两种类型，但是在底层它们实际上都是基于 AppModel 应用模型的应用。我想要增加
-  AppTypeBKMSApp 这种应用类型作为默认，表示 bkms 的默认应用，并且通过新字段 language 和 framework 来替代其职能。
+## 1. 应用类型与技术栈
 
-- Application 增加两个核心字段 language 和 framework，language 表示应用的 runtime 类型，目前取值包括 go/cpp, framework 则包括 trpc/taf/blank（blank 表示空框架），这样可以覆盖现有，主要 framework 通过字面量值，可以在代码中基于数据定义的方式，每个 framework 需要定义自己所支持的 languages 类型，这个之后会用作产品层面的限制；
-- 首先是对模型中已有字段的改变，现有的 pkg/core/app/app.go 的 TrpcSpec 不再存在， pkg/workload/appmodelcore/appmodel/entities.go 中的 TrpcConfig TafConfig 也同理，其都应该被一个更通用的字段和 map 类型去取代，仅当一些断定其已经是某种框架后，再通过 mapstructure 等反序列化出具体的配置值；这一步完成后数据模型层面形成了 language+framework 再加上具体的与具体框架和语言技术无关的详细的额外配置 map 字段；
-- 之后，领域层，针对特定的 trpc 或 taf 类型的代码，应该进行迁移，而是基于一个方便的应用的框架去判断，并且可以和方便的如上一步描述的，基于框架的配置反序列化出具体所需的结构体。
-    - 到这一步，领域层所需要的处理的事项是非常多的，很多功能涉及这些框架，最重要的指导原则是松耦合和统一标准
-    - 具体的某个功能，比如说 devmode，对于它面向哪些技术栈（通过framework+language两者或其中的任何一种) 开放/支持，应当遵循统一的规范并且可以对外暴露（考虑到前端什么时候展示）
-    - 因此，对于所有框架或语言特定的 feature，我倾向于有一个统一的抽象去汇总式的获取，比如传入一个应用，就可以知道它支持哪些功能模块，并且这里不止是 bool，而是有 props 的支持，再通过这些数据驱
-  动方式，使用到对应的功能模块里面去，总之就是应用获取到对于的 runtimeModSet，每个 Mod 根据应用返回的 ModeSet 去判断自己如何工作、是否可以工作、具体怎么工作，这样来实现解耦
-- 完成以上所有工作后，理论上基于 BKMSApp 的成熟的框架就成型了，接下来就是提供提供新的 API，并删除已有的 trpc/taf 特定的应用创建/修改等 API 了。
-
-理解和 review 我的计划，将其细化为分阶段的可实施文档。
-```
-
-状态：阶段 0 决策已冻结，阶段 1 模型与兼容读取已开始落地。冻结结论、消费清单与基线样本见 [bkms_app_runtime_model_phase0.md](./bkms_app_runtime_model_phase0.md)。本文基于当前仓库代码，明确目标模型、迁移边界、分阶段交付和验收条件。
-
-## 1. 评审结论
-
-方向成立：`trpc` / `taf` 描述的是技术栈，而 `helm` / `agones` 描述的是应用管理方式。把前两者归并为默认的 `AppTypeBKMSApp`，再以 `language + framework` 描述技术栈，可以消除目前 AppType 同时承担两类职责的问题。
-
-建议保留“模型 → 领域能力 → API”的主线，但调整以下细节：
-
-1. **先确立唯一事实来源，再删除旧字段。** `Application` 持有技术栈；`AppModel.Workload` 持有部署相关的框架扩展配置。两者通过 `appID` 关联，不能继续各存一份 language/framework。
-2. **map 只作为持久化与边界载体。** 通用模型不依赖具体框架结构体，框架适配器仍使用有校验的具体类型。并不是把所有领域配置都变成任意 map。
-3. **RuntimeModSet 描述能力，模块执行行为。** 集中汇总支持范围和 props，复用现有 workload plugin、组件与领域服务；不另造通用插件执行引擎。
-4. **区分技术栈支持、环境可用、用户启用与权限。** 仅传 Application 可以得到静态能力；环境、配置、集群依赖和权限检查在执行上下文中完成。
-5. **把旧 Workload.Type、隐式 tRPC 默认值、存量配置和客户端纳入迁移。** 单纯替换 AppType 常量会漏掉真实的渲染分派与产品入口。
-6. **新 API 发布与旧 API 删除分为两个阶段。** 已确认采用分阶段兼容迁移：先兼容读写，再迁移调用方与数据，满足退出条件后删除旧入口。具体兼容窗口与各发布批次在阶段 0 确定。
-
-本期保留 Helm/Agones 现有模型与行为。BKMSApp 成为新建默认类型，不意味着所有应用类型都改用 AppModel。`language` 目前表示 Go/C++/Node.js/Python 技术栈（Node.js、Python 仅 blank 支持），不承载语言版本、ABI、构建镜像、CPU 架构等信息。
-
-实施顺序概览：
-
-| 阶段 | 可交付结果 | 进入下一阶段的关键条件 |
+| 应用类型 `type` | 管理方式 | 技术栈 |
 | --- | --- | --- |
-| 0 基线 | 支持矩阵、消费清单、存量冲突报告 | 明确 TAF 语言、技术栈修改和客户端兼容窗口 |
-| 1 模型 | 新字段、框架目录、严格解码、旧数据适配 | 新旧模型等价，冲突可定位 |
-| 2 能力 | RuntimeModSet，devmode/platformBuild 迁移 | 同源规则驱动展示与执行，props 约定稳定 |
-| 3 领域 | 统一生命周期、渲染与集成，blank 后端闭环 | 旧功能等价，blank 无框架副作用 |
-| 4 API/客户端 | 统一 API、能力查询、UI/CLI 适配 | 新客户端可读新旧数据，响应切换条件满足 |
-| 5 数据 | 存量回填、新模型主读写、恢复演练 | 无未处理冲突，历史读取与恢复可用 |
-| 6 收缩 | 删除旧入口、旧模型和兼容分支 | 旧调用/旧任务清零，完整门禁通过 |
+| `bkmsApp` | 平台按 AppModel 渲染工作负载 | 由 `framework` + `language` 描述 |
+| `helm`、`agones` | 用户提供 Chart，平台按 Chart 部署 | 不涉及，`framework`、`language` 为空 |
 
-## 2. 现状与需要处理的真实边界
+`trpc`、`taf` 是旧的 `type` 取值，与 `bkmsApp` 同属 AppModel 管理，迁移完成前仍可读到，见迁移文档。
+判断管理方式统一用 `appruntime.IsAppModelType` / `IsHelmBasedType`，不比较 `type` 字面值。
 
-### 2.1 已确认的代码事实
+**框架目录**（`pkg/core/appruntime/catalog.go`）是合法组合的唯一来源，创建校验、能力矩阵和前端选项都取自它：
 
-| 位置 | 当前行为 | 迁移影响 |
+| framework | 支持的 language | 说明 |
 | --- | --- | --- |
-| [Application](../pkg/core/app/app.go) | `Type=trpc/taf`；`TrpcSpec` 仅含 language；`IsAppModelType` 只识别这两类 | `TrpcSpec` 的信息应提升到 `Application.Language`，不需要为了取代它再增加空的应用级 map |
-| [AppModel / Workload](../pkg/workload/appmodelcore/appmodel/entities.go) | `Workload.Type` 再次区分 trpc/taf；TrpcConfig 再存 language；两种配置都有文件元信息与内容字段 | 删除重复技术栈字段，统一框架配置载体；处理历史 fileContent |
-| [tRPC 更新服务](../pkg/workload/appmodelcore/framework/trpc/trpc.go) | 更新 `Workload.TrpcConfig.Language`，该路径没有同步更新 Application.TrpcSpec | 两处 language 可能不一致，迁移时必须检测冲突，不能假设二者始终相等 |
-| [workload plugin](../pkg/workload/appmodelcore/workload/plugin/plugin.go) | 按 Workload.Type 选择插件；空字符串回退 tRPC | 新模型禁止依赖这个回退，兼容行为仅允许放在旧记录适配层 |
-| standard plugin（M4.5 已删除） | 无框架特效的内部插件，仅用于测试 | 与 blank 不对等；blank 不走框架插件，只渲染公共部分 |
-| [workload builder](../pkg/workload/appmodelcore/workload/builder.go) | 框架插件、plain 配置文件、devmode 已有独立组装步骤 | 保留此分工，改变能力选择与输入，不重建渲染流水线 |
-| [devmode](../pkg/extension/component/devmode/devmode.go)、[校验](../pkg/extension/component/devmode/builder.go) | Type 决定脚本、工作路径、二进制路径；校验环境与启动命令 | props 需要描述执行策略和路径；是否启用仍归 AppSpec |
-| [构建前置检查](../pkg/build/build/service.go)、[镜像构建](../pkg/build/image/build.go) | 平台生成 Dockerfile 仅支持 trpc+go，依赖 TrpcSpec.Language | 不能改成“所有 BKMSApp 均支持”；独立能力 `platformBuild` 保留当前范围 |
-| [应用路由](../pkg/core/app/router.go)、[输入](../pkg/core/app/serializer/app.go) | 创建已是统一 POST；请求 type/spec 分叉，更新为 trpc-spec/taf-spec | 扩展现有创建入口，统一更新契约；不是再建两套创建路由 |
-| [部署路由](../pkg/deploy/router.go)、[构建部署路由](../pkg/build/autodeploy/router.go) | 两套镜像接口；部署路由明确标注 CLI 使用 | 合并到 AppModel 部署契约，迁移 UI/CLI 后才删除旧路由 |
-| [框架文件渲染](../pkg/workload/appmodelcore/framework/trpc/plugin.go) | 内容来自 MountableFileProvider，但挂载文件名/目录仍以 AppModel 为准 | 不能直接采用 def 的 name/mountDir，历史 def 名可能是 default |
-| [旧配置迁移](../pkg/core/render/migrate/draft.go) | 明确处理 `workload.tafConfig.fileContent` 残留 | 删除字段之前核对残留内容，兼容已有迁移工具 |
-| [集群依赖定义](../pkg/core/env/clusteraddon/assets/addons) | requiredForAppTypes / optionalForAppTypes 使用 trpc/taf | 既要迁移代码，也要迁移内置 YAML 及其已同步的数据库记录 |
+| `trpc` | go、cpp | |
+| `taf` | cpp | |
+| `blank` | go、cpp、nodejs、python | 不使用开发框架，由用户提供镜像。`blank` 是显式取值，不是空字符串 |
 
-其他必须盘点的消费点：管理命令、APM 服务名解析、Polaris 框架配置补丁与校验、BSCP workload 元信息、环境变量、空间应用列表与组件引用、部署概览/状态/预检查、资源拓扑、实例/WebConsole、异步部署轮询、镜像清理、审计与监控标签。
+约束：
 
-UI 的技术栈分支分布在应用类型 composable、store、表单、部署与配置页面中；CLI 也依赖旧路由与类型值。共享 adapter、Dockerfile generator、测试工厂、Bruno 用例、Swagger 及生成类型均须纳入阶段 0 清单，不能以服务端通过编译作为迁移完成标准。
+- 组合合法不代表支持全部功能，功能是否可用由能力集合决定（见 §3）。
+- 技术栈创建后不能修改：它同时决定配置格式、脚本、构建方式与历史部署的含义。
 
-### 2.2 当前设计中的耦合与处理方式
+## 2. 数据模型
 
-- **重复状态：** Application.Type、TrpcSpec.Language、Workload.Type、TrpcConfig.Language 可以互相矛盾。最终只保留 Application 的技术栈定义；兼容读取集中处理旧状态。
-- **创建/更新服务重复：** trpc/taf 服务重复建立 AppModel、AppSpec 和配置文件。抽出统一应用编排服务，适配器只提供框架默认值、校验及框架文件初始化差异。代价是需要重新检查多表写入失败与审计边界。
-- **特性与类型硬绑定：** 例如平台构建只支持 trpc+go，组件引用查询却只查 trpc。每个分支先判断是在表达管理方式、技术栈能力还是历史遗漏，再迁移；不做全局机械替换。
-- **现有组件与新 Mod 容易重叠：** Component 是用户配置的部署扩展实例，RuntimeMod 是平台实现提供的能力描述。两者分离；Mod 可以控制某组件是否可用，但不复制组件 schema、存储或模板系统。
-
-## 3. 目标数据模型
-
-### 3.1 字段归属
-
-建议持久化字面值 `AppTypeBKMSApp = "bkmsApp"`，最终公开类型为 `bkmsApp / helm / agones`。以下字段名为本提案的统一命名，应在第一阶段固定到 JSON/BSON 契约。
-
-| 对象 | 字段 | 约束 |
+| 对象 | 字段 | 说明 |
 | --- | --- | --- |
-| Application | `type` | 新创建请求缺省为 bkmsApp；未知值报错。数据库旧记录缺 type 不按新建默认值自动补齐 |
-| Application | `language` | BKMSApp 必填：go/cpp/nodejs/python，须为框架支持的语言；Helm/Agones 暂不要求填写，不自动填 go |
-| Application | `framework` | BKMSApp 必填：trpc/taf/blank；blank 是显式字面值，不是空字符串 |
-| AppModel.Workload | `frameworkConfig` | `map[string]any`，只保存框架专属配置（目前无）；不存放配置文件挂载信息，见 §3.4 |
-| AppModel.Workload | `frameworkConfigVersion` | 初始为 1，描述该框架 map 的 schema 版本；不等于框架软件版本 |
+| Application | `type` | `bkmsApp` / `helm` / `agones` |
+| Application | `framework`、`language` | bkmsApp 必填，须为框架目录中的组合；helm / agones 为空 |
+| AppModel.Workload | `frameworkConfig` | 框架专属配置，`map[string]any`；目前三种框架都没有字段，固定为空对象，不落库 |
+| AppModel.Workload | `frameworkConfigVersion` | `frameworkConfig` 的结构版本，当前为 1 |
+| 框架配置文件 def | `Name`、`MountDir` | 框架配置文件的文件名与挂载目录，与普通配置文件一致；内容走配置文件与版本体系 |
 
-`Application.TrpcSpec`、`Workload.TrpcConfig`、`Workload.TafConfig` 最终删除。`Workload.Type` 最终也删除：当前该字段实际用于选择框架插件，不能让它成为第二个 framework。未来若需要 Deployment/GameDeployment 等工作负载后端差异，应独立设计 backend 字段；本期不借机新增。
+技术栈只存在 Application 上，不在 AppModel 重复保存。
 
-技术栈身份不在 Application 与 AppModel 双写。执行入口组装只读的 `RuntimeContext{Application, AppModel, ModSet}`，让原本只接收 AppModel 的代码得到技术栈信息；不能把跨表读取藏进实体 getter。列表场景批量加载，避免逐应用查询 AppModel。
+**frameworkConfig 的约定：**
 
-模型形态示意（省略其他字段，并非可直接编译的实现）：
+- 由各框架的 `DecodeConfig`（`appmodelcore/framework/<框架>/config.go`）严格解码：拒绝未知 key、错类型和未知版本，消费方不直接读 map。
+- 修改时整体替换并重新校验，不做递归合并。
+- 结构有变化时先发布能读新旧版本的程序，再写入新版本。
+
+## 3. 运行时能力集合
+
+### 3.1 什么算能力
+
+能力（Mod）是**支持与否或参数因技术栈不同而变化**的功能。不满足这一条的不建模：
+
+| 归属 | 例子 | 判断方式 |
+| --- | --- | --- |
+| 所有技术栈一致 | 普通配置文件、构建、一键构建部署、监控 | 不判断，或按管理方式判断 |
+| 管理方式 | 部署、渲染、实例、AppSpec、组件、环境变量 | `IsAppModelType` |
+| 环境 / 集群 | GPA、HostPort、端口池、集群组件 | 环境或集群属性 |
+| 框架实现的选择 | 渲染插件 | 按 framework 查表，不是能力 |
+
+### 3.2 三层职责
+
+| 层 | 负责 | 位置 |
+| --- | --- | --- |
+| 声明 | 能不能做、用什么参数：规则、props、常量、错误约定 | `pkg/core/appruntime/capability/<能力>` |
+| 框架实现 | 某个框架具体怎么做：配置解析、协议、渲染插件 | `pkg/workload/appmodelcore/framework/<框架>` |
+| 使用方 | 何时做、动态条件（环境、启用状态、权限）是否满足、按 props 选实现并执行 | 各业务模块 |
+
+能力集合只反映技术栈决定的静态支持情况，不包含环境、配置、权限等运行时条件；前端据此展示入口，执行入口仍需自行校验。
+使用方不得再按 `framework` / `language` 字面值判断能力，这类分支只允许出现在能力声明和框架实现内部。
+
+### 3.3 声明与解析
 
 ```go
-type Application struct {
-    Type      string
-    Language  string
-    Framework string
+type Spec[P Props] struct {
+    ID      ModID
+    Resolve func(framework, language string) Mod[P]
 }
 
-type Workload struct {
-    FrameworkConfig        map[string]any
-    FrameworkConfigVersion int
+type Mod[P Props] struct {
+    ID         ModID
+    Supported  bool
+    ReasonCode ReasonCode
+    Props      P
 }
 ```
 
-通用字段 Command、Args、Resources、EnvVars、Probes、Lifecycle、Components 继续使用现有类型。默认/环境覆盖仍归 AppSpec 与已有配置文件体系，第一版不为 frameworkConfig 另建一套环境 overlay。
+- 只随框架或只随语言变化的能力用 `runtimemod.ByFramework` / `ByLanguage` 查表；随组合变化的自行实现解析函数，不引入规则表或优先级。
+- `mods.Of(app)` 从 Application 字段得出技术栈，再解析全部能力，返回强类型的 `Set`。每次现算，不落库、不缓存，无 I/O。
+- 技术栈非法时记录告警，全部能力为不支持（`invalid_stack`），不返回错误。
+- 能力不支持不是错误；执行器通过 `Mod.Require()` 取 props，不支持时得到 `runtimemod.ErrModUnsupported`。
+- 能力之间不互相调用；执行器可以同时读多个能力。
 
-### 3.2 框架定义与有效组合
+不支持的原因：
 
-在代码中声明 framework registry，每项至少含 `name`、`supportedLanguages`、`configVersion`。返回排序稳定的只读目录，创建校验、产品选项和能力匹配使用同一份定义。避免一份前端枚举、一份 binding oneof、再一份后台 switch 各自维护。
-
-| framework | 首期 languages | 说明 |
-| --- | --- | --- |
-| trpc | go、cpp | 当前创建 API 已支持 |
-| taf | cpp（待存量核对） | 现有 TAF 模型没有 language，不能仅凭代码证明线上全为 C++；迁移前核对样本及产品约束 |
-| blank | go、cpp、nodejs、python | 新能力目标；先支持用户提供镜像/已有可用构建路径，再逐项开放框架无关特性。nodejs、python 于 M5 + M6 加入 |
-
-TAF 若有 Go 存量，不静默标为 cpp：补齐 taf+go 的测试与声明，或将该批记录列为待处理。管理命令代码中出现的 java/node/python 分支不代表 tRPC 支持这些语言；nodejs、python 只对 blank 开放，java 不在目录中。
-
-框架和语言组合合法不代表支持全部功能。比如 blank+go 合法，首期仍不自动支持平台 Dockerfile 构建。
-
-### 3.3 map 解码与配置内容边界
-
-以 `frameworkConfig` 命名，是因为其容器和通用模型不依赖具体框架；**map 的内容仍由对应框架定义**。“技术无关”不能解释成框架配置没有 schema。
-
-读取流程：确认 framework → 确认 configVersion → 框架适配器统一解码 → 领域校验 → 获得具体配置。消费代码通过如 `trpc.DecodeConfig(runtimeContext)` 的入口获取类型化结果，不自行断言 map 字段，也不在通用层为所有框架维护 union struct。
-
-解码约定：
-
-- 新 API 写入拒绝未知 key、错类型、缺必填字段和未知版本；不靠宽松转换把任意字符串转 bool/int。
-- 对 JSON/BSON 嵌套对象、数组及整数统一规范化，覆盖数据库往返测试；不直接照搬会把整数全部变为 float64 的组件辅助逻辑。
-- 历史字段由显式适配器转换；未知版本或不完整配置可在详情中报告，但执行功能应拒绝并给出可定位错误，不能自动使用空配置。
-- 后续演进先发布能读新旧版本的程序，再写入新版本。配置替换前校验完整对象；通用元信息更新不得重编码并丢弃未知的扩展字段。
-- 新增 map 需要深拷贝。渲染插件不能把运行时计算结果写回持久化 map，审计的 before/after 也不能共享同一份 map。
-
-可复用仓库已有 map 解码依赖，实现时核对现有版本的严格校验能力；本设计不要求新增依赖或升级整个依赖树。
-
-文件配置的首期映射：
-
-| 旧来源 | 新来源/去向 |
+| reasonCode | 含义 |
 | --- | --- |
-| `Application.TrpcSpec.Language`、`Workload.TrpcConfig.Language` | `Application.Language`；一致才自动合并，冲突进入迁移报告 |
-| trpcConfig / tafConfig 的 fileName、filePath | 框架 def 的 `Name` / `MountDir`，与 plain 一致，见 §3.4 |
-| 框架 fileContent | AppConfigFile / 配置版本体系；渲染结果仅存会话中的 MountableFile |
-| Workload.Type | 迁移阶段辅助识别/冲突检查；最终由 Application.Framework 选择适配器 |
+| `unsupported_app_type` | helm / agones 应用 |
+| `unsupported_stack` | 当前框架或组合不支持 |
+| `incomplete_language` | 能力取决于语言，但应用未记录语言（只有存量应用会出现） |
+| `invalid_stack` | 技术栈数据非法，全部能力不可用 |
 
-第一版新 API 中，framework/language 创建后不可通过普通配置更新改变：修改技术栈会同时影响配置格式、脚本、镜像构建和历史部署。原 tRPC 更新输入允许填写 language，因此兼容窗口必须显式处理：旧入口若收到不同 language，返回明确的“不支持切换技术栈”错误，并在调用方迁移前核对是否有人依赖此能力。若必须保留，应另做具备完整校验与审计的技术栈转换操作，不能继续只改 AppModel。此项是提案中的行为收紧，需要阶段 0 决策。
+### 3.4 能力目录
 
-### 3.4 框架配置文件挂载信息收敛到 def（已完成）
+| 能力 ID | trpc | taf | blank | props（内部） | 对外 props | 使用方 |
+| --- | --- | --- | --- | --- | --- | --- |
+| `frameworkFile` | ✅ yaml | ✅ taf | ❌ | 文件格式 | `format` | 创建流程；配置文件定义接口拒绝为不支持的技术栈新建框架文件 |
+| `devMode` | ✅ | ✅ | ❌ | 脚本集、工作目录、挂载目录、二进制目录 | `workPath`、`mountPath` | `extension/component/devmode`、AppSpec |
+| `platformBuild` | ✅ 仅 go | ❌ | ❌ | Dockerfile 语言 | — | `build/image`、`build/build` |
+| `adminCommand` | ✅ | ✅ | ❌ | 协议；tRPC 按语言区分 admin 地址写法 | — | `workload/instance` |
+| `apmServiceName` | ✅ | ✅ | ❌ | 解析器 | — | `observability/bkmonitor` |
+| `polarisServiceCheck` | ✅ | ❌ | ❌ | — | — | `extension/addon/polaris` |
+| `polarisFrameworkPatch` | ✅ | ❌ | ❌ | — | — | tRPC 渲染插件 |
+| `bscpWorkloadMeta` | ✅ | ❌ | ❌ | — | — | `extension/bscpcfg` |
+| `configFileMerge` | ✅ 保留空值 | ✅ 保留空值 | ✅ k8s 默认 | 合并策略 | — | `core/app/appcfg` |
 
-框架配置文件的文件名与挂载目录已由框架 def 的 `Name` / `MountDir` 表达，与 plain 一致；`Workload.TrpcConfig/TafConfig` 中的旧字段不再写入。实现见 #274，数据迁移见 `db/migrations/000021`。
+`adminCommand` 已预置 java、nodejs、python 的 tRPC 地址写法，这些语言加入框架目录后自动生效。
 
-| 环节 | 现状 |
-| --- | --- |
-| 新建 | 创建应用时把 spec 传入的 fileName / filePath 写入框架 def |
-| 渲染 | 插件直接使用 `GetFrameworkMountableFile` 返回的 Name / MountDir |
-| 存量 | 000021 把 `app_models` 上的 fileName / filePath 回填到唯一一条框架 def 并清理旧字段；多条框架 def 的应用不回填 |
-| 多条 def | 先执行 `repair_trpc_taf_framework_defs` 收敛，再单独处理 |
-| 回滚 | 旧版本只读 `app_models`；回滚最低版本为写入 def 的桥接版本，且需确认迁移未清理旧字段，或从备份恢复 |
-| 待核对 | 000021 报告中的多 def 应用、fileName/filePath 为空的应用 |
+### 3.5 对外结构
 
-第一版新 API 中，framework/language 创建后不可通过普通配置更新改变：修改技术栈会同时影响配置格式、脚本、镜像构建和历史部署。原 tRPC 更新输入允许填写 language，因此兼容窗口必须显式处理：旧入口若收到不同 language，返回明确的“不支持切换技术栈”错误，并在调用方迁移前核对是否有人依赖此能力。若必须保留，应另做具备完整校验与审计的技术栈转换操作，不能继续只改 AppModel。此项是提案中的行为收紧，需要阶段 0 决策。
-
-## 4. RuntimeModSet：统一声明与消费规范
-
-### 4.1 三层职责
-
-```mermaid
-flowchart LR
-    A[Application: type / framework / language] --> R[纯函数 RuntimeResolver]
-    F[Framework 定义与 Mod 支持规则] --> R
-    R --> M[RuntimeModSet: 支持情况与类型化 props]
-    M --> P[面向 API 的公开投影]
-    M --> D[领域功能模块]
-    C[环境 / 配置 / 集群 / 权限] --> D
-    D --> E[现有插件与领域执行器]
-```
-
-- **静态解析：** `ResolveRuntime(app) (RuntimeModSet, error)` 仅依赖规范化后的技术栈和代码声明，无数据库/网络访问，无用户身份，不改变应用状态。相同输入和代码版本产生相同结果。
-- **有效性检查：** 具体模块接收 Mod、已加载配置和执行上下文，检查依赖、启用状态、权限。需要前端展示原因时，由应用服务汇总为上下文视图。
-- **执行：** 模块使用自己的类型化 props 和已有执行器。管理命令仍由对应协议实现，框架渲染仍由现有插件完成。
-
-不把 `RuntimeModSet` 持久化到 Application；否则代码更新后会出现能力缓存陈旧。部署记录如需重放，单独保存当次技术栈/渲染输入快照，并定义旧快照读取规则，不把当前 resolver 的结果冒充历史事实。
-
-### 4.2 Mod 规范与 props
-
-统一使用 `Mod` 命名。每个 Mod 至少包含稳定 ID、Supported、Props；不支持时提供机器可读 reasonCode，props 为空。
-
-内部使用泛型 `Mod[T]` 和强类型字段，如 `mods.DevMode`、`mods.PlatformBuild`。只有 API 边界投影成 JSON 对象，领域执行器不拿 `map[string]any` 四处解码 props。
-
-每个 Mod 用一个解析函数声明：`func(framework, language) Mod[P]`。只按框架或只按语言变化的能力用现成工厂函数，参数随组合变化的能力自行实现，不引入规则表、优先级和多层继承。
-
-| Mod ID | 支持条件 | props 职责 |
-| --- | --- | --- |
-| `frameworkFile` | trpc、taf | 配置文件格式；blank 不创建伪框架文件 |
-| `devMode` | trpc、taf | 脚本集、工作目录、挂载目录、二进制目录 |
-| `platformBuild` | trpc+go | 生成器策略、Dockerfile 语言；不限制其他既有构建模式 |
-| `adminCommand` | trpc、taf | 协议、配置键布局（按语言） |
-| `apmServiceName` | trpc、taf | 配置解析器；不等于整个监控功能只支持这些应用 |
-| `polarisServiceCheck` | trpc | 无参数；仅指基于 tRPC 配置的服务名校验 |
-| `polarisFrameworkPatch` | trpc | 无参数；仅指配置注入，不等于 Polaris 注册本身 |
-| `bscpWorkloadMeta` | trpc | 无参数；工作负载类型取实际渲染结果；TAF 尚未接入 |
-| `configFileMerge` | trpc、taf、blank | 合并策略：trpc、taf 保留空值字段并支持空默认文件，blank 按 k8s 默认 strategic merge；helm / agones values 属独立链路 |
-
-完整定义与对外契约见 [能力集合方案](./bkms_app_runtime_model_phase1.md) §3，此处不再维护第二份清单。判定标准：**支持与否或参数因技术栈不同而变化**才建 Mod。对所有技术栈一致的功能（plain 配置文件、一键构建部署、构建、监控等）、管理方式相关（部署、渲染、实例、AppSpec、组件）、环境/集群相关（GPA、HostPort、端口池、集群 addon）都不建 Mod。
-
-### 4.3 解析规则
-
-1. 每个能力是一个解析函数，输入框架与语言，输出是否支持及参数；简单的按框架或按语言查表，复杂的自行实现。
-2. 先校验技术栈，再解析能力；未知框架、未知语言、非法组合是技术栈错误，能力不支持返回 unsupported，两者必须区分。
-3. 非 bkmsApp 应用的解析结果统一为 `unsupported_app_type`。
-4. 语言为空时：按框架声明的能力照常支持；按语言声明的能力返回 `incomplete_language`。
-5. 启动期不做校验；ID 唯一、能力覆盖框架目录、supported 组合有执行器，全部由测试保证。
-6. 结果只读且确定性：相同输入与代码版本得到相同结果，调用方不得通过返回对象修改全局声明。
-
-### 4.4 devmode 的完整调用例子
-
-1. Application 为 bkmsApp+trpc+go，resolver 返回 `devMode.supported=true`，props 选择 tRPC 脚本和现有路径。
-2. 从 AppSpec 解析用户是否启用，从 Environment 读取环境类型，从工作负载读取启动命令。
-3. 模块使用 props 选择脚本实现，而不是再次读取 AppType；生产环境不能启用、启动命令不能为空等检查继续由模块执行。
-4. API 可以展示 `supported=true, available=false, reasonCode=production_environment`；配置未启用表现为 `enabled=false`，不把它解释成不支持。
-5. 执行入口重新校验权限和动态条件。前端可见/可用结果只是展示依据，不能作为授权凭证。
-6. blank 首期不支持 devmode；显式开启时返回能力错误，不能进入目前“非 TAF 就按 tRPC 处理”的 else 分支。
-
-AppSpec.DevMode 保留 Enabled 等用户配置；模块 props 为平台定义的策略。路径如仍允许用户配置，只能在 props 定义的范围内校验，不能让用户覆盖内部执行器键。
-
-### 4.5 包依赖与现有扩展系统
-
-建议新增以下职责，路径可在实现时按仓库依赖细化：
-
-| 包 | 职责 | 依赖约束 |
-| --- | --- | --- |
-| `pkg/core/appruntime/runtimemod` | ModID、ReasonCode、Mod、Spec、查表工厂、对外结构 | 只依赖 `appruntime` 与标准库 |
-| `pkg/core/appruntime/capability/<能力>` | 各能力的声明、props 类型、公开投影、常量与错误约定，一个能力一个包 | 只依赖 `appruntime`、`runtimemod`；不依赖 `runtimemod/mods` 及 workload、extension 等业务层；不放执行代码 |
-| `pkg/core/appruntime/runtimemod/mods` | 组装：`Set`、`Of(app)`、`Resolve`、`Matrix` | 依赖各能力包、`appruntime`、`runtimemod`、`core/app` |
-| 应用运行时组装 | `mods.Of(app)`：Application → 技术栈 → 能力集合 | 不放在 `core/app` 方法里，避免 core/app 反向依赖 |
-| `pkg/workload/appmodelcore/framework/<框架>` | 框架配置解码、校验、默认值、渲染/初始化差异、协议实现（M4.5 起） | 保留框架知识；可依赖能力包；通用业务通过 Mod/适配器接口调用 |
-
-能力声明位于 `pkg/core/appruntime/capability/<能力>/`（M3 引入，M4.5 从 `pkg/capability` 移入）。执行按 §1 第 3 条与 §4.1：模块使用自己的类型化 props 和已有执行器完成，执行代码留在原模块，框架专属实现在 `appmodelcore/framework`，只通过 `mods.Of(app).<能力>` 取支持情况与 props。M3 曾规划"执行代码逐步移入能力包"，与本节约束不符，M4.5 已撤回。禁止让 core/app 直接 import devmode/build/admincmd 来拼能力集合。
-
-包位置遵循《pkg 模块结构重构迁移总说明》（iwiki 4020906210）：`pkg` 下不新增顶级目录，`core` 只放基础对象，spec 与框架配置的解释归 `workload/appmodelcore`。
-
-## 5. API 与产品契约
-
-### 5.1 目标接口
-
-以下是路由建议，均相对于现有 API 路由前缀。正式发布前固定命名并补充 Swagger。实际实施与本表的差异（新开 `POST /workspaces/:workspaceID/bkmsapps`、旧入口不改、路由改名）见 [新 API 与 blank 闭环](./bkms_app_runtime_model_phase4_api.md) §6。
-
-| 接口 | 行为 |
-| --- | --- |
-| `POST /workspaces/:workspaceID/apps` | 复用创建入口；type 缺省 bkmsApp；接受 language、framework、appModelSpec.frameworkConfig；拒绝相互冲突的新旧字段 |
-| `PUT /apps/:appID/appmodel-spec` | 统一原 trpc-spec/taf-spec 的更新范围；完整替换提交的 frameworkConfig 对象，禁止静默递归合并；不负责技术栈切换、环境变量和配置文件内容 |
-| 现有应用详情/列表 | 返回 language、framework；迁移期由兼容投影补齐，列表支持明确的 type/framework/language 筛选语义 |
-| `GET /app-runtime-definitions` | 返回框架及其 supportedLanguages、可公开的 Mod 目录和版本；供创建表单使用 |
-| `GET /apps/:appID/runtime-mods` | 返回应用静态能力及公开 props；执行 app 查看权限校验 |
-| `GET /apps/:appID/envs/:envName/runtime-mods` | 若产品需要环境可用性，返回附加 available/enabled/reasonCode；不把任意环境依赖查询放进基础详情接口 |
-| `/apps/:appID/envs/:envName/appmodel-deploys[...]` | 承接部署、预检查、状态、快照、下架等原两套路由的等价功能 |
-| `/apps/:appID/envs/:envName/appmodel-build-deploys` | 承接原 trpc/taf-build-deploys |
-
-框架配置文件内容继续通过现有配置文件 API 编辑/版本化。创建时通过独立的 `frameworkConfigFile` 输入（暂定名）提供文件名、挂载目录与初始内容，由同一编排流程写入框架 def 与 AppConfigFile（§3.4）；不把这些放进 frameworkConfig。原创建接口必填 buildConfig 等约束仍然保留，直到另有明确设计。
-
-统一更新接口要写清 omitted/null/空对象语义：缺省不修改，null 默认拒绝，`{}` 是显式替换并重新校验（例如 trpc 缺必填文件路径应失败）。并发写采用版本条件或等价冲突检查，冲突返回明确错误，不能丢失另一位用户的配置。
-
-### 5.2 对外能力形态示例
-
-以下为建议的静态能力响应片段，完整响应包括所有已知 Mod。环境类型等枚举复用实际常量。内部执行器键、凭据、运行中地址、配置内容不对外返回。
+`GET /app-runtime-definitions` 返回框架目录与全部合法组合的能力矩阵，`GET /apps/:appID/runtime-mods` 返回单个应用的能力集合，结构相同：
 
 ```json
 {
-  "data": {
-    "schemaVersion": 1,
-    "type": "bkmsApp",
-    "framework": "trpc",
-    "language": "go",
-    "mods": {
-      "devMode": {
-        "supported": true,
-        "props": {"allowedEnvTypes": ["development", "test", "staging"]}
-      },
-      "platformBuild": {
-        "supported": true,
-        "props": {"imageBuildModes": ["platform"]}
-      }
-    }
+  "schemaVersion": 1,
+  "type": "bkmsApp",
+  "framework": "trpc",
+  "language": "cpp",
+  "mods": {
+    "frameworkFile": { "supported": true, "props": { "format": "yaml" } },
+    "platformBuild": { "supported": false, "reasonCode": "unsupported_stack" }
   }
 }
 ```
 
-返回所有已知 Mod 的支持状态，以便解释未开放原因；未来新增 ID 是增量变化，客户端忽略不认识的 ID，缺少某个已知 ID 时按不支持处理。props 按 Mod 给出明确 Swagger schema，不能只生成无约束的 object。`schemaVersion` 只在响应契约破坏性变更时调整，正常支持矩阵更新不要求每次升版本。
+- `mods` 包含全部能力；新增能力只增加 key，客户端忽略不认识的 key。
+- 只输出 `Props.Public()` 返回的内容，执行器内部参数不对外；没有可展示内容时省略 `props`。
+- helm / agones 应用不输出 `framework`、`language`，全部能力为 `unsupported_app_type`。
 
-前端从目录生成语言/框架选项，从 RuntimeModSet 控制功能入口；后端使用同源 resolver 再次校验。类型值可以展示管理方式标签，不能继续用于决定 devmode/platformBuild 等功能是否可见。
+## 4. 包划分与依赖
 
-### 5.3 兼容期间的请求与响应
-
-- 旧 create type=trpc/taf 转换为统一领域命令；旧 trpc-spec/taf-spec 路由变成薄适配层，强制核对应用 framework。
-- 旧请求携带新字段且矛盾时拒绝，不规定“某一份随便覆盖另一份”。
-- 旧路由的请求兼容不等于客户端兼容：应用详情/列表中的 type 变为 bkmsApp 同样会破坏 UI/CLI。
-- 因此先发布能读取新旧形态的客户端，期间共用详情/列表保留旧 type 展示，并增量提供 language/framework；最终输出 type=bkmsApp 的切换必须作为独立发布门槛。
-- 在同一未版本化详情接口仍需要服务旧客户端期间，不开放 blank 应用创建，因为它无法无损投影为 trpc/taf。若必须提前开放 blank，提供显式版本化的新响应契约并隔离旧客户端访问，不伪造旧类型。
-- 旧筛选 `type=trpc` 在兼容层转换为 framework=trpc 与 AppModel 管理方式的组合；保留分页/统计语义，不能仅在结果返回后过滤。
-- 框架协议本身需要专用实现。API 统一后仍可保留内部 trpc/taf 包，不以删除所有框架名为验收标准。
-
-## 6. 存量数据与发布方案
-
-### 6.1 迁移盘点与转换规则
-
-工具按 Application、AppModel、框架文件定义及内容关联扫描，生成记录级计划，至少包含 appID、旧字段摘要、新字段、冲突原因、原值校验条件。报告避免输出完整配置内容或凭据。
-
-| 存量情况 | 动作 |
-| --- | --- |
-| type=trpc，两处 language 一致且有效 | 目标 bkmsApp + trpc + 原 language，搬迁文件元信息 |
-| type=trpc，只有一处 language 有效 | 使用有效值并记录来源；验证相关框架配置可解码 |
-| 两处 language 冲突，或都缺失/未知 | 待人工核对；不以 go 作为默认补齐 |
-| type=taf | 在确认存量语言后填值；未经核对不能批量猜测 |
-| Application.Type 与非空 Workload.Type 冲突 | 停止该应用迁移，报告冲突 |
-| Workload.Type 为空 | 仅结合旧 Application.Type 及配置判定；不应用旧插件的空值兜底 |
-| 有旧 fileContent 且规范存储无内容 | 先迁入正确的框架配置文件及版本体系，核对成功后再清理旧内容 |
-| 新旧内容都存在且不同 | 以当前实际生效读取路径为依据核对，报告冲突并保留备份，不覆盖新存储 |
-| 孤立 Application / AppModel、两个框架配置都非空 | 标记异常，修复后重试；不生成看似完整的新模型 |
-| helm/agones | 不改模型，仅核对新代码行为无回归 |
-
-同时检查 appspec、部署记录/快照、异步任务 payload、组件引用、集群 addon 数据与迁移脚本是否包含旧类型。历史审计/监控标签不无差别改写；对仍参与回放和查询的旧字段提供版本化读取适配。已下发的资源快照保持原义，回滚不得因为当前框架配置变化而重渲染成不同资源。
-
-### 6.2 扩展、切换、收缩
-
-1. **扩展读能力：** 发布桥接版本，旧类型/字段仍是持久化主数据。仓储兼容层可读新旧形态，对领域层返回统一模型；此时新类型和 blank 创建保持关闭。
-2. **收拢写入口：** 所有创建/更新路径进入统一应用服务。桥接版本在同一写流程生成新字段与旧投影，记录存储迁移版本/完成标记及校验指纹；该元数据与 API 的 schemaVersion 分离，不暴露给领域消费方。不能让两个模型各自被独立写入。
-3. **完成旧进程退出：** 全部 API 节点、任务执行器和管理脚本升级到桥接版本后才启动回填。旧二进制在混跑时可能只更新旧字段或覆盖新字段，不能仅靠双写新版本来保证一致。
-4. **数据回填：** 使用幂等、可断点续跑的工具。先 generate/dry-run，再 apply/verify；按读取时原值做条件更新，遇到并发变化跳过重算，不全表覆盖。
-5. **切换主读写：** 完成完整性核对及客户端迁移后，写入 type=bkmsApp，以新字段为准，继续生成可兼容的旧投影一段窗口。开启 blank 前确认已不需要旧 type 响应约定。
-6. **收缩：** 旧调用归零、旧任务处理完、恢复演练通过后，先停止旧投影写入，再清理旧字段、类型常量、路由与兼容代码。
-
-Application 与 AppModel 跨集合更新：上线前验证当前 MongoDB 部署的事务能力。支持时用事务保护同一应用的关键更新；否则桥接协议必须定义逐应用写入顺序和完成标记，未完成时旧投影仍为读来源，新记录在完整提交前不可见，并有可重试的补偿过程。不能将两个无条件 update 当作原子操作，也不能在部分更新后向 API 返回成功。
-
-新建应用还涉及 BuildConfig、AppSpec、配置文件等记录。统一编排服务应预校验全部输入，再执行可恢复的写入流程；失败不会留下可部署但配置不全的应用。审计只记录成功提交的状态，保留操作失败的诊断上下文。
-
-### 6.3 恢复边界
-
-- 回填前备份原始字段和记录级迁移清单；恢复使用条件检查，不能覆盖迁移之后的用户编辑。
-- 数据切换后，程序回滚最低版本是能读取新模型的桥接版本；不能直接回滚到只认识 trpc/taf 的旧版本。
-- blank 应用没有旧类型等价物。一旦开放创建，不能承诺降级为老版本；可先关闭 blank 新建和相关变更，继续使用桥接版本服务已有应用。
-- 清理旧字段是单独的收缩发布。回退依赖备份和版本兼容策略，而不是编写一个把所有 bkmsApp 猜回 trpc 的 down migration。
-- 复杂关联数据转换采用 Go migration 子命令，简单索引/清理采用现有 JSON migration；遵循 [数据库迁移说明](../README.md#数据库迁移)，新增 seq 必须唯一。
-
-## 7. 分阶段实施与交付
-
-每个阶段应能独立合并与验证，不要求一次性完成所有领域改造。涉及对外行为的阶段同步更新对应设计文档与 API 文档。
-
-### 阶段 0：建立基线与冻结决策
-
-**交付：** 技术栈/能力矩阵、旧分支消费清单、脱敏存量扫描报告、渲染与 API 基线样本。
-
-- 将搜索命中的每一项归为“管理方式”“能力选择”“协议实现”“兼容/历史数据”。覆盖 Go、YAML、UI、CLI、生成类型、任务与数据库记录。
-- 核实 TAF 语言，确定 bkmsApp 字面值、框架配置字段名、技术栈是否允许变更、客户端发布与兼容窗口。
-- 固定 trpc+go、trpc+cpp、taf 的创建、更新、渲染、部署、构建、devmode 与管理命令样例；补充 Helm/Agones 对照。
-- 记录当前可能的不一致，如两处 language、AppModel/def 挂载目标、仅查 trpc 的组件引用；区分保持行为与单独修复事项。
-
-**验收：** 没有未经解释的类型消费点；迁移冲突种类和样本已明确；每个后续模块有对应测试与负责边界。
-
-### 阶段 1：引入新模型与兼容读取
-
-**依赖：** 阶段 0 的字段契约。**主要位置：** core/app、appmodel、store、serializer、testutil/dbfactory、新 appruntime 规范定义包。
-
-- 增加 BKMSApp、language/framework、框架目录、frameworkConfig/version。
-- 旧持久化结构移入兼容 DTO；新增规范化入口和框架类型化解码。业务逐步拿统一模型，旧请求/旧库仍可使用。
-- 明确旧/新字段优先级和冲突错误，增加未知版本保护；更新应用列表/空间列表的技术栈展示与筛选方案。
-- `IsAppModelType` 在桥接期识别新旧类型，最终仅识别 BKMSApp；不能立即删除所有旧常量。
-
-**验收：** 旧数据往返不丢字段；新旧输入得到等价统一模型；冲突不会静默覆盖；新增字段不改变既有渲染输出；框架目录的所有组合有校验测试。
-
-### 阶段 2：实现 RuntimeModSet，并用两个差异明显的功能验证
-
-**依赖：** 阶段 1。**首批切片：** devmode、platformBuild。
-
-- 实现只读 resolver、规则注册校验、类型化 props/getter、公开 DTO 投影。
-- devmode 从 props 获得脚本与路径策略，移除“非 TAF 默认 tRPC”的推断；AppSpec 路径校验使用同一来源。
-- platformBuild 保持仅 trpc+go；镜像工具链与凭据等动态条件继续由构建服务验证。
-- 基础能力单测加执行入口契约测试，证明返回 supported 的组合有对应执行器。
-
-**验收：** 两个功能不再从 AppType 推断能力；trpc+cpp 可支持 devmode 而不支持 platformBuild；前端 DTO 与执行服务来自同一解析结果；生产环境 devmode 策略不回归。
-
-### 阶段 3：统一领域编排并接通 blank
-
-**依赖：** 阶段 2；可按以下顺序拆成多个变更。
-
-| 批次 | 工作 | 验收重点 |
-| --- | --- | --- |
-| 3A 渲染与配置 | 按 Framework/Mod 选择插件；框架内容仍走 provider/patcher；挂载信息已由 #274 收敛到 def（§3.4）；会话存渲染结果 | 新旧 trpc/taf 资源清单等价；保留名称、挂载目标、ConfigMap、init container 和环境变量语义 |
-| 3B 应用生命周期 | 合并 trpc/taf Create/Update 编排；框架适配器提供差异；完成跨集合失败恢复与审计 | 创建/更新失败可恢复；无半成品可部署应用；环境变量/文件版本 API 行为不变 |
-| 3C 通用 AppModel 功能 | 部署状态、预检查、实例、拓扑、WebConsole、环境变量、引用查询、异步轮询、镜像清理 | BKMSApp 被完整识别；旧任务仍能处理；查询/统计无遗漏；Helm/Agones 无回归 |
-| 3D 框架特性 | admincmd、APM、Polaris、BSCP 等消费 Mods 和类型化配置 | 不支持组合返回明确错误；不把框架专用限制错误施加到整个通用集成 |
-| 3E 集群依赖 | addon 的管理方式筛选与能力依赖分开；同步内置定义和数据库；更新调用接口 | blank 获得通用部署所需依赖，不自动要求框架专用依赖；required/optional 语义一致 |
-| 3F blank 验证 | 接入空框架适配器，不走框架插件；仅开放经过验证的通用能力 | 可用已有镜像创建、渲染、部署、查看状态/日志、挂载 plain 文件和下架；不产生 tRPC/TAF 框架资源 |
-
-**退出门槛：** 领域流程不依赖旧 AppType/TrpcSpec/Workload.Type 选择技术栈；所有 map 访问有统一解码边界；尚未公开的 blank 已有完整后端端到端测试。框架协议实现和兼容层中的 trpc/taf 名字允许保留。
-
-### 阶段 4：发布统一 API 与迁移调用方
-
-**依赖：** 阶段 3 的对应领域能力成熟。
-
-- 更新创建请求，增加统一修改、能力目录和应用能力查询，合并部署/构建部署接口；旧入口仅做转换。
-- 新旧 API 执行相同权限校验、错误映射、审计和领域服务；确保旧框架入口不能操作其他框架应用。
-- 生成 Swagger；更新 UI API 类型、创建/修改表单、入口显示和部署流程；更新 CLI/adapter 调用与文档。
-- 客户端先同时识别新旧类型；定义共享详情/列表响应切换点。完成后开放 BKMSApp 默认创建与 blank，避免将无法投影的新应用交给旧客户端。
-- 记录旧路由、旧字段、旧查询参数与旧任务使用量，确定停用条件及调用方名单。
-
-**验收：** 同一应用的新旧入口业务效果一致（除已确认的技术栈切换限制）；新 UI 不再硬编码技术栈能力矩阵；CLI 创建/部署/配置主路径可用；三种框架的产品流程已通过联调。
-
-### 阶段 5：迁移存量并切换主读写
-
-**依赖：** 阶段 1–4 的桥接版本和客户端已部署。
-
-- 发布 dry-run/apply/verify 工具，核对全部异常记录；通过条件更新保证幂等与并发安全。
-- 小范围应用迁移后比较详情、列表、渲染与部署行为，再扩大范围；无需为改数据库类型而自动重新部署工作负载。
-- 完成集群 addon 记录、旧任务与回放读取适配；切换 type=bkmsApp 和新字段为主读写。
-- 进行失败中断、重复执行、并发写冲突及恢复演练。
-
-**验收：** 目标记录数与完成数一致；待处理冲突为零或明确隔离且阻止清理；数据校验通过；历史部署/文件版本读取与回放正确；恢复能回到桥接版本；业务清单无意外资源差异。
-
-### 阶段 6：删除旧接口与模型，完成收缩
-
-**依赖：** 阶段 5 完成，旧客户端已淘汰且旧调用在覆盖实际发布/任务周期的观察窗口内归零。
-
-- 删除 trpc-spec/taf-spec、两套部署与构建部署旧路由及 serializer 适配代码。
-- 删除 TrpcSpec、旧配置字段、旧 Workload.Type、旧 AppType 常量和新代码中的兼容回退；清理数据库旧投影。
-- 更新迁移工具对历史备份/残留旧记录的说明，不能让工具在字段删除后静默失效。
-- 更新测试工厂、Bruno、Swagger、UI 生成类型、CLI 帮助与相关设计文档。
-
-**验收：** 活跃数据无旧字段；领域代码不依赖旧类型；旧路由按发布约定停止服务；新建/存量三种框架及 Helm/Agones 完整门禁通过。归档迁移脚本、审计历史中的旧字面值不强制抹除。
-
-## 8. 验证与发布门禁
-
-| 层级 | 必测内容 |
-| --- | --- |
-| 纯模型与规则 | 所有合法/非法技术栈组合；blank 与空值区别；重复匹配；未知框架/版本；props 不可变与确定性 |
-| 配置解码 | JSON/BSON 往返；嵌套 map/array/整数；未知 key、错误类型、空对象；深拷贝；历史字段转换 |
-| 数据迁移 | 双语言冲突；缺配置；残留 fileContent；重复运行；中途失败；并发更新；新旧版本混跑限制；恢复不覆盖后续编辑 |
-| 领域契约 | 同一规则同时驱动 API 和执行器；动态条件拒绝；权限重新校验；多集合部分失败补偿；静态解析不产生 I/O |
-| 渲染回归 | trpc+go、trpc+cpp、已确认 taf 组合的新旧清单比较；保留配置补丁/overlay/挂载顺序和资源名；只规范化时间戳等无语义差异 |
-| blank 端到端 | 创建→已有镜像→plain 配置/变量→渲染→部署→状态/日志→下架；框架功能拒绝；没有隐式 tRPC 文件/脚本 |
-| 兼容与客户端 | 新旧创建/更新/部署/查询等价；筛选分页计数；type 响应切换；UI 能力驱动；CLI 旧调用迁移 |
-| 历史与旁路 | 异步任务、部署快照、文件版本回滚、集群 addon、组件引用、镜像清理、Helm/Agones 行为 |
-
-单元测试遵守仓库约定：Ginkgo、`-gcflags="all=-l -N" --cover --coverprofile cover.out`；由子代理执行。使用包的 FxModule，通过 `fxtest.New` + `fx.Populate` 注入依赖，使用真实测试数据库和 dbfactory；不 mock store。测试描述使用英文。
-
-每个 Go 变更交付前执行 `make lint` 和相应包测试；阶段合并门禁执行 `make test`。API 变更执行 `make apidocs`、`make build`，按 [服务端说明](../AGENTS.md) 重启本地服务后执行 Bruno。devmode 脚本变更另跑其 `just lint && just test`。UI/CLI 变更分别执行本模块要求的 lint、类型检查、测试与构建；生成文档和类型须检查差异。未具备测试数据库、集群或外部集成时明确记录缺口，不能以单元测试代替完整联调。
-
-阶段 0 可用以下搜索维护清单；结果需要逐项分类，而不是要求所有 trpc/taf 文本消失：
-
-```bash
-rg -n 'AppTypeTRPC|AppTypeTAF|TrpcSpec|TrpcConfig|TafConfig|WorkloadType|Workload\.Type' pkg cmd
-rg -n 'trpc-spec|taf-spec|trpc-deploys|taf-deploys|trpc-build-deploys|taf-build-deploys' pkg tests ../bkms-cli ../bkms-ui/src
-rg -n 'requiredForAppTypes|optionalForAppTypes|"trpc"|"taf"' pkg/core/env/clusteraddon configs db
+```
+pkg/core/appruntime/                    技术栈值类型、框架目录、技术栈校验
+pkg/core/appruntime/runtimemod/         ModID、ReasonCode、Mod、Spec、查表工厂、对外结构
+pkg/core/appruntime/runtimemod/mods/    组装：Set、Of(app)、Resolve、Matrix
+pkg/core/appruntime/capability/<能力>/   能力声明、props、常量与错误约定，一个能力一个包
+pkg/workload/appmodelcore/framework/<框架>/   frameworkConfig 解码、渲染插件、协议与配置解析
+pkg/workload/appmodelcore/lifecycle/   bkmsApp 应用的创建与修改编排
 ```
 
-## 9. 决策记录与待确认项
+依赖约束：
 
-阶段 0 已冻结，完整说明见 [bkms_app_runtime_model_phase0.md](./bkms_app_runtime_model_phase0.md)。摘要：
+- 能力包只依赖 `appruntime`、`runtimemod`；不依赖 `mods`，也不依赖 workload、extension 等业务层，不放执行代码。
+- 框架包可以依赖能力包（取 props、错误约定）。需要被能力包以外的基础层引用的解析代码放在叶子子包（如 `trpcconf`、`tafconf`），避免循环引用。
+- `core/app` 不依赖 `mods`，也不 import 具体能力的执行模块。
 
-| 决策 | 冻结值 |
+判断一段代码放在哪里：
+
+- 换一个框架就得重写 → 框架包；
+- 只回答"能不能做、参数是什么" → 能力包；
+- 负责流程、动态条件或执行入口 → 使用方。
+
+包位置遵循《pkg 模块结构重构迁移总说明》（iwiki 4020906210）：`pkg` 下不新增顶级目录，`core` 只放基础对象，框架配置的解释归 `workload/appmodelcore`。
+
+## 5. API
+
+| 接口 | 说明 |
 | --- | --- |
-| BKMSApp 持久化值 | `bkmsApp` |
-| TAF 支持语言 | 目录仅 cpp；存量未核对前不批量填 language |
-| 技术栈可变性 | 普通修改不可变；旧入口提交不同 language 须明确报错（写路径收拢批次落地） |
-| 兼容发布 | 桥接读 → 客户端双识别 → 数据切换 → 删旧入口；窗口内不输出 type=bkmsApp、不开放 blank |
-| blank 首期能力 | 仅目录声明；创建关闭 |
-| fileName/filePath 归属 | 收敛到框架 def 的 `Name` / `MountDir`（替代原“首期放 frameworkConfig”），见 §3.4 |
+| `POST /workspaces/:workspaceID/bkmsapps` | 创建 bkmsApp 应用 |
+| `PUT /apps/:appID/startup-config` | 修改启动命令、参数、脚本与 `frameworkConfig`；不能修改技术栈 |
+| `GET /app-runtime-definitions` | 框架目录与能力矩阵 |
+| `GET /apps/:appID/runtime-mods` | 应用的能力集合 |
+| `/apps/:appID/envs/:envName/bkmsapp-deploys[...]` | 部署记录、预检、部署、下架、资源快照、最新状态；所有 AppModel 应用通用 |
+| `POST /apps/:appID/envs/:envName/build-deploys` | 一键构建部署；所有 AppModel 应用通用 |
+| 详情 `GET /apps/:appID`、列表 `GET /workspaces/:workspaceID/apps` | 返回 `framework`、`language`；详情另返回 `appModelSpec.frameworkConfig` |
 
-阶段 2（能力层）的组织方式、能力目录与 pkg 划分已确定，见 [bkms_app_runtime_model_phase1.md](./bkms_app_runtime_model_phase1.md)；执行端切换见 [bkms_app_runtime_model_phase2.md](./bkms_app_runtime_model_phase2.md)；能力包划分见 [bkms_app_runtime_model_phase2_pkg.md](./bkms_app_runtime_model_phase2_pkg.md)。运行链路识别 bkmsApp 见 [bkms_app_runtime_model_phase3_runtime.md](./bkms_app_runtime_model_phase3_runtime.md)；框架协议实现拆分见 [bkms_app_runtime_model_phase3_framework.md](./bkms_app_runtime_model_phase3_framework.md)。整体进度与 PR 拆分见 [bkms_app_runtime_model_milestones.md](./bkms_app_runtime_model_milestones.md)。
+**创建**（`lifecycle.Service.Create`）：
 
-首个实现变更建议只覆盖阶段 0–1 的一个垂直切片：定义技术栈目录、Application 新字段及旧 tRPC 数据规范化，配齐一致性测试。待统一模型稳定后再用 devmode/platformBuild 验证能力规范，避免在尚未验证的抽象上同时迁移全部领域功能。
+1. 校验技术栈、`frameworkConfig`、框架配置文件输入，全部通过后再写库；
+2. 写构建配置；
+3. `frameworkFile` 支持时，按其格式创建框架配置文件 def 与默认内容（框架支持时必填，blank 传入即报错）；
+4. 写 AppModel（启动配置、环境变量、`frameworkConfigVersion=1`）与 AppSpec（按工作空间默认规则）；
+5. 最后写 Application，之前任一步失败都不会留下可见的应用；
+6. 异步任务与审计：自定义镜像记录、默认告警策略、操作记录。
+
+**修改 `startup-config`**：`command`、`args`、`shCommand` 整体替换，未传的字段被清空；`frameworkConfig` 未传不修改，传 `null` 拒绝，传对象（含 `{}`）整体替换并重新校验。
+
+## 6. 扩展方式
+
+| 场景 | 需要改动 |
+| --- | --- |
+| 框架支持新语言 | 框架目录加语言；逐个核对能力声明中按语言区分的部分（如 `adminCommand`、`platformBuild`） |
+| 新增框架 | 框架目录加一项；`framework/<框架>` 提供 `DecodeConfig`，需要框架资源时提供渲染插件并在插件表登记；逐个能力决定是否支持并补充规则；按需补充框架实现（配置解析、协议） |
+| 新增能力 | 新建 `capability/<能力>` 声明 props 与规则；在 `runtimemod` 加 ModID；在 `mods.Set` 的字段、`resolve`、`invalid`、`all` 四处登记（测试会检查四者一致）；使用方通过 `mods.Of(app).<能力>` 取 props |
+| 给 blank 开放某项能力 | 在该能力的规则中加 blank；已有实现可复用时只改规则，否则先在框架包或使用方补实现 |
+
+测试约束：能力矩阵测试覆盖框架目录的全部合法组合；每个 `Supported=true` 的组合都有执行器覆盖测试。

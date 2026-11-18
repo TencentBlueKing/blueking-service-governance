@@ -35,6 +35,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime"
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/secret"
@@ -59,7 +60,7 @@ var _ = Describe("genHelmReleaseSpec", func() {
 			WorkspaceID: "test-workspace",
 			Name:        "test-app",
 			DisplayName: "Test Application",
-			Type:        bkmsapp.AppTypeHelm,
+			Type:        appruntime.AppTypeHelm,
 			HelmSpec: &bkmsapp.HelmSpec{
 				HelmSource: &bkmsapp.HelmSource{
 					RepoType: "HelmRepo",
@@ -588,7 +589,7 @@ var _ = Describe("genHelmDeployValues", func() {
 			WorkspaceID: "test-workspace",
 			ID:          "test-app",
 			Name:        "test-app",
-			Type:        bkmsapp.AppTypeHelm,
+			Type:        appruntime.AppTypeHelm,
 		}
 		env = &bkmsenv.Environment{Name: "dev", Type: "development"}
 		reader = envvars.NewUnifiedEnvVarsReader(nil, nil, nil)
@@ -841,7 +842,7 @@ var _ = Describe("buildEnvContext", func() {
 
 	BeforeEach(func() {
 		ctx = testutil.NewDefaultTenantContext()
-		app = &bkmsapp.Application{WorkspaceID: "ws", ID: "app", Name: "app", Type: bkmsapp.AppTypeHelm}
+		app = &bkmsapp.Application{WorkspaceID: "ws", ID: "app", Name: "app", Type: appruntime.AppTypeHelm}
 		env = &bkmsenv.Environment{Name: "dev", Type: "development"}
 		reader = envvars.NewUnifiedEnvVarsReader(nil, nil, nil)
 	})

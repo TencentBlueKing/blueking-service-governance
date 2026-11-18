@@ -25,6 +25,7 @@ import (
 	"github.com/onsi/gomega"
 
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime"
 )
 
 // HelmApplicationStores 创建 Helm 应用所需的 store 集合
@@ -55,7 +56,7 @@ func HelmApplication(
 		ID:          appName + stringx.Random(6),
 		Name:        appName,
 		WorkspaceID: "test-ws-" + stringx.Random(6),
-		Type:        bkmsapp.AppTypeHelm,
+		Type:        appruntime.AppTypeHelm,
 		HelmSpec: &bkmsapp.HelmSpec{
 			HelmSource: &bkmsapp.HelmSource{
 				RepoType: bkmsapp.HelmSourceRepoTypeHelm,

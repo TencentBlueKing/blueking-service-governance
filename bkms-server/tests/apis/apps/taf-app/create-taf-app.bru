@@ -69,7 +69,8 @@ script:post-response {
 
 tests {
   test("should create taf app successfully", () => {
-    expect(res.body.data.type).to.equal('taf');
+    // 旧创建接口按 bkmsApp 创建，响应的 type 为 bkmsApp
+    expect(res.body.data.type).to.equal('bkmsApp');
     expect(res.body.data.name).to.contain(bru.getVar('randomSuffix'));
   });
 }

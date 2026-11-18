@@ -38,6 +38,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil/dbfactory"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/secret"
@@ -59,7 +60,7 @@ import (
 // WorkloadTestCase 定义参数化测试用例
 type WorkloadTestCase struct {
 	Name             string
-	AppType          string // bkmsapp.AppTypeTRPC or bkmsapp.AppTypeTAF
+	AppType          string // appruntime.AppTypeTRPC or appruntime.AppTypeTAF
 	WorkloadType     string // appmodel.WorkloadTypeTrpc or appmodel.WorkloadTypeTaf
 	ConfigFileName   string
 	ConfigFilePath   string
@@ -73,7 +74,7 @@ type WorkloadTestCase struct {
 var workloadTestCases = []WorkloadTestCase{
 	{
 		Name:             "TRPC",
-		AppType:          bkmsapp.AppTypeTRPC,
+		AppType:          appruntime.AppTypeTRPC,
 		WorkloadType:     appmodel.WorkloadTypeTrpc,
 		ConfigFileName:   "trpc_config.yaml",
 		ConfigFilePath:   "/etc/",
@@ -84,7 +85,7 @@ var workloadTestCases = []WorkloadTestCase{
 	},
 	{
 		Name:             "TAF",
-		AppType:          bkmsapp.AppTypeTAF,
+		AppType:          appruntime.AppTypeTAF,
 		WorkloadType:     appmodel.WorkloadTypeTaf,
 		ConfigFileName:   "taf_config.conf",
 		ConfigFilePath:   "/etc/",
@@ -116,7 +117,7 @@ func createApplication(
 	components []*component.Component,
 ) (*bkmsapp.Application, *appmodel.AppModel) {
 	switch tc.AppType {
-	case bkmsapp.AppTypeTRPC:
+	case appruntime.AppTypeTRPC:
 		trpcConfig := &appmodel.TrpcConfig{
 			FileName:    tc.ConfigFileName,
 			FilePath:    tc.ConfigFilePath,
@@ -130,7 +131,7 @@ func createApplication(
 			Components:  components,
 			WorkspaceID: newWorkspaceID(ctx),
 		})
-	case bkmsapp.AppTypeTAF:
+	case appruntime.AppTypeTAF:
 		tafConfig := &appmodel.TafConfig{
 			FileName:    tc.ConfigFileName,
 			FilePath:    tc.ConfigFilePath,
