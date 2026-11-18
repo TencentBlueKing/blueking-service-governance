@@ -189,7 +189,7 @@ func (d *Deployer) Deploy(
 func (d *Deployer) Uninstall(ctx context.Context, env *bkmsenv.Environment, trafficLaneName string) error {
 	envName := env.Name
 	// 获取最新部署记录
-	record, err := GetLatest(ctx, d.db, d.app.ID, envName, trafficLaneName)
+	record, err := GetLatestRecord(ctx, d.db, d.app.ID, envName, trafficLaneName)
 	if err != nil {
 		return errors.Wrap(err, "get latest deploy record")
 	}
@@ -216,7 +216,7 @@ func (d *Deployer) Uninstall(ctx context.Context, env *bkmsenv.Environment, traf
 
 	// 删除最新部署记录管理的资源，以及最近的部署记录引用过的全部 ConfigMap：
 	// 旧版本 Pod 挂载的 ConfigMap 不在最新记录的 ResourceKeys 中，已删除的 ConfigMap 再次删除会被忽略
-	records, err := ListRecent(ctx, d.db, d.app.ID, envName, trafficLaneName, recentRecordsLimit)
+	records, err := ListRecentRecord(ctx, d.db, d.app.ID, envName, trafficLaneName, recentRecordsLimit)
 	if err != nil {
 		return errors.Wrap(err, "list recent deploy records")
 	}
@@ -294,7 +294,7 @@ func (d *Deployer) UpdateInstances(
 	podNames []string,
 ) (deployID string, err error) {
 	// 获取最新的部署记录
-	record, err := GetLatest(ctx, d.db, d.app.ID, envName, trafficLaneName)
+	record, err := GetLatestRecord(ctx, d.db, d.app.ID, envName, trafficLaneName)
 	if err != nil {
 		return "", errors.Wrap(err, "get latest deploy record")
 	}
@@ -421,7 +421,7 @@ func (d *Deployer) UpdateInstances(
 // Scale 对应用实例进行扩缩容操作
 func (d *Deployer) Scale(ctx context.Context, envName, trafficLaneName string, replicas int32) error {
 	// 获取最新的部署记录
-	record, err := GetLatest(ctx, d.db, d.app.ID, envName, trafficLaneName)
+	record, err := GetLatestRecord(ctx, d.db, d.app.ID, envName, trafficLaneName)
 	if err != nil {
 		return errors.Wrap(err, "get latest deploy record")
 	}
@@ -474,7 +474,7 @@ func (d *Deployer) BatchDeleteInstances(
 	}
 
 	// 获取最新的部署记录
-	record, err := GetLatest(ctx, d.db, d.app.ID, envName, trafficLaneName)
+	record, err := GetLatestRecord(ctx, d.db, d.app.ID, envName, trafficLaneName)
 	if err != nil {
 		return errors.Wrap(err, "get latest deploy record")
 	}
@@ -730,7 +730,7 @@ func (d *Deployer) getExpiredResources(
 	envName, trafficLaneName string,
 	currentResourceKeys ResourceKeys,
 ) (ResourceKeys, error) {
-	records, err := ListRecent(ctx, d.db, d.app.ID, envName, trafficLaneName, recentRecordsLimit)
+	records, err := ListRecentRecord(ctx, d.db, d.app.ID, envName, trafficLaneName, recentRecordsLimit)
 	if err != nil {
 		return nil, errors.Wrap(err, "list recent deploy records")
 	}
@@ -818,7 +818,7 @@ func (d *Deployer) createDeployRecord(
 
 // getRunningImageTag 返回环境 / 泳道中旧版本实例正在使用的镜像标签
 func (d *Deployer) getRunningImageTag(ctx context.Context, envName, trafficLaneName string) (string, error) {
-	record, err := GetLatest(ctx, d.db, d.app.ID, envName, trafficLaneName, StatusDeployed)
+	record, err := GetLatestRecord(ctx, d.db, d.app.ID, envName, trafficLaneName, StatusDeployed)
 	if errors.Is(err, ErrDeployRecordNotFound) {
 		return "", nil
 	}
@@ -898,7 +898,7 @@ func (d *Deployer) UpdateInstancePolaris(
 	weight *int32,
 	isolate *bool,
 ) error {
-	record, err := GetLatest(ctx, d.db, d.app.ID, envName, trafficLaneName)
+	record, err := GetLatestRecord(ctx, d.db, d.app.ID, envName, trafficLaneName)
 	if err != nil {
 		return errors.Wrap(err, "deploy record not found")
 	}

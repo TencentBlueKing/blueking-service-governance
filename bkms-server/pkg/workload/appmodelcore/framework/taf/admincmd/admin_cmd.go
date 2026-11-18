@@ -269,7 +269,7 @@ func (s *TafAdminService) parseEndpoint(ctx context.Context, endpoint string) (i
 
 // GetPodNameIPMap 获取 Pod IP 映射
 func (s *TafAdminService) GetPodNameIPMap(ctx context.Context) (map[string]string, error) {
-	record, err := appmodeldeploy.GetLatest(ctx, s.Stores.DB, s.App.ID, s.EnvName, "")
+	record, err := appmodeldeploy.GetLatestRecord(ctx, s.Stores.DB, s.App.ID, s.EnvName, "")
 	if err != nil {
 		return nil, errors.Wrapf(err, "deploy record not found")
 	}

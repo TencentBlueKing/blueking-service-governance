@@ -123,9 +123,9 @@ func UpdateBatchProgress(ctx context.Context, db *mongo.Database, id string, pro
 	return errors.Wrapf(err, "update batch progress of deploy record %s", id)
 }
 
-// GetLatest 获取应用在指定环境、泳道下最新的一条部署记录；传入 statuses 时只在这些状态中查找。
+// GetLatestRecord 获取应用在指定环境、泳道下最新的一条部署记录；传入 statuses 时只在这些状态中查找。
 // 不存在时返回 ErrDeployRecordNotFound
-func GetLatest(
+func GetLatestRecord(
 	ctx context.Context, db *mongo.Database, appID, envName, trafficLaneName string, statuses ...Status,
 ) (*Record, error) {
 	opts := []store.Opt{deploytypes.ByAppEnvLane(appID, envName, trafficLaneName), deploytypes.NewestFirst()}
@@ -139,8 +139,8 @@ func GetLatest(
 	return record, nil
 }
 
-// ListRecent 按创建时间倒序列出应用在指定环境、泳道下最近的 limit 条部署记录
-func ListRecent(
+// ListRecentRecord 按创建时间倒序列出应用在指定环境、泳道下最近的 limit 条部署记录
+func ListRecentRecord(
 	ctx context.Context, db *mongo.Database, appID, envName, trafficLaneName string, limit int64,
 ) ([]Record, error) {
 	records, err := store.Of(db, RecordMeta).List(
@@ -162,7 +162,7 @@ func ListRecent(
 func GetLatestWorkload(
 	ctx context.Context, db *mongo.Database, appID, envName, trafficLaneName string,
 ) (kind, name string, err error) {
-	record, err := GetLatest(ctx, db, appID, envName, trafficLaneName)
+	record, err := GetLatestRecord(ctx, db, appID, envName, trafficLaneName)
 	if err != nil {
 		// GetLatest 已带上 app / env 信息，这里不再重复包装
 		return "", "", err

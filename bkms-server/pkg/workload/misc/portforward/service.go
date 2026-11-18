@@ -113,7 +113,7 @@ func NewService(db *mongo.Database, opts ...Option) *Service {
 func (s *Service) GetDeployedPod(
 	ctx context.Context, appID, envName, instanceID string,
 ) (*unstructured.Unstructured, *appmodeldeploy.Record, error) {
-	record, err := appmodeldeploy.GetLatest(ctx, s.db, appID, envName, "")
+	record, err := appmodeldeploy.GetLatestRecord(ctx, s.db, appID, envName, "")
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "deploy record not found")
 	}
