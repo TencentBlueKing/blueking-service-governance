@@ -97,7 +97,29 @@
         disabled
       />
     </Form.FormItem>
+
+    <!-- 发布方式 / 发布策略：与实例列表「全量更新」共用同一份准入规则与交互 -->
+    <ReleaseStrategyField
+      v-model:strategy-id="formModel.releaseStrategyID"
+      :disabled-reason="canaryDisabledReason"
+      :existing-names="existingStrategyNames"
+      :hint-text="strategyHintText"
+      :loading="strategyLoading"
+      :options="strategyOptions"
+      :release-mode="formModel.releaseMode"
+      :selected-strategy="selectedStrategy"
+      @cloned="refreshReleaseStrategies"
+      @created="handleStrategyCreated"
+      @update:release-mode="handleChangeReleaseMode"
+    />
   </Form>
+
+  <!-- 发布预览：摘要栏 + 批次时间线 -->
+  <ReleasePreviewPanel
+    v-if="releasePreview"
+    class="mb-[24px]"
+    :preview="releasePreview"
+  />
 
   <!-- “资源规格” 和 “环境变量” 统一预检查弹窗 -->
   <EnvVarPrecheckDialog
@@ -117,8 +139,10 @@
 <script lang="ts" setup>
   import { computed, reactive, ref } from 'vue';
 
-  import { Button, Form, Input, Select } from 'bkui-vue';
+  import { Button, Form, Input, Message, Select } from 'bkui-vue';
+  import { RELEASE_MODE } from '~/common/enums/deploy';
   import { type RevisionType, revisionRequestFields } from '~/components/code-revision/revision';
+  import { isAppModelAppType } from '~/composables/app-type';
   import { useAppRepoRefSelect } from '~/composables/use-app-repo-ref-select';
   import { useAppVisibleEnvs } from '~/composables/use-app-visible-envs';
   import useLeaveConfirm from '~/composables/use-leave-confirm';
@@ -128,8 +152,11 @@
 
   import ImageSelect from '../../components/image-select.vue';
   import EnvVarPrecheckDialog from './env-var-precheck-dialog.vue';
+  import ReleasePreviewPanel from './release-preview-panel.vue';
+  import ReleaseStrategyField from './release-strategy-field.vue';
   import { type DeployableAppType, type DeployParams, useDeployAPIs } from './use-deploy';
   import { useDeployPrecheck } from './use-deploy-precheck';
+  import { useReleaseStrategy } from './use-release-strategy';
 
   import type { EnvOutput } from '~/@types/v1/env';
 
@@ -141,6 +168,8 @@
       effectiveReplicas?: number; // 当前生效的实例数，用于重置表单时回填
       envName?: string;
       envType?: string;
+      /** 目标环境是否为联邦集群环境；联邦集群暂不支持按策略分批发布。 */
+      isFederationEnv?: boolean;
       isProdEnv?: boolean;
       /** 是否在提交表单时执行预检查；普通部署已在打开侧栏前完成检查。 */
       precheckBeforeSubmit?: boolean;
@@ -180,6 +209,8 @@
   const defaultRevision = ref('');
   const formModel = reactive<{
     imageTag: string;
+    releaseMode: 'all' | 'canary';
+    releaseStrategyID: string;
     replicas: number;
     revision: string;
     revisionType: RevisionType;
@@ -188,6 +219,8 @@
     imageTag: '',
     revision: '',
     revisionType: 'branch',
+    releaseMode: 'all',
+    releaseStrategyID: '',
   });
 
   // 实例列表入口沿用 store 当前环境；总览入口只认侧栏选中的目标环境，即使暂时为空也不回退。
@@ -217,8 +250,42 @@
   function handleRevisionConfirm() {
     fetchRecommendTag();
   }
+
+  // ---------- 发布方式 / 发布策略：与实例列表「全量更新」共用 useReleaseStrategy ----------
+
+  const {
+    canaryDisabledReason,
+    existingStrategyNames,
+    handleChangeReleaseMode,
+    handleStrategyCreated,
+    releasePreview,
+    // 查看抽屉里克隆为空间策略成功后刷新列表，成功提示由查看抽屉展示
+    refresh: refreshReleaseStrategies,
+    resetToAllInstances,
+    selectedStrategy,
+    strategyHintText,
+    strategyLoading,
+    strategyOptions,
+  } = useReleaseStrategy({
+    envName,
+    isAppModelApp: () => isAppModelAppType(appDetailStore.appType),
+    isFederationEnv: () => Boolean(props.isFederationEnv),
+    isBuildFromSource: () => imageSource.value === 'code',
+    model: formModel,
+  });
   // 离开确认：表单有变更时提示用户
   const { confirmBox, forceCleanDirtyTag, withPausedWatch } = useLeaveConfirm(formModel);
+
+  /**
+   * 提交结果：
+   * - submitted=false 表示未真正发起部署（表单校验 / 环境预检查 / 环境资格拦截），调用方应停留在侧栏；
+   * - ok 表示部署接口是否成功返回，releaseMode 供调用方判断是否需要跳转「发布详情」。
+   */
+  interface DeploySubmitResult {
+    ok: boolean;
+    releaseMode: 'all' | 'canary';
+    submitted: boolean;
+  }
 
   // 清除表单校验结果
   function clearValidate() {
@@ -237,6 +304,12 @@
   // 执行部署：根据镜像来源调用直接部署或构建+部署接口
   async function deploy(targetEnv: EnvOutput) {
     if (!targetEnv.name || !checkDeployEnv(targetEnv)) return false;
+    // 提交前按最新资格兜底校验：分批发布已失效（如主工作负载异步判定为 Deployment）时拦截，
+    // 不把后端必拒的 releaseStrategyID 透传出去。
+    if (formModel.releaseMode === RELEASE_MODE.CANARY && canaryDisabledReason.value) {
+      Message({ theme: 'error', message: canaryDisabledReason.value });
+      return false;
+    }
     const deployAPIs = useDeployAPIs(appDetailStore.appType as DeployableAppType);
     const params: DeployParams = {
       appID: appDetailStore.appID,
@@ -245,6 +318,10 @@
       replicas: Number(formModel.replicas),
     };
     if (imageSource.value === 'image') {
+      // 仅镜像直连部署 + 分批发布 + 已选策略时透传发布策略；构建部署接口无该字段。
+      if (formModel.releaseMode === RELEASE_MODE.CANARY && formModel.releaseStrategyID) {
+        params.releaseStrategyID = formModel.releaseStrategyID;
+      }
       await deployAPIs.createDeployDirectly!(params);
     } else {
       Object.assign(params, revisionRequestFields(showCodeSource.value, formModel.revisionType, formModel.revision));
@@ -257,6 +334,8 @@
   async function handleChangeImageSource(source: ImageSourceType) {
     imageSource.value = source;
     if (source === 'code') {
+      // 构建部署不支持分批发布，切到源码构建时回落为一次更新全部
+      resetToAllInstances();
       defaultRevision.value = getDefaultBranch();
       formModel.revisionType = 'branch';
       await prepareBranchAfterMount(defaultRevision.value);
@@ -278,6 +357,8 @@
       formModel.imageTag = '';
       formModel.revision = '';
       formModel.revisionType = 'branch';
+      formModel.releaseMode = 'all';
+      formModel.releaseStrategyID = '';
       imageSource.value = 'image';
     });
     forceCleanDirtyTag(() => {
@@ -287,18 +368,25 @@
   }
 
   // 提交部署：内部完成校验、部署和脏标记清理
-  async function submit(targetEnv: EnvOutput) {
+  async function submit(targetEnv: EnvOutput): Promise<DeploySubmitResult> {
+    const releaseMode = formModel.releaseMode;
     const valid = await validate();
-    if (!valid) return false;
+    if (!valid) return { ok: false, releaseMode, submitted: false };
 
     if (props.precheckBeforeSubmit) {
       const precheckPassed = await precheck(targetEnv);
-      if (!precheckPassed) return false;
+      if (!precheckPassed) return { ok: false, releaseMode, submitted: false };
     }
 
-    if (!(await deploy(targetEnv))) return false;
+    try {
+      if (!(await deploy(targetEnv))) return { ok: false, releaseMode, submitted: false };
+    } catch (error) {
+      // 请求异常已由拦截器提示，这里只记录日志：灰度发布即使失败也要进入发布详情。
+      console.warn(error);
+      return { ok: false, releaseMode, submitted: true };
+    }
     forceCleanDirtyTag();
-    return true;
+    return { ok: true, releaseMode, submitted: true };
   }
 
   // 校验表单

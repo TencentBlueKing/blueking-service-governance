@@ -429,7 +429,7 @@
                   width="160"
                 >
                   <template #default="{ row }">
-                    <div class="flex items-center gap-[12px]">
+                    <div class="flex items-center gap-[16px]">
                       <Button
                         text
                         theme="primary"

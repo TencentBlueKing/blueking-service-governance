@@ -178,7 +178,29 @@
             />
           </Form.FormItem>
         </template>
+
+        <!-- 发布方式 / 发布策略：与「快速部署」共用同一份准入规则与交互 -->
+        <ReleaseStrategyField
+          v-model:strategy-id="formModel.releaseStrategyID"
+          :disabled-reason="canaryDisabledReason"
+          :existing-names="existingStrategyNames"
+          :hint-text="strategyHintText"
+          :loading="strategyLoading"
+          :options="strategyOptions"
+          :release-mode="formModel.releaseMode"
+          :selected-strategy="selectedStrategy"
+          @cloned="refreshReleaseStrategies"
+          @created="handleStrategyCreated"
+          @update:release-mode="handleChangeReleaseMode"
+        />
       </Form>
+
+      <!-- 发布预览：摘要栏 + 批次时间线 -->
+      <ReleasePreviewPanel
+        v-if="releasePreview"
+        class="mx-[24px] mb-[24px]"
+        :preview="releasePreview"
+      />
     </template>
     <template v-else>
       <BuildLogPanel
@@ -186,12 +208,12 @@
         :build-info="buildInfo"
       />
     </template>
-
-    <div
+    <template
       v-if="!showBuildLog"
-      class="mt-[32px] px-[24px]"
+      #footer
     >
       <Button
+        class="mr-[10px]"
         :loading="loading"
         theme="primary"
         @click="handleDeploy"
@@ -199,13 +221,12 @@
         {{ $t('部署') }}
       </Button>
       <Button
-        class="ml-[8px]"
         :loading="loading"
         @click="handleClose"
       >
         {{ $t('取消') }}
       </Button>
-    </div>
+    </template>
   </Sideslider>
 </template>
 
@@ -215,7 +236,9 @@
   import { Alert, Button, Form, Input, Message, Radio, Sideslider } from 'bkui-vue';
   import { useI18n } from 'vue-i18n';
   import { InstanceService } from '~/api/modules/v1';
+  import { RELEASE_MODE } from '~/common/enums/deploy';
   import { type RevisionType, revisionRequestFields } from '~/components/code-revision/revision';
+  import { isAppModelAppType } from '~/composables/app-type';
   import { useAppRepoRefSelect } from '~/composables/use-app-repo-ref-select';
   import { useAppVisibleEnvs } from '~/composables/use-app-visible-envs';
   import useIsFederationEnv from '~/composables/use-is-federation-env';
@@ -226,7 +249,10 @@
   import { useAppDetail } from '~/stores/app-detail';
   import { useTrpcDeployStore } from '~/stores/trpc-deploy';
 
+  import ReleasePreviewPanel from '../release-preview-panel.vue';
+  import ReleaseStrategyField from '../release-strategy-field.vue';
   import { type DeployableAppType, type DeployParams, useDeployAPIs } from '../use-deploy';
+  import { useReleaseStrategy } from '../use-release-strategy';
 
   import type { AppModelDeployRecordOutputObj } from '~/@types/v1/deploy';
   import type { UpdateAppInstancesRequest } from '~/@types/v1/instance';
@@ -237,6 +263,8 @@
   const isShow = defineModel<boolean>('isShow');
   const emit = defineEmits<{
     update: [keepOpen: boolean];
+    /** 灰度发布提交后：由父组件切换到发布详情（无论发布结果成功或失败都跳转） */
+    viewReleaseDetail: [];
   }>();
   const props = defineProps<{
     effectiveReplicas?: number;
@@ -263,6 +291,8 @@
   const defaultRevision = ref('');
   const formModel = reactive<{
     imageTag: string;
+    releaseMode: 'all' | 'canary';
+    releaseStrategyID: string;
     replicas?: number;
     revision: string;
     revisionType: RevisionType;
@@ -272,6 +302,8 @@
     revisionType: 'branch',
     imageTag: '',
     updateContent: 'both',
+    releaseMode: 'all',
+    releaseStrategyID: '',
   });
   // 切换为“仅配置”时会保留之前的镜像来源，因此只有“镜像+配置”选择源码时才触发构建。
   const shouldBuildFromSource = computed(() => formModel.updateContent === 'both' && imageSource.value === 'code');
@@ -292,6 +324,32 @@
     fetchRecommendTag();
   }
   const { confirmBox, forceCleanDirtyTag, withPausedWatch } = useLeaveConfirm(formModel);
+
+  // ---------- 发布方式 / 发布策略：与「快速部署」共用 useReleaseStrategy ----------
+
+  const {
+    canaryDisabledReason,
+    existingStrategyNames,
+    handleChangeReleaseMode,
+    handleStrategyCreated,
+    releasePreview,
+    // 查看抽屉里克隆为空间策略成功后刷新列表，成功提示由查看抽屉展示
+    refresh: refreshReleaseStrategies,
+    resetToAllInstances,
+    selectedStrategy,
+    strategyHintText,
+    strategyLoading,
+    strategyOptions,
+  } = useReleaseStrategy({
+    envName: () => trpcDeployStore.curEnvItem?.name ?? '',
+    isAppModelApp: () => isAppModelAppType(appDetailStore.appType),
+    isFederationEnv,
+    // 切换为「仅配置」时会保留之前的镜像来源，因此只有「镜像+配置」选择源码时才算构建部署
+    isBuildFromSource: shouldBuildFromSource,
+    // 「仅镜像（原地重启）」走实例更新接口，同样不支持分批发布
+    isInplaceRestart: () => formModel.updateContent === 'image',
+    model: formModel,
+  });
 
   function isValidReplicas(value: number | string | undefined) {
     return Number.isInteger(Number(value)) && Number(value) >= 1;
@@ -330,6 +388,19 @@
     revision: '',
     status: 'running',
   });
+  /**
+   * 部署提交成功的顶部提示文案：
+   * - 一次更新全部：正在更新全部 N 个实例（实例数缺失时退回通用文案）；
+   * - 按策略分批：开始第 1 批灰度发布。
+   */
+  function buildSubmitSuccessMessage(): string {
+    if (formModel.releaseMode === RELEASE_MODE.CANARY) {
+      return t('部署任务已提交，开始第 1 批灰度发布');
+    }
+    const replicas = Number(formModel.replicas) || props.effectiveReplicas || 0;
+    return replicas > 0 ? t('部署任务已提交，正在更新全部 {0} 个实例', [replicas]) : t('操作成功');
+  }
+
   // 通过接口获取当前镜像 Tag
   async function fetchCurrentImageTag() {
     const deployAPIs = useDeployAPIs(appDetailStore.appType as DeployableAppType);
@@ -353,6 +424,8 @@
   async function handleChangeImageSource(source: ImageSourceType) {
     imageSource.value = source;
     if (source === 'code') {
+      // 构建部署不支持分批发布，切到源码构建时回落为一次更新全部
+      resetToAllInstances();
       defaultRevision.value = getDefaultBranch();
       formModel.revisionType = 'branch';
       await prepareBranchAfterMount(defaultRevision.value);
@@ -411,6 +484,10 @@
         });
       } else {
         // 已构建镜像 和 “仅配置”均直接部署；“仅配置”的镜像 Tag 已回填为当前部署版本。
+        // 已构建镜像 + 分批发布 + 已选策略时透传发布策略；构建部署接口无该字段。
+        if (formModel.releaseMode === RELEASE_MODE.CANARY && formModel.releaseStrategyID) {
+          params.releaseStrategyID = formModel.releaseStrategyID;
+        }
         await deployAPIs.createDeployDirectly!(params);
       }
       return true;
@@ -425,6 +502,16 @@
     const valid = await formRef.value?.validate().catch(() => false);
     if (!valid) return;
 
+    // 提交前按最新资格兜底校验：分批发布已失效（如主工作负载异步判定为 Deployment）时拦截，
+    // 不把后端必拒的 releaseStrategyID 透传出去。
+    if (formModel.releaseMode === RELEASE_MODE.CANARY && canaryDisabledReason.value) {
+      Message({ theme: 'error', message: canaryDisabledReason.value });
+      return;
+    }
+
+    // 灰度发布：提交请求结束后无论成败都进入发布详情，只有表单 / 资格校验不通过时留在侧栏。
+    const isCanaryRelease = formModel.releaseMode === RELEASE_MODE.CANARY;
+
     loading.value = true;
     try {
       let result = false;
@@ -432,6 +519,20 @@
         result = await handleConfigAndImage();
       } else {
         result = await handleImage();
+      }
+
+      if (isCanaryRelease) {
+        forceCleanDirtyTag(() => {
+          if (result) {
+            Message({
+              theme: 'success',
+              message: buildSubmitSuccessMessage(),
+            });
+          }
+          emit('update', false);
+          emit('viewReleaseDetail');
+        });
+        return;
       }
 
       if (!result) return;
@@ -445,7 +546,7 @@
         emit('update', shouldBuildFromSource.value);
         Message({
           theme: 'success',
-          message: t('操作成功'),
+          message: buildSubmitSuccessMessage(),
         });
       });
     } catch (error) {
@@ -484,6 +585,8 @@
   function handleUpdateContentChange(val: 'both' | 'config' | 'image') {
     // 仅配置时,使用当前镜像 Tag;其他情况清空让用户选择
     formModel.imageTag = val === 'config' ? curImageTag.value : '';
+    // 仅镜像（原地重启）不支持分批发布，切回时静默重置，避免触发禁用重置提示
+    if (val === 'image') resetToAllInstances();
   }
 
   watch(isShow, async val => {
@@ -494,6 +597,8 @@
         formModel.updateContent = 'both';
         formModel.imageTag = '';
         formModel.replicas = undefined;
+        formModel.releaseMode = 'all';
+        formModel.releaseStrategyID = '';
       });
       imageSource.value = 'image';
       showBuildLog.value = false;

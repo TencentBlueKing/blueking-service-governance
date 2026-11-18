@@ -92,7 +92,7 @@
               {{ $t('编辑') }}
             </Button>
             <Button
-              class="ml-[12px]"
+              class="ml-[16px]"
               text
               theme="primary"
               @click="handleDelete(row.rangeIndex)"

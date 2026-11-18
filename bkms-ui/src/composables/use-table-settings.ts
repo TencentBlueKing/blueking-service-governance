@@ -21,7 +21,7 @@ import type { ComputedRef, Ref } from 'vue';
 
 import { useUiStore } from '~/stores/ui';
 
-import type { ISettings } from 'node_modules/@blueking/table/typings/components/setting-column/Index.vue';
+import type { ISettings } from '@blueking/table';
 
 /** 表格列设置的个性化差异：相对默认勾选列，hidden=默认勾选但被取消，shown=默认未勾选但被勾选；size=用户选择的行高。 */
 interface TableSettingDiff {
