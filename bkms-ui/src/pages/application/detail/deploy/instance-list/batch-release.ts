@@ -351,10 +351,16 @@ export function canOperateBatchRelease(progress: BatchReleaseProgressOutputObj |
  */
 export function hasCanaryDeployRecord(latest: LatestDeployStatus | null): boolean {
   if (!latest) return false;
+  // build 阶段沿用实例列表口径：构建不删旧实例，旧的分批发布可能仍在运行。
+  if (latest.stage === 'build') {
+    return latest.inProgressReleaseMode === RELEASE_MODE.CANARY || latest.releaseMode === RELEASE_MODE.CANARY;
+  }
   // 移除部署后 latest-status 仍会带出历史上那条 canary 记录（hasDeployRecord=false），
   // 此时已没有任何批次或实例可控制，不能继续搭车轮询进度接口。
-  // build 阶段沿用实例列表口径：构建不删旧实例，旧的分批发布可能仍在运行。
-  if (latest.hasDeployRecord === false && latest.stage !== 'build') return false;
+  if (latest.hasDeployRecord === false) return false;
+  // 已卸载（uninstalled）同样没有任何可控制的批次：后端可能仍返回 hasDeployRecord=true
+  // 且 releaseMode=canary，若继续补查会让横幅错误展示旧进度、每轮轮询闪一次骨架屏。
+  if (latest.status === APP_DEPLOY_STATUS.UNINSTALLED) return false;
   if (latest.inProgressReleaseMode === RELEASE_MODE.CANARY) return true;
   // 进行中标记为空时，再看最新记录本身是否为分批发布，用于完成一次进度查询后清理状态。
   return latest.releaseMode === RELEASE_MODE.CANARY;

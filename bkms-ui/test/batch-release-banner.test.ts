@@ -489,6 +489,21 @@ describe('进度补查门控', () => {
     expect(shouldFetchBatchReleaseProgress(uninstalled, null)).toBe(false);
   });
 
+  it('已卸载（后端仍返回 hasDeployRecord=true 且 releaseMode=canary）时不补查', () => {
+    // 真实响应：移除部署后 latest-status 仍带 hasDeployRecord=true / releaseMode=canary / status=uninstalled，
+    // 若只按 hasDeployRecord 判定，会每 5s 空转进度接口并让横幅闪出骨架。
+    const uninstalled = buildLatest({
+      hasDeployRecord: true,
+      inProgressReleaseMode: '',
+      releaseMode: 'canary',
+      status: 'uninstalled',
+    });
+    expect(hasCanaryDeployRecord(uninstalled)).toBe(false);
+    expect(shouldFetchBatchReleaseProgress(uninstalled, null)).toBe(false);
+    // 进度缓存里还留着上一次的进行中快照时同样不应继续补查
+    expect(shouldFetchBatchReleaseProgress(uninstalled, buildProgress())).toBe(false);
+  });
+
   it('构建阶段 hasDeployRecord=false 时仍视为有部署记录（旧实例可能仍在运行）', () => {
     const building = buildLatest({ hasDeployRecord: false, stage: 'build' });
     expect(hasCanaryDeployRecord(building)).toBe(true);

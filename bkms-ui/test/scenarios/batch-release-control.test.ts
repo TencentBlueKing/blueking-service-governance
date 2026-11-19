@@ -47,6 +47,7 @@
  *       ⑭ 查看发布详情→横幅隐藏 + 面板呈现 ⑮ 面板平铺按钮复用确认链路 ⑯ 返回实例列表
  *       ⑰ 切换环境→旧横幅收起 + 骨架占位→新环境进度返回后展示新横幅 ⑱ 关闭后轮询补查→骨架不出现
  *       ⑲ 两个环境分别关闭→切回已关闭环境仍隐藏 + 记忆落 sessionStorage（localStorage 无残留）
+ *       ⑳ 移除部署完成（latest-status 仍带 hasDeployRecord=true）→ 停止轮询，无横幅 / 骨架
  * 变异验证：M1 环境切换不重置快照（deploy.vue watch 注销）→ ⑰ 红；M2 showSkeleton 退化为只看
  *           loading → ⑱ 红；M3 resetForSwitch 保留旧进度快照 → ⑰ 红；M4 关闭记忆回到「单值覆盖 +
  *           localStorage」旧实现 → ⑲ 红；逐轮还原后 21/21 全绿。
@@ -762,6 +763,40 @@ describe('实例列表分批发布控制：横幅与操作', () => {
     // 移除部署后不能继续搭车 latest-status 每 5s 轮询进度接口
     expect(mocks.progress).not.toHaveBeenCalled();
     expect(screen.queryByTestId('batch-release-banner')).toBeNull();
+  });
+
+  it('移除部署完成后（后端仍返回 hasDeployRecord=true 的历史 canary 记录）应停止轮询，不展示横幅与骨架', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      // 真实响应：移除部署后 latest-status 仍带 hasDeployRecord=true / releaseMode=canary / status=uninstalled。
+      // 后端延迟期间页面会继续轮询，若不在 uninstalled 收敛时停掉，会每 5s 空转 latest-status + batch-release，
+      // 并让尚未部署的空态页反复闪出横幅骨架。
+      mocks.latest.mockResolvedValue({
+        deployID: 'deploy-1',
+        hasDeployRecord: true,
+        inProgressReleaseMode: 'canary',
+        releaseMode: 'canary',
+        stage: 'deploy',
+        status: 'uninstalled',
+      });
+      mountPage();
+
+      // 完成信号：未部署空态渲染（说明 latest 已回填且页面进入未部署分支）
+      await screen.findByText('该环境尚未部署应用');
+      expect(mocks.latest).toHaveBeenCalledTimes(1);
+      // 已卸载后不再补查进度，横幅与骨架都不应出现
+      expect(mocks.progress).not.toHaveBeenCalled();
+      expect(screen.queryByTestId('batch-release-banner')).toBeNull();
+      expect(screen.queryByTestId('batch-release-skeleton')).toBeNull();
+
+      // 推进两个轮询周期：latest-status 与 batch-release 都不再空转
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(mocks.latest).toHaveBeenCalledTimes(1);
+      expect(mocks.progress).not.toHaveBeenCalled();
+      expect(screen.queryByTestId('batch-release-skeleton')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('当操作失败时，应提示失败并保留横幅当前状态', async () => {
