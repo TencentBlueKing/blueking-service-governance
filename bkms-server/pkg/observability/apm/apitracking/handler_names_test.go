@@ -25,7 +25,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/apitracking"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/apm/apitracking"
 )
 
 var _ = Describe("HandlerNames", func() {
@@ -37,7 +37,6 @@ var _ = Describe("HandlerNames", func() {
 		getApp     = modulePath + "/pkg/core/app/handler.(*Handler).GetApp-fm"
 		closure    = modulePath + "/pkg/core/app.Register.func1"
 		nested     = modulePath + "/pkg/core/app.Register.func1.2"
-		healthz    = modulePath + "/pkg/server/basic/handler.(*Handler).List-fm"
 	)
 
 	var names *apitracking.HandlerNames
@@ -51,9 +50,7 @@ var _ = Describe("HandlerNames", func() {
 			{Method: "GET", Path: basePath + "/v2/apps/:appID", Handler: getApp},
 			{Method: "GET", Path: basePath + "/closure", Handler: closure},
 			{Method: "GET", Path: basePath + "/nested", Handler: nested},
-			// basePath 以外，不参与重名判断
-			{Method: "GET", Path: "/healthz", Handler: healthz},
-		}, basePath)
+		})
 	})
 
 	It("uses the method name when it is unique", func() {

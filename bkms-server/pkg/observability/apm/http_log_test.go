@@ -16,7 +16,7 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
-package apitracking_test
+package apm
 
 import (
 	"bytes"
@@ -33,14 +33,16 @@ import (
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/tenant"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/apitracking"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/apm/apitracking"
 )
 
-type fakeHandler struct{}
+type trackingHandler struct{}
 
-func (fakeHandler) GetApp(c *gin.Context) { c.Status(http.StatusOK) }
+func (trackingHandler) GetApp(c *gin.Context) { c.Status(http.StatusOK) }
 
-var _ = Describe("Middleware", func() {
+func (trackingHandler) ValidateToken(c *gin.Context) { c.Status(http.StatusOK) }
+
+var _ = Describe("HTTPLogMiddleware api tracking", func() {
 	const (
 		basePath  = "/bkms/v1/bkms-server"
 		cliUA     = "bkms-cli/1.0.7 (linux/amd64)"
@@ -70,14 +72,17 @@ var _ = Describe("Middleware", func() {
 
 		gin.SetMode(gin.TestMode)
 		engine = gin.New()
+		names := apitracking.NewHandlerNames()
+		engine.Use(HTTPLogMiddleware(names))
+		engine.GET("/user_token/validate", trackingHandler{}.ValidateToken)
+
 		requiredAuth, err := auth.Required(auth.Config{AllowSetUserInHeader: true}, nil)
 		Expect(err).NotTo(HaveOccurred())
-		names := apitracking.NewHandlerNames()
 		v1 := engine.Group(basePath)
-		v1.Use(apitracking.Middleware(names), requiredAuth, tenant.Required(false, nil))
-		v1.GET("/apps/:appID", fakeHandler{}.GetApp)
+		v1.Use(requiredAuth, tenant.Required(false, nil))
+		v1.GET("/apps/:appID", trackingHandler{}.GetApp)
 		v1.GET("/closure", func(c *gin.Context) { c.Status(http.StatusNoContent) })
-		names.Load(context.Background(), engine.Routes(), v1.BasePath())
+		names.Load(context.Background(), engine.Routes())
 	})
 
 	AfterEach(func() {
@@ -103,7 +108,7 @@ var _ = Describe("Middleware", func() {
 		return w.Code
 	}
 
-	events := func() []map[string]any {
+	records := func() []map[string]any {
 		var result []map[string]any
 		for _, line := range strings.Split(strings.TrimSpace(logBuf.String()), "\n") {
 			if line == "" {
@@ -111,20 +116,19 @@ var _ = Describe("Middleware", func() {
 			}
 			record := map[string]any{}
 			Expect(json.Unmarshal([]byte(line), &record)).To(Succeed())
-			if record["msg"] == apitracking.EventName {
-				result = append(result, record)
-			}
+			result = append(result, record)
 		}
 		return result
 	}
 
-	It("logs an authenticated cli request", func() {
+	It("logs an authenticated cli request in a single access log record", func() {
 		code := serve(request{
 			path: basePath + "/apps/foo?keyword=x&access_token=secret", userAgent: cliUA, authed: true,
 		})
 		Expect(code).To(Equal(http.StatusOK))
 
-		Expect(events()).To(ConsistOf(SatisfyAll(
+		Expect(records()).To(ConsistOf(SatisfyAll(
+			HaveKeyWithValue("request", HaveKeyWithValue("method", http.MethodGet)),
 			HaveKeyWithValue("event", apitracking.EventName),
 			HaveKeyWithValue("schema", BeNumerically("==", 1)),
 			HaveKeyWithValue("client", apitracking.ClientCLI),
@@ -148,7 +152,7 @@ var _ = Describe("Middleware", func() {
 	It("logs an unauthenticated cli request", func() {
 		Expect(serve(request{path: basePath + "/apps/foo", userAgent: cliUA})).To(Equal(http.StatusUnauthorized))
 
-		Expect(events()).To(ConsistOf(SatisfyAll(
+		Expect(records()).To(ConsistOf(SatisfyAll(
 			HaveKeyWithValue("client", apitracking.ClientCLI),
 			HaveKeyWithValue("username", ""),
 			HaveKeyWithValue("tenant_id", ""),
@@ -157,12 +161,22 @@ var _ = Describe("Middleware", func() {
 		)))
 	})
 
+	It("logs a cli request outside the v1 group", func() {
+		Expect(serve(request{path: "/user_token/validate", userAgent: cliUA})).To(Equal(http.StatusOK))
+
+		Expect(records()).To(ConsistOf(SatisfyAll(
+			HaveKeyWithValue("client", apitracking.ClientCLI),
+			HaveKeyWithValue("handler", "ValidateToken"),
+			HaveKeyWithValue("username", ""),
+		)))
+	})
+
 	It("logs a legacy cli request", func() {
 		ua := "go-resty/2.17.0 (https://github.com/go-resty/resty)"
 		Expect(serve(request{path: basePath + "/apps/foo", userAgent: ua, authorized: "Bearer t", authed: true})).
 			To(Equal(http.StatusOK))
 
-		Expect(events()).To(ConsistOf(SatisfyAll(
+		Expect(records()).To(ConsistOf(SatisfyAll(
 			HaveKeyWithValue("client", apitracking.ClientCLI),
 			HaveKeyWithValue("cli_version", apitracking.VersionLegacy),
 			HaveKeyWithValue("os", ""),
@@ -175,7 +189,7 @@ var _ = Describe("Middleware", func() {
 		})
 		Expect(code).To(Equal(http.StatusOK))
 
-		Expect(events()).To(ConsistOf(SatisfyAll(
+		Expect(records()).To(ConsistOf(SatisfyAll(
 			HaveKeyWithValue("client", apitracking.ClientWeb),
 			HaveKeyWithValue("cli_version", ""),
 			HaveKeyWithValue("device_id", ""),
@@ -190,26 +204,26 @@ var _ = Describe("Middleware", func() {
 		})
 		Expect(code).To(Equal(http.StatusOK))
 
-		Expect(events()).To(ConsistOf(HaveKeyWithValue("client", apitracking.ClientToken)))
+		Expect(records()).To(ConsistOf(HaveKeyWithValue("client", apitracking.ClientToken)))
 	})
 
 	It("logs an unauthenticated request of unknown client", func() {
 		Expect(serve(request{path: basePath + "/apps/foo", userAgent: browserUA})).To(Equal(http.StatusUnauthorized))
 
-		Expect(events()).To(ConsistOf(HaveKeyWithValue("client", apitracking.ClientUnknown)))
+		Expect(records()).To(ConsistOf(HaveKeyWithValue("client", apitracking.ClientUnknown)))
 	})
 
 	It("falls back to method and route for closure handlers", func() {
 		Expect(serve(request{path: basePath + "/closure", userAgent: cliUA, authed: true})).
 			To(Equal(http.StatusNoContent))
 
-		Expect(events()).To(ConsistOf(HaveKeyWithValue("handler", "GET "+basePath+"/closure")))
+		Expect(records()).To(ConsistOf(HaveKeyWithValue("handler", "GET "+basePath+"/closure")))
 	})
 
-	It("does not log unmatched routes", func() {
+	It("logs unmatched routes without tracking fields", func() {
 		Expect(serve(request{path: basePath + "/not-found", userAgent: cliUA, authed: true})).
 			To(Equal(http.StatusNotFound))
 
-		Expect(events()).To(BeEmpty())
+		Expect(records()).To(ConsistOf(Not(HaveKey("event"))))
 	})
 })

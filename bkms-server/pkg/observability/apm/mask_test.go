@@ -28,6 +28,8 @@ import (
 	"github.com/gin-gonic/gin"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/apm/apitracking"
 )
 
 var _ = Describe("HTTPLogMiddleware", func() {
@@ -49,7 +51,7 @@ var _ = Describe("HTTPLogMiddleware", func() {
 	It("masks sensitive query and referer parameters", func() {
 		gin.SetMode(gin.TestMode)
 		engine := gin.New()
-		engine.Use(HTTPLogMiddleware())
+		engine.Use(HTTPLogMiddleware(apitracking.NewHandlerNames()))
 		var gotToken string
 		engine.GET("/user_token/validate", func(c *gin.Context) {
 			gotToken = c.Query("access_token")

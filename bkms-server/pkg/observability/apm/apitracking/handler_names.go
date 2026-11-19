@@ -44,12 +44,12 @@ func NewHandlerNames() *HandlerNames {
 	return &HandlerNames{}
 }
 
-// Load 由 basePath 下的路由构建映射，须在路由注册完成后调用
-func (h *HandlerNames) Load(ctx context.Context, routes gin.RoutesInfo, basePath string) {
+// Load 由已注册的路由构建映射，须在路由注册完成后调用
+func (h *HandlerNames) Load(ctx context.Context, routes gin.RoutesInfo) {
 	byMethod := map[string][]string{}
 	seen := map[string]bool{}
 	for _, route := range routes {
-		if !strings.HasPrefix(route.Path, basePath) || seen[route.Handler] {
+		if seen[route.Handler] {
 			continue
 		}
 		seen[route.Handler] = true
@@ -67,7 +67,7 @@ func (h *HandlerNames) Load(ctx context.Context, routes gin.RoutesInfo, basePath
 		for _, fullName := range fullNames {
 			names[fullName] = qualifiedName(fullName)
 		}
-		log.WarnAttrs(ctx, "cli usage: duplicate handler method name, use qualified names instead",
+		log.WarnAttrs(ctx, "api tracking: duplicate handler method name, use qualified names instead",
 			slog.String("method_name", name), slog.Any("handlers", fullNames))
 	}
 	h.names.Store(&names)

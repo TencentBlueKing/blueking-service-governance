@@ -24,7 +24,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/utils/urlmask"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/tenant"
@@ -43,45 +42,37 @@ type userInfo struct {
 	cred     auth.UserCredential
 }
 
-// Middleware 为每个请求输出事件日志。
-// 须挂在认证之前：c.Next() 返回后，c.Request 已被认证中间件替换为带用户信息的 ctx，
-// 认证失败的请求也能记录。
-func Middleware(names *HandlerNames) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		cli, isCLI := IdentifyCLI(c.Request)
-
-		c.Next()
-
-		route := c.FullPath()
-		if route == "" {
-			return
-		}
-		ctx := c.Request.Context()
-		user := requestUser(ctx)
-		client := ClientCLI
-		if !isCLI {
-			client = clientType(user.cred)
-		}
-		req := c.Request
-		log.InfoAttrs(ctx, EventName,
-			slog.String("event", EventName),
-			slog.Int("schema", schemaVersion),
-			slog.String("client", client),
-			slog.String("cli_version", cli.Version),
-			slog.String("os", cli.OS),
-			slog.String("arch", cli.Arch),
-			slog.String("device_id", cli.DeviceID),
-			slog.String("user_agent", truncate(req.UserAgent(), maxUserAgentLen)),
-			slog.String("username", user.username),
-			slog.String("tenant_id", user.tenantID),
-			slog.String("client_ip", c.ClientIP()),
-			slog.String("handler", names.Lookup(c.HandlerName(), req.Method, route)),
-			slog.String("method", req.Method),
-			slog.String("route", route),
-			slog.String("path", req.URL.Path),
-			slog.String("query", urlmask.Query(req.URL.RawQuery)),
-			slog.Int("status", c.Writer.Status()),
-		)
+// Attrs 返回追踪字段，未匹配路由时为 nil；须在 c.Next() 后调用
+func Attrs(c *gin.Context, names *HandlerNames) []slog.Attr {
+	route := c.FullPath()
+	if route == "" {
+		return nil
+	}
+	req := c.Request
+	cli, isCLI := IdentifyCLI(req)
+	user := requestUser(req.Context())
+	client := ClientCLI
+	if !isCLI {
+		client = clientType(user.cred)
+	}
+	return []slog.Attr{
+		slog.String("event", EventName),
+		slog.Int("schema", schemaVersion),
+		slog.String("client", client),
+		slog.String("cli_version", cli.Version),
+		slog.String("os", cli.OS),
+		slog.String("arch", cli.Arch),
+		slog.String("device_id", cli.DeviceID),
+		slog.String("user_agent", truncate(req.UserAgent(), maxUserAgentLen)),
+		slog.String("username", user.username),
+		slog.String("tenant_id", user.tenantID),
+		slog.String("client_ip", c.ClientIP()),
+		slog.String("handler", names.Lookup(c.HandlerName(), req.Method, route)),
+		slog.String("method", req.Method),
+		slog.String("route", route),
+		slog.String("path", req.URL.Path),
+		slog.String("query", urlmask.Query(req.URL.RawQuery)),
+		slog.Int("status", c.Writer.Status()),
 	}
 }
 
