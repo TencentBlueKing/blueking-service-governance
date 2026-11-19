@@ -65,6 +65,7 @@
       <SearchSelect
         v-model="searchValue"
         class="w-full bg-[#fff]"
+        v-bind="searchSelectBind"
         :data="versionSearchData"
         :placeholder="
           createPlaceholder({
@@ -251,7 +252,7 @@
 </template>
 
 <script setup lang="ts">
-  import { computed, nextTick, ref, shallowRef, watch } from 'vue';
+  import { computed, nextTick, ref, watch } from 'vue';
 
   import { Table, TableColumn } from '@blueking/table';
   import { Button, Divider, PopConfirm, Popover, Radio, SearchSelect, Sideslider, Tag } from 'bkui-vue';
@@ -266,6 +267,7 @@
   import usePageConf from '~/composables/use-page';
   import { useSearchPlaceholder } from '~/composables/use-search-placeholder';
   import useTableEmpty from '~/composables/use-table-empty';
+  import useUserSearch from '~/composables/use-user-search';
   import { useAppDetail } from '~/stores/app-detail';
 
   import RollbackConfirmDialog from './components/rollback-confirm-dialog.vue';
@@ -347,12 +349,17 @@
   /** 搜索值 */
   const searchValue = ref<ISearchValue[]>([]);
 
-  /** 搜索配置 */
-  const versionSearchData = shallowRef([
-    { name: t('版本号'), id: 'version', multiple: false, placeholder: t('请输入版本号') },
-    { name: t('版本描述'), id: 'description', multiple: false, placeholder: t('请输入版本描述') },
-    { name: t('创建人'), id: 'creator', multiple: false, placeholder: t('请输入创建人') },
-  ]);
+  // 多租户环境下创建人支持远程人员搜索（配置装饰与 hooks 由 composable 统一提供）
+  const { decorateSearchData, searchSelectBind } = useUserSearch('creator');
+
+  /** 搜索配置（创建人项的远程/本地行为由 decorateSearchData 按多租户标记） */
+  const versionSearchData = computed(() =>
+    decorateSearchData([
+      { name: t('版本号'), id: 'version', multiple: false, placeholder: t('请输入版本号') },
+      { name: t('版本描述'), id: 'description', multiple: false, placeholder: t('请输入版本描述') },
+      { name: t('创建人'), id: 'creator', multiple: false, placeholder: t('请输入创建人') },
+    ]),
+  );
 
   /** 版本列表加载状态 */
   const versionListLoading = ref(false);

@@ -47,6 +47,7 @@
         <SearchSelect
           v-model="searchValue"
           class="w-[520px] bg-[#fff] relative z-[100]"
+          v-bind="searchSelectBind"
           :data="searchSelectData"
           :placeholder="
             createPlaceholder({
@@ -231,6 +232,7 @@
   import { useSearchPlaceholder } from '~/composables/use-search-placeholder';
   import useTableEmpty from '~/composables/use-table-empty';
   import useDynamicsHeight from '~/composables/use-table-height';
+  import useUserSearch from '~/composables/use-user-search';
   import { useSpaceStore } from '~/stores/space';
 
   import type { DatePickerValueType } from 'bkui-vue/lib/date-picker/interface';
@@ -247,6 +249,9 @@
   const { createPlaceholder } = useSearchPlaceholder();
   const spaceStore = useSpaceStore();
   const { maxHeight } = useDynamicsHeight(96, ['.header-right', '.container-header']);
+
+  // 多租户环境下操作人支持远程人员搜索（配置装饰与 hooks 由 composable 统一提供）
+  const { decorateSearchData, searchSelectBind } = useUserSearch();
 
   const operationFilters = ref<OperationRecordFilterOptionsOutputObj>();
   // 部署列表
@@ -265,37 +270,36 @@
   const isShow = ref(false);
   // 搜索条件值
   const searchValue = ref<ISearchValue[]>([]);
-  // 搜索条件配置
-  const searchSelectData: ComputedRef<ISearchItem[]> = computed(() => [
-    {
-      name: t('操作人'),
-      id: 'username',
-    },
-    {
-      name: t('资源类型'),
-      id: 'resourceType',
-      children: mapKeys(operationFilters.value?.resourceTypes || [], {
-        name: 'displayName',
-        id: 'value',
-      }) as unknown as ICommonItem[],
-    },
-    {
-      name: t('操作类型'),
-      id: 'operationType',
-      children: mapKeys(operationFilters.value?.operationTypes || [], {
-        name: 'displayName',
-        id: 'value',
-      }) as unknown as ICommonItem[],
-    },
-    {
-      name: t('操作结果'),
-      id: 'result',
-      children: mapKeys(operationFilters.value?.operationResults || [], {
-        name: 'displayName',
-        id: 'value',
-      }) as unknown as ICommonItem[],
-    },
-  ]);
+  // 搜索条件配置（操作人项的远程/本地行为由 decorateSearchData 按多租户标记）
+  const searchSelectData: ComputedRef<ISearchItem[]> = computed(() =>
+    decorateSearchData([
+      { name: t('操作人'), id: 'username' },
+      {
+        name: t('资源类型'),
+        id: 'resourceType',
+        children: mapKeys(operationFilters.value?.resourceTypes || [], {
+          name: 'displayName',
+          id: 'value',
+        }) as unknown as ICommonItem[],
+      },
+      {
+        name: t('操作类型'),
+        id: 'operationType',
+        children: mapKeys(operationFilters.value?.operationTypes || [], {
+          name: 'displayName',
+          id: 'value',
+        }) as unknown as ICommonItem[],
+      },
+      {
+        name: t('操作结果'),
+        id: 'result',
+        children: mapKeys(operationFilters.value?.operationResults || [], {
+          name: 'displayName',
+          id: 'value',
+        }) as unknown as ICommonItem[],
+      },
+    ]),
+  );
 
   const { filterOptions, handleFilterChange } = useSearchFilter(searchSelectData, searchValue, [
     'resourceType',
@@ -374,7 +378,15 @@
     operationFilters.value = await OperationAuditService.listOperationRecordFilterOptions();
   }
 
-  watch(searchValue, handleListRecord, { deep: true });
+  watch(
+    searchValue,
+    () => {
+      // 筛选条件变化后重置分页到第一页（覆盖新增/删除/清空场景）
+      pagination.value.current = 1;
+      handleListRecord();
+    },
+    { deep: true },
+  );
 
   onMounted(() => {
     handleListRecord();

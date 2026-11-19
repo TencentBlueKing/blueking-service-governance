@@ -30,6 +30,8 @@ const mocks = vi.hoisted(() => ({ listVersions: vi.fn() }));
 vi.mock('vue-i18n', async () => (await import('../helpers/mock-i18n')).i18nMockFactory());
 vi.mock('@blueking/table', async () => (await import('../helpers/mock-table')).tableMockFactory());
 vi.mock('~/stores/app-detail', () => ({ useAppDetail: () => ({ appID: 'app-test' }) }));
+// version-list-sideslider 通过 useUserSearch 读取 user store（多租户判断），mock 掉以避免依赖 Pinia
+vi.mock('~/stores/user', () => ({ useUserStore: () => ({ tenantId: '' }) }));
 vi.mock('~/api/modules/v1', () => ({
   AppConfigFilesService: { listAppConfigFileVersions: mocks.listVersions },
 }));
