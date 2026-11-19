@@ -29,6 +29,7 @@
     "@blueking/bk-user-selector": "^0.1.9",
     "@blueking/date-picker": "^3.0.7",
     "@blueking/ediatable": "0.0.1-beta.32",
+    "@blueking/login-userinfo": "^0.0.21",
     "@blueking/monitor-vue3-components": "1.0.7-beta.1",
     "@blueking/notice-component": "^2.0.7",
     "@blueking/platform-config": "^1.0.5",
