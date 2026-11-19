@@ -18,7 +18,7 @@
 /**
  * 场景级测试：部署表单发布策略选择（ROUTES 未收录，本头即场景说明）
  *
- * 覆盖十六条用户可感知路径 → V = 16：
+ * 覆盖十七条用户可感知路径 → V = 17：
  *   1. 默认「一次更新全部」提交：部署参数不带 releaseStrategyID
  *   2. 切「按策略分批更新」：展开策略下拉，下拉底部有「新建策略」、右侧有「查看」
  *   3. 分批发布未选策略提交：表单校验拦截，不发起部署
@@ -35,12 +35,13 @@
  *   14. 策略末批未到全量：提示收尾为「最后自动全量」，预览不补齐全量批、底部提示剩余实例自动更新
  *   15. 两批策略（25% → 100%）：提示保留首批灰度阶段，不误判为单批全量
  *   16. 主工作负载资格检查完成前：分批发布禁用；返回 Deployment 后仍禁用
+ *   17. 首次部署（无记录 / 只有构建记录 / 已下线）：分批发布禁用，仍可一次更新全部
  *
  * stub/mock：
  *   - bkui-vue 真实渲染（Form/Button/Select/Input/Tag）；嵌套的新建策略抽屉同样真实渲染
  *   - ReleaseStrategiesService.listReleaseStrategies → harness 假数据（4 批：1 个 → 25% 暂停 600s → 50% 永久暂停 → 100%）
  *   - ReleaseStrategiesService.createReleaseStrategy → harness 返回新建结果（含 id，供「自动选中」断言）
- *   - use-deploy 的 useDeployAPIs → harness.createDeployDirectly / buildAndCreateDeploy / listDeployRecords（断言部署参数与主工作负载）
+ *   - use-deploy 的 useDeployAPIs → harness.createDeployDirectly / buildAndCreateDeploy / listDeployRecords（断言部署参数与主工作负载）/ listLatestDeployRecords（首次部署判定）
  *   - use-deploy-precheck / use-app-repo-ref-select / use-recommend-tag / use-app-visible-envs / use-leave-confirm / stores → 契约 stub
  *   - vue-router → mock-router 工厂（业务已不直接跳页，保留路由依赖兜底）
  *   - ImageSelect → 可填值 stub（真实组件依赖镜像列表接口）；CodeRevisionField 为全局组件 → 注册空 stub
@@ -70,6 +71,8 @@ const harness = vi.hoisted(() => ({
   buildAndCreateDeploy: vi.fn().mockResolvedValue({}),
   // 最近一条部署记录：默认无记录（主工作负载未知）
   listDeployRecords: vi.fn().mockResolvedValue({ count: 0, results: [] }),
+  // 最新部署状态：默认已有部署记录（非首次部署）
+  listLatestDeployRecords: vi.fn().mockResolvedValue({ hasDeployRecord: true, status: 'deployed' }),
   listReleaseStrategies: vi.fn(),
   createReleaseStrategy: vi.fn(),
 }));
@@ -169,6 +172,7 @@ vi.mock('~/pages/application/detail/deploy/use-deploy', async importOriginal => 
     createDeployDirectly: harness.createDeployDirectly,
     buildAndCreateDeploy: harness.buildAndCreateDeploy,
     listDeployRecords: harness.listDeployRecords,
+    listLatestDeployRecords: harness.listLatestDeployRecords,
   }),
 }));
 
@@ -368,6 +372,7 @@ beforeEach(() => {
   appState.appType = 'trpc';
   harness.listReleaseStrategies.mockResolvedValue(strategyList);
   harness.listDeployRecords.mockResolvedValue({ count: 0, results: [] });
+  harness.listLatestDeployRecords.mockResolvedValue({ hasDeployRecord: true, status: 'deployed' });
 });
 
 describe('部署表单：发布策略选择', () => {
@@ -602,6 +607,32 @@ describe('部署表单：发布策略选择', () => {
     // 可正常展开策略下拉
     await enableCanaryMode();
     expect(await screen.findByPlaceholderText('请选择发布策略')).toBeInTheDocument();
+  });
+
+  it.each([
+    ['无部署 / 构建记录（data 为 null）', null],
+    ['只有构建记录（hasDeployRecord=false）', { hasDeployRecord: false, status: 'failed' }],
+    ['工作负载已下线（status=uninstalled）', { hasDeployRecord: true, status: 'uninstalled' }],
+  ])('当目标环境为首次部署（%s）时，应禁用「按策略分批更新」', async (_name, latest) => {
+    harness.listLatestDeployRecords.mockResolvedValue(latest);
+    await renderForm();
+    await fillBaseForm();
+
+    // 首部署检查按环境 / 泳道查询，空泳道传空串
+    await waitFor(() => expect(harness.listLatestDeployRecords).toHaveBeenCalled());
+    expect(harness.listLatestDeployRecords).toHaveBeenCalledWith({
+      appID: 'app-a',
+      envName: 'stag',
+      trafficLaneName: '',
+    });
+    // 等检查结果落地（promise 微任务），确认不是仅因「检查中」而禁用
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(screen.getByRole('button', { name: '按策略分批更新' })).toBeDisabled();
+
+    // 一次更新全部仍可用，提交链路不受影响
+    await submitForm();
+    await waitFor(() => expect(harness.createDeployDirectly).toHaveBeenCalledTimes(1));
+    expect(harness.createDeployDirectly.mock.calls[0][0]).not.toHaveProperty('releaseStrategyID');
   });
 
   it('当策略为两批（25% → 100%）时，提示与预览应保留首批灰度阶段，不误判为单批全量', async () => {

@@ -20,6 +20,7 @@ import {
   type CanaryEligibilityInput,
   buildStrategyOptions,
   formatStrategyOptionLabel,
+  isFirstDeployFromLatestStatus,
   resolveCanaryBlockReason,
 } from '~/pages/application/detail/deploy/release-strategy';
 
@@ -29,6 +30,7 @@ function eligible(overrides: Partial<CanaryEligibilityInput> = {}): CanaryEligib
     isAppModelApp: true,
     isBuildFromSource: false,
     isFederationEnv: false,
+    isFirstDeploy: false,
     isInplaceRestart: false,
     mainWorkloadKind: 'GameDeployment',
     workloadKindLoading: false,
@@ -49,6 +51,7 @@ describe('分批发布准入规则', () => {
     ['helm 等非应用模型应用', { isAppModelApp: false }, 'notAppModelApp'],
     ['联邦集群环境', { isFederationEnv: true }, 'federationEnv'],
     ['资格检查进行中', { workloadKindLoading: true }, 'checkingWorkloadKind'],
+    ['首次部署', { isFirstDeploy: true }, 'firstDeploy'],
     ['主工作负载为 Deployment', { mainWorkloadKind: 'Deployment' }, 'deploymentWorkload'],
     ['原地重启（仅镜像）', { isInplaceRestart: true }, 'inplaceRestart'],
     ['从源码构建部署', { isBuildFromSource: true }, 'buildFromSource'],
@@ -67,10 +70,35 @@ describe('分批发布准入规则', () => {
     expect(resolveCanaryBlockReason(eligible({ isFederationEnv: true, isBuildFromSource: true }))).toBe(
       'federationEnv',
     );
+    // 资格检查未完成时无法判断是否首次部署，检查中优先于首次部署
+    expect(resolveCanaryBlockReason(eligible({ workloadKindLoading: true, isFirstDeploy: true }))).toBe(
+      'checkingWorkloadKind',
+    );
+    // 首次部署先于主工作负载判定：此时工作负载尚未创建，判定结果没有参考意义
+    expect(resolveCanaryBlockReason(eligible({ isFirstDeploy: true, mainWorkloadKind: 'Deployment' }))).toBe(
+      'firstDeploy',
+    );
     // 原地重启先于构建部署（两者互斥，但优先级需稳定）
     expect(resolveCanaryBlockReason(eligible({ isInplaceRestart: true, isBuildFromSource: true }))).toBe(
       'inplaceRestart',
     );
+  });
+});
+
+describe('首次部署判定', () => {
+  it.each([
+    ['最新状态为空（data === null），既无部署也无构建记录', null, true],
+    ['只有构建记录（hasDeployRecord === false）', { hasDeployRecord: false, status: 'failed' }, true],
+    ['已下线（status === uninstalled）', { hasDeployRecord: true, status: 'uninstalled' }, true],
+    ['已部署', { hasDeployRecord: true, status: 'deployed' }, false],
+    ['部署失败但存在部署记录（可基于旧版本灰度）', { hasDeployRecord: true, status: 'failed' }, false],
+    ['未标注 hasDeployRecord 的历史记录按已有部署处理', { status: 'deployed' }, false],
+  ])('%s：%s，首次部署应为 %s', (_name, latest, expected) => {
+    expect(isFirstDeployFromLatestStatus(latest)).toBe(expected);
+  });
+
+  it('完全拿不到状态（undefined）时按首次部署处理，由调用方决定是否拦截', () => {
+    expect(isFirstDeployFromLatestStatus(undefined)).toBe(true);
   });
 });
 
