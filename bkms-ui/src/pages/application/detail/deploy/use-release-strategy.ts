@@ -32,6 +32,7 @@ import {
   type ReleaseMode,
   type ReleaseStrategyOption,
   buildStrategyOptions,
+  isFirstDeployFromLatestStatus,
   resolveCanaryBlockReason,
 } from './release-strategy';
 import { type DeployableAppType, useDeployAPIs } from './use-deploy';
@@ -44,6 +45,7 @@ const CANARY_BLOCK_MESSAGES: Record<Exclude<CanaryBlockReason, ''>, string> = {
   notAppModelApp: '仅应用模型应用支持分批发布',
   federationEnv: '联邦集群环境暂不支持分批发布',
   checkingWorkloadKind: '正在检查分批发布资格，请稍候',
+  firstDeploy: '首次部署暂不支持分批发布',
   deploymentWorkload: '仅主工作负载为 GameDeployment 的应用支持分批发布',
   inplaceRestart: '原地重启暂不支持分批发布',
   buildFromSource: '构建部署暂不支持分批发布',
@@ -68,6 +70,8 @@ export interface UseReleaseStrategyOptions {
   isInplaceRestart?: MaybeRefOrGetter<boolean>;
   /** 表单模型：直接读写 releaseMode / releaseStrategyID / replicas */
   model: ReleaseStrategyModel;
+  /** 目标泳道名；不传表示不使用泳道 */
+  trafficLaneName?: MaybeRefOrGetter<string | undefined>;
 }
 
 /**
@@ -85,6 +89,14 @@ export function useReleaseStrategy(options: UseReleaseStrategyOptions) {
   const mainWorkloadKind = ref('');
   /** 主工作负载资格检查是否进行中：检查完成前禁用分批发布，避免选择后再被回退 */
   const workloadKindLoading = ref(false);
+  /** 环境切换时丢弃上一轮的主工作负载检查结果 */
+  let workloadKindToken = 0;
+  /** 目标环境 / 泳道是否首次部署：首次部署没有存量实例可灰度，不允许选择分批发布 */
+  const isFirstDeploy = ref(false);
+  /** 首次部署检查是否进行中：与主工作负载检查共用「资格检查中」禁用态 */
+  const deployStatusLoading = ref(false);
+  /** 环境切换时丢弃上一轮的首次部署检查结果 */
+  let deployStatusToken = 0;
 
   // 工作空间发布策略列表（含平台内置策略，isBuiltin 标识）
   const releaseStrategies = ref<ReleaseStrategyOutputObj[]>([]);
@@ -96,8 +108,10 @@ export function useReleaseStrategy(options: UseReleaseStrategyOptions) {
       isFederationEnv: Boolean(toValue(options.isFederationEnv)),
       isInplaceRestart: Boolean(toValue(options.isInplaceRestart ?? false)),
       isBuildFromSource: Boolean(toValue(options.isBuildFromSource)),
+      isFirstDeploy: isFirstDeploy.value,
       mainWorkloadKind: mainWorkloadKind.value,
-      workloadKindLoading: workloadKindLoading.value,
+      // 两个资格检查任一未完成都视为「检查中」，避免先选分批再被回退
+      workloadKindLoading: workloadKindLoading.value || deployStatusLoading.value,
     }),
   );
 
@@ -148,6 +162,7 @@ export function useReleaseStrategy(options: UseReleaseStrategyOptions) {
   async function fetchMainWorkloadKind() {
     const envName = toValue(options.envName);
     if (!toValue(options.isAppModelApp) || !envName) return;
+    const token = ++workloadKindToken;
     workloadKindLoading.value = true;
     try {
       const deployAPIs = useDeployAPIs(appDetailStore.appType as DeployableAppType);
@@ -159,9 +174,47 @@ export function useReleaseStrategy(options: UseReleaseStrategyOptions) {
           pageSize: 1,
         })
         .catch(() => ({ count: 0, results: [] as AppModelDeployRecordOutputObj[] }));
+      // 环境切换后旧请求可能晚到，不能覆盖新环境的主工作负载类型
+      if (token !== workloadKindToken) return;
       mainWorkloadKind.value = res?.results?.[0]?.workloadKind ?? '';
     } finally {
-      workloadKindLoading.value = false;
+      if (token === workloadKindToken) workloadKindLoading.value = false;
+    }
+  }
+
+  /**
+   * 检查目标环境 / 泳道是否首次部署。
+   *
+   * 用最新部署状态接口判断：无记录（data 为 null）、只有构建记录（hasDeployRecord=false）、
+   * 已下线（status=uninstalled）三种情况都按首次部署处理。首次部署没有存量实例可灰度，
+   * 分批更新按钮需置灰。
+   *
+   * 请求失败不拦截：无法确认时交给后端兜底，避免接口抖动把合法入口一起禁用。
+   */
+  async function fetchDeployStatus() {
+    const envName = toValue(options.envName);
+    if (!toValue(options.isAppModelApp) || !envName) return;
+    const token = ++deployStatusToken;
+    deployStatusLoading.value = true;
+    try {
+      const deployAPIs = useDeployAPIs(appDetailStore.appType as DeployableAppType);
+      // Helm 等应用类型没有该接口（分批发布本身已由 isAppModelApp 拦截），保持可用交由后端校验
+      if (!deployAPIs.listLatestDeployRecords) {
+        isFirstDeploy.value = false;
+        return;
+      }
+      const latest = await deployAPIs.listLatestDeployRecords({
+        appID: appDetailStore.appID,
+        envName,
+        trafficLaneName: toValue(options.trafficLaneName) || '',
+      });
+      if (token !== deployStatusToken) return;
+      isFirstDeploy.value = isFirstDeployFromLatestStatus(latest);
+    } catch (error) {
+      console.error(error);
+      if (token === deployStatusToken) isFirstDeploy.value = false;
+    } finally {
+      if (token === deployStatusToken) deployStatusLoading.value = false;
     }
   }
 
@@ -209,9 +262,19 @@ export function useReleaseStrategy(options: UseReleaseStrategyOptions) {
     Message({ theme: 'warning', message: t('当前环境不支持分批发布，已重置为一次更新全部实例') });
   });
 
+  /** 两项准入资格检查：主工作负载类型 + 是否首次部署 */
+  function fetchReleaseEligibility() {
+    fetchMainWorkloadKind();
+    fetchDeployStatus();
+  }
+
+  // 快速部署侧栏允许在侧栏内切换目标环境，环境变化后必须重跑资格检查，
+  // 否则会把上一个环境（如已部署环境）的判定套用到新的首次部署环境上。
+  watch(() => toValue(options.envName), fetchReleaseEligibility);
+
   onMounted(() => {
     refresh();
-    fetchMainWorkloadKind();
+    fetchReleaseEligibility();
   });
 
   return {

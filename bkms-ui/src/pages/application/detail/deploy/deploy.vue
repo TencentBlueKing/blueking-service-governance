@@ -457,7 +457,11 @@
   import CreateFeatureEnv from './create-feature-env.vue';
   import DeployEvent from './deploy-event.vue';
   import DeployHistory from './deploy-history.vue';
-  import { resolveInstanceListHasDeployRecord, shouldResetDeployStatusOnEnvChange } from './deploy-status-rules';
+  import {
+    resolveInstanceListHasDeployRecord,
+    shouldContinueDeployStatusPolling,
+    shouldResetDeployStatusOnEnvChange,
+  } from './deploy-status-rules';
   import EnvVarPrecheckDialog from './env-var-precheck-dialog.vue';
   import FeatureEnv from './feature-env.vue';
   import BatchReleaseBanner from './instance-list/components/batch-release-banner.vue';
@@ -685,6 +689,7 @@
     busyReason: batchReleaseBusyReason,
     handleAction: handleBatchReleaseAction,
     handleClose: handleBatchReleaseClose,
+    reset: resetBatchRelease,
     resetForSwitch: resetBatchReleaseForSwitch,
     showSkeleton: batchReleaseShowSkeleton,
     pendingAction: batchReleasePendingAction,
@@ -987,6 +992,9 @@
       // 分批发布进行中时补查进度，部署状态展示「灰度发布中 · 第 N/M 批」，横幅展示批次控制；
       // 非分批发布清空进度，已结束的记录仍需补查一次以展示「已完成 / 失败」结果。
       await refreshBatchRelease(nextLatestDeployStatus);
+      // 移除部署完成后环境已没有任何可推进的状态，停止 latest-status 轮询，
+      // 避免空态页持续空转请求（分批发布补查也会跟着停掉，骨架屏不再反复闪烁）。
+      if (!shouldContinueDeployStatusPolling(nextLatestDeployStatus)) stop();
     } catch (err) {
       // 旧环境销毁后返回的 404 不应停止或污染新环境轮询。
       if (appID !== appDetailStore.appID || envName !== trpcDeployStore.curEnvItem?.name) return;
@@ -1026,6 +1034,17 @@
     envStore.updateSelectedEnvs(items.map(item => item?.name ?? ''));
   }
 
+  /**
+   * 恢复 latest-status 轮询。
+   * 已卸载环境会主动停止轮询；本页重新发起部署后状态不再是 uninstalled，需要重新开启以跟踪进度。
+   */
+  function resumeDeployStatusPolling() {
+    if (timer.value) return;
+    if (!appDetailStore.appID || !trpcDeployStore.curEnvItem?.name) return;
+    if (!shouldContinueDeployStatusPolling(latestDeployStatus.value)) return;
+    start();
+  }
+
   const deployOverviewRef = ref<InstanceType<typeof DeployOverview>>();
 
   /** 环境选择器刷新部署状态后，同步检查总览表格是否需要重新拉取。 */
@@ -1059,6 +1078,8 @@
     }
     // 首次部署从实例页发起，成功后需同步更新顶部环境选择器的部署状态图标和“仅显示已部署环境”筛选结果。
     await Promise.all([handleGetLatestDeployStatus(), refreshEnvSelectPanel()]);
+    // 从未部署环境发起部署：此前为省掉空转已停止轮询，状态不再 uninstalled 后需要恢复。
+    resumeDeployStatusPolling();
     fetchFeatureEnvList();
   }
 
@@ -1151,6 +1172,8 @@
 
     // 先拿到最新部署状态并回查批次进度，再切到进度视图，避免面板没有数据可渲染。
     await handleGetLatestDeployStatus();
+    // 从已卸载空态发起灰度发布时同样需要恢复轮询，否则面板进度不会继续推进。
+    resumeDeployStatusPolling();
     const latest = latestDeployStatus.value;
     showBatchReleaseProgress.value =
       !!batchReleaseView.value ||
@@ -1348,7 +1371,7 @@
     }
     isShowRemoveDeploy.value = true;
   }
-  /** 移除部署成功后更新当前状态，并刷新环境状态、总览和轮询。 */
+  /** 移除部署成功后更新当前状态，并刷新环境状态、总览。 */
   async function handleRemoveDeploySuccess() {
     latestDeployStatus.value = {
       ...(latestDeployStatus.value || {}),
@@ -1357,11 +1380,12 @@
       status: APP_DEPLOY_STATUS.UNINSTALLED,
     };
     initLoading.value = false;
+    // 已卸载环境不再有可推进的状态，先清掉分批发布快照（避免横幅盖在未部署空态上），再停止轮询。
+    resetBatchRelease();
     await refreshEnvSelectPanel();
     deployOverviewRef.value?.load();
     fetchFeatureEnvList();
     stop();
-    start();
   }
 
   // 切换空间停止轮询并重置状态
@@ -1393,10 +1417,8 @@
       await handleGetLatestDeployStatus();
       await fetchEffectiveDeploySpec();
       if (activeTab.value === TAB_NAMES.overview) return;
-      // 当前环境被销毁并清空时，不重新开启一个只会空转的轮询。
-      if (appDetailStore.appID && trpcDeployStore.curEnvItem?.name && !timer.value) {
-        start();
-      }
+      // 当前环境被销毁并清空、或环境已卸载时，不重新开启一个只会空转的轮询。
+      resumeDeployStatusPolling();
     },
     { immediate: true },
   );
