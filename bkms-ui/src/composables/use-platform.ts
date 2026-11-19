@@ -34,11 +34,8 @@ export default function usePlatform() {
       favicon: '/favicon.svg',
       helperLink: 'wxwork://message?uin=8444252571319680',
       helperText: t('技术支持'),
-      footerInfoHTML: '',
-      version: '',
-      i18n: {
-        footerInfoHTML: '',
-      },
+      // 版本号来自 index.html 注入的构建变量，未设置时为 '--'，兜底为空串
+      version: window.BK_BKMS_APP_VERSION && window.BK_BKMS_APP_VERSION !== '--' ? window.BK_BKMS_APP_VERSION : '',
     };
     let data: { [key: string]: any } = {};
     if (import.meta.env.BK_SHARED_RES_BASE_JS_URL) {

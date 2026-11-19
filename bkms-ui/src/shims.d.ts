@@ -19,6 +19,7 @@
 interface Window {
   readonly BK_API_PREFIX: string;
   readonly BK_BCS: string;
+  readonly BK_BKMS_APP_VERSION: string;
   readonly BK_DOC_URL: string;
   readonly BK_LOGIN_URL: string;
   readonly BK_SHARED_RES_BASE_JS_URL: string;
