@@ -77,30 +77,6 @@ uv run scripts/<category>/<script-name>.py [参数...]
         --dry-run
     ```
 
-### `mask-sensitive-operation-records.js` —— 清理操作记录中的敏感明文
-
-- **用途**：审计层脱敏（字段上的 `audit` tag，见 `pkg/misc/audit/sanitize.go`）上线前，操作记录 `operation_records`
-  的 `data.before` / `data.after` / `data.extras` 中可能写入了敏感明文。本脚本按与 Go 侧 `audit` tag 一致的规则
-  将其替换为 `******`：
-    - 对象的 `IsSensitive` 为 `true` 时，打码其 `Value`（敏感环境变量）
-    - `BscpToken`、`Password` / `password`、`PolarisToken` 字段的非空值
-    - `Properties` 对象（组件属性）中 key 以 `token`、`password`、`passwd`、`secret` 结尾的非空字符串
-- **行为**：默认 dry-run，只统计需要打码的记录数与样例 `_id`；设置 `APPLY=1` 才写回。只写回内容有变化的记录，
-  可重复执行。JSON 解析失败、或含超出 JS 安全整数范围整数的记录会跳过并打印 `_id`，需人工处理。
-- **备份**：执行前务必先用 `mongodump` 备份该集合。备份文件本身含明文，确认无误后删除。
-- **使用示例**：
-
-    ```bash
-    # 备份
-    mongodump --uri "<mongo-uri>" --collection operation_records --out ./operation-records-backup
-
-    # 预览
-    mongosh "<mongo-uri>" --file scripts/mask-sensitive-operation-records.js
-
-    # 写回，完成后再执行一次预览，确认需要打码的记录数为 0
-    APPLY=1 mongosh "<mongo-uri>" --file scripts/mask-sensitive-operation-records.js
-    ```
-
 ## 典型工作流
 
 以"新增平台构建可用的 Go 运行时版本"为例：

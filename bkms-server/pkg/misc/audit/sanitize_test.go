@@ -30,12 +30,12 @@ type tagSecret struct {
 	IsSensitive bool
 }
 
-type tagProps struct {
-	Properties map[string]any `audit:"maskKeys"`
+type tagUnexported struct {
+	Token string `audit:"mask"`
 }
 
 type tagEmbedded struct {
-	tagProps
+	tagUnexported
 	Name string
 }
 
@@ -169,19 +169,13 @@ var _ = Describe("Sanitize", func() {
 			Expect(data.Any.(tagSecret).Password).To(Equal("pw"))
 		})
 
-		It("masks properties and exported embedded struct fields", func() {
-			props := map[string]any{"polarisToken": "tk", "polarisName": "n"}
-			Expect(sanitize(tagProps{Properties: props}).(tagProps).Properties).To(Equal(map[string]any{
-				"polarisToken": SensitiveValueMask, "polarisName": "n",
-			}))
-			Expect(props["polarisToken"]).To(Equal("tk"))
-
+		It("masks exported embedded struct fields only", func() {
 			e := tagExportedEmbedded{TagExported: TagExported{Token: "tk"}, Name: "n"}
 			Expect(sanitize(e).(tagExportedEmbedded).Token).To(Equal(SensitiveValueMask))
 			Expect(e.Token).To(Equal("tk"))
 
 			// 未导出的内嵌结构体不处理
-			u := tagEmbedded{tagProps: tagProps{Properties: props}}
+			u := tagEmbedded{tagUnexported: tagUnexported{Token: "tk"}}
 			Expect(sanitize(u)).To(Equal(u))
 		})
 
@@ -204,51 +198,6 @@ var _ = Describe("Sanitize", func() {
 		It("masks non-empty string and keeps empty string", func() {
 			Expect(maskString("plain")).To(Equal(SensitiveValueMask))
 			Expect(maskString("")).To(BeEmpty())
-		})
-	})
-
-	Describe("maskSensitiveProperties", func() {
-		It("returns nil for nil properties", func() {
-			Expect(maskSensitiveProperties(nil)).To(BeNil())
-		})
-
-		It("masks sensitive keys recursively without modifying the original", func() {
-			props := map[string]any{
-				"polarisToken": "tk",
-				"Password":     "pw",
-				"secretName":   "my-secret",
-				"emptyToken":   "",
-				"servicePort":  80,
-				"nested": map[string]any{
-					"apiSecret": "s",
-					"name":      "n",
-				},
-				"items": []any{
-					map[string]any{"passwd": "p"},
-					"plain",
-				},
-			}
-
-			masked := maskSensitiveProperties(props)
-
-			Expect(masked).To(Equal(map[string]any{
-				"polarisToken": SensitiveValueMask,
-				"Password":     SensitiveValueMask,
-				"secretName":   "my-secret",
-				"emptyToken":   "",
-				"servicePort":  80,
-				"nested": map[string]any{
-					"apiSecret": SensitiveValueMask,
-					"name":      "n",
-				},
-				"items": []any{
-					map[string]any{"passwd": SensitiveValueMask},
-					"plain",
-				},
-			}))
-			Expect(props["polarisToken"]).To(Equal("tk"))
-			Expect(props["nested"].(map[string]any)["apiSecret"]).To(Equal("s"))
-			Expect(props["items"].([]any)[0].(map[string]any)["passwd"]).To(Equal("p"))
 		})
 	})
 })

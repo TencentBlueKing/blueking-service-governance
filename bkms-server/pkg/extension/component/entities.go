@@ -156,7 +156,7 @@ type ComponentInst struct {
 	Version string `bson:"version"`
 
 	// Properties 中包含组件具体内容, 当引用空间组件时，该字段没有实际值，需要根据引用关系使用空间组件的值。
-	Properties map[string]any `bson:"properties,omitempty" audit:"maskKeys"`
+	Properties map[string]any `bson:"properties,omitempty"`
 }
 
 // NormalizeProperties 将 Properties 中的 BSON 类型规范化为 Go 原生类型。

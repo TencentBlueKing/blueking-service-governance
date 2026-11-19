@@ -77,7 +77,7 @@ var _ = Describe("Sanitize models", func() {
 	})
 
 	Describe("app model", func() {
-		It("masks env vars and component properties without modifying the original", func() {
+		It("masks env vars without modifying the original", func() {
 			comp := &component.Component{Name: "polaris"}
 			comp.Type = "ImportPolaris"
 			comp.Properties = map[string]any{"polarisToken": "tk", "polarisName": "n"}
@@ -98,38 +98,12 @@ var _ = Describe("Sanitize models", func() {
 			Expect(masked.Workload.EnvVars[1].Value).To(Equal("n"))
 			Expect(masked.Components).To(HaveLen(2))
 			Expect(masked.Components[0].Name).To(Equal("polaris"))
-			Expect(masked.Components[0].Properties).To(Equal(map[string]any{
-				"polarisToken": mask, "polarisName": "n",
-			}))
+			// 组件属性不脱敏
+			Expect(masked.Components[0].Properties["polarisToken"]).To(Equal("tk"))
 			Expect(masked.Components[1]).To(BeNil())
 
 			Expect(m.Workload.EnvVars[0].Value).To(Equal("s"))
 			Expect(comp.Properties["polarisToken"]).To(Equal("tk"))
-		})
-	})
-
-	Describe("components", func() {
-		It("masks app component and its update data", func() {
-			comp := &component.Component{Name: "c"}
-			comp.Properties = map[string]any{"polarisToken": "tk"}
-			Expect(recorded[component.Component](comp).Properties["polarisToken"]).To(Equal(mask))
-			Expect(comp.Properties["polarisToken"]).To(Equal("tk"))
-
-			d := &appmodel.ComponentUpdateData{Properties: map[string]any{"polarisToken": "tk"}}
-			Expect(recorded[appmodel.ComponentUpdateData](d).Properties["polarisToken"]).To(Equal(mask))
-			Expect(d.Properties["polarisToken"]).To(Equal("tk"))
-		})
-
-		It("masks workspace component and its update data", func() {
-			comp := &workspace.Component{Name: "c"}
-			comp.Properties = map[string]any{"polarisToken": "tk"}
-			masked := recorded[workspace.Component](comp)
-			Expect(masked.Name).To(Equal("c"))
-			Expect(masked.Properties["polarisToken"]).To(Equal(mask))
-			Expect(comp.Properties["polarisToken"]).To(Equal("tk"))
-
-			d := &workspace.ComponentUpdateData{Properties: map[string]any{"polarisToken": "tk"}}
-			Expect(recorded[workspace.ComponentUpdateData](d).Properties["polarisToken"]).To(Equal(mask))
 		})
 	})
 

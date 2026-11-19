@@ -69,7 +69,7 @@ type ComponentUpdateData struct {
 	// Version 组件版本
 	Version *string
 	// Properties 组件属性
-	Properties map[string]any `audit:"maskKeys"`
+	Properties map[string]any
 }
 
 // AppModelStore 应用模型的 GenericStore

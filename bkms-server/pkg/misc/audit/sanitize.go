@@ -28,17 +28,10 @@ import (
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 )
 
-// 写入操作记录前的脱敏。
+// 写入操作记录前，按字段上的 audit tag 递归脱敏，结果为拷贝，不修改原对象：
 //
-// 模型在敏感字段上声明 audit tag，WithDataBefore / WithDataAfter / WithExtras 序列化前由 sanitize
-// 递归处理（指针、结构体、内嵌结构体、slice、array、map、interface），不需要逐个类型登记：
-//
-//	Password     string         `audit:"mask"`                // 非空即打码
-//	Value        string         `audit:"mask,if=IsSensitive"` // 同一结构体中的 bool 字段为 true 时打码
-//	Properties   map[string]any `audit:"maskKeys"`            // 按 key 后缀打码，见 maskSensitiveProperties
-//
-// 只处理导出字段。脱敏结果是拷贝，原对象不变：调用方往往还会用原对象构造接口响应。
-// 新增 tag 规则时，同步更新 scripts/mask-sensitive-operation-records.js。
+//	`audit:"mask"`                非空即打码
+//	`audit:"mask,if=IsSensitive"` 同一结构体中该 bool 字段为 true 时打码
 
 // SensitiveValueMask 是操作记录中替换敏感值所用的掩码，与 envvars/types.SensitiveValueMask 保持一致。
 const SensitiveValueMask = "******"
@@ -126,12 +119,6 @@ func maskStruct(v reflect.Value, p *typePlan, depth int) (reflect.Value, bool, e
 			if masked := maskString(fv.String()); masked != fv.String() {
 				set(f.index, reflect.ValueOf(masked).Convert(fv.Type()))
 			}
-		case opMaskKeys:
-			if fv.Len() == 0 {
-				continue
-			}
-			props := fv.Convert(propertiesType).Interface().(map[string]any)
-			set(f.index, reflect.ValueOf(maskSensitiveProperties(props)).Convert(fv.Type()))
 		case opWalk:
 			nv, changed, err := maskValue(fv, depth+1)
 			if err != nil {
@@ -216,8 +203,6 @@ const (
 	opWalk fieldOp = iota
 	// opMask 对应 audit:"mask"
 	opMask
-	// opMaskKeys 对应 audit:"maskKeys"
-	opMaskKeys
 )
 
 type fieldPlan struct {
@@ -238,8 +223,6 @@ type typePlan struct {
 }
 
 var (
-	propertiesType = reflect.TypeFor[map[string]any]()
-
 	planCache sync.Map // reflect.Type -> *typePlan
 	planMu    sync.Mutex
 )
@@ -330,14 +313,6 @@ func parseFieldTag(t reflect.Type, f reflect.StructField, tag string) (fieldPlan
 			plan.cond = cond.Index[0]
 		}
 		return plan, nil
-	case "maskKeys":
-		if len(opts) > 1 {
-			return fieldPlan{}, errors.Errorf(`audit:"maskKeys" takes no option, got %q`, tag)
-		}
-		if !f.Type.ConvertibleTo(propertiesType) || f.Type.Kind() != reflect.Map {
-			return fieldPlan{}, errors.New(`audit:"maskKeys" requires a map[string]any field`)
-		}
-		return fieldPlan{op: opMaskKeys, cond: -1}, nil
 	default:
 		return fieldPlan{}, errors.Errorf("unknown audit tag %q", tag)
 	}
@@ -349,50 +324,4 @@ func maskString(s string) string {
 		return ""
 	}
 	return SensitiveValueMask
-}
-
-// sensitiveKeySuffixes 是组件属性等无结构数据中视为敏感的 key 后缀（不区分大小写）。
-// 用后缀而不是包含关系，避免误伤 secretName 这类只是引用名称的字段。
-var sensitiveKeySuffixes = []string{"token", "password", "passwd", "secret"}
-
-func isSensitiveKey(key string) bool {
-	lower := strings.ToLower(key)
-	for _, suffix := range sensitiveKeySuffixes {
-		if strings.HasSuffix(lower, suffix) {
-			return true
-		}
-	}
-	return false
-}
-
-// maskSensitiveProperties 返回 props 的深拷贝，其中 key 以 token / password / passwd / secret 结尾
-// （不区分大小写）的非空字符串值被打码，嵌套的 map 与 slice 递归处理。props 为 nil 时返回 nil。
-func maskSensitiveProperties(props map[string]any) map[string]any {
-	if props == nil {
-		return nil
-	}
-	masked := make(map[string]any, len(props))
-	for k, v := range props {
-		if s, ok := v.(string); ok && isSensitiveKey(k) {
-			masked[k] = maskString(s)
-			continue
-		}
-		masked[k] = maskNestedValue(v)
-	}
-	return masked
-}
-
-func maskNestedValue(v any) any {
-	switch val := v.(type) {
-	case map[string]any:
-		return maskSensitiveProperties(val)
-	case []any:
-		items := make([]any, len(val))
-		for i, item := range val {
-			items[i] = maskNestedValue(item)
-		}
-		return items
-	default:
-		return v
-	}
 }
