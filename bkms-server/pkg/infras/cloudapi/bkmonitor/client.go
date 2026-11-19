@@ -20,9 +20,12 @@
 package bkmonitor
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
+	"net/http"
 	"time"
 
 	"github.com/TencentBlueKing/bk-apigateway-sdks/core/bkapi"
@@ -65,8 +68,10 @@ type MonitorClient interface {
 	ListApmApp(ctx context.Context, bkBizID int64) ([]*ApmApp, error)
 	// UpdateApmServiceConfig 更新 APM 服务配置（增量绑定容器负载/蓝盾流水线）
 	UpdateApmServiceConfig(ctx context.Context, req *UpdateApmServiceConfigReq) error
-	// GetMetadataSpaceDetail 获取空间详情
+	// GetMetadataSpaceDetail 获取空间详情；空间不存在时返回 ErrSpaceNotFound
 	GetMetadataSpaceDetail(ctx context.Context, bcsProjectCode string) (*Space, error)
+	// SetBkmsSpaceStatus 设置 BKMS 空间启停状态，仅支持 ID 以 bkms- 开头的 bkci 类型空间
+	SetBkmsSpaceStatus(ctx context.Context, bcsProjectCode, status string) error
 	// SearchUserGroups 查询告警组列表
 	SearchUserGroups(ctx context.Context, req *SearchUserGroupsReq) ([]*UserGroup, error)
 	// SearchUserGroupDetail 查询告警组详情
@@ -170,22 +175,52 @@ func (c *ApiClient) handleOperation(
 	}
 	defer resp.Body.Close()
 
+	apiErr := &APIError{
+		OpName:     op.FullName(),
+		HTTPStatus: resp.StatusCode,
+		Code:       cast.ToInt64(mapx.Get(result, "code", 0)),
+		Message:    mapx.GetStr(result, "message"),
+		RequestID: cmp.Or(
+			resp.Header.Get(bkapiRequestIDHeader), mapx.GetStr(result, "request_id"), mapx.GetStr(result, "requestID"),
+		),
+	}
 	if !httpresp.IsSuccess(resp) {
 		errMsg, _ := io.ReadAll(resp.Body)
-		return nil, errors.Errorf("call %s api %s failed, http code: %d, err: %s",
-			gatewayName, op.FullName(), resp.StatusCode, errMsg)
+		apiErr.Message = cmp.Or(apiErr.Message, string(errMsg))
+		return nil, apiErr
 	}
-
 	if !mapx.GetBool(result, "result") {
-		return nil, errors.Errorf(
-			"api error, code: %d, message: %s, request_id: %s",
-			cast.ToInt64(
-				mapx.Get(result, "code", 0),
-			),
-			mapx.GetStr(result, "message"),
-			mapx.GetStr(result, "requestID"),
-		)
+		return nil, apiErr
 	}
-
 	return result, nil
+}
+
+// bkapiRequestIDHeader 蓝鲸 API 网关返回的请求 ID 响应头
+const bkapiRequestIDHeader = "X-Bkapi-Request-Id"
+
+// APIError 蓝鲸监控 API 调用返回的错误（HTTP 非 2xx，或响应 result 为 false）
+type APIError struct {
+	// OpName 网关资源名
+	OpName string
+	// HTTPStatus HTTP 状态码
+	HTTPStatus int
+	// Code 监控返回的错误码
+	Code int64
+	// Message 监控或网关返回的原始错误信息
+	Message string
+	// RequestID 网关请求 ID
+	RequestID string
+}
+
+func (e *APIError) Error() string {
+	if e.HTTPStatus < http.StatusOK || e.HTTPStatus >= http.StatusMultipleChoices {
+		return fmt.Sprintf("call %s api %s failed, http code: %d, err: %s",
+			gatewayName, e.OpName, e.HTTPStatus, e.Message)
+	}
+	return fmt.Sprintf("api error, code: %d, message: %s, request_id: %s", e.Code, e.Message, e.RequestID)
+}
+
+// IsNotFound 判断错误是否为监控侧资源不存在（HTTP 404 或错误码 404）
+func (e *APIError) IsNotFound() bool {
+	return e.HTTPStatus == http.StatusNotFound || e.Code == http.StatusNotFound
 }

@@ -290,7 +290,11 @@ func (c *MonitorGatewayClient) GetMetadataSpaceDetail(ctx context.Context, bcsPr
 		},
 	).SetQueryParams(params))
 	if err != nil {
-		return nil, errors.Wrapf(ErrSpaceNotFound, "get metadata space detail failed: %v", err)
+		var apiErr *APIError
+		if errors.As(err, &apiErr) && apiErr.IsNotFound() {
+			return nil, errors.Wrapf(ErrSpaceNotFound, "get metadata space detail failed: %v", err)
+		}
+		return nil, errors.Wrapf(err, "get metadata space detail of %s", params["space_uid"])
 	}
 
 	space := new(Space)
@@ -302,6 +306,29 @@ func (c *MonitorGatewayClient) GetMetadataSpaceDetail(ctx context.Context, bcsPr
 		space.ID = -space.ID
 	}
 	return space, nil
+}
+
+// SetBkmsSpaceStatus 设置 BKMS 空间启停状态。
+//
+// 监控只接受 ID 以 bkms- 开头的 bkci 类型空间，且不校验当前状态，重复设置同一状态不会报错
+func (c *MonitorGatewayClient) SetBkmsSpaceStatus(ctx context.Context, bcsProjectCode, status string) error {
+	spaceUID := fmt.Sprintf(SpaceUIDFormat, bcsProjectCode)
+	resp, err := c.handleOperation(ctx, c.NewOperation(
+		bkapi.OperationConfig{
+			Name:   "metadata_set_bkms_space_status",
+			Method: http.MethodPost,
+			Path:   "/app/metadata/set_bkms_space_status/",
+		},
+		bkapi.OptSetRequestBody(map[string]string{"space_uid": spaceUID, "status": status}),
+	))
+	if err != nil {
+		return errors.Wrapf(err, "set space %s status to %s", spaceUID, status)
+	}
+
+	if got := mapx.GetStr(resp, "data.status"); got != status {
+		return errors.Errorf("set space %s status to %s, but got %s", spaceUID, status, got)
+	}
+	return nil
 }
 
 // TimeSeriesUnifyQuery 统一时序数据查询。

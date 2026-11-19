@@ -45,6 +45,8 @@ var _ Client = &StubApiClient{}
 var (
 	stubCreatedPipelines    sync.Map
 	stubCreatedRepositories sync.Map
+	// stubDisabledProjects 记录被停用的项目 Code，未记录的项目视为启用
+	stubDisabledProjects sync.Map
 )
 
 // NewStub 创建 StubApiClient
@@ -78,13 +80,26 @@ func (s *StubApiClient) ListProjects(ctx context.Context) ([]Project, error) {
 // GetProject 返回模拟的项目详情
 func (s *StubApiClient) GetProject(ctx context.Context, projectCode string) (*Project, error) {
 	log.Infof(ctx, "Stub: GetProject request: %s", projectCode)
+	_, disabled := stubDisabledProjects.Load(projectCode)
 	return &Project{
 		ID:            "stub-project-id-" + projectCode,
 		Code:          projectCode,
 		Name:          "Stub Project",
 		Creator:       s.user.ID,
 		HasManagePerm: true,
+		Enabled:       !disabled,
 	}, nil
+}
+
+// SetProjectEnabled 模拟启用或停用项目，GetProject 会返回对应状态
+func (s *StubApiClient) SetProjectEnabled(ctx context.Context, projectCode string, enabled bool) error {
+	log.Infof(ctx, "Stub: SetProjectEnabled request: %s, enabled: %t", projectCode, enabled)
+	if enabled {
+		stubDisabledProjects.Delete(projectCode)
+	} else {
+		stubDisabledProjects.Store(projectCode, struct{}{})
+	}
+	return nil
 }
 
 // CreateProject 模拟创建项目，总是返回成功
