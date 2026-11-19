@@ -79,8 +79,9 @@ uv run scripts/<category>/<script-name>.py [参数...]
 
 ### `mask-sensitive-operation-records.js` —— 清理操作记录中的敏感明文
 
-- **用途**：审计层脱敏（`audit.Sanitizer`）上线前，操作记录 `operation_records` 的 `data.before` / `data.after` /
-  `data.extras` 中可能写入了敏感明文。本脚本按与 Go 侧 `ForAudit` 一致的规则将其替换为 `******`：
+- **用途**：审计层脱敏（字段上的 `audit` tag，见 `pkg/misc/audit/sanitize.go`）上线前，操作记录 `operation_records`
+  的 `data.before` / `data.after` / `data.extras` 中可能写入了敏感明文。本脚本按与 Go 侧 `audit` tag 一致的规则
+  将其替换为 `******`：
     - 对象的 `IsSensitive` 为 `true` 时，打码其 `Value`（敏感环境变量）
     - `BscpToken`、`Password` / `password`、`PolarisToken` 字段的非空值
     - `Properties` 对象（组件属性）中 key 以 `token`、`password`、`passwd`、`secret` 结尾的非空字符串

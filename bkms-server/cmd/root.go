@@ -24,8 +24,6 @@ import (
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/cmd/migration"
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
-	// 登记各业务模型写入操作记录前的脱敏函数
-	_ "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/misc/audit/sanitizers"
 )
 
 var rootCmd = &cobra.Command{

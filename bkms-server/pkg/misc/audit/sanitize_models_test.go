@@ -16,7 +16,7 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
-package sanitizers_test
+package audit_test
 
 import (
 	"encoding/json"
@@ -30,7 +30,6 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/misc/audit"
-	_ "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/misc/audit/sanitizers"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars"
 )
@@ -46,7 +45,7 @@ func recorded[T any](data any) T {
 	return out
 }
 
-var _ = Describe("Sanitizers", func() {
+var _ = Describe("Sanitize models", func() {
 	Describe("env vars", func() {
 		It("masks sensitive app env var for both value and pointer", func() {
 			v := &appmodel.Variable{Key: "K", Value: "plain", IsSensitive: true}

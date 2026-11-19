@@ -21,44 +21,330 @@ package audit
 import (
 	"reflect"
 	"strings"
+	"sync"
+
+	"github.com/pkg/errors"
+
+	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 )
+
+// 写入操作记录前的脱敏。
+//
+// 模型在敏感字段上声明 audit tag，WithDataBefore / WithDataAfter / WithExtras 序列化前由 sanitize
+// 递归处理（指针、结构体、内嵌结构体、slice、array、map、interface），不需要逐个类型登记：
+//
+//	Password     string         `audit:"mask"`                // 非空即打码
+//	Value        string         `audit:"mask,if=IsSensitive"` // 同一结构体中的 bool 字段为 true 时打码
+//	Properties   map[string]any `audit:"maskKeys"`            // 按 key 后缀打码，见 maskSensitiveProperties
+//
+// 只处理导出字段。脱敏结果是拷贝，原对象不变：调用方往往还会用原对象构造接口响应。
+// 新增 tag 规则时，同步更新 scripts/mask-sensitive-operation-records.js。
 
 // SensitiveValueMask 是操作记录中替换敏感值所用的掩码，与 envvars/types.SensitiveValueMask 保持一致。
 const SensitiveValueMask = "******"
 
-// sanitizers 按数据类型登记的脱敏函数，只在 init 阶段写入，之后只读，无需加锁。
-var sanitizers = map[reflect.Type]func(any) any{}
+const (
+	tagName = "audit"
+	// maxSanitizeDepth 限制递归深度，防止循环引用导致栈溢出
+	maxSanitizeDepth = 64
+)
 
-// RegisterSanitizer 登记类型 T 写入操作记录前的脱敏函数，只能在 init 中调用。
-//
-// WithDataBefore / WithDataAfter / WithExtras 遇到 T 或 *T 类型的数据时，序列化 fn 的返回值。
-// fn 必须返回脱敏后的拷贝，不得修改入参：调用方往往还会用原对象构造接口响应。
-//
-// 业务模型的脱敏函数统一登记在子包 audit/sanitizers 中，由程序入口以 blank import 引入。
-func RegisterSanitizer[T any](fn func(T) any) {
-	sanitizers[reflect.TypeFor[T]()] = func(v any) any { return fn(v.(T)) }
-}
-
-// sanitize 返回可写入操作记录的数据。nil 指针原样返回，保持序列化为 null。
+// sanitize 返回可写入操作记录的数据。tag 声明有误或嵌套过深时丢弃数据（返回 nil），避免写入明文。
 func sanitize(data any) any {
-	v := reflect.ValueOf(data)
-	if !v.IsValid() {
+	if data == nil {
+		return nil
+	}
+	masked, changed, err := maskValue(reflect.ValueOf(data), 0)
+	if err != nil {
+		log.ErrorNoContextf("sanitize audit data %T failed, data dropped: %v", data, err)
+		return nil
+	}
+	if !changed {
 		return data
 	}
-	if fn, ok := sanitizers[v.Type()]; ok {
-		return fn(data)
-	}
-	if v.Kind() != reflect.Pointer || v.IsNil() {
-		return data
-	}
-	if fn, ok := sanitizers[v.Type().Elem()]; ok {
-		return fn(v.Elem().Interface())
-	}
-	return data
+	return masked.Interface()
 }
 
-// MaskString 对非空字符串打码；空串保持为空，以便看出该字段是否设置过。
-func MaskString(s string) string {
+// maskValue 返回 v 脱敏后的值。只有确实发生变化的路径才会复制，其余部分与原值共享。
+func maskValue(v reflect.Value, depth int) (reflect.Value, bool, error) {
+	if depth > maxSanitizeDepth {
+		return v, false, errors.Errorf("nested deeper than %d", maxSanitizeDepth)
+	}
+	p := planOf(v.Type())
+	if !p.walk {
+		return v, false, nil
+	}
+
+	switch v.Kind() {
+	case reflect.Interface:
+		if v.IsNil() {
+			return v, false, nil
+		}
+		return maskValue(v.Elem(), depth+1)
+	case reflect.Pointer:
+		if v.IsNil() {
+			return v, false, nil
+		}
+		elem, changed, err := maskValue(v.Elem(), depth+1)
+		if err != nil || !changed {
+			return v, false, err
+		}
+		cp := reflect.New(v.Type().Elem())
+		cp.Elem().Set(elem)
+		return cp, true, nil
+	case reflect.Struct:
+		return maskStruct(v, p, depth)
+	case reflect.Slice, reflect.Array:
+		return maskList(v, depth)
+	case reflect.Map:
+		return maskMap(v, depth)
+	default:
+		return v, false, nil
+	}
+}
+
+func maskStruct(v reflect.Value, p *typePlan, depth int) (reflect.Value, bool, error) {
+	if p.err != nil {
+		return v, false, p.err
+	}
+	var cp reflect.Value
+	set := func(index int, nv reflect.Value) {
+		if !cp.IsValid() {
+			cp = reflect.New(v.Type()).Elem()
+			cp.Set(v)
+		}
+		cp.Field(index).Set(nv)
+	}
+
+	for _, f := range p.fields {
+		fv := v.Field(f.index)
+		switch f.op {
+		case opMask:
+			if f.cond >= 0 && !v.Field(f.cond).Bool() {
+				continue
+			}
+			if masked := maskString(fv.String()); masked != fv.String() {
+				set(f.index, reflect.ValueOf(masked).Convert(fv.Type()))
+			}
+		case opMaskKeys:
+			if fv.Len() == 0 {
+				continue
+			}
+			props := fv.Convert(propertiesType).Interface().(map[string]any)
+			set(f.index, reflect.ValueOf(maskSensitiveProperties(props)).Convert(fv.Type()))
+		case opWalk:
+			nv, changed, err := maskValue(fv, depth+1)
+			if err != nil {
+				return v, false, errors.Wrapf(err, "field %s", v.Type().Field(f.index).Name)
+			}
+			if changed {
+				set(f.index, nv)
+			}
+		}
+	}
+	if !cp.IsValid() {
+		return v, false, nil
+	}
+	return cp, true, nil
+}
+
+func maskList(v reflect.Value, depth int) (reflect.Value, bool, error) {
+	if v.Kind() == reflect.Slice && v.IsNil() {
+		return v, false, nil
+	}
+	var cp reflect.Value
+	for i := range v.Len() {
+		elem, changed, err := maskValue(v.Index(i), depth+1)
+		if err != nil {
+			return v, false, err
+		}
+		if !changed {
+			continue
+		}
+		if !cp.IsValid() {
+			if v.Kind() == reflect.Slice {
+				cp = reflect.MakeSlice(v.Type(), v.Len(), v.Len())
+				reflect.Copy(cp, v)
+			} else {
+				cp = reflect.New(v.Type()).Elem()
+				cp.Set(v)
+			}
+		}
+		cp.Index(i).Set(elem)
+	}
+	if !cp.IsValid() {
+		return v, false, nil
+	}
+	return cp, true, nil
+}
+
+func maskMap(v reflect.Value, depth int) (reflect.Value, bool, error) {
+	if v.IsNil() {
+		return v, false, nil
+	}
+	type entry struct{ key, value reflect.Value }
+	var changes []entry
+	iter := v.MapRange()
+	for iter.Next() {
+		value, changed, err := maskValue(iter.Value(), depth+1)
+		if err != nil {
+			return v, false, err
+		}
+		if changed {
+			changes = append(changes, entry{iter.Key(), value})
+		}
+	}
+	if len(changes) == 0 {
+		return v, false, nil
+	}
+	cp := reflect.MakeMapWithSize(v.Type(), v.Len())
+	iter = v.MapRange()
+	for iter.Next() {
+		cp.SetMapIndex(iter.Key(), iter.Value())
+	}
+	for _, c := range changes {
+		cp.SetMapIndex(c.key, c.value)
+	}
+	return cp, true, nil
+}
+
+// fieldOp 结构体字段的处理方式
+type fieldOp int
+
+const (
+	// opWalk 字段本身无 tag，但其类型可能包含需脱敏的数据，递归处理
+	opWalk fieldOp = iota
+	// opMask 对应 audit:"mask"
+	opMask
+	// opMaskKeys 对应 audit:"maskKeys"
+	opMaskKeys
+)
+
+type fieldPlan struct {
+	index int
+	op    fieldOp
+	// cond 为 if= 指向的 bool 字段下标，-1 表示无条件
+	cond int
+}
+
+// typePlan 描述某个类型的脱敏方式，按类型缓存
+type typePlan struct {
+	// walk 为 false 时该类型不可能包含需脱敏的数据，直接跳过
+	walk bool
+	// fields 仅结构体使用
+	fields []fieldPlan
+	// err 结构体 tag 声明有误
+	err error
+}
+
+var (
+	propertiesType = reflect.TypeFor[map[string]any]()
+
+	planCache sync.Map // reflect.Type -> *typePlan
+	planMu    sync.Mutex
+)
+
+func planOf(t reflect.Type) *typePlan {
+	if p, ok := planCache.Load(t); ok {
+		return p.(*typePlan)
+	}
+	planMu.Lock()
+	defer planMu.Unlock()
+	// 先在局部构建，完整后再发布，避免并发读到未完成的 plan
+	building := map[reflect.Type]*typePlan{}
+	p := buildPlan(t, building)
+	for typ, plan := range building {
+		planCache.Store(typ, plan)
+	}
+	return p
+}
+
+func buildPlan(t reflect.Type, building map[reflect.Type]*typePlan) *typePlan {
+	if p, ok := planCache.Load(t); ok {
+		return p.(*typePlan)
+	}
+	if p, ok := building[t]; ok {
+		return p
+	}
+	// 递归类型在构建完成前按"需要遍历"处理，偏保守
+	p := &typePlan{walk: true}
+	building[t] = p
+
+	switch t.Kind() {
+	case reflect.Interface:
+		p.walk = true
+	case reflect.Pointer, reflect.Slice, reflect.Array, reflect.Map:
+		p.walk = buildPlan(t.Elem(), building).walk
+	case reflect.Struct:
+		p.fields, p.err = buildFieldPlans(t, building)
+		p.walk = len(p.fields) > 0 || p.err != nil
+	default:
+		p.walk = false
+	}
+	return p
+}
+
+func buildFieldPlans(t reflect.Type, building map[reflect.Type]*typePlan) ([]fieldPlan, error) {
+	var plans []fieldPlan
+	for i := range t.NumField() {
+		f := t.Field(i)
+		if !f.IsExported() {
+			continue
+		}
+		tag, ok := f.Tag.Lookup(tagName)
+		if !ok {
+			if buildPlan(f.Type, building).walk {
+				plans = append(plans, fieldPlan{index: i, op: opWalk, cond: -1})
+			}
+			continue
+		}
+		plan, err := parseFieldTag(t, f, tag)
+		if err != nil {
+			return nil, errors.Wrapf(err, "%s.%s", t, f.Name)
+		}
+		plan.index = i
+		plans = append(plans, plan)
+	}
+	return plans, nil
+}
+
+func parseFieldTag(t reflect.Type, f reflect.StructField, tag string) (fieldPlan, error) {
+	opts := strings.Split(tag, ",")
+	switch opts[0] {
+	case "mask":
+		if f.Type.Kind() != reflect.String {
+			return fieldPlan{}, errors.New(`audit:"mask" requires a string field`)
+		}
+		plan := fieldPlan{op: opMask, cond: -1}
+		for _, opt := range opts[1:] {
+			name, ok := strings.CutPrefix(opt, "if=")
+			if !ok {
+				return fieldPlan{}, errors.Errorf("unknown audit tag option %q", opt)
+			}
+			cond, found := t.FieldByName(name)
+			if !found || len(cond.Index) != 1 || !cond.IsExported() || cond.Type.Kind() != reflect.Bool {
+				return fieldPlan{}, errors.Errorf(
+					"audit tag if=%s requires an exported bool field in the same struct", name,
+				)
+			}
+			plan.cond = cond.Index[0]
+		}
+		return plan, nil
+	case "maskKeys":
+		if len(opts) > 1 {
+			return fieldPlan{}, errors.Errorf(`audit:"maskKeys" takes no option, got %q`, tag)
+		}
+		if !f.Type.ConvertibleTo(propertiesType) || f.Type.Kind() != reflect.Map {
+			return fieldPlan{}, errors.New(`audit:"maskKeys" requires a map[string]any field`)
+		}
+		return fieldPlan{op: opMaskKeys, cond: -1}, nil
+	default:
+		return fieldPlan{}, errors.Errorf("unknown audit tag %q", tag)
+	}
+}
+
+// maskString 对非空字符串打码；空串保持为空，以便看出该字段是否设置过。
+func maskString(s string) string {
 	if s == "" {
 		return ""
 	}
@@ -79,16 +365,16 @@ func isSensitiveKey(key string) bool {
 	return false
 }
 
-// MaskSensitiveProperties 返回 props 的深拷贝，其中 key 以 token / password / passwd / secret 结尾
+// maskSensitiveProperties 返回 props 的深拷贝，其中 key 以 token / password / passwd / secret 结尾
 // （不区分大小写）的非空字符串值被打码，嵌套的 map 与 slice 递归处理。props 为 nil 时返回 nil。
-func MaskSensitiveProperties(props map[string]any) map[string]any {
+func maskSensitiveProperties(props map[string]any) map[string]any {
 	if props == nil {
 		return nil
 	}
 	masked := make(map[string]any, len(props))
 	for k, v := range props {
 		if s, ok := v.(string); ok && isSensitiveKey(k) {
-			masked[k] = MaskString(s)
+			masked[k] = maskString(s)
 			continue
 		}
 		masked[k] = maskNestedValue(v)
@@ -99,7 +385,7 @@ func MaskSensitiveProperties(props map[string]any) map[string]any {
 func maskNestedValue(v any) any {
 	switch val := v.(type) {
 	case map[string]any:
-		return MaskSensitiveProperties(val)
+		return maskSensitiveProperties(val)
 	case []any:
 		items := make([]any, len(val))
 		for i, item := range val {

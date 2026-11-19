@@ -455,7 +455,7 @@ func WithResult(result Result) Option {
 	}
 }
 
-// WithDataBefore 添加操作前数据，已登记脱敏函数（RegisterSanitizer）的数据会先脱敏
+// WithDataBefore 添加操作前数据，按字段的 audit tag 先脱敏（见 sanitize.go）
 func WithDataBefore(data any) Option {
 	return func(r *OperationRecord) {
 		bytes, err := json.Marshal(sanitize(data))
@@ -467,7 +467,7 @@ func WithDataBefore(data any) Option {
 	}
 }
 
-// WithDataAfter 添加操作后数据，已登记脱敏函数（RegisterSanitizer）的数据会先脱敏
+// WithDataAfter 添加操作后数据，按字段的 audit tag 先脱敏（见 sanitize.go）
 func WithDataAfter(data any) Option {
 	return func(r *OperationRecord) {
 		bytes, err := json.Marshal(sanitize(data))
@@ -479,7 +479,7 @@ func WithDataAfter(data any) Option {
 	}
 }
 
-// WithExtras 添加额外信息，已登记脱敏函数（RegisterSanitizer）的数据会先脱敏
+// WithExtras 添加额外信息，按字段的 audit tag 先脱敏（见 sanitize.go）
 func WithExtras(extras any) Option {
 	return func(r *OperationRecord) {
 		bytes, err := json.Marshal(sanitize(extras))

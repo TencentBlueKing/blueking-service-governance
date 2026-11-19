@@ -212,7 +212,7 @@ type ImageConfig struct {
 	// Username 用户名
 	Username string `bson:"username"`
 	// Password 密码
-	Password string `bson:"password"`
+	Password string `bson:"password" audit:"mask"`
 }
 
 // PipelineConfig 蓝盾流水线配置

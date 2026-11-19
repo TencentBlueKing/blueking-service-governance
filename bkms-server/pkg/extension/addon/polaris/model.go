@@ -75,7 +75,7 @@ type Properties struct {
 	// PolarisNamespace 北极星命名空间
 	PolarisNamespace string `bson:"polarisNamespace"`
 	// PolarisToken 北极星访问令牌
-	PolarisToken string `bson:"polarisToken"`
+	PolarisToken string `bson:"polarisToken" audit:"mask"`
 	// ServicePort 服务端口
 	ServicePort int32 `bson:"servicePort"`
 	// Direct 是否直连
@@ -282,7 +282,7 @@ type RedeployRequiredFields struct {
 	// InstanceKey 北极星实例标识，用于生成环境变量
 	InstanceKey string `bson:"instanceKey"`
 	// PolarisToken 北极星访问令牌
-	PolarisToken string `bson:"polarisToken"`
+	PolarisToken string `bson:"polarisToken" audit:"mask"`
 	// ServicePort 北极星服务端口
 	ServicePort int32 `bson:"servicePort"`
 }

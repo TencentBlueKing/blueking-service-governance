@@ -70,6 +70,7 @@ the user to install them. ALWAYS prefer using `rg` rather than `find` or `grep`.
 * Domain code receives `*mongo.Database` explicitly instead of accessing `storereg.G()`. Functions that read or write more than one model must list those models in their doc comment, since the signature no longer shows them.
 * When adding new migrations, read the guide in `README.md`, specifically the "数据库迁移" section
 * ALWAYS add a comment for extra indexes in the store source file
+* Secret fields (passwords, tokens, sensitive env var values) on models that may be written to operation records MUST carry an `audit` struct tag (`audit:"mask"`, `audit:"mask,if=IsSensitive"`, `audit:"maskKeys"`), see `pkg/misc/audit/sanitize.go`. Keep `scripts/mask-sensitive-operation-records.js` in sync when adding new rules.
 * Before writing code that touches multi-tenancy (`Meta.TenantScoped`, `store.TenantAll` / `store.TenantOf`, tenant in ctx, taskq envelope, tests of tenant scoped collections), read `design_notes/tenant_isolation.md`
 
 ### API Tests

@@ -19,9 +19,10 @@
 /**
  * 清理操作记录（operation_records）中历史写入的敏感明文。
  *
- * 背景：审计层脱敏（audit.Sanitizer）上线前，操作记录的 data.before / data.after / data.extras
- * 直接序列化了解密后的对象，其中可能包含敏感环境变量、BSCP token、Helm 仓库密码、构建镜像仓库密码、
- * 北极星 token 以及组件属性中的 token 等明文。本脚本按与 Go 侧 ForAudit 一致的规则将其替换为 "******"。
+ * 背景：审计层脱敏（字段上的 audit tag，见 pkg/misc/audit/sanitize.go）上线前，操作记录的
+ * data.before / data.after / data.extras 直接序列化了解密后的对象，其中可能包含敏感环境变量、BSCP token、
+ * Helm 仓库密码、构建镜像仓库密码、北极星 token 以及组件属性中的 token 等明文。
+ * 本脚本按与 Go 侧 audit tag 一致的规则将其替换为 "******"。
  *
  * 打码规则（递归作用于 JSON 中的每个对象）：
  *   1. 对象的 IsSensitive / isSensitive 为 true 时，Value / value 打码（对应环境变量）；

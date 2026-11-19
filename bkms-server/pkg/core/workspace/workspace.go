@@ -93,7 +93,7 @@ type BkSystems struct {
 	// BkBSCPProjectKey BSCP 项目 Key（如 BK-BSCP-12345）
 	BkBSCPProjectKey string `bson:"bkBSCPProjectKey"`
 	// BscpToken BSCP Credential token
-	BscpToken string `bson:"bscpToken"`
+	BscpToken string `bson:"bscpToken" audit:"mask"`
 	// BscpCredentialID BSCP Credential ID
 	BscpCredentialID string `bson:"bscpCredentialID"`
 

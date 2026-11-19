@@ -43,7 +43,7 @@ var (
 // ComponentUpdateData 定义了更新 Component 时允许修改的数据
 type ComponentUpdateData struct {
 	Version       *string
-	Properties    map[string]any
+	Properties    map[string]any `audit:"maskKeys"`
 	Name          *string
 	ScopeType     *component.ScopeType
 	ScopeEnvNames []string
