@@ -27,13 +27,10 @@ type Handler interface {
 	UpdateAccessPoint(c *gin.Context)
 	DeleteAccessPoint(c *gin.Context)
 	TestConnectivity(c *gin.Context)
-	GetNetworkInfo(c *gin.Context)
 	ListNamespaces(c *gin.Context)
 
 	ListClusters(c *gin.Context)
-	ListOperators(c *gin.Context)
-	InstallOperators(c *gin.Context)
-	GetEnvOperator(c *gin.Context)
+	ListOperatorValues(c *gin.Context)
 }
 
 // Register 注册北极星接入点路由。
@@ -51,16 +48,10 @@ func Register(rg *gin.RouterGroup, h Handler) {
 	rg.DELETE("/workspaces/:workspaceID/polaris-access-points/:accessPointID", h.DeleteAccessPoint)
 	// 连通测试
 	rg.POST("/workspaces/:workspaceID/polaris-access-points/connectivity-test", h.TestConnectivity)
-	// 平台访问北极星的网络信息（出口 IP）
-	rg.GET("/workspaces/:workspaceID/polaris-access-points/network-info", h.GetNetworkInfo)
 	// 接入点上可选的北极星命名空间
 	rg.GET("/workspaces/:workspaceID/polaris-access-points/:accessPointID/namespaces", h.ListNamespaces)
 	// 集群绑定视图
 	rg.GET("/workspaces/:workspaceID/polaris-clusters", h.ListClusters)
-	// 组件状态视图
-	rg.GET("/workspaces/:workspaceID/polaris-operators", h.ListOperators)
-	// 在接入点绑定的集群上安装或更新组件
-	rg.POST("/workspaces/:workspaceID/polaris-access-points/:accessPointID/operator-installs", h.InstallOperators)
-	// 环境所在集群的组件状态
-	rg.GET("/envs/:envID/polaris-operator", h.GetEnvOperator)
+	// 已绑定集群上 bcs-polaris-operator 的期望 values；安装与状态查询使用集群插件接口
+	rg.GET("/workspaces/:workspaceID/polaris-operator-values", h.ListOperatorValues)
 }

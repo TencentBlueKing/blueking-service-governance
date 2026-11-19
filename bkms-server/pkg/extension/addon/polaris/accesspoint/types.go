@@ -40,6 +40,9 @@ const (
 	SDKPort = 8091
 	// MaxClientHosts 自建接入点客户端地址数量上限
 	MaxClientHosts = 10
+
+	// OperatorAddonName bcs-polaris-operator 对应的内置集群插件名称，组件的安装与状态查询使用集群插件接口
+	OperatorAddonName = "bcs-polaris-operator"
 )
 
 // NamespaceSource 北极星配置可选命名空间的来源
@@ -118,19 +121,3 @@ type AccessPoint struct {
 func (a *AccessPoint) IsPlatform() bool {
 	return a.Kind == KindPlatform
 }
-
-// OperatorStatus 集群上 bcs-polaris-operator 的组件状态，由安装任务与 release 状态计算得出，不入库
-type OperatorStatus string
-
-const (
-	// OperatorStatusReady 已安装，且北极星相关参数与接入点一致
-	OperatorStatusReady OperatorStatus = "ready"
-	// OperatorStatusInstalling 最近的安装任务仍在运行
-	OperatorStatusInstalling OperatorStatus = "installing"
-	// OperatorStatusFailed 最近的安装任务失败，或 release 状态为 failed
-	OperatorStatusFailed OperatorStatus = "failed"
-	// OperatorStatusOutdated 已安装，但北极星相关参数与集群绑定的接入点不一致
-	OperatorStatusOutdated OperatorStatus = "outdated"
-	// OperatorStatusNotInstalled 未安装
-	OperatorStatusNotInstalled OperatorStatus = "not_installed"
-)

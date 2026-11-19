@@ -15,14 +15,6 @@
     ]
   },
   {
-    "dropIndexes": "cluster_addon_install_tasks",
-    "index": [
-      "idx_clusterID_namespace_addonName_createdAt",
-      "idx_clusterID_namespace_addonName_running",
-      "tenantID_1"
-    ]
-  },
-  {
     "dropIndexes": "polaris_configs",
     "index": "idx_accessPointID"
   }

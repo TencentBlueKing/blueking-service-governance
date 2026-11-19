@@ -113,7 +113,7 @@ var _ = Describe("Query", func() {
 			addons := clusteraddon.BuildAddonInfoList(
 				ctx,
 				addonDefs,
-				addonEnvironment("fake-cluster", false),
+				addonTarget("fake-cluster", false),
 				"",
 				repoIndex,
 			)
@@ -139,7 +139,7 @@ var _ = Describe("Query", func() {
 			addons := clusteraddon.BuildAddonInfoList(
 				ctx,
 				addonDefs,
-				addonEnvironment("fake-cluster", false),
+				addonTarget("fake-cluster", false),
 				"override-ns",
 				repoIndex,
 			)
@@ -164,7 +164,7 @@ var _ = Describe("Query", func() {
 			addons := clusteraddon.BuildAddonInfoList(
 				ctx,
 				addonDefs,
-				addonEnvironment("fake-cluster", false),
+				addonTarget("fake-cluster", false),
 				"",
 				repoIndex,
 			)
@@ -196,7 +196,7 @@ var _ = Describe("Query", func() {
 					addons := clusteraddon.BuildAddonInfoList(
 						context.Background(),
 						defs,
-						addonEnvironment("cluster", isFederation),
+						addonTarget("cluster", isFederation),
 						"",
 						clusteraddon.NewRepoIndex(&repo.IndexFile{}),
 					)
@@ -232,7 +232,7 @@ var _ = Describe("Query", func() {
 					},
 				}, nil).Build()
 				addons := clusteraddon.BuildAddonInfoList(context.Background(), defs,
-					addonEnvironment("cluster", false), "bcs-system", clusteraddon.NewRepoIndex(&repo.IndexFile{}))
+					addonTarget("cluster", false), "bcs-system", clusteraddon.NewRepoIndex(&repo.IndexFile{}))
 				Expect(query.Times()).To(Equal(1))
 				Expect(addons).To(HaveLen(2))
 				Expect(addons[0].InstallInfo.Status).To(Equal(helm.StatusDeployed))
@@ -251,7 +251,7 @@ var _ = Describe("Query", func() {
 				query := mockey.Mock(helm.ListReleases).Return(nil, errors.New("access denied")).Build()
 				addons := clusteraddon.BuildAddonInfoList(context.Background(),
 					[]*clusteraddon.ClusterAddonDef{gameDeployDef(), hookOperatorDef()},
-					addonEnvironment("cluster", false), "bcs-system", clusteraddon.NewRepoIndex(&repo.IndexFile{}))
+					addonTarget("cluster", false), "bcs-system", clusteraddon.NewRepoIndex(&repo.IndexFile{}))
 				Expect(query.Times()).To(Equal(1))
 				Expect(addons).To(HaveLen(2))
 				for _, addon := range addons {
@@ -478,4 +478,9 @@ func agonesDef() *clusteraddon.ClusterAddonDef {
 // addonEnvironment 构造组件测试所需的内存环境对象，仅设置集群信息，不写入数据库。
 func addonEnvironment(clusterID string, isFederation bool) *envmodel.Environment {
 	return &envmodel.Environment{Cluster: envmodel.BizCluster{ClusterID: clusterID, IsFederation: isFederation}}
+}
+
+// addonTarget 构造组件测试所需的目标集群
+func addonTarget(clusterID string, isFederation bool) clusteraddon.ClusterTarget {
+	return clusteraddon.ClusterTarget{ClusterID: clusterID, IsFederation: isFederation}
 }

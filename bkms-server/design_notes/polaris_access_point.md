@@ -41,7 +41,6 @@ OpenAPI 只用第一个地址（`http://{clientHosts[0]}:8090`），SDK 使用�
 | 配置 | 默认值 | 社区版 | 内部版 |
 | --- | --- | --- | --- |
 | `polaris.allowWorkspaceAccessPoints` | `false` | `true` | `false` |
-| `network.egressIPs` | 空 | 平台出口 IP | 不需要 |
 | `polaris.address` / `polaris.joinPoint` | 空 | 不使用 | `joinPoint` |
 
 开关决定集群使用哪种接入点，两种模式互斥，不做隐式回退：
@@ -114,43 +113,30 @@ OpenAPI 只用第一个地址（`http://{clientHosts[0]}:8090`），SDK 使用�
 
 ## 5. 数据模型
 
-三个集合都是租户集合（`TenantScoped: true`），索引见迁移 `000028_polaris_access_points_idx`。组件安装任务见 5.1。
+两个集合都是租户集合（`TenantScoped: true`），索引见迁移 `000028_polaris_access_points_idx`。
 该迁移还给 `polaris_configs` 新增了 `accessPointID` 索引，供删除接入点前查询（见 4.3）。
 
 | 集合 | 模型 | 索引 |
 | --- | --- | --- |
 | `polaris_access_points` | `PolarisAccessPoint` | 唯一 `workspaceID + name` |
 | `polaris_cluster_bindings` | `PolarisClusterBinding` | 唯一 `workspaceID + clusterID`（不做跨空间唯一）；`workspaceID + accessPointID` |
-| `cluster_addon_install_tasks` | `installtask.InstallTask` | `clusterID + namespace + addonName + createdAt(-1)`；唯一 `clusterID + namespace + addonName`（仅 `status=running`，不带租户） |
 
 - 自建接入点的 Token 选填，通过 store 的 Encode/Decode 钩子用 `crypto.AESEncrypt` 加密存储。
   Token 只写入 `PolarisConfig` CR，不放进 operator 安装参数，不注入 Pod；更换 Token 下次部署生效。
 - `lastConnectivity` 记录最近一次连通测试：`{ok, reason, message, consoleAuth, clientAuth, checkedAt}`，
   `reason` 取值 `networkUnreachable` / `clientAuthEnabled` / `tokenInvalid`。
-- 组件安装任务状态只有 `running` / `succeeded` / `failed`。“同一集群同时只允许 1 个运行中的任务”
-  由部分唯一索引保证，并发创建时第二个返回 `installtask.ErrRunning`，不依赖先查后写。
-
-### 5.1 组件安装任务放在 clusteraddon
-
-`bcs-polaris-operator` 是内置的集群 Addon（`clusteraddon/assets/addons/bcs-polaris-operator.yaml`），
-环境的“集群组件”页也能安装它。为了让两条安装路径看到同一份任务、互相排斥，安装任务是通用的集群 Addon 任务，
-不是北极星专属模型：
-
-- 模型与存储在 `pkg/core/env/clusteraddon/installtask`，不在 `clusteraddon` 根包，
-  因为 `clusteraddon` 经 `deploy/helm` 依赖 `addon/polaris`，放在根包会让 `accesspoint` 引用它时形成循环依赖。
-- 互斥键是 `clusterID + namespace + addonName`，与 `clusteraddon.NewInstallLock` 一致，不带租户与空间：
-  集群是物理资源，不同租户、不同空间对同一 Addon 的安装都必须互斥。
-- 04 的异步任务执行 helm 安装时**必须持有 `clusteraddon.NewInstallLock`**。唯一索引只拦得住两个异步任务，
-  环境页的同步安装不写任务记录，只有锁能让两条路径互斥。
-- 任务不记录接入点。`outdated` 由 release 的 values 与接入点当前的期望值比对得出，不依赖安装时的接入点。
-- 北极星专属的部分留在本包：安装参数合并、`outdated` / `driftFields` 判定、组件状态视图与批量安装接口；
-  组件状态视图按 `addonName=bcs-polaris-operator` 查询最近任务。
 - `PolarisConfig` 新增 `accessPointID`：创建时由生效环境的集群绑定推导并固定，之后不变；为空表示平台托管。
+
+
+### 5.1 组件安装复用集群插件接口
+
+`bcs-polaris-operator` 是内置的集群 Addon（`clusteraddon/assets/addons/bcs-polaris-operator.yaml`，
+名称为 `accesspoint.OperatorAddonName`），环境的“集群组件”页也能安装它。北极星不单独提供安装接口，
 
 ## 6. REST API 契约
 
 路由注册在 `accesspoint/router.go`，handler 在 `accesspoint/handler`，请求与响应结构在 `accesspoint/serializer`。
-除网络信息外，handler 目前只做参数绑定与权限校验，然后返回 `NOT_IMPLEMENTED`，业务逻辑由对应子需求补齐。
+handler 目前只做参数绑定与权限校验，然后返回 `NOT_IMPLEMENTED`，业务逻辑由对应子需求补齐。
 
 | 接口 | 路由 | 权限 | 实现方 |
 | --- | --- | --- | --- |
@@ -159,12 +145,9 @@ OpenAPI 只用第一个地址（`http://{clientHosts[0]}:8090`），SDK 使用�
 | 更新接入点 | `PATCH /workspaces/{ws}/polaris-access-points/{accessPointID}` | 空间编辑 | 02（`clusterIDs` 由 03） |
 | 删除接入点 | `DELETE /workspaces/{ws}/polaris-access-points/{accessPointID}` | 空间编辑 | 02 |
 | 连通测试 | `POST /workspaces/{ws}/polaris-access-points/connectivity-test` | 空间编辑 | 02 |
-| 网络信息 | `GET /workspaces/{ws}/polaris-access-points/network-info` | 空间查看 | 已实现 |
 | 命名空间 | `GET /workspaces/{ws}/polaris-access-points/{accessPointID}/namespaces` | 空间查看 | 02 |
 | 集群绑定视图 | `GET /workspaces/{ws}/polaris-clusters` | 空间查看 | 03 |
-| 组件状态视图 | `GET /workspaces/{ws}/polaris-operators` | 空间查看 | 04 |
-| 安装/更新组件 | `POST /workspaces/{ws}/polaris-access-points/{accessPointID}/operator-installs` | 空间编辑 | 04 |
-| 环境组件状态 | `GET /envs/{envID}/polaris-operator` | 环境查看 | 04 |
+| 组件期望 values | `GET /workspaces/{ws}/polaris-operator-values?accessPointID=` | 空间查看 | 04 |
 
 以上接口只在 `allowWorkspaceAccessPoints=true` 时注册，此时平台托管接入点不可用，因此接口只处理空间自建接入点：
 列表不返回平台托管接入点，路径中的 `accessPointID` 传 `platform` 时返回 `NOT_FOUND`。

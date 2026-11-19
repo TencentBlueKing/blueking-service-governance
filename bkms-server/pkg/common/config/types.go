@@ -356,12 +356,6 @@ type EncryptConfig struct {
 	Secret string
 }
 
-// NetworkConfig 平台自身的网络配置
-type NetworkConfig struct {
-	// EgressIPs 平台访问外部系统（如自建北极星）时的出口 IP，供用户在对方配置白名单
-	EgressIPs []string
-}
-
 // --------------------------- 业务功能配置 ---------------------------
 
 // ClusterAddonConfig 集群插件（Addon）相关配置
@@ -494,8 +488,6 @@ type Config struct {
 	Logging LoggingConfig
 	// 加密配置
 	Encrypt EncryptConfig
-	// Network 平台自身的网络配置
-	Network NetworkConfig
 
 	// --------------------------- 业务功能配置 ---------------------------
 	// ClusterAddons 集群插件（Addons）配置

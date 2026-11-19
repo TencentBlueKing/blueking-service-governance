@@ -248,10 +248,9 @@ asynq:
 			Expect(cfg.BKCI.PipelineTmpl.BuilderImageCode).To(BeEmpty())
 			Expect(cfg.BKCI.PipelineTmpl.BuilderImageVersion).To(BeEmpty())
 			Expect(cfg.Polaris.AllowWorkspaceAccessPoints).To(BeFalse())
-			Expect(cfg.Network.EgressIPs).To(BeEmpty())
 		})
 
-		It("should successfully load explicit polaris access point and network config values", func() {
+		It("should successfully load explicit polaris access point config values", func() {
 			configContent := `
 bkApp:
   code: test-app
@@ -262,10 +261,6 @@ account:
 polaris:
   address: 10.0.0.1:8091
   allowWorkspaceAccessPoints: true
-network:
-  egressIPs:
-    - 10.0.0.1
-    - 10.0.0.2
 metrics:
   port: 8081
 httpServer:
@@ -286,7 +281,6 @@ asynq:
 				Address:                    "10.0.0.1:8091",
 				AllowWorkspaceAccessPoints: true,
 			}))
-			Expect(cfg.Network.EgressIPs).To(Equal([]string{"10.0.0.1", "10.0.0.2"}))
 		})
 
 		It("should successfully load explicit tenant config values", func() {
