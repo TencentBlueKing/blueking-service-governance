@@ -20,6 +20,9 @@
 package serializer
 
 import (
+	"context"
+
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/i18n"
 	clusteraddon "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/clusteraddon"
 )
 
@@ -104,11 +107,13 @@ type ClusterInstallInfoOutput struct {
 }
 
 // FromModel fills output fields from a ClusterAddonInfo domain model.
-func (o *ClusterAddonInfoOutput) FromModel(info clusteraddon.ClusterAddonInfo) *ClusterAddonInfoOutput {
+func (o *ClusterAddonInfoOutput) FromModel(
+	ctx context.Context, info clusteraddon.ClusterAddonInfo,
+) *ClusterAddonInfoOutput {
 	*o = ClusterAddonInfoOutput{
 		Name:                info.Name,
 		DisplayName:         info.DisplayName,
-		Description:         info.Description,
+		Description:         localizedDescription(ctx, info),
 		RequiredForAppTypes: info.RequiredForAppTypes,
 		OptionalForAppTypes: info.OptionalForAppTypes,
 		SupportedActions:    info.SupportedActions,
@@ -131,6 +136,15 @@ func (o *ClusterAddonInfoOutput) FromModel(info clusteraddon.ClusterAddonInfo) *
 		}
 	}
 	return o
+}
+
+// localizedDescription 返回插件描述的翻译；部署目录可配置，且数据库中可能残留已移出仓库的插件定义，
+// 这些插件没有内嵌翻译，回退到定义中的原文
+func localizedDescription(ctx context.Context, info clusteraddon.ClusterAddonInfo) string {
+	if msg, ok := i18n.TryT(ctx, "cluster_addon.addon."+info.Name+".description", nil); ok {
+		return msg
+	}
+	return info.Description
 }
 
 // -----------------------------------------------------------------------------

@@ -22,15 +22,28 @@ import (
 	"fmt"
 
 	"github.com/pkg/errors"
+	"github.com/samber/lo"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 )
 
 var (
 	// ErrNotFound 文档不存在，所有 GenericStore 的 NotFound 错误都满足 errors.Is(err, ErrNotFound)
-	ErrNotFound = errors.New("document not found")
+	ErrNotFound error = &genericError{msg: "document not found", notFound: true}
 	// ErrDuplicate 唯一键冲突，所有 GenericStore 的冲突错误都满足 errors.Is(err, ErrDuplicate)
-	ErrDuplicate = errors.New("duplicate key")
+	ErrDuplicate error = &genericError{msg: "duplicate key", alreadyExists: true}
 )
+
+// genericError 是 store 的通用哨兵错误，通过 IsNotFound / IsAlreadyExists 声明错误类别，
+// HTTP 出口（bkerrs）据此定码，store 无需依赖 bkerrs
+type genericError struct {
+	msg           string
+	notFound      bool
+	alreadyExists bool
+}
+
+func (e *genericError) Error() string         { return e.msg }
+func (e *genericError) IsNotFound() bool      { return e.notFound }
+func (e *genericError) IsAlreadyExists() bool { return e.alreadyExists }
 
 // IgnoreNotFound 在 err 是 NotFound 错误时返回 nil，否则原样返回 err，
 // 用于「目标不存在即视为完成」的写操作，例如：
@@ -68,7 +81,15 @@ func (e *storeError) Is(target error) bool {
 	return target == e.generic || (e.domain != nil && errors.Is(e.domain, target))
 }
 
-func (e *storeError) Unwrap() error { return e.cause }
+// IsNotFound、IsAlreadyExists 透出通用哨兵错误的类别（Unwrap 不包含 generic，errors.As 取不到它）
+func (e *storeError) IsNotFound() bool      { return e.generic == ErrNotFound }
+func (e *storeError) IsAlreadyExists() bool { return e.generic == ErrDuplicate }
+
+// Unwrap 同时暴露业务错误与底层原因，业务错误在前，
+// 使 errors.As 能优先取到 Meta 中配置的已分类错误（如 bkerrs.Define 定义的错误）
+func (e *storeError) Unwrap() []error {
+	return lo.Filter([]error{e.domain, e.cause}, func(err error, _ int) bool { return err != nil })
+}
 
 func (s *GenericStore[T]) notFound(q *query) error {
 	return &storeError{

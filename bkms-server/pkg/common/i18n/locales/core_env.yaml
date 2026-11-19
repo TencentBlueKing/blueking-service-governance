@@ -1,0 +1,40 @@
+# 环境（pkg/core/env）
+ENV_NOT_FOUND:
+  zh: "环境不存在"
+  en: "Environment not found"
+ENV_ALREADY_EXISTS:
+  zh: "环境已存在（名称重复或集群命名空间已被占用）"
+  en: "Environment already exists (duplicate name or cluster namespace already occupied)"
+CORE_ENV_HAS_APPS_CANNOT_UPDATE_CLUSTER:
+  zh: "环境已部署 {{.appCount}} 个应用，无法修改集群配置"
+  en: "Environment has {{.appCount}} deployed app(s) and cannot update cluster configuration"
+CORE_ENV_HAS_APPS_CANNOT_DELETE:
+  zh: "环境下还有 {{.appCount}} 个应用，无法删除"
+  en: "Environment still has {{.appCount}} app(s) and cannot be deleted"
+CORE_ENV_INVALID_FEATURE_ENV_INPUT:
+  zh: "特性环境参数不合法"
+  en: "Invalid feature environment input"
+ENV_CLUSTER_NAMESPACE_OCCUPIED:
+  zh: "集群 {{.clusterID}} 的命名空间 {{.namespace}} 已被工作空间 {{.occupiedByWorkspaceID}} 下的环境 {{.occupiedByEnvName}} 占用"
+  en: "Namespace {{.namespace}} of cluster {{.clusterID}} is already used by environment {{.occupiedByEnvName}} in workspace {{.occupiedByWorkspaceID}}"
+
+# 集群插件（pkg/core/env/clusteraddon）
+# 内置集群插件的描述，key 中间段为插件名；每个内置插件都必须配置，由 clusteraddon 的测试检查
+cluster_addon.addon.agones.description:
+  zh: "Agones 是 Kubernetes 上的游戏服务器管理器，用于管理游戏服务器实例的部署、伸缩和调度。"
+  en: "Agones is a Kubernetes-based game server manager for deploying, scaling, and scheduling game server instances."
+cluster_addon.addon.bcs-gamedeployment-operator.description:
+  zh: "GameDeployment-Operator 支持优雅删除/更新，原地更新及智能化地分步骤灰度发布功能"
+  en: "GameDeployment-Operator supports graceful deletion/update, in-place update, and intelligent phased canary release."
+cluster_addon.addon.bcs-hook-operator.description:
+  zh: "Hook-Operator 支持优雅删除/更新的 hook 检查"
+  en: "Hook-Operator supports hook checks for graceful deletion and update."
+cluster_addon.addon.bcs-ingress-controller.description:
+  zh: "蓝鲸容器服务扩展 Ingress，多云环境下为 GameServer 提供灵活的流量接入方式"
+  en: "BCS extended Ingress providing flexible traffic routing for GameServers in multi-cloud environments."
+cluster_addon.addon.bcs-polaris-operator.description:
+  zh: "BcsPolaris-Operator 是基于北极星名字服务（Polaris）提供实例自动发现、实例注册与卸载、名字服务管理等功能的组件"
+  en: "BcsPolaris-Operator provides automatic instance discovery, registration/deregistration, and service naming management based on Polaris."
+cluster_addon.addon.general-pod-autoscaler.description:
+  zh: "GeneralPodAutoscaler 支持更多模式自动扩缩副本数"
+  en: "GeneralPodAutoscaler supports more modes for automatic replica autoscaling."

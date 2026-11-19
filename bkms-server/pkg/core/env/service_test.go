@@ -20,6 +20,7 @@ package env
 
 import (
 	"context"
+	"errors"
 
 	"github.com/TencentBlueKing/gopkg/stringx"
 	. "github.com/onsi/ginkgo/v2"
@@ -28,6 +29,7 @@ import (
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
@@ -119,14 +121,13 @@ var _ = Describe("Test EnvService", func() {
 				WorkspaceID: "ws-" + stringx.Random(6),
 				Cluster:     Cluster,
 			})
-			Expect(IsErrEnvClusterNamespaceOccupied(createErr)).To(BeTrue())
-
-			occupiedErr, ok := GetEnvClusterNamespaceConflictInfo(createErr)
-			Expect(ok).To(BeTrue())
-			Expect(occupiedErr.ClusterID).To(Equal(Cluster.ClusterID))
-			Expect(occupiedErr.Namespace).To(Equal(Cluster.Namespace))
-			Expect(occupiedErr.OccupiedByEnvName).To(Equal(envName))
-			Expect(occupiedErr.OccupiedByWorkspaceID).To(Equal(workspaceID))
+			Expect(errors.Is(createErr, ErrEnvClusterNamespaceOccupied)).To(BeTrue())
+			Expect(bkerrs.FromError(createErr).Params()).To(Equal(map[string]string{
+				"clusterID":             Cluster.ClusterID,
+				"namespace":             Cluster.Namespace,
+				"occupiedByEnvName":     envName,
+				"occupiedByWorkspaceID": workspaceID,
+			}))
 		})
 
 		It("returns domain conflict error when updating an env to an occupied cluster namespace", func() {
@@ -151,14 +152,13 @@ var _ = Describe("Test EnvService", func() {
 				ClusterType: &occupiedCluster.ClusterType,
 				Namespace:   &occupiedCluster.Namespace,
 			})
-			Expect(IsErrEnvClusterNamespaceOccupied(updateErr)).To(BeTrue())
-
-			occupiedErr, ok := GetEnvClusterNamespaceConflictInfo(updateErr)
-			Expect(ok).To(BeTrue())
-			Expect(occupiedErr.ClusterID).To(Equal(occupiedCluster.ClusterID))
-			Expect(occupiedErr.Namespace).To(Equal(occupiedCluster.Namespace))
-			Expect(occupiedErr.OccupiedByEnvName).To(Equal(occupiedEnvName))
-			Expect(occupiedErr.OccupiedByWorkspaceID).To(Equal(occupiedWorkspaceID))
+			Expect(errors.Is(updateErr, ErrEnvClusterNamespaceOccupied)).To(BeTrue())
+			Expect(bkerrs.FromError(updateErr).Params()).To(Equal(map[string]string{
+				"clusterID":             occupiedCluster.ClusterID,
+				"namespace":             occupiedCluster.Namespace,
+				"occupiedByEnvName":     occupiedEnvName,
+				"occupiedByWorkspaceID": occupiedWorkspaceID,
+			}))
 		})
 
 		It("runs update hooks with before and after env when type changes", func() {

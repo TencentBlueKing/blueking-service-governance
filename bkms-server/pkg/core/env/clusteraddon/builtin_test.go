@@ -20,11 +20,14 @@ package clusteraddon_test
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"gopkg.in/yaml.v3"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/i18n"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	clusteraddon "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/clusteraddon"
 )
@@ -75,5 +78,23 @@ var _ = Describe("Builtin ClusterAddonDefs Tests", func() {
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("stating path"))
 		})
+	})
+})
+
+var _ = Describe("Builtin ClusterAddonDefs i18n", func() {
+	It("should have a localized description for every builtin addon", func() {
+		files, err := filepath.Glob("./assets/addons/*.yaml")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(files).NotTo(BeEmpty())
+		for _, file := range files {
+			content, err := os.ReadFile(file)
+			Expect(err).NotTo(HaveOccurred())
+			var def struct {
+				Name string `yaml:"name"`
+			}
+			Expect(yaml.Unmarshal(content, &def)).To(Succeed())
+			key := "cluster_addon.addon." + def.Name + ".description"
+			Expect(i18n.HasKey(key)).To(BeTrue(), "missing message for key %q (%s)", key, file)
+		}
 	})
 })

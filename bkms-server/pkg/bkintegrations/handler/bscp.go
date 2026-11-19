@@ -45,7 +45,7 @@ func (h *Handler) ListBSCPBizs(c *gin.Context) {
 	ctx := c.Request.Context()
 	client, err := bscp.New(auth.MustGetUser(ctx))
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "initial bscp client"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "initial bscp client"))
 		return
 	}
 
@@ -85,7 +85,7 @@ func (h *Handler) ListBSCPServices(c *gin.Context) {
 	ctx := c.Request.Context()
 	client, err := bscp.New(auth.MustGetUser(ctx))
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "initial bscp client"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "initial bscp client"))
 		return
 	}
 
@@ -129,7 +129,7 @@ func (h *Handler) ListBSCPConfigs(c *gin.Context) {
 	ctx := c.Request.Context()
 	client, err := bscp.New(auth.MustGetUser(ctx))
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "initial bscp client"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "initial bscp client"))
 		return
 	}
 
@@ -141,11 +141,9 @@ func (h *Handler) ListBSCPConfigs(c *gin.Context) {
 
 	ver := versions.LatestFullyReleased()
 	if ver == nil {
-		bkerrs.AbortWithErr(c, bkerrs.WrapBSCPNotFullyReleased(
-			bkerrs.New(bkerrs.ErrCodeNotFound, "no fully released version"),
-			uriInput.BizID,
-			uriInput.ServiceID,
-		))
+		bkerrs.AbortWithErr(c, bkerrs.ErrBSCPNotFullyReleased.
+			With("bizID", uriInput.BizID).
+			With("serviceID", uriInput.ServiceID))
 		return
 	}
 
@@ -195,7 +193,7 @@ func (h *Handler) GetBSCPConfig(c *gin.Context) {
 	ctx := c.Request.Context()
 	client, err := bscp.New(auth.MustGetUser(ctx))
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "initial bscp client"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "initial bscp client"))
 		return
 	}
 
@@ -207,11 +205,9 @@ func (h *Handler) GetBSCPConfig(c *gin.Context) {
 
 	ver := versions.LatestFullyReleased()
 	if ver == nil {
-		bkerrs.AbortWithErr(c, bkerrs.WrapBSCPNotFullyReleased(
-			bkerrs.New(bkerrs.ErrCodeNotFound, "no fully released version"),
-			uriInput.BizID,
-			uriInput.ServiceID,
-		))
+		bkerrs.AbortWithErr(c, bkerrs.ErrBSCPNotFullyReleased.
+			With("bizID", uriInput.BizID).
+			With("serviceID", uriInput.ServiceID))
 		return
 	}
 
@@ -257,7 +253,7 @@ func (h *Handler) GetBSCPConfig(c *gin.Context) {
 
 func wrapBSCPAPIError(err error, msg string) error {
 	if errors.Is(err, bscp.ErrNoPermission) {
-		return bkerrs.WrapBSCPNoPermission(err, msg)
+		return bkerrs.ErrBSCPNoPermission.WithCause(errors.Wrap(err, msg))
 	}
 	return bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, msg)
 }

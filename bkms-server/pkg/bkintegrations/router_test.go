@@ -85,7 +85,7 @@ var _ = Describe("Register", func() {
 		Expect(rec.Code).To(Equal(http.StatusNotImplemented))
 		var out bkerrs.GinErrorOutput
 		Expect(json.Unmarshal(rec.Body.Bytes(), &out)).To(Succeed())
-		Expect(out.Error.Details).To(HaveLen(1))
+		Expect(out.Error.Details).NotTo(BeEmpty())
 		Expect(out.Error.Details[0]["code"]).To(Equal(string(bkerrs.ErrDetailCodeBSCPDisabled)))
 	})
 

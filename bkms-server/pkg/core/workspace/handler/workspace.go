@@ -620,13 +620,7 @@ func (h *Handler) CreateWorkspace(c *gin.Context) {
 	defaultEnvs := workspace.BuildDefaultEnvs(auth.MustGetUser(ctx).ID, ws.ID, bkSystem.BkBCSProjectCode)
 	for _, env := range defaultEnvs {
 		if envErr := envSvc.Create(ctx, &env); envErr != nil {
-			if abortIfEnvClusterNamespaceOccupied(c, envErr) {
-				return
-			}
-			bkerrs.AbortWithErr(
-				c,
-				bkerrs.Wrapf(envErr, bkerrs.ErrCodeInternalServerError, "create default env %s", env.Name),
-			)
+			bkerrs.AbortWithErr(c, errors.Wrapf(envErr, "create default env %s", env.Name))
 			return
 		}
 	}
@@ -1039,15 +1033,4 @@ func ClassifyEnsureBkSystemsErr(err error) bkerrs.ErrCode {
 	default:
 		return bkerrs.ErrCodeInternalServerError
 	}
-}
-
-func abortIfEnvClusterNamespaceOccupied(c *gin.Context, err error) bool {
-	info, ok := bkmsenv.GetEnvClusterNamespaceConflictInfo(err)
-	if !ok {
-		return false
-	}
-	bkerrs.AbortWithErr(c, bkerrs.WrapEnvClusterNamespaceOccupied(
-		info.ClusterID, info.Namespace, info.OccupiedByEnvName, info.OccupiedByWorkspaceID,
-	))
-	return true
 }

@@ -18,50 +18,19 @@
 
 package bkerrs
 
-import (
-	"errors"
-	"fmt"
+var (
+	// ErrBSCPDisabled 当前环境关闭了 BSCP 对接（featureIntegrations.disableBSCP）
+	ErrBSCPDisabled = Define(
+		ErrCodeNotImplemented,
+		ErrDetailCodeBSCPDisabled,
+		"bscp integration is disabled by featureIntegrations.disableBSCP",
+	)
+	// ErrBSCPNoPermission 无 BSCP 服务权限
+	ErrBSCPNoPermission = Define(ErrCodeNoPermission, ErrDetailCodeBSCPNoPermission, "bscp service permission denied")
+	// ErrBSCPNotFullyReleased BSCP 服务没有全量发布的版本，需附带参数 bizID、serviceID
+	ErrBSCPNotFullyReleased = Define(
+		ErrCodeNotFound,
+		ErrDetailCodeNotFullyReleased,
+		"bscp service has no fully released version",
+	)
 )
-
-// ErrBSCPDisabled 当前环境关闭了 BSCP 对接（featureIntegrations.disableBSCP）。
-// WriteError 会将错误链中含有该错误的响应统一转换为 BSCP_DISABLED，调用方无需逐层转换。
-var ErrBSCPDisabled = errors.New("bscp integration is disabled by featureIntegrations.disableBSCP")
-
-const bscpDisabledMsg = "bscp is disabled in current environment"
-
-// WrapBSCPNoPermission wraps a BSCP permission error into the standard API shape.
-func WrapBSCPNoPermission(err error, msg string) *Error {
-	return Wrap(err, ErrCodeNoPermission, msg).SetDetails(
-		NewDetail(
-			ErrDetailCodeBSCPNoPermission,
-			"bscp service permission denied",
-			WithSystem(SystemName),
-			WithModule("bscp"),
-		),
-	)
-}
-
-// WrapBSCPDisabled 包装为当前环境关闭了 BSCP 对接的错误
-func WrapBSCPDisabled(err error) *Error {
-	return Wrap(err, ErrCodeNotImplemented, bscpDisabledMsg).SetDetails(
-		NewDetail(
-			ErrDetailCodeBSCPDisabled,
-			bscpDisabledMsg,
-			WithSystem(SystemName),
-			WithModule("bscp"),
-		),
-	)
-}
-
-// WrapBSCPNotFullyReleased 包装为 BSCP 服务未全量发布错误
-func WrapBSCPNotFullyReleased(err error, bizID, serviceID string) error {
-	wrappedErr := Wrapf(err, ErrCodeNotFound, "no fully released version for service: %s in biz: %s", serviceID, bizID)
-	return wrappedErr.SetDetails(
-		NewDetail(
-			ErrDetailCodeNotFullyReleased,
-			fmt.Sprintf("bscp service %s has no fully released version in biz %s", serviceID, bizID),
-			WithSystem("bkms"),
-			WithModule("bscp"),
-		),
-	)
-}

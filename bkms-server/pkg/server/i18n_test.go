@@ -16,28 +16,26 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
-package bkerrs
+package server_test
 
-import "fmt"
+import (
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 
-// WrapEnvClusterNamespaceOccupied 包装为"集群命名空间已被其他环境占用"API 错误。
-func WrapEnvClusterNamespaceOccupied(clusterID, namespace, occupiedByEnvName, occupiedByWorkspaceID string) error {
-	msg := fmt.Sprintf(
-		"cluster %s namespace %s is already bound to environment %q in workspace %s",
-		clusterID, namespace, occupiedByEnvName, occupiedByWorkspaceID,
-	)
-	return New(ErrCodeAlreadyExists, msg).SetDetails(
-		NewDetail(
-			ErrDetailCodeEnvClusterNamespaceOccupied,
-			msg,
-			WithSystem(SystemName),
-			WithModule("env"),
-			WithExtras(map[string]string{
-				"clusterID":             clusterID,
-				"namespace":             namespace,
-				"occupiedByEnvName":     occupiedByEnvName,
-				"occupiedByWorkspaceID": occupiedByWorkspaceID,
-			}),
-		),
-	)
-}
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/i18n"
+	_ "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server"
+)
+
+// server 包引入了全部业务模块，此处 bkerrs.Definitions() 即为服务中定义的全部错误
+var _ = Describe("Error messages", func() {
+	It("should have a localized message for every defined error", func() {
+		definitions := bkerrs.Definitions()
+		Expect(definitions).NotTo(BeEmpty())
+		for _, def := range definitions {
+			Expect(
+				i18n.HasKey(string(def.DetailCode())),
+			).To(BeTrue(), "missing message for detail code %s", def.DetailCode())
+		}
+	})
+})

@@ -55,7 +55,7 @@ type apiErrorRule struct {
 }
 
 // TODO(北极星接入点管理、集群绑定子需求): IN_USE 两类详情需要在 extras 中列出占用的应用与配置，
-// 实现删除与换绑时参照 bkerrs.WrapEnvClusterNamespaceOccupied 单独包装，不再走这里的通用规则
+// 实现删除与换绑时参照 env.ErrEnvClusterNamespaceOccupied 用 bkerrs.Define 定义并通过 With 附带参数，不再走这里的通用规则
 var apiErrorRules = []apiErrorRule{
 	{ErrAccessPointNotFound, bkerrs.ErrCodeNotFound, ""},
 	{installtask.ErrNotFound, bkerrs.ErrCodeNotFound, ""},
