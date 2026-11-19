@@ -156,9 +156,8 @@
 </template>
 
 <script setup lang="ts">
-  import { computed, nextTick, onBeforeMount, ref, watch } from 'vue';
+  import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 
-  import { useLocalStorage } from '@vueuse/core';
   import { Popover } from 'bkui-vue';
   import { useI18n } from 'vue-i18n';
   import { useRoute, useRouter } from 'vue-router';
@@ -167,8 +166,8 @@
   import Layout from '~/components/skeleton/skeleton-layout';
   import Skeleton from '~/components/skeleton/skeleton.vue';
   import { isRuntimeModSupported } from '~/composables/use-app-runtime';
+  import { DEFAULT_ENV_NAME, useAppConfigEnv } from '~/pages/application/detail/app-config/use-app-config-env';
   import { useAppDetail } from '~/stores/app-detail';
-  import { useSpaceStore } from '~/stores/space';
 
   import DevModeForm from './components/dev-mode-form.vue';
   import HealthProbe from './components/health-probe.vue';
@@ -185,12 +184,14 @@
   const { t } = useI18n();
   const route = useRoute();
   const router = useRouter();
-  const spaceStore = useSpaceStore();
   const appDetailStore = useAppDetail();
   const devModeSupported = computed(() => isRuntimeModSupported(appDetailStore.runtime, 'devMode'));
+  const { getEnvStorageKey, getStoredEnvName, saveEnvNameToStorage } = useAppConfigEnv();
+  let initializationID = 0;
 
-  const APP_CONFIG_ENV_STORAGE_KEY = 'bkms_app_config_deploy_env';
-  const DEFAULT_ENV_NAME = '__default__';
+  function isCurrentScope(storageKey: string, requestID: number) {
+    return storageKey === getEnvStorageKey() && requestID === initializationID;
+  }
 
   // 将带 {0} 占位符的 tip 文本拆分为前后两部分，中间插入黄线图标
   const deployConfigTipText = computed(() => t('带 {0} 标记的字段已脱离继承，不再跟随默认配置变更。', ['\x00']));
@@ -249,16 +250,10 @@
   // 已配置部署规格的环境名称列表
   const configuredEnvNames = ref<string[]>([]);
 
-  const storedEnvNames = useLocalStorage<Record<string, string>>(APP_CONFIG_ENV_STORAGE_KEY, {});
-
   function clearRouteEnvName() {
     if (!('envName' in route.query)) return;
     const { envName: _envName, ...query } = route.query;
     router.replace({ query });
-  }
-
-  function getEnvStorageKey() {
-    return `${spaceStore.currentSpace}:${appDetailStore.appID}`;
   }
 
   /** 获取稳定的环境展示对象，不依赖部署规格概览，避免保存后刷新概览时重建当前环境对象。 */
@@ -301,49 +296,44 @@
     return Array.isArray(envName) ? envName[0] || '' : envName || '';
   }
 
-  function getStoredEnvName() {
-    return storedEnvNames.value[getEnvStorageKey()] || '';
-  }
-
-  function saveEnvNameToStorage(envName: string) {
-    const realName = envName === DEFAULT_ENV_NAME ? '' : envName;
-    const storageKey = getEnvStorageKey();
-    const nextStoredEnvNames = { ...storedEnvNames.value };
-
-    if (realName) {
-      nextStoredEnvNames[storageKey] = realName;
-    } else {
-      delete nextStoredEnvNames[storageKey];
-    }
-
-    storedEnvNames.value = nextStoredEnvNames;
-  }
-
   // 转换为 ExtendedEnv（提供给各表单组件）
   const currentExtendedEnv = computed<ExtendedEnv | null>(() => getExtendedEnv(currentEnvName.value));
 
   // 获取部署规格概览（哪些环境已配置）
   async function fetchDeploySpecOverview() {
-    if (!appDetailStore.appID) return;
+    const appID = appDetailStore.appID;
+    if (!appID) return;
+    const storageKey = getEnvStorageKey();
+    const requestID = initializationID;
     try {
       const result = await AppSpecService.getAppSpecOverview({
-        appID: appDetailStore.appID,
+        appID,
       });
+      if (!isCurrentScope(storageKey, requestID)) return;
       configuredEnvNames.value = result?.configuredEnvs || [];
     } catch {
-      configuredEnvNames.value = [];
+      if (isCurrentScope(storageKey, requestID)) configuredEnvNames.value = [];
     }
   }
 
   // 获取环境列表
   async function getEnvList() {
-    if (!appDetailStore.appID) {
+    const appID = appDetailStore.appID;
+    if (!appID) {
       envList.value = [];
-      return;
+      return false;
     }
-    envList.value = await EnvService.listAppEnvs({
-      appID: appDetailStore.appID,
-    }).catch(() => []);
+    const storageKey = getEnvStorageKey();
+    const requestID = initializationID;
+    try {
+      const result = await EnvService.listAppEnvs({ appID });
+      if (!isCurrentScope(storageKey, requestID)) return false;
+      envList.value = result;
+      return true;
+    } catch {
+      if (isCurrentScope(storageKey, requestID)) envList.value = [];
+      return false;
+    }
   }
 
   /** 通知参与 AppSpec 配置的组件切换环境，并返回各组件的确认结果。 */
@@ -358,7 +348,10 @@
 
   // 环境修改状态变更回调（保存/恢复默认后刷新概览）
   async function handleEnvModifiedChange() {
+    const storageKey = getEnvStorageKey();
+    const requestID = initializationID;
     await fetchDeploySpecOverview();
+    if (!isCurrentScope(storageKey, requestID)) return;
     if (!currentExtendedEnv.value?.isDefault) {
       saveEnvNameToStorage(currentEnvName.value);
     }
@@ -368,6 +361,8 @@
   async function handleEnvSelectChange(envName: string) {
     if (envSwitchingLoading.value || networkAccessRef.value?.isSaving()) return;
 
+    const storageKey = getEnvStorageKey();
+    const requestID = initializationID;
     envSwitchingLoading.value = true;
 
     try {
@@ -378,6 +373,7 @@
       // 通知所有参与 AppSpec 配置的组件先确认脏数据；任一组件取消则保持当前环境不变。
       const [resourcesConfirmed, strategyConfirmed, metadataConfirmed, networkAccessConfirmed] =
         await handleAppSpecSectionsEnvChange(extendedEnv);
+      if (!isCurrentScope(storageKey, requestID)) return;
 
       // 如果任一组件取消，不更新当前环境
       const isEnvChangeCanceled =
@@ -397,17 +393,27 @@
 
       await nextTick();
     } finally {
-      envSwitchingLoading.value = false;
+      if (isCurrentScope(storageKey, requestID)) envSwitchingLoading.value = false;
     }
   }
 
   async function initDeployConfig() {
-    await Promise.all([getEnvList(), fetchDeploySpecOverview()]);
-    await initEnvFromRouteOrStorage();
+    const requestID = ++initializationID;
+    const storageKey = getEnvStorageKey();
+    const isCurrent = () => isCurrentScope(storageKey, requestID);
+    resetDeployConfig();
+    envSwitchingLoading.value = true;
+    try {
+      const [envListLoaded] = await Promise.all([getEnvList(), fetchDeploySpecOverview()]);
+      if (!isCurrent()) return;
+      await initEnvFromRouteOrStorage(envListLoaded, isCurrent);
+    } finally {
+      if (isCurrent()) envSwitchingLoading.value = false;
+    }
   }
 
   /** 初始化指定环境及各配置组件。 */
-  async function initEnv(envName: string, shouldSaveToStorage: boolean) {
+  async function initEnv(envName: string, shouldSaveToStorage: boolean, isCurrent: () => boolean) {
     const extendedEnv = getLoadExtendedEnv(envName);
     if (!extendedEnv) return false;
 
@@ -417,34 +423,35 @@
     }
 
     await nextTick();
+    if (!isCurrent()) return false;
     await handleAppSpecSectionsEnvChange(extendedEnv);
-    return true;
+    return isCurrent();
   }
 
-  async function initEnvFromRouteOrStorage() {
-    envSwitchingLoading.value = true;
+  async function initEnvFromRouteOrStorage(envListLoaded: boolean, isCurrent: () => boolean) {
     const routeEnvName = getRouteEnvName();
     const storedEnvName = getStoredEnvName();
 
     try {
-      if (routeEnvName && (await initEnv(routeEnvName, true))) {
+      if (routeEnvName && (await initEnv(routeEnvName, true, isCurrent))) {
         return;
       }
+      if (!isCurrent()) return;
 
       if (!storedEnvName) {
-        await initEnv(DEFAULT_ENV_NAME, false);
+        await initEnv(DEFAULT_ENV_NAME, false, isCurrent);
         return;
       }
 
-      if (!(await initEnv(storedEnvName, true))) {
-        saveEnvNameToStorage(DEFAULT_ENV_NAME);
-        await initEnv(DEFAULT_ENV_NAME, false);
+      if (!(await initEnv(storedEnvName, true, isCurrent)) && isCurrent()) {
+        // 只有成功取得完整环境列表才能确认环境已失效，接口失败时保留跨页记忆。
+        if (envListLoaded) saveEnvNameToStorage(DEFAULT_ENV_NAME);
+        await initEnv(DEFAULT_ENV_NAME, false, isCurrent);
       }
     } finally {
-      if (routeEnvName) {
+      if (routeEnvName && isCurrent()) {
         clearRouteEnvName();
       }
-      envSwitchingLoading.value = false;
     }
   }
 
@@ -452,22 +459,23 @@
     envList.value = [];
     configuredEnvNames.value = [];
     currentEnvName.value = DEFAULT_ENV_NAME;
+    envSwitchingLoading.value = false;
   }
 
   watch(
-    () => appDetailStore.appID,
-    async newVal => {
-      if (newVal) {
+    getEnvStorageKey,
+    async () => {
+      if (appDetailStore.appID) {
         await initDeployConfig();
       } else {
+        initializationID += 1;
         resetDeployConfig();
       }
     },
+    { immediate: true },
   );
 
-  onBeforeMount(async () => {
-    if (appDetailStore.appID) {
-      await initDeployConfig();
-    }
+  onBeforeUnmount(() => {
+    initializationID += 1;
   });
 </script>

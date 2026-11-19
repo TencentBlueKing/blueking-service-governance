@@ -19,7 +19,7 @@
 import { ref } from 'vue';
 
 import { flushPromises, shallowMount } from '@vue/test-utils';
-import { Radio } from 'bkui-vue';
+import { Radio, Switcher } from 'bkui-vue';
 import { languages } from 'monaco-editor';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ConfigFileListItem from '~/pages/application/detail/app-config/components/config-file-list-item.vue';
@@ -46,8 +46,13 @@ const mocks = vi.hoisted(() => ({
   saveContent: vi.fn(),
   stopLoading: vi.fn(),
   validate: vi.fn(),
+  confirmBox: vi.fn(),
+  envList: vi.fn(),
+  infoBox: vi.fn(),
 }));
 const runtimeState = ref<null | PublicView | undefined>();
+const scopeState = ref({ space: 'space-id', appID: 'app-id' });
+const ENV_STORAGE_KEY = 'bkms_app_config_deploy_env';
 vi.mock('vue-i18n', async importOriginal => ({
   ...(await importOriginal<object>()),
   useI18n: () => ({
@@ -60,7 +65,9 @@ vi.mock('~/modules/i18n', () => ({ i18n: { global: { t: (key: string) => key } }
 vi.mock('vue-router', () => ({ onBeforeRouteLeave: vi.fn(), onBeforeRouteUpdate: vi.fn() }));
 vi.mock('~/stores/app-detail', () => ({
   useAppDetail: () => ({
-    appID: 'app-id',
+    get appID() {
+      return scopeState.value.appID;
+    },
     loading: false,
     get runtime() {
       return runtimeState.value === undefined
@@ -74,7 +81,14 @@ vi.mock('~/stores/app-detail', () => ({
     appDetail: { appModelSpec: { tafSpec: { fileName: 'old-spec.conf', filePath: '/old-spec' } } },
   }),
 }));
-vi.mock('~/composables/use-leave-confirm', () => ({ default: () => ({ confirmBox: async () => true }) }));
+vi.mock('~/stores/space', () => ({
+  useSpaceStore: () => ({
+    get currentSpace() {
+      return scopeState.value.space;
+    },
+  }),
+}));
+vi.mock('~/composables/use-leave-confirm', () => ({ default: () => ({ confirmBox: mocks.confirmBox }) }));
 vi.mock('~/api/modules/v1', () => ({
   AppConfigFileDefsService: {
     listDefaultFilesWithDef: mocks.list,
@@ -86,12 +100,12 @@ vi.mock('~/api/modules/v1', () => ({
     updateAppConfigFileDefContent: mocks.saveContent,
   },
   AppConfigFilesService: {},
-  EnvService: { listAppEnvs: async () => [{ name: 'prod', displayName: 'Production', type: 'prod' }] },
+  EnvService: { listAppEnvs: mocks.envList },
   EnvvarsService: {},
 }));
 vi.mock('bkui-vue', async importOriginal => {
   const actual = await importOriginal<typeof BkuiVue>();
-  return { ...actual, Message: mocks.message };
+  return { ...actual, Message: mocks.message, InfoBox: mocks.infoBox };
 });
 vi.mock('~/components/monaco-editor/ms-editor.vue', () => ({
   default: {
@@ -137,10 +151,14 @@ const container = { template: '<div><slot /></div>' };
 
 beforeEach(() => {
   vi.resetAllMocks();
+  localStorage.removeItem(ENV_STORAGE_KEY);
+  scopeState.value = { space: 'space-id', appID: 'app-id' };
   mocks.appType = 'taf';
   runtimeState.value = undefined;
   mocks.editorValue = '';
   mocks.validate.mockReturnValue(false);
+  mocks.confirmBox.mockResolvedValue(true);
+  mocks.envList.mockResolvedValue([{ name: 'prod', displayName: 'Production', type: 'prod' }]);
   vi.spyOn(languages, 'getLanguages').mockReturnValue([
     { id: 'yaml', extensions: ['.yaml', '.yml'] },
     { id: 'json', extensions: ['.json'] },
@@ -180,6 +198,8 @@ beforeEach(() => {
 });
 afterEach(() => {
   wrapper?.unmount();
+  wrapper = undefined;
+  localStorage.removeItem(ENV_STORAGE_KEY);
 });
 
 async function openEditor(editFileInfo = true) {
@@ -224,6 +244,274 @@ async function save() {
   await button!.trigger('click');
   await flushPromises();
 }
+
+describe('配置文件：环境联动', () => {
+  beforeEach(() => {
+    savedFile = {
+      ...savedFile,
+      isUnifiedConfig: false,
+      editableContentField: 'content',
+      envContentStrategy: 'overwrite',
+      content: 'default content',
+    };
+    mocks.envList.mockResolvedValue([
+      { name: 'prod', displayName: 'Production', type: 'production' },
+      { name: 'staging', displayName: 'Staging', type: 'staging' },
+    ]);
+    mocks.detail.mockImplementation(async ({ envName }: { envName: string }) => ({
+      item: { ...savedFile, content: envName ? `${envName} content` : 'default content' },
+    }));
+  });
+
+  function rememberEnvs(values: Record<string, string>) {
+    localStorage.setItem(ENV_STORAGE_KEY, JSON.stringify(values));
+  }
+
+  function rememberedEnvs(): Record<string, string> {
+    return JSON.parse(localStorage.getItem(ENV_STORAGE_KEY) || '{}');
+  }
+
+  it.each([
+    ['prod', 'prod', 'prod content'],
+    ['', '__default__', 'default content'],
+  ])('当用户进入配置文件时，应恢复记忆中的环境 %s 并加载对应内容', async (envName, selected, content) => {
+    rememberEnvs(envName ? { 'space-id:app-id': envName } : {});
+    const view = await openEditor(false);
+
+    expect(view.getComponent({ name: 'EnvPerspectiveSelect' }).props('modelValue')).toBe(selected);
+    expect(mocks.editorValue).toBe(content);
+    expect(mocks.detail).toHaveBeenCalledExactlyOnceWith({ appID: 'app-id', id: 'def-id', envName }, { needRes: true });
+  });
+
+  it('当用户选择环境后再次进入配置文件时，应恢复选择且保留其他应用的记忆', async () => {
+    rememberEnvs({ 'other-space:app-id': 'staging', 'space-id:other-app': 'staging' });
+    const view = await openEditor(false);
+    view.getComponent({ name: 'EnvPerspectiveSelect' }).vm.$emit('change', 'prod');
+    await flushPromises();
+
+    expect(rememberedEnvs()).toEqual({
+      'space-id:app-id': 'prod',
+      'other-space:app-id': 'staging',
+      'space-id:other-app': 'staging',
+    });
+    view.unmount();
+    const reopened = await openEditor(false);
+    expect(reopened.getComponent({ name: 'EnvPerspectiveSelect' }).props('modelValue')).toBe('prod');
+    expect(mocks.editorValue).toBe('prod content');
+  });
+
+  it('当用户选择默认配置后再次进入时，应保持默认配置且保留其他应用的记忆', async () => {
+    rememberEnvs({ 'space-id:app-id': 'prod', 'space-id:other-app': 'staging' });
+    const view = await openEditor(false);
+    view.getComponent({ name: 'EnvPerspectiveSelect' }).vm.$emit('change', '__default__');
+    await flushPromises();
+
+    expect(rememberedEnvs()).toEqual({ 'space-id:other-app': 'staging' });
+    expect(mocks.editorValue).toBe('default content');
+    view.unmount();
+    const reopened = await openEditor(false);
+    expect(reopened.getComponent({ name: 'EnvPerspectiveSelect' }).props('modelValue')).toBe('__default__');
+    expect(mocks.editorValue).toBe('default content');
+  });
+
+  it('当用户切换空间或应用时，应分别恢复对应的环境记忆', async () => {
+    rememberEnvs({ 'space-id:app-id': 'prod', 'other-space:app-id': 'staging' });
+    const view = await openEditor(false);
+    expect(view.getComponent({ name: 'EnvPerspectiveSelect' }).props('modelValue')).toBe('prod');
+
+    scopeState.value = { space: 'other-space', appID: 'app-id' };
+    await flushPromises();
+    expect(view.getComponent({ name: 'EnvPerspectiveSelect' }).props('modelValue')).toBe('staging');
+    expect(mocks.editorValue).toBe('staging content');
+
+    scopeState.value = { space: 'other-space', appID: 'other-app' };
+    await flushPromises();
+    expect(view.getComponent({ name: 'EnvPerspectiveSelect' }).props('modelValue')).toBe('__default__');
+    expect(mocks.editorValue).toBe('default content');
+    expect(rememberedEnvs()).toEqual({ 'space-id:app-id': 'prod', 'other-space:app-id': 'staging' });
+  });
+
+  it('当用户切换已开启按环境配置的文件时，应继续查看相同环境', async () => {
+    const otherFile = { ...savedFile, id: 'other-id', configKind: 'plain', name: 'other.yaml' };
+    mocks.list.mockResolvedValue({ items: [savedFile, otherFile] });
+    mocks.detail.mockImplementation(async ({ id, envName }: { envName: string; id: string }) => ({
+      item: { ...(id === otherFile.id ? otherFile : savedFile), content: `${id}:${envName}` },
+    }));
+    rememberEnvs({ 'space-id:app-id': 'prod' });
+    const view = await openEditor(false);
+
+    view.getComponent({ name: 'ConfigFileList' }).vm.$emit('select', otherFile.id);
+    await flushPromises();
+    expect(view.getComponent({ name: 'EnvPerspectiveSelect' }).props('modelValue')).toBe('prod');
+    expect(mocks.editorValue).toBe('other-id:prod');
+  });
+
+  it('当列表快照为统一配置但详情已开启按环境配置时，用户应能切换环境并同步记忆', async () => {
+    mocks.list.mockResolvedValue({ items: [{ ...savedFile, isUnifiedConfig: true }] });
+    const view = await openEditor(false);
+    const environment = view.getComponent({ name: 'EnvPerspectiveSelect' });
+
+    expect(environment.props('modelValue')).toBe('__default__');
+    environment.vm.$emit('change', 'prod');
+    await flushPromises();
+
+    expect(view.getComponent({ name: 'EnvPerspectiveSelect' }).props('modelValue')).toBe('prod');
+    expect(mocks.editorValue).toBe('prod content');
+    expect(mocks.detail).toHaveBeenLastCalledWith(
+      { appID: 'app-id', id: 'def-id', envName: 'prod' },
+      { needRes: true },
+    );
+    expect(rememberedEnvs()).toEqual({ 'space-id:app-id': 'prod' });
+  });
+
+  it('当当前文件未开启按环境配置时，应只显示默认内容并在切换支持的文件后恢复环境', async () => {
+    savedFile.isUnifiedConfig = true;
+    const otherFile = { ...savedFile, id: 'other-id', isUnifiedConfig: false };
+    mocks.list.mockResolvedValue({ items: [savedFile, otherFile] });
+    mocks.detail.mockImplementation(async ({ id, envName }: { envName: string; id: string }) => ({
+      item: { ...(id === otherFile.id ? otherFile : savedFile), content: `${id}:${envName || 'default'}` },
+    }));
+    rememberEnvs({ 'space-id:app-id': 'prod' });
+    const view = await openEditor(false);
+    expect(view.findComponent({ name: 'EnvPerspectiveSelect' }).exists()).toBe(false);
+    expect(mocks.editorValue).toBe('def-id:default');
+    expect(rememberedEnvs()).toEqual({ 'space-id:app-id': 'prod' });
+
+    view.getComponent({ name: 'ConfigFileList' }).vm.$emit('select', otherFile.id);
+    await flushPromises();
+    expect(view.getComponent({ name: 'EnvPerspectiveSelect' }).props('modelValue')).toBe('prod');
+    expect(mocks.editorValue).toBe('other-id:prod');
+  });
+
+  it('当记忆中的环境未挂载当前文件时，应只在当前文件回默认并在切换支持的文件后恢复', async () => {
+    savedFile = { ...savedFile, configKind: 'plain', mountedEnvNames: ['staging'] };
+    const otherFile = { ...savedFile, id: 'other-id', name: 'other.yaml', mountedEnvNames: ['prod'] };
+    mocks.list.mockResolvedValue({ items: [savedFile, otherFile] });
+    mocks.detail.mockImplementation(async ({ id, envName }: { envName: string; id: string }) => ({
+      item: { ...(id === otherFile.id ? otherFile : savedFile), content: `${id}:${envName || 'default'}` },
+    }));
+    rememberEnvs({ 'space-id:app-id': 'prod' });
+    const view = await openEditor(false);
+    expect(view.getComponent({ name: 'EnvPerspectiveSelect' }).props('modelValue')).toBe('__default__');
+    expect(mocks.editorValue).toBe('def-id:default');
+    expect(rememberedEnvs()).toEqual({ 'space-id:app-id': 'prod' });
+
+    view.getComponent({ name: 'ConfigFileList' }).vm.$emit('select', otherFile.id);
+    await flushPromises();
+    expect(view.getComponent({ name: 'EnvPerspectiveSelect' }).props('modelValue')).toBe('prod');
+    expect(mocks.editorValue).toBe('other-id:prod');
+  });
+
+  it('当用户关闭后重新开启按环境配置时，应恢复共享环境并保留环境记忆', async () => {
+    rememberEnvs({ 'space-id:app-id': 'prod' });
+    const view = await openEditor(false);
+    await view.get('[data-section="文件内容"]').trigger('click');
+    view.getComponent(Switcher).vm.$emit('update:modelValue', false);
+    await flushPromises();
+    expect(mocks.infoBox).toHaveBeenCalledOnce();
+    await mocks.infoBox.mock.calls[0][0].onConfirm();
+    await flushPromises();
+    expect(view.findComponent({ name: 'EnvPerspectiveSelect' }).exists()).toBe(false);
+    expect(mocks.editorValue).toBe('default content');
+    expect(rememberedEnvs()).toEqual({ 'space-id:app-id': 'prod' });
+
+    await view.get('[data-section="文件内容"]').trigger('click');
+    view.getComponent(Switcher).vm.$emit('update:modelValue', true);
+    await flushPromises();
+    expect(view.getComponent({ name: 'EnvPerspectiveSelect' }).props('modelValue')).toBe('prod');
+    expect(mocks.editorValue).toBe('prod content');
+    expect(rememberedEnvs()).toEqual({ 'space-id:app-id': 'prod' });
+  });
+
+  it('当用户修改挂载范围移除再加入共享环境时，应先本地回默认再恢复共享环境', async () => {
+    savedFile = { ...savedFile, configKind: 'plain' };
+    rememberEnvs({ 'space-id:app-id': 'prod' });
+    const view = await openEditor();
+    const mountScope = view.getComponent({ name: 'MountScopeField' });
+    mountScope.vm.$emit('update:scope', 'envs');
+    mountScope.vm.$emit('update:envNames', ['staging']);
+    await flushPromises();
+    await save();
+    expect(view.getComponent({ name: 'EnvPerspectiveSelect' }).props('modelValue')).toBe('__default__');
+    expect(mocks.editorValue).toBe('default content');
+    expect(rememberedEnvs()).toEqual({ 'space-id:app-id': 'prod' });
+
+    await view.get('[data-section="文件信息"]').trigger('click');
+    view.getComponent({ name: 'MountScopeField' }).vm.$emit('update:scope', 'all');
+    await flushPromises();
+    await save();
+    expect(view.getComponent({ name: 'EnvPerspectiveSelect' }).props('modelValue')).toBe('prod');
+    expect(mocks.editorValue).toBe('prod content');
+    expect(rememberedEnvs()).toEqual({ 'space-id:app-id': 'prod' });
+  });
+
+  it('当当前文件已回默认且用户明确选择默认时，应清除共享环境而不重载或丢弃草稿', async () => {
+    savedFile = { ...savedFile, configKind: 'plain', mountedEnvNames: ['staging'] };
+    rememberEnvs({ 'space-id:app-id': 'prod' });
+    const view = await openEditor(false);
+    await view.get('[data-section="文件内容"]').trigger('click');
+    mocks.editorValue = 'unsaved draft';
+    view.getComponent({ name: 'MsEditor' }).vm.$emit('change', mocks.editorValue);
+    view.getComponent({ name: 'EnvPerspectiveSelect' }).vm.$emit('change', '__default__');
+    await flushPromises();
+
+    expect(rememberedEnvs()).toEqual({});
+    expect(mocks.editorValue).toBe('unsaved draft');
+    expect(mocks.detail).toHaveBeenCalledOnce();
+    expect(mocks.confirmBox).not.toHaveBeenCalled();
+    await save();
+    expect(view.getComponent({ name: 'SaveVersionConfirmDialog' }).props('preview')).toMatchObject({
+      envName: '',
+      content: 'unsaved draft',
+    });
+  });
+
+  it('当用户取消丢弃未保存内容时，应保持当前环境、草稿和共享环境', async () => {
+    rememberEnvs({ 'space-id:app-id': 'prod' });
+    const view = await openEditor(false);
+    await view.get('[data-section="文件内容"]').trigger('click');
+    mocks.editorValue = 'unsaved draft';
+    view.getComponent({ name: 'MsEditor' }).vm.$emit('change', mocks.editorValue);
+    mocks.confirmBox.mockResolvedValueOnce(false);
+    view.getComponent({ name: 'EnvPerspectiveSelect' }).vm.$emit('change', 'staging');
+    await flushPromises();
+
+    expect(mocks.confirmBox).toHaveBeenCalledOnce();
+    expect(view.getComponent({ name: 'EnvPerspectiveSelect' }).props('modelValue')).toBe('prod');
+    expect(mocks.editorValue).toBe('unsaved draft');
+    expect(mocks.detail).toHaveBeenCalledOnce();
+    expect(rememberedEnvs()).toEqual({ 'space-id:app-id': 'prod' });
+  });
+
+  it('当环境列表加载失败时，应显示错误并保留共享环境记忆', async () => {
+    rememberEnvs({ 'space-id:app-id': 'prod' });
+    mocks.envList.mockRejectedValueOnce(new Error('environment unavailable'));
+    const view = await openEditor(false);
+
+    expect(view.text()).toContain('环境列表加载失败，挂载范围相关操作暂不可用。');
+    expect(view.getComponent({ name: 'EnvPerspectiveSelect' }).props('modelValue')).toBe('__default__');
+    expect(mocks.editorValue).toBe('default content');
+    expect(rememberedEnvs()).toEqual({ 'space-id:app-id': 'prod' });
+  });
+
+  it('当用户快速切换环境时，应保持最后选择且忽略较早返回的内容', async () => {
+    const view = await openEditor(false);
+    const oldRequest = Promise.withResolvers<{ item: DefDetailObj }>();
+    mocks.detail.mockReturnValueOnce(oldRequest.promise);
+    view.getComponent({ name: 'EnvPerspectiveSelect' }).vm.$emit('change', 'prod');
+    await flushPromises();
+    view.getComponent({ name: 'EnvPerspectiveSelect' }).vm.$emit('change', 'staging');
+    await flushPromises();
+    expect(view.getComponent({ name: 'EnvPerspectiveSelect' }).props('modelValue')).toBe('staging');
+    expect(mocks.editorValue).toBe('staging content');
+
+    oldRequest.resolve({ item: { ...savedFile, content: 'old prod content' } });
+    await flushPromises();
+    expect(view.getComponent({ name: 'EnvPerspectiveSelect' }).props('modelValue')).toBe('staging');
+    expect(mocks.editorValue).toBe('staging content');
+    expect(rememberedEnvs()).toEqual({ 'space-id:app-id': 'staging' });
+  });
+});
 
 describe('配置文件保存预览', () => {
   it('首次保存独立环境时预览已加载的原文，并提交预览时的草稿和版本 0', async () => {
