@@ -47,6 +47,8 @@ import (
 var (
 	// ObjectNotFound 蓝盾对象不存在（用于 http status code 为 404 的情况）
 	ObjectNotFound = errors.New("bkci object not found")
+	// PermissionDenied 蓝盾拒绝当前用户的请求（用于 http status code 为 403 的情况）
+	PermissionDenied = errors.New("bkci permission denied")
 	// ProjectAlreadyExist 蓝盾项目已存在
 	ProjectAlreadyExist = errors.New("bkci project already exist")
 	// RepoAlreadyExist 蓝盾代码库已存在
@@ -981,6 +983,9 @@ func (c *ApiClient) handleOperation(
 	// 404 错误 -> 蓝盾资源不存在
 	if resp.StatusCode == http.StatusNotFound {
 		return nil, ObjectNotFound
+	}
+	if resp.StatusCode == http.StatusForbidden {
+		return nil, errors.Wrap(PermissionDenied, newHTTPError(opName, resp.StatusCode, result).Error())
 	}
 	// 根据返回码判断是否失败
 	// 蓝鲸网关错误码字段是 Code，蓝盾错误码字段是 Status

@@ -21,7 +21,11 @@ package bkci
 import (
 	"context"
 
+	"github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/v2/mongo"
+
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bkci"
 )
 
 // RepositoryInitSpec carries the repository URL/alias pair required to
@@ -51,4 +55,13 @@ func EnsureWorkspaceRepositories(
 		seen[spec] = struct{}{}
 	}
 	return nil
+}
+
+// WrapRepositoryErr 将关联 / 访问蓝盾代码库的错误转换为接口错误：
+// 蓝盾拒绝时返回无权限并附带引导授权的详情码，其余情况视为内部错误
+func WrapRepositoryErr(err error, msg string) *bkerrs.Error {
+	if errors.Is(err, bkci.PermissionDenied) {
+		return bkerrs.WrapBkCIRepositoryPermissionDenied(err, msg)
+	}
+	return bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, msg)
 }

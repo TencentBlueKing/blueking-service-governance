@@ -175,7 +175,7 @@ func (h *Handler) ensureCodeRepositoryRegistered(
 		URL:   cfg.CodeRepo.RepoURL,
 		Alias: cfg.CodeRepo.RepoAlias,
 	}}); err != nil {
-		return bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "ensure bkci repositories")
+		return bkci.WrapRepositoryErr(err, "ensure bkci repositories")
 	}
 	return nil
 }

@@ -91,7 +91,7 @@ func (h *Handler) UpdateHelmSpec(c *gin.Context) {
 	if err = bkci.EnsureWorkspaceRepositories(
 		ctx, h.registry.DB, app.WorkspaceID, helmSourceRepositoriesToBind(helmSource),
 	); err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "ensure bkci repositories"))
+		bkerrs.AbortWithErr(c, bkci.WrapRepositoryErr(err, "ensure bkci repositories"))
 		return
 	}
 
