@@ -69,8 +69,8 @@ var _ = Describe("HTTPLogMiddleware", func() {
 		record := map[string]any{}
 		Expect(json.Unmarshal(logBuf.Bytes(), &record)).To(Succeed())
 		Expect(record).To(HaveKeyWithValue("request", SatisfyAll(
-			HaveKeyWithValue("query", "access_token=%2A%2A%2A&page=1"),
-			HaveKeyWithValue("referer", "https://bkms.example.com/apps?bk_token=%2A%2A%2A&tab=env"),
+			HaveKeyWithValue("query", "access_token=***&page=1"),
+			HaveKeyWithValue("referer", "https://bkms.example.com/apps?bk_token=***&tab=env"),
 			HaveKeyWithValue("path", "/user_token/validate"),
 		)))
 	})

@@ -144,7 +144,7 @@ var _ = Describe("HTTPLogMiddleware api tracking", func() {
 			HaveKeyWithValue("method", http.MethodGet),
 			HaveKeyWithValue("route", basePath+"/apps/:appID"),
 			HaveKeyWithValue("path", basePath+"/apps/foo"),
-			HaveKeyWithValue("query", "access_token=%2A%2A%2A&keyword=x"),
+			HaveKeyWithValue("query", "keyword=x&access_token=***"),
 			HaveKeyWithValue("status", BeNumerically("==", http.StatusOK)),
 		)))
 	})

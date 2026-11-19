@@ -34,12 +34,16 @@ var _ = Describe("Query", func() {
 		},
 		Entry("empty", "", ""),
 		Entry("no sensitive keys", "keyword=foo&page=1", "keyword=foo&page=1"),
-		Entry("token and ticket", "access_token=a&bk_ticket=b", "access_token=%2A%2A%2A&bk_ticket=%2A%2A%2A"),
+		Entry("token and ticket", "access_token=a&bk_ticket=b", "access_token=***&bk_ticket=***"),
 		Entry("secret, password and credential", "appSecret=a&Password=b&credential=c",
-			"Password=%2A%2A%2A&appSecret=%2A%2A%2A&credential=%2A%2A%2A"),
-		Entry("key suffix", "api_key=a&apiKey=b&keyword=c", "apiKey=%2A%2A%2A&api_key=%2A%2A%2A&keyword=c"),
-		Entry("repeated values", "token=a&token=b", "token=%2A%2A%2A&token=%2A%2A%2A"),
-		Entry("malformed query", "a=%zz", urlmask.Masked),
+			"appSecret=***&Password=***&credential=***"),
+		Entry("key suffix", "api_key=a&apiKey=b&keyword=c", "api_key=***&apiKey=***&keyword=c"),
+		Entry("repeated values", "token=a&token=b", "token=***&token=***"),
+		Entry("keeps order and encoding", "z=1&q=a+b%20c&token=x&a=%E4%B8%AD", "z=1&q=a+b%20c&token=***&a=%E4%B8%AD"),
+		Entry("escaped sensitive key", "access%5Ftoken=x", "access%5Ftoken=***"),
+		Entry("empty values", "keyword=&token=", "keyword=&token=***"),
+		Entry("key without value", "token&page=1", "token&page=1"),
+		Entry("malformed values", "a=%zz&token=%zz", "a=%zz&token=***"),
 	)
 
 	It("truncates long query", func() {
@@ -55,7 +59,7 @@ var _ = Describe("URL", func() {
 		Entry("empty", "", ""),
 		Entry("without query", "https://bkms.example.com/apps", "https://bkms.example.com/apps"),
 		Entry("with sensitive query", "https://bkms.example.com/apps?bk_token=x&tab=env",
-			"https://bkms.example.com/apps?bk_token=%2A%2A%2A&tab=env"),
+			"https://bkms.example.com/apps?bk_token=***&tab=env"),
 		Entry("malformed", "http://[::1", urlmask.Masked),
 	)
 })

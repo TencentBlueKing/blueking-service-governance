@@ -34,27 +34,30 @@ const (
 // sensitiveKeyParts 参数名含以下片段时视为敏感
 var sensitiveKeyParts = []string{"token", "ticket", "secret", "password", "passwd", "credential"}
 
-// Query 将敏感参数的值替换为 Masked，超长时截断
+// Query 将敏感参数的值替换为 Masked，其余部分保持原样（顺序与编码不变），超长时截断
 func Query(rawQuery string) string {
 	if rawQuery == "" {
 		return ""
 	}
-	values, err := url.ParseQuery(rawQuery)
-	if err != nil {
-		return Masked
-	}
-	for key, vals := range values {
-		if isSensitiveKey(key) {
-			for i := range vals {
-				vals[i] = Masked
-			}
+	parts := strings.Split(rawQuery, "&")
+	for i, part := range parts {
+		key, _, hasValue := strings.Cut(part, "=")
+		if !hasValue {
+			continue
+		}
+		name, err := url.QueryUnescape(key)
+		if err != nil {
+			name = key
+		}
+		if isSensitiveKey(name) {
+			parts[i] = key + "=" + Masked
 		}
 	}
-	encoded := values.Encode()
-	if len(encoded) > maxQueryLen {
-		return encoded[:maxQueryLen]
+	masked := strings.Join(parts, "&")
+	if len(masked) > maxQueryLen {
+		return masked[:maxQueryLen]
 	}
-	return encoded
+	return masked
 }
 
 // URL 脱敏完整 URL 中的查询参数，无法解析时返回 Masked
