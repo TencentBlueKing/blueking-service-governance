@@ -30,6 +30,9 @@ package runtimerender
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"slices"
@@ -50,12 +53,16 @@ import (
 // Only depends on cp and sed commands now.
 const initContainerImage = "busybox:1.36"
 
+// configMapHashLength 配置 ConfigMap 名称中内容摘要的十六进制字符数
+const configMapHashLength = 10
+
 // ConfigParams describes a config file rendered by an init container at pod startup.
 type ConfigParams struct {
 	// WorkloadType is used to derive default volume, mount path, and init container names.
 	// For example, "trpc" produces "trpc-config-template", "/trpc-config-template", and "trpc-init".
 	WorkloadType string
-	// ConfigMapName is the ConfigMap resource name that holds the config template.
+	// ConfigMapName is the base name of the ConfigMap that holds the config template; the actual
+	// name carries a content hash suffix, see VersionedConfigMapName.
 	ConfigMapName string
 	// Files contains all config files rendered into the workload, including the framework config file
 	// and any extra plain files.
@@ -132,11 +139,19 @@ func BuildConfig(params ConfigParams) (*Config, error) {
 		return nil, err
 	}
 
+	configMap := corev1.ConfigMap{
+		TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "ConfigMap"},
+		Data:     make(map[string]string, len(files)),
+	}
+	mainMounts, configMapItems := buildConfigMapData(names, files, &configMap)
+	configMap.Name = VersionedConfigMapName(params.ConfigMapName, configMap.Data)
+
 	configMapVolume := corev1.Volume{
 		Name: names.templateVolumeName,
 		VolumeSource: corev1.VolumeSource{
 			ConfigMap: &corev1.ConfigMapVolumeSource{
-				LocalObjectReference: corev1.LocalObjectReference{Name: params.ConfigMapName},
+				LocalObjectReference: corev1.LocalObjectReference{Name: configMap.Name},
+				Items:                configMapItems,
 			},
 		},
 	}
@@ -147,15 +162,6 @@ func BuildConfig(params ConfigParams) (*Config, error) {
 		},
 	}
 
-	configMap := corev1.ConfigMap{
-		TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: "ConfigMap"},
-		ObjectMeta: metav1.ObjectMeta{Name: params.ConfigMapName},
-		Data:       make(map[string]string, len(files)),
-	}
-
-	mainMounts, configMapItems := buildConfigMapData(names, files, &configMap)
-	configMapVolume.ConfigMap.Items = configMapItems
-
 	initContainer := buildInitContainer(names)
 
 	return &Config{
@@ -164,6 +170,14 @@ func BuildConfig(params ConfigParams) (*Config, error) {
 		ConfigMap:           configMap,
 		InitContainerSpecs:  []corev1.Container{initContainer},
 	}, nil
+}
+
+// VersionedConfigMapName 返回配置 ConfigMap 的版本化名称：base 加上 data 的内容摘要。
+func VersionedConfigMapName(base string, data map[string]string) string {
+	// map 序列化时按 key 排序，结果稳定；map[string]string 不会序列化失败
+	content, _ := json.Marshal(data)
+	sum := sha256.Sum256(content)
+	return fmt.Sprintf("%s-%s", base, hex.EncodeToString(sum[:])[:configMapHashLength])
 }
 
 // buildConfigMapData 遍历文件列表，生成 ConfigMap 数据和主容器挂载。

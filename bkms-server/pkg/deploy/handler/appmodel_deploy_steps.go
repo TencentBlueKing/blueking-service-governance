@@ -434,7 +434,7 @@ func (h *Handler) latestAppModelDeployStatus(
 	}
 
 	// 获取最新一次应用部署结果
-	latestDeploy, err := appmodeldeploy.GetLatest(ctx, h.registry.DB, appID, envName, trafficLaneName)
+	latestDeploy, err := appmodeldeploy.GetLatestRecord(ctx, h.registry.DB, appID, envName, trafficLaneName)
 	if err != nil && !errors.Is(err, appmodeldeploy.ErrDeployRecordNotFound) {
 		return nil, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get latest app model deploy record")
 	}

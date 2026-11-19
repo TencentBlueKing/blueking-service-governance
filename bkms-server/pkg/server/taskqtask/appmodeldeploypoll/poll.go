@@ -204,7 +204,7 @@ func (p *Poller) onFetchFailed(
 // hasNewerDeploy 同环境 / 泳道的最新部署记录不是当前记录时返回 true
 // 查最新记录失败只打日志，按没有更新的部署处理，不影响本 tick 状态推进
 func (p *Poller) hasNewerDeploy(ctx context.Context, args Args) bool {
-	latest, err := appmodeldeploy.GetLatest(ctx, p.db, args.AppID, args.EnvName, args.TrafficLaneName)
+	latest, err := appmodeldeploy.GetLatestRecord(ctx, p.db, args.AppID, args.EnvName, args.TrafficLaneName)
 	if err != nil {
 		log.Errorf(ctx, "failed to get latest deploy record: %v", err)
 		return false

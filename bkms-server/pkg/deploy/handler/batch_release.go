@@ -68,7 +68,7 @@ func (h *Handler) GetBatchReleaseProgress(c *gin.Context) {
 		return
 	}
 
-	record, err := appmodeldeploy.GetLatest(ctx, h.registry.DB, app.ID, uriInput.EnvName, input.TrafficLaneName)
+	record, err := appmodeldeploy.GetLatestRecord(ctx, h.registry.DB, app.ID, uriInput.EnvName, input.TrafficLaneName)
 	if errors.Is(err, appmodeldeploy.ErrDeployRecordNotFound) {
 		ginutils.OK(c, serializer.GetBatchReleaseProgressOutput{})
 		return

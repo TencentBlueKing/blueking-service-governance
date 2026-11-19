@@ -89,7 +89,7 @@ func NewLogManager(
 	namespace := env.Cluster.Namespace
 	containerName := defaults.WorkloadMainContainerName
 	if appruntime.IsAppModelType(app.Type) {
-		record, err := appmodeldeploy.GetLatest(ctx, db, app.ID, env.Name, trafficLaneName)
+		record, err := appmodeldeploy.GetLatestRecord(ctx, db, app.ID, env.Name, trafficLaneName)
 		if err != nil {
 			return nil, errors.Wrapf(err, "get latest deploy record for app %s", app.ID)
 		}

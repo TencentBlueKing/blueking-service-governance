@@ -82,7 +82,7 @@ var _ = Describe("createInstancesUpdateRecord", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(deployID).NotTo(Equal(baseID))
 
-			latest, err := GetLatest(ctx, db, appID, "prod", "lane-1")
+			latest, err := GetLatestRecord(ctx, db, appID, "prod", "lane-1")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(latest.ID.Hex()).To(Equal(deployID))
 			Expect(latest.Status).To(Equal(StatusDeploying))

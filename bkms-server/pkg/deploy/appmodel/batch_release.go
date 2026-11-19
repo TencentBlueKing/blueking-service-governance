@@ -221,7 +221,7 @@ func (r *workloadRollout) SnapshotObjects(extraObjs []unstructured.Unstructured)
 func OperateBatchRelease(
 	ctx context.Context, db *mongo.Database, appID, envName, trafficLaneName string, action batchrelease.Action,
 ) (*Record, error) {
-	record, err := GetLatest(ctx, db, appID, envName, trafficLaneName)
+	record, err := GetLatestRecord(ctx, db, appID, envName, trafficLaneName)
 	if err != nil && !errors.Is(err, ErrDeployRecordNotFound) {
 		return nil, err
 	}

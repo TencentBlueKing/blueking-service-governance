@@ -19,6 +19,7 @@
 package appmodel
 
 import (
+	"context"
 	"time"
 
 	tkex "github.com/Tencent/bk-bcs/bcs-scenarios/kourse/pkg/apis/tkex/v1alpha1"
@@ -26,12 +27,14 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/autodeploy"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
+	k8skind "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/kind"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/workload"
 )
@@ -84,6 +87,103 @@ var _ = Describe("injectDeployID", func() {
 		deployer.injectDeployID(result, "deploy-first")
 		deployer.injectDeployID(result, "deploy-second")
 		expectBothLevels(gd, "deploy-second")
+	})
+})
+
+var _ = Describe("getExpiredResources", func() {
+	const envName, laneName = "stag", ""
+	var (
+		ctx      context.Context
+		db       *mongo.Database
+		deployer *Deployer
+		appID    string
+		baseTime time.Time
+	)
+	gdKey := ResourceKey{Kind: k8skind.GameDeploy, Name: "demo"}
+
+	BeforeEach(func() {
+		ctx = testutil.NewDefaultTenantContext()
+		db = testutil.NewDB(GinkgoT())
+		appID = "app-" + stringx.Random(6)
+		deployer = &Deployer{db: db, app: &bkmsapp.Application{ID: appID}}
+		baseTime = time.Now().Add(-time.Hour)
+		records := store.Of(db, RecordMeta)
+		DeferCleanup(func() { _, _ = records.DeleteMany(ctx, store.Where("appID", appID)) })
+	})
+
+	// createRecords 按传入顺序（由旧到新）创建部署记录
+	createRecords := func(records ...Record) {
+		for i := range records {
+			records[i].AppID = appID
+			records[i].EnvName = envName
+			records[i].TrafficLaneName = laneName
+			records[i].CreatedAt = baseTime.Add(time.Duration(i) * time.Minute)
+			Expect(store.Of(db, RecordMeta).Create(ctx, &records[i])).To(Succeed())
+		}
+	}
+
+	It("should return nothing for the first deployment", func() {
+		expired, err := deployer.getExpiredResources(
+			ctx, envName, laneName, ResourceKeys{gdKey, configMapKey("cm-a")},
+		)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(expired).To(BeEmpty())
+	})
+
+	It("should delete removed resources immediately but keep the previous ConfigMap", func() {
+		svcKey := ResourceKey{Kind: k8skind.SVC, Name: "demo-svc"}
+		createRecords(Record{
+			Status: StatusDeployed, ResourceKeys: ResourceKeys{gdKey, svcKey, configMapKey("cm-a")},
+		})
+
+		expired, err := deployer.getExpiredResources(
+			ctx, envName, laneName, ResourceKeys{gdKey, configMapKey("cm-b")},
+		)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(expired).To(Equal(ResourceKeys{svcKey}))
+	})
+
+	It("should clean up ConfigMaps older than the latest deployed record", func() {
+		createRecords(
+			Record{Status: StatusDeployed, ResourceKeys: ResourceKeys{gdKey, configMapKey("cm-z")}},
+			Record{Status: StatusDeployed, ResourceKeys: ResourceKeys{gdKey, configMapKey("cm-a")}},
+			Record{Status: StatusCanceled, ResourceKeys: ResourceKeys{gdKey, configMapKey("cm-b")}},
+		)
+
+		expired, err := deployer.getExpiredResources(
+			ctx, envName, laneName, ResourceKeys{gdKey, configMapKey("cm-c")},
+		)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(expired).To(Equal(ResourceKeys{configMapKey("cm-z")}))
+	})
+
+	It("should keep an old ConfigMap reused by the current deployment", func() {
+		createRecords(
+			Record{Status: StatusDeployed, ResourceKeys: ResourceKeys{gdKey, configMapKey("cm-z")}},
+			Record{Status: StatusDeployed, ResourceKeys: ResourceKeys{gdKey, configMapKey("cm-a")}},
+		)
+
+		// 配置改回 cm-z 对应的内容，ConfigMap 名称与旧版本相同
+		expired, err := deployer.getExpiredResources(
+			ctx, envName, laneName, ResourceKeys{gdKey, configMapKey("cm-z")},
+		)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(expired).To(BeEmpty())
+	})
+
+	It("should only look at records of the same env and traffic lane", func() {
+		createRecords(Record{Status: StatusDeployed, ResourceKeys: ResourceKeys{gdKey, configMapKey("cm-z")}})
+		other := Record{
+			AppID: appID, EnvName: envName, TrafficLaneName: "lane-x", Status: StatusDeployed,
+			ResourceKeys: ResourceKeys{gdKey, configMapKey("cm-x")}, CreatedAt: time.Now(),
+		}
+		Expect(store.Of(db, RecordMeta).Create(ctx, &other)).To(Succeed())
+
+		expired, err := deployer.getExpiredResources(
+			ctx, envName, laneName, ResourceKeys{gdKey, configMapKey("cm-a")},
+		)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(expired).To(BeEmpty())
 	})
 })
 
