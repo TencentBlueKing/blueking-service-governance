@@ -19,7 +19,7 @@
 import { computed, onUnmounted } from 'vue';
 
 import { debounce } from 'lodash-es';
-import { getBkUserApiUrl } from '~/common/bk-user-api';
+import { isMultiTenant as checkMultiTenant, getBkUserApiUrl } from '~/common/bk-user-api';
 import { useUserStore } from '~/stores/user';
 
 import type { ICommonItem, ISearchItem } from 'bkui-vue/lib/search-select/utils';
@@ -52,11 +52,8 @@ interface BkUserSearchResponse {
 export default function useUserSearch(fieldId = 'username') {
   const userStore = useUserStore();
 
-  /** 是否多租户：已配置用户网关且租户非 default（与 user-name store 的 canResolve 逻辑一致） */
-  const isMultiTenant = computed(() => {
-    const tenantId = userStore.tenantId;
-    return !!getBkUserApiUrl() && !!tenantId && tenantId !== 'default';
-  });
+  /** 是否多租户：已配置用户网关且租户非 default */
+  const isMultiTenant = computed(() => checkMultiTenant(userStore.tenantId));
 
   /** 请求序号：递增即令所有在途请求过期，用于丢弃乱序返回的旧响应 */
   let requestSeq = 0;

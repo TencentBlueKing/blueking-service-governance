@@ -164,7 +164,7 @@
         show-overflow="tooltip"
       >
         <template #default="{ row }: { row: WorkspaceWithStatsOutput }">
-          {{ row.creator || '--' }}
+          <UserDisplay :value="row.creator" />
         </template>
       </TableColumn>
 
@@ -175,7 +175,7 @@
         show-overflow="tooltip"
       >
         <template #default="{ row }: { row: WorkspaceWithStatsOutput }">
-          {{ row.updater || '--' }}
+          <UserDisplay :value="row.updater" />
         </template>
       </TableColumn>
 

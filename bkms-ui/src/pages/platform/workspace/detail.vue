@@ -147,13 +147,15 @@
                 <ProbeDetailItem
                   :label="t('创建者')"
                   :line-height="22"
-                  :value="workspaceDetail?.creator || '--'"
-                />
+                >
+                  <UserDisplay :value="workspaceDetail?.creator" />
+                </ProbeDetailItem>
                 <ProbeDetailItem
                   :label="t('更新者')"
                   :line-height="22"
-                  :value="workspaceDetail?.updater || '--'"
-                />
+                >
+                  <UserDisplay :value="workspaceDetail?.updater" />
+                </ProbeDetailItem>
               </div>
               <ProbeDetailItem
                 :label="t('描述')"

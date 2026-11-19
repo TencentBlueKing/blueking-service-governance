@@ -19,11 +19,12 @@
 import userEvent from '@testing-library/user-event';
 import { render, screen, waitFor } from '@testing-library/vue';
 import { createPinia } from 'pinia';
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, expect, it, vi } from 'vitest';
 import WorkspaceBasic from '~/pages/basic/base-info/basic.vue';
 import { useUserStore } from '~/stores/user';
 
 import { i18nGlobalMocks, I18nTStub } from './helpers/mock-i18n';
+import { installVxeShims } from './helpers/mock-table';
 
 const { listWorkspaceRoleMemberGroups } = vi.hoisted(() => ({
   listWorkspaceRoleMemberGroups: vi.fn(),
@@ -45,6 +46,10 @@ vi.mock('~/stores/space', () => ({
     getRepositoryTypeName: () => '',
   }),
 }));
+
+beforeAll(() => {
+  installVxeShims();
+});
 
 afterEach(() => {
   vi.unstubAllEnvs();

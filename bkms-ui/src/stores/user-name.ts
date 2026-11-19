@@ -19,7 +19,7 @@
 import { ref } from 'vue';
 
 import { defineStore } from 'pinia';
-import { getBkUserApiUrl } from '~/common/bk-user-api';
+import { getBkUserApiUrl, isMultiTenant } from '~/common/bk-user-api';
 import { useUserStore } from '~/stores/user';
 
 /** bk-user display_info 接口返回的用户结构 */
@@ -63,8 +63,7 @@ export const useUserNameStore = defineStore('user-name', () => {
 
   /** 是否具备解析条件：已配置用户网关且为多租户（非 default）租户 */
   function canResolve() {
-    const tenantId = useUserStore().tenantId;
-    return !!getBkUserApiUrl() && !!tenantId && tenantId !== 'default';
+    return isMultiTenant(useUserStore().tenantId);
   }
 
   async function fetchBatch(ids: string[]) {

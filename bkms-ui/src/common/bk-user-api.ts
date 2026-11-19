@@ -25,6 +25,13 @@ export function getBkUserApiUrl() {
 
 /** 多租户（非 default）且已配置用户网关时返回姓名组件配置，否则返回 undefined 沿用原文本 */
 export function getUserDisplayConfig(tenantId?: string) {
-  const apiBaseUrl = getBkUserApiUrl();
-  return tenantId && tenantId !== 'default' && apiBaseUrl ? { tenantId, apiBaseUrl } : undefined;
+  return isMultiTenant(tenantId) ? { tenantId, apiBaseUrl: getBkUserApiUrl() } : undefined;
+}
+
+/**
+ * 是否多租户：已配置用户网关且租户非 default
+ * 项目的展示、远程搜索、批量解析共用此判定，改动判定条件只需改这里
+ */
+export function isMultiTenant(tenantId?: string): tenantId is string {
+  return !!getBkUserApiUrl() && !!tenantId && tenantId !== 'default';
 }
