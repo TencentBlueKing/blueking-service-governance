@@ -101,7 +101,6 @@ export interface PatchMetadataInput {
 export interface MetadataOutput {
   appID?: string;
   createdAt?: string;
-  enable?: boolean;
   mountPath?: string;
   operator?: string;
   postHookID?: string;

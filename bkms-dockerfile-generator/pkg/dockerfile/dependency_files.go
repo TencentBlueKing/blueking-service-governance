@@ -75,16 +75,9 @@ type fileCheckInput struct {
 // 以避免 dockerfile 包与上层的环境变量契约耦合。上层调用者若希望在错误里
 // 补上环境变量名，可再通过 errors.Wrap 包装一层
 func collectExistingFiles(input fileCheckInput) ([]string, error) {
-	directory := strings.TrimSpace(input.directory)
-	if directory == "" {
-		return nil, errors.Errorf("missing Docker build directory")
-	}
-	info, err := os.Stat(directory)
+	directory, err := resolveDockerBuildDir(input.directory)
 	if err != nil {
-		return nil, errors.Wrapf(err, "Docker build directory %q is not accessible", directory)
-	}
-	if !info.IsDir() {
-		return nil, errors.Errorf("Docker build directory %q is not a directory", directory)
+		return nil, err
 	}
 
 	files := make([]string, 0, len(input.requiredFiles)+len(input.optionalFiles))
@@ -104,6 +97,24 @@ func collectExistingFiles(input fileCheckInput) ([]string, error) {
 		}
 	}
 	return files, nil
+}
+
+// resolveDockerBuildDir 校验 Docker 构建目录存在且是目录，返回去掉首尾空白后的路径
+//
+// go 依赖文件与 python 锁文件探测共用这套错误口径
+func resolveDockerBuildDir(raw string) (string, error) {
+	directory := strings.TrimSpace(raw)
+	if directory == "" {
+		return "", errors.Errorf("missing Docker build directory")
+	}
+	info, err := os.Stat(directory)
+	if err != nil {
+		return "", errors.Wrapf(err, "Docker build directory %q is not accessible", directory)
+	}
+	if !info.IsDir() {
+		return "", errors.Errorf("Docker build directory %q is not a directory", directory)
+	}
+	return directory, nil
 }
 
 // requireRegularFile 校验指定文件必须存在且必须是普通文件

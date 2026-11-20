@@ -18,7 +18,10 @@
 
 package tof
 
-import log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
+import (
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
+	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
+)
 
 // Factory 构造 Client 的工厂函数
 //
@@ -43,8 +46,13 @@ func RegisterFactory(f Factory) {
 
 // New 创建 TOF 客户端
 //
+// 启用 useStubTof 时使用 noopClient，避免开发测试环境访问真实 TOF；
 // 已注册工厂时调用注册的工厂；未注册时退化为返回 noopClient，所有查询返回空值。
 func New() (Client, error) {
+	if config.G != nil && config.G.Development.UseStubTof {
+		log.InfoNoContext("use noop tof client according to config")
+		return newNoopClient(), nil
+	}
 	if factory == nil {
 		log.InfoNoContext("tof factory not registered, fallback to noop client")
 		return newNoopClient(), nil

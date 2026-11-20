@@ -6,7 +6,7 @@
 import type { Config } from '~/api/interceptors';
 import type { NoInfer } from '~/api/ts-helpers';
 import { v1Fetch } from '~/api/clients';
-import type { ListRoleBindingsRequest, RoleBindingOutput, AssignRolesRequest, ListRolesRequest, RoleOutput, RevokeRoleRequest, ListPlatWorkspacesRequest, PaginatedWorkspaceOutput, GetPlatWorkspaceStatsRequest, WorkspaceStatsOutput, GetPlatWorkspaceRequest, WorkspaceInfoOutput, GetWorkspaceRoleStatusRequest, RoleStatusOutput, GrantWorkspaceAdminRequest, RevokeWorkspaceAdminRequest, GetPlatWorkspaceImageRegistryRequest, ImageRegistryOutput, UpdatePlatWorkspaceImageRegistryRequest } from '~/@types/v1/platmgt';
+import type { ListRoleBindingsRequest, RoleBindingOutput, AssignRolesRequest, ListRolesRequest, RoleOutput, RevokeRoleRequest, ListPlatWorkspacesRequest, PaginatedWorkspaceOutput, GetPlatWorkspaceStatsRequest, WorkspaceStatsOutput, GetPlatWorkspaceRequest, WorkspaceInfoOutput, GetWorkspaceRoleStatusRequest, RoleStatusOutput, GrantWorkspaceAdminRequest, RevokeWorkspaceAdminRequest, ListPlatCfgSwitchesRequest, PlatCfgSwitchOutput, UpdatePlatCfgSwitchRequest, GetPlatWorkspaceImageRegistryRequest, ImageRegistryOutput, UpdatePlatWorkspaceImageRegistryRequest } from '~/@types/v1/platmgt';
 
 export const PlatmgtService = {
   /**
@@ -165,6 +165,38 @@ export const PlatmgtService = {
     params?: NoInfer<Request>,
     config?: Config,
   ) => await v1Fetch.delete<Request, ResponseData>('/plat-mgt/workspaces/{workspaceID}/admins')(params, config),
+  /**
+   * 查询空间的配置开关列表（配置管理 BSCP、七彩石），从未设置过的开关为关闭状态
+   *
+   * @method GET
+   * @path /plat-mgt/workspaces/{workspaceID}/cfg-switches
+   * @tag platmgt
+   * @param workspaceID path string required 工作空间 ID
+   * @response 200 PlatCfgSwitchListResponse OK
+   * @response 400 GinErrorOutput Bad Request
+   */
+  listPlatCfgSwitches: async <Request extends ListPlatCfgSwitchesRequest = ListPlatCfgSwitchesRequest, ResponseData = PlatCfgSwitchOutput[]>(
+    params?: NoInfer<Request>,
+    config?: Config,
+  ) => await v1Fetch.get<Request, ResponseData>('/plat-mgt/workspaces/{workspaceID}/cfg-switches')(params, config),
+  /**
+   * 设置空间的一项配置开关
+   *
+   * 关闭配置管理（BSCP）后，该空间下应用的配置管理接口全部不可用，且之后的部署不再注入 BSCP 容器
+   *
+   * @method PUT
+   * @path /plat-mgt/workspaces/{workspaceID}/cfg-switches/{key}
+   * @tag platmgt
+   * @param workspaceID path string required 工作空间 ID
+   * @param key path string required 开关标识：bscp / rainbowTConf
+   * @param body body UpdatePlatCfgSwitchInput required 开关取值
+   * @response 200 PlatCfgSwitchResponse OK
+   * @response 400 GinErrorOutput Bad Request
+   */
+  updatePlatCfgSwitch: async <Request extends UpdatePlatCfgSwitchRequest = UpdatePlatCfgSwitchRequest, ResponseData = PlatCfgSwitchOutput>(
+    params?: NoInfer<Request>,
+    config?: Config,
+  ) => await v1Fetch.put<Request, ResponseData>('/plat-mgt/workspaces/{workspaceID}/cfg-switches/{key}')(params, config),
   /**
    * 查询空间当前生效的镜像仓库
    *

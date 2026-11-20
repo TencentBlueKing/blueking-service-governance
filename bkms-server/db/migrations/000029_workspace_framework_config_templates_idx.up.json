@@ -1,0 +1,35 @@
+[
+  {
+    "createIndexes": "workspace_framework_config_templates",
+    "indexes": [
+      {
+        "key": {
+          "workspaceID": 1,
+          "framework": 1,
+          "language": 1,
+          "name": 1
+        },
+        "name": "idx_workspaceID_framework_language_name",
+        "unique": true
+      },
+      {
+        "key": {
+          "workspaceID": 1,
+          "framework": 1,
+          "language": 1
+        },
+        "name": "idx_workspaceID_framework_language_default",
+        "unique": true,
+        "partialFilterExpression": {
+          "isDefault": true
+        }
+      },
+      {
+        "key": {
+          "tenantID": 1
+        },
+        "name": "tenantID_1"
+      }
+    ]
+  }
+]

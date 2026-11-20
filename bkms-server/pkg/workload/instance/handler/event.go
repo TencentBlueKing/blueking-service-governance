@@ -75,7 +75,7 @@ func (h *Handler) ListEvents(c *gin.Context) {
 	}
 
 	// 获取最新部署记录，用于获取集群 ID、命名空间以及工作负载资源信息
-	record, err := appmodeldeploy.GetLatest(
+	record, err := appmodeldeploy.GetLatestRecord(
 		ctx, h.registry.DB, app.ID, uriInput.EnvName, queryInput.TrafficLaneName,
 	)
 	if err != nil {

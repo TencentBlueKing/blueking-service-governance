@@ -223,10 +223,9 @@
   /** 空值筛选标识 */
   const EMPTY_FILTER_ID = '__empty__';
 
-  /** 从实例列表中动态提取筛选项，更新 searchData 中各字段的 children */
+  /** 从实例列表中动态提取筛选项，更新 searchData 中各字段的 children（就绪状态为固定项，不参与动态提取） */
   function updateDynamicFilterChildren(instances: AppInstanceOutputObj[]) {
     const imageSet = new Set<string>();
-    const healthySet = new Set<string>();
     const polarisSet = new Set<string>();
 
     for (const instance of instances) {
@@ -234,8 +233,6 @@
       if (instance.image) {
         imageSet.add(instance.image);
       }
-      // 就绪状态：仍按 isHealthy 归类，不区分具体 phase
-      healthySet.add(String(instance.isHealthy));
       // 北极星状态
       if (!instance.polarisInfos?.length) {
         polarisSet.add(EMPTY_FILTER_ID);
@@ -244,7 +241,6 @@
       }
     }
 
-    const healthyLabelMap: Record<string, string> = { true: t('是'), false: t('否') };
     const polarisLabelMap: Record<string, string> = {
       healthy: 'Healthy',
       [EMPTY_FILTER_ID]: '--',
@@ -256,10 +252,6 @@
       image: Array.from(imageSet).map(image => ({
         id: image,
         name: image.split(':').pop() || image,
-      })),
-      isHealthy: Array.from(healthySet).map(val => ({
-        id: val,
-        name: healthyLabelMap[val] || val,
       })),
       polarisStatus: Array.from(polarisSet).map(val => ({
         id: val,
@@ -287,6 +279,12 @@
     { id: 'Evicted', name: 'Evicted' },
     { id: 'NotReady', name: 'NotReady' },
     { id: 'Completed', name: 'Completed' },
+  ];
+
+  // 就绪状态为固定筛选项，不随实例数据动态变化
+  const healthyOptions = [
+    { id: 'true', name: t('是') },
+    { id: 'false', name: t('否') },
   ];
 
   const searchData = ref([
@@ -321,7 +319,7 @@
       name: t('就绪状态'),
       id: 'isHealthy',
       multiple: true,
-      children: [] as { id: string; name: string }[],
+      children: healthyOptions,
     },
     {
       name: t('北极星状态'),

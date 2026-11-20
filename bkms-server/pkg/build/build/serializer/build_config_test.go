@@ -229,6 +229,25 @@ var _ = Describe("Build config serializers", func() {
 				"length must not exceed 128",
 			),
 		)
+
+		It("rejects docker build arg values containing line breaks", func() {
+			cfg, err := platformRepoInput(func(input *serializer.RepositoryBuildConfigInput) {
+				input.DockerBuildArgs = map[string]string{"A": "1\nBKMS_BUILD_ARGS_EOF"}
+			}).ToModel()
+
+			Expect(cfg).To(BeNil())
+			Expect(err).To(MatchError(ContainSubstring("buildConfig.repoBuildConfig.dockerBuildArgs")))
+			Expect(err).To(MatchError(ContainSubstring("value of A must not contain line breaks")))
+		})
+
+		It("keeps valid docker build args", func() {
+			cfg, err := platformRepoInput(func(input *serializer.RepositoryBuildConfigInput) {
+				input.DockerBuildArgs = map[string]string{"A": "it's 1"}
+			}).ToModel()
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(cfg.DockerBuildArgs).To(Equal(map[string]string{"A": "it's 1"}))
+		})
 	})
 
 	Describe("Platform build extra files validation", func() {

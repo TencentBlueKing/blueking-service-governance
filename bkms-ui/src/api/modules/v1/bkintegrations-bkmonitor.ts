@@ -28,25 +28,19 @@ export const BkintegrationsBkmonitorService = {
   /**
    * 按指定指标的平均值查询环境实例的 Top / Bottom N
    *
-   * @method GET
+   * @method POST
    * @path /apps/{appID}/envs/{envName}/bkmonitor/instance-ranks
    * @tag bkintegrations-bkmonitor
    * @param appID path string required 应用 ID
    * @param envName path string required 环境名称
-   * @param limit query number 取前 N 个实例，1~50，默认 10
-   * @param rankBy query "cpu_limit_usage" | "memory_limit_usage" | "cpu_usage" | "memory_usage" 排名指标
-   * @param rankType query "top" | "bottom" 排名方向，默认 top
-   * @param startTime query number required 排名时间范围的开始时间（Unix 时间戳，秒）
-   * @param endTime query number required 排名时间范围的结束时间（Unix 时间戳，秒）
-   * @param interval query number 子查询步长（秒），最小 60，默认 60
-   * @param method query "sum" | "max" | "min" | "count" | "avg" 汇聚方法，默认 sum
+   * @param body body RankInstancesQueryInput required 查询参数
    * @response 200 RankInstancesResp OK
    * @response 400 GinErrorOutput Bad Request
    */
   rankInstances: async <Request extends RankInstancesRequest = RankInstancesRequest, ResponseData = InstanceRankOutput[]>(
     params?: NoInfer<Request>,
     config?: Config,
-  ) => await v1Fetch.get<Request, ResponseData>('/apps/{appID}/envs/{envName}/bkmonitor/instance-ranks')(params, config),
+  ) => await v1Fetch.post<Request, ResponseData>('/apps/{appID}/envs/{envName}/bkmonitor/instance-ranks')(params, config),
   /**
    * 查询实例监控指标时序数据
    *

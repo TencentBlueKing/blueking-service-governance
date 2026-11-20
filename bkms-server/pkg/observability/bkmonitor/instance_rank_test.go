@@ -121,6 +121,36 @@ var _ = Describe("InstanceRank", func() {
 			_, err := bkmonitor.BuildInstanceRankPromQL(query)
 			Expect(err).To(MatchError(ContainSubstring("unsupported rank metric: network_receive")))
 		})
+
+		Context("with selected instances", func() {
+			const podFilter = `bcs_cluster_id="BCS-K8S-00000",namespace=~"^(demo-ns)$",` +
+				`pod_name=~"^(pod-a|pod-b)$",container_name!="POD"`
+
+			BeforeEach(func() {
+				query.Instances = []string{"pod-a", "pod-b"}
+			})
+
+			It("filters both numerator and denominator by pods instead of workload", func() {
+				Expect(build()).To(Equal(
+					`topk(10, avg_over_time((` +
+						`sum by(pod)(rate(container_cpu_usage_seconds_total{` + podFilter + `}[1m]))` +
+						` / sum by(pod)(kube_pod_container_resource_limits_cpu_cores{` + podFilter + `})` +
+						`)[3600s:60s]))`,
+				))
+			})
+
+			It("ignores the workload filter", func() {
+				Expect(build()).NotTo(ContainSubstring("workload_"))
+			})
+
+			It("filters usage metrics by pods", func() {
+				query.RankBy = bkmonitor.MetricMemoryUsage
+				Expect(build()).To(Equal(
+					`topk(10, avg_over_time((sum by(pod)(container_memory_working_set_bytes{` + podFilter + `}))` +
+						`[3600s:60s]))`,
+				))
+			})
+		})
 	})
 
 	Describe("RankInstances", func() {
@@ -217,6 +247,14 @@ var _ = Describe("InstanceRank", func() {
 			Expect(err).To(MatchError(ContainSubstring("bkmonitor unavailable")))
 			Expect(err).To(MatchError(ContainSubstring("GameDeployment/demo")))
 			Expect(err).To(MatchError(ContainSubstring("by cpu_limit_usage")))
+		})
+
+		It("describes selected pods in the error and sends the pod filter", func() {
+			query.Instances = []string{"pod-a", "pod-b"}
+			respErr = errors.New("bkmonitor unavailable")
+			_, err := bkmonitor.NewMetricTimeSeriesService().RankInstances(context.Background(), query)
+			Expect(err).To(MatchError(ContainSubstring("2 selected pods")))
+			Expect(captured.QueryConfigs[0].PromQL).To(ContainSubstring(`pod_name=~"^(pod-a|pod-b)$"`))
 		})
 
 		DescribeTable("returns the unit of the rank metric",

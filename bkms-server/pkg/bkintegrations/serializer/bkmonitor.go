@@ -22,6 +22,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/samber/lo"
+
 	bkmmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/bkmonitor"
 	_ "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/validators" // register global validators
 )
@@ -186,14 +188,7 @@ type GetInstanceTimeSeriesQueryInput struct {
 
 // Normalize 对输入进行值修正（过滤空白实例名称、设置默认汇聚周期与汇聚方法）
 func (r *GetInstanceTimeSeriesQueryInput) Normalize() {
-	// 过滤空白实例名称
-	instances := make([]string, 0, len(r.Instances))
-	for _, inst := range r.Instances {
-		if v := strings.TrimSpace(inst); v != "" {
-			instances = append(instances, v)
-		}
-	}
-	r.Instances = instances
+	r.Instances = trimInstances(r.Instances)
 	// 汇聚周期不能小于 60 秒，太小的话，会产生很多数据。
 	if r.Interval < DefaultInterval {
 		r.Interval = DefaultInterval
@@ -205,30 +200,34 @@ func (r *GetInstanceTimeSeriesQueryInput) Normalize() {
 
 // --- 实例排名 ---
 
-// RankInstancesQueryInput 实例排名的 Query 参数
+// RankInstancesQueryInput 实例排名的请求参数
 type RankInstancesQueryInput struct {
+	// Instances 候选实例（Pod）名称，过滤空白后最多 50 个；为空时在最新部署的工作负载的全部 Pod 中排名，
+	// 非空时只在这批 Pod 中排名，不校验实例是否属于该环境
+	Instances []string `json:"instances"`
 	// Limit 取前 N 个实例，取值 1~50，默认 10
-	Limit int `form:"limit" binding:"omitempty,min=1,max=50"`
+	Limit int `json:"limit" binding:"omitempty,min=1,max=50"`
 	// RankBy 排名指标，默认 cpu_limit_usage：
 	//   - cpu_limit_usage: CPU 使用率（用量 / limits）
 	//   - memory_limit_usage: 内存使用率（Working Set / limits）
 	//   - cpu_usage: CPU 用量（核数）
 	//   - memory_usage: 内存用量（Working Set，字节）
-	RankBy string `form:"rankBy" binding:"omitempty,oneof=cpu_limit_usage memory_limit_usage cpu_usage memory_usage" enums:"cpu_limit_usage,memory_limit_usage,cpu_usage,memory_usage"` //nolint:lll
+	RankBy string `json:"rankBy" binding:"omitempty,oneof=cpu_limit_usage memory_limit_usage cpu_usage memory_usage" enums:"cpu_limit_usage,memory_limit_usage,cpu_usage,memory_usage"` //nolint:lll
 	// RankType 排名方向：top 按排名指标平均值从高到低、bottom 从低到高，默认 top
-	RankType string `form:"rankType" binding:"omitempty,oneof=top bottom" enums:"top,bottom"`
+	RankType string `json:"rankType" binding:"omitempty,oneof=top bottom" enums:"top,bottom"`
 	// StartTime 排名时间范围的开始时间（Unix 时间戳，秒）
-	StartTime int64 `form:"startTime" binding:"required,min=1,ltefield=EndTime"`
+	StartTime int64 `json:"startTime" binding:"required,min=1,ltefield=EndTime"`
 	// EndTime 排名时间范围的结束时间（Unix 时间戳，秒）
-	EndTime int64 `form:"endTime" binding:"required,min=1"`
+	EndTime int64 `json:"endTime" binding:"required,min=1"`
 	// Interval 子查询步长（秒），最小为 60 秒，建议与图表汇聚周期一致
-	Interval int64 `form:"interval"`
+	Interval int64 `json:"interval"`
 	// Method 同一 Pod 内多个容器的数据如何合并，默认 sum，建议与图表汇聚方法一致
-	Method string `form:"method" binding:"omitempty,oneof=sum max min count avg" enums:"sum,max,min,count,avg"`
+	Method string `json:"method" binding:"omitempty,oneof=sum max min count avg" enums:"sum,max,min,count,avg"`
 }
 
-// Normalize 设置默认的排名数量、指标、方向、子查询步长与汇聚方法
+// Normalize 过滤空白实例名称，并设置默认的排名数量、指标、方向、子查询步长与汇聚方法
 func (r *RankInstancesQueryInput) Normalize() {
+	r.Instances = trimInstances(r.Instances)
 	if r.Limit <= 0 {
 		r.Limit = DefaultRankLimit
 	}
@@ -330,4 +329,12 @@ type DashboardDirectoryOutput struct {
 // ListDashboardsResp 获取仪表盘列表的响应
 type ListDashboardsResp struct {
 	Data []*DashboardDirectoryOutput `json:"data"`
+}
+
+// trimInstances 去掉实例名称首尾空白，并丢弃空白项
+func trimInstances(instances []string) []string {
+	return lo.FilterMap(instances, func(inst string, _ int) (string, bool) {
+		v := strings.TrimSpace(inst)
+		return v, v != ""
+	})
 }

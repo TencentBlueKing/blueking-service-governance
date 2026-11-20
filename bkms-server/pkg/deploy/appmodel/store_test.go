@@ -247,7 +247,7 @@ var _ = Describe("RecordStore", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// 获取最新记录
-			latest, err := appmodel.GetLatest(ctx, db, appID, envName, trafficLaneName)
+			latest, err := appmodel.GetLatestRecord(ctx, db, appID, envName, trafficLaneName)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(latest).NotTo(BeNil())
 			Expect(latest.ID.Hex()).To(Equal(recordID2))
@@ -257,7 +257,7 @@ var _ = Describe("RecordStore", func() {
 		})
 
 		It("should return ErrDeployRecordNotFound when no record exists", func() {
-			_, err := appmodel.GetLatest(ctx, db, "non-existent-app", envName, trafficLaneName)
+			_, err := appmodel.GetLatestRecord(ctx, db, "non-existent-app", envName, trafficLaneName)
 			Expect(err).To(MatchError(appmodel.ErrDeployRecordNotFound))
 		})
 
@@ -274,7 +274,7 @@ var _ = Describe("RecordStore", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// 获取 production 环境的最新记录
-			latest, err := appmodel.GetLatest(ctx, db, appID, "production", trafficLaneName)
+			latest, err := appmodel.GetLatestRecord(ctx, db, appID, "production", trafficLaneName)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(latest.ID.Hex()).To(Equal(recordID2))
 			Expect(latest.EnvName).To(Equal("production"))
@@ -293,7 +293,7 @@ var _ = Describe("RecordStore", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// 获取 feature 泳道的最新记录
-			latest, err := appmodel.GetLatest(ctx, db, appID, envName, "feature-lane")
+			latest, err := appmodel.GetLatestRecord(ctx, db, appID, envName, "feature-lane")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(latest.ID.Hex()).To(Equal(recordID2))
 			Expect(latest.TrafficLaneName).To(Equal("feature-lane"))
@@ -319,7 +319,7 @@ var _ = Describe("RecordStore", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// 获取最新记录应该返回最后创建的那条
-			latest, err := appmodel.GetLatest(ctx, db, appID, envName, trafficLaneName)
+			latest, err := appmodel.GetLatestRecord(ctx, db, appID, envName, trafficLaneName)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(latest.ID.Hex()).To(Equal(recordID3))
 			Expect(latest.ImageTag).To(Equal("v1.0.3"))
@@ -348,7 +348,7 @@ var _ = Describe("RecordStore", func() {
 			recordID3 := recordC.ID.Hex()
 			Expect(err).NotTo(HaveOccurred())
 
-			latest, err := appmodel.GetLatest(
+			latest, err := appmodel.GetLatestRecord(
 				ctx,
 				db,
 				appID,
@@ -368,7 +368,7 @@ var _ = Describe("RecordStore", func() {
 			err := recordStore.Create(ctx, &recordA)
 			Expect(err).NotTo(HaveOccurred())
 
-			_, err = appmodel.GetLatest(
+			_, err = appmodel.GetLatestRecord(
 				ctx,
 				db,
 				appID,

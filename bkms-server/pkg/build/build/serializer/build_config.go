@@ -37,6 +37,8 @@ const (
 	platformBuildArtifactDirField  = platformBuildConfigField + ".artifactDir"
 	repoBuildConfigDockerfileField = "buildConfig.repoBuildConfig.dockerfile"
 	repoBuildConfigSourceDirField  = "buildConfig.repoBuildConfig.sourceDir"
+	// 前端字段名仍是 dockerBuildArgs
+	repoBuildConfigBuildArgsField = "buildConfig.repoBuildConfig.dockerBuildArgs"
 )
 
 // AppURIInput is the path input for APIs scoped by application.
@@ -145,7 +147,7 @@ func (r *RepositoryBuildConfigInput) ToModel() (*imagebuild.RepositoryConfig, er
 	if r.PlatformBuildConfig != nil {
 		platformBuildConfig = r.PlatformBuildConfig.ToModel()
 	}
-	return &imagebuild.RepositoryConfig{
+	cfg := &imagebuild.RepositoryConfig{
 		Type:                imagebuild.RepositoryType(r.Type),
 		RepoAlias:           r.RepoAlias,
 		RepoURL:             r.RepoURL,
@@ -155,7 +157,11 @@ func (r *RepositoryBuildConfigInput) ToModel() (*imagebuild.RepositoryConfig, er
 		DefaultBranch:       r.DefaultBranch,
 		ImageBuildMode:      imageBuildMode,
 		PlatformBuildConfig: platformBuildConfig,
-	}, nil
+	}
+	if err := cfg.ValidateDockerBuildArgs(); err != nil {
+		return nil, errors.Wrap(err, repoBuildConfigBuildArgsField)
+	}
+	return cfg, nil
 }
 
 // ValidateRepositorySourceDir 校验代码仓库构建目录必须位于仓库内部
@@ -176,17 +182,20 @@ func ValidateRepositorySourceDir(field, sourceDir string) error {
 
 // PlatformBuildConfigInput is the JSON representation of platform build config.
 type PlatformBuildConfigInput struct {
-	// 构建阶段基础镜像
+	// 构建阶段基础镜像；python 只有运行阶段，可留空
 	BuilderImage string `json:"builderImage"`
 	// 运行阶段基础镜像
 	RunnerImage string `json:"runnerImage"`
-	// 构建产物目录，可选；为空时 go / cpp 默认 /out。构建阶段命令可通过 ${BKMS_ARTIFACT_DIR} 引用，
-	// 目录内全部内容会拷贝到运行镜像的 /app。必须是绝对路径、不能是根目录、不能包含 .. 路径段，
+	// 构建产物目录，可选，构建命令可通过 ${BKMS_ARTIFACT_DIR} 引用。
+	// go / cpp：为空时默认 /out，目录内全部内容会拷贝到运行镜像的 /app。
+	// python：为空时默认 /app，源码整体拷入该目录并以它作为工作目录。
+	// 必须是绝对路径、不能是根目录、不能包含 .. 路径段，
 	// 只允许字母、数字和 . _ - /，最长 128；保存时会去掉末尾 / 等冗余写法
 	ArtifactDir string `json:"artifactDir"`
 	// 命令配置
 	Commands *BuildCommandsInput `json:"commands"`
-	// 打包额外文件路径，相对构建目录；空列表表示不额外拷贝
+	// 打包额外文件路径，相对构建目录；空列表表示不额外拷贝。
+	// python 会把源码整体拷入产物目录，额外文件随源码落在产物目录下，不再单独拷贝
 	ExtraFiles []string `json:"extraFiles"`
 }
 

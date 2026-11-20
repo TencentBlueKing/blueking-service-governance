@@ -148,7 +148,7 @@ func Register(rg *gin.RouterGroup, h Handler) {
 	rg.PUT("/envs/:envID/bkmonitor/apms/:apmID", h.BindApmToEnv)
 	rg.GET("/envs/:envID/bkmonitor/apms", h.GetEnvApm)
 	rg.POST("/apps/:appID/envs/:envName/bkmonitor/instance-time-series", h.GetInstanceTimeSeries)
-	rg.GET("/apps/:appID/envs/:envName/bkmonitor/instance-ranks", h.RankInstances)
+	rg.POST("/apps/:appID/envs/:envName/bkmonitor/instance-ranks", h.RankInstances)
 	rg.GET("/workspaces/:workspaceID/bkmonitor/dashboards", h.ListDashboardDirectoryTree)
 
 	// --- BkHCM 相关路由 ---

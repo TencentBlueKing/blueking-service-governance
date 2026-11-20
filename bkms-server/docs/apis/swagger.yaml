@@ -1,5 +1,15 @@
 basePath: /v1
 definitions:
+  accesspoint.FailureReason:
+    enum:
+    - networkUnreachable
+    - clientAuthEnabled
+    - tokenInvalid
+    type: string
+    x-enum-varnames:
+    - FailureNetworkUnreachable
+    - FailureClientAuthEnabled
+    - FailureTokenInvalid
   admin.RoleCode:
     enum:
     - admin
@@ -977,19 +987,23 @@ definitions:
     properties:
       artifactDir:
         description: |-
-          构建产物目录，可选；为空时 go / cpp 默认 /out。构建阶段命令可通过 ${BKMS_ARTIFACT_DIR} 引用，
-          目录内全部内容会拷贝到运行镜像的 /app。必须是绝对路径、不能是根目录、不能包含 .. 路径段，
+          构建产物目录，可选，构建命令可通过 ${BKMS_ARTIFACT_DIR} 引用。
+          go / cpp：为空时默认 /out，目录内全部内容会拷贝到运行镜像的 /app。
+          python：为空时默认 /app，源码整体拷入该目录并以它作为工作目录。
+          必须是绝对路径、不能是根目录、不能包含 .. 路径段，
           只允许字母、数字和 . _ - /，最长 128；保存时会去掉末尾 / 等冗余写法
         type: string
       builderImage:
-        description: 构建阶段基础镜像
+        description: 构建阶段基础镜像；python 只有运行阶段，可留空
         type: string
       commands:
         allOf:
         - $ref: '#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_build_build_serializer.BuildCommandsInput'
         description: 命令配置
       extraFiles:
-        description: 打包额外文件路径，相对构建目录；空列表表示不额外拷贝
+        description: |-
+          打包额外文件路径，相对构建目录；空列表表示不额外拷贝。
+          python 会把源码整体拷入产物目录，额外文件随源码落在产物目录下，不再单独拷贝
         items:
           type: string
         type: array
@@ -1297,6 +1311,8 @@ definitions:
     type: object
   github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_workload_appmodelcore_appspec_serializer.EmptyOutput:
     type: object
+  ? github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_workload_appmodelcore_frameworkcfgtmpl_serializer.EmptyOutput
+  : type: object
   github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_workload_envvars_serializer.EmptyOutput:
     type: object
   github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_workload_instance_serializer.EmptyOutput:
@@ -1347,6 +1363,99 @@ definitions:
     - ReasonUnsupportedStack
     - ReasonInvalidStack
     - ReasonIncompleteLanguage
+  serializer.AccessPointCreateInput:
+    properties:
+      clientHosts:
+        description: 客户端地址，IP 或域名，1 ~ 10 个；OpenAPI 端口固定为 8090，SDK 端口固定为 8091
+        items:
+          type: string
+        type: array
+      clusterIDs:
+        description: 绑定到该接入点的集群 ID；缺省表示不绑定集群
+        items:
+          type: string
+        type: array
+      consoleURL:
+        description: 北极星控制台地址，IP:Port 或域名，缺省协议时补 http://
+        type: string
+      name:
+        description: 接入点名称，空间内唯一
+        type: string
+      token:
+        description: 北极星鉴权 Token，选填
+        type: string
+    required:
+    - clientHosts
+    - consoleURL
+    - name
+    type: object
+  serializer.AccessPointListResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/serializer.AccessPointOutput'
+        type: array
+    type: object
+  serializer.AccessPointOutput:
+    properties:
+      boundClusterCount:
+        description: 绑定的集群数量
+        type: integer
+      clientHosts:
+        description: 客户端地址
+        items:
+          type: string
+        type: array
+      consoleURL:
+        description: 北极星控制台地址
+        type: string
+      hasToken:
+        description: 是否填写了 Token
+        type: boolean
+      id:
+        description: 接入点 ID
+        type: string
+      lastConnectivity:
+        allOf:
+        - $ref: '#/definitions/serializer.ConnectivityResultOutput'
+        description: 最近一次连通测试结果，从未测试时为 null
+      name:
+        description: 接入点名称
+        type: string
+      updatedAt:
+        description: 最近修改时间
+        type: string
+      updater:
+        description: 最近修改人
+        type: string
+    type: object
+  serializer.AccessPointResponse:
+    properties:
+      data:
+        $ref: '#/definitions/serializer.AccessPointOutput'
+    type: object
+  serializer.AccessPointUpdateInput:
+    properties:
+      clientHosts:
+        description: 客户端地址
+        items:
+          type: string
+        type: array
+      clusterIDs:
+        description: 绑定到该接入点的集群 ID，全量替换；显式传空数组表示解除全部绑定
+        items:
+          type: string
+        type: array
+      consoleURL:
+        description: 北极星控制台地址
+        type: string
+      name:
+        description: 接入点名称
+        type: string
+      token:
+        description: 北极星鉴权 Token；显式传空字符串表示清除
+        type: string
+    type: object
   serializer.AddWorkspaceUserInput:
     properties:
       userIDs:
@@ -3142,7 +3251,7 @@ definitions:
         description: 当前已安装的 Chart 版本
         type: string
       currentValues:
-        description: 当前已安装的 values 参数（JSON 字符串，未安装时为空）
+        description: 当前已安装的 values 参数（YAML 字符串，未安装时为空）
         type: string
       message:
         description: 状态信息（安装失败时给出提示信息）
@@ -3325,6 +3434,87 @@ definitions:
       level:
         description: 冲突级别：none 无冲突，warn 软冲突（可保存），error 硬冲突（禁止保存）
         type: string
+    type: object
+  serializer.ConnectivityResultOutput:
+    properties:
+      checkedAt:
+        description: 测试时间
+        type: string
+      clientAuth:
+        description: 是否开启客户端鉴权
+        type: boolean
+      consoleAuth:
+        description: 是否开启控制台鉴权
+        type: boolean
+      message:
+        description: 失败原因或提示信息
+        type: string
+      ok:
+        description: 是否通过
+        type: boolean
+      reason:
+        allOf:
+        - $ref: '#/definitions/accesspoint.FailureReason'
+        description: 失败的原因，通过时为空：networkUnreachable 网络不通 / clientAuthEnabled 开启了客户端鉴权
+          / tokenInvalid Token 无效
+        enum:
+        - networkUnreachable
+        - clientAuthEnabled
+        - tokenInvalid
+    type: object
+  serializer.ConnectivityTestInput:
+    properties:
+      clientHosts:
+        description: 客户端地址
+        items:
+          type: string
+        type: array
+      consoleURL:
+        description: 北极星控制台地址
+        type: string
+      id:
+        description: 已有接入点的 ID
+        type: string
+      token:
+        description: 北极星鉴权 Token
+        type: string
+    required:
+    - clientHosts
+    - consoleURL
+    type: object
+  serializer.ConnectivityTestOutput:
+    properties:
+      clientAuth:
+        description: 是否开启客户端鉴权
+        type: boolean
+      consoleAuth:
+        description: 是否开启控制台鉴权
+        type: boolean
+      message:
+        description: 失败原因或提示信息
+        type: string
+      namespaces:
+        description: 北极星上的命名空间（已过滤系统命名空间 Polaris），网络不通时为空
+        items:
+          type: string
+        type: array
+      ok:
+        description: 是否通过
+        type: boolean
+      reason:
+        allOf:
+        - $ref: '#/definitions/accesspoint.FailureReason'
+        description: 失败的原因，通过时为空：networkUnreachable 网络不通 / clientAuthEnabled 开启了客户端鉴权
+          / tokenInvalid Token 无效
+        enum:
+        - networkUnreachable
+        - clientAuthEnabled
+        - tokenInvalid
+    type: object
+  serializer.ConnectivityTestResponse:
+    properties:
+      data:
+        $ref: '#/definitions/serializer.ConnectivityTestOutput'
     type: object
   serializer.CreateAlertStrategyBody:
     properties:
@@ -3692,7 +3882,8 @@ definitions:
           长度范围 1~63 个字符，以小写字母开头，可包含小写字母、数字、中划线，不能以中划线结尾
         type: string
       language:
-        description: 语言：go、cpp、nodejs、python，须为框架支持的语言（nodejs、python 仅 blank 支持）
+        description: 语言：go、cpp、nodejs、python，须为框架支持的语言（nodejs 仅 blank 支持，python 支持
+          blank 与 trpc）
         type: string
       name:
         description: 应用名称. 长度范围 1~63 个字符，以小写字母开头，可包含小写字母、数字、中划线，不能以中划线结尾
@@ -4122,6 +4313,35 @@ definitions:
         - $ref: '#/definitions/serializer.ScopedEnvVarOutputObj'
         description: 作用域级别环境变量
     type: object
+  serializer.CreateTemplateInput:
+    properties:
+      content:
+        description: 框架配置文件内容
+        type: string
+      fileName:
+        description: 框架配置文件名，规则与应用配置文件名一致
+        maxLength: 64
+        minLength: 1
+        type: string
+      framework:
+        description: 框架：trpc、taf
+        type: string
+      isDefault:
+        description: 是否设为创建应用时默认使用的模板
+        type: boolean
+      language:
+        description: 语言：go、cpp、python
+        type: string
+      name:
+        description: 模板名称，同一框架、同一语言下不能重复，不能为「平台默认」
+        type: string
+    required:
+    - content
+    - fileName
+    - framework
+    - language
+    - name
+    type: object
   serializer.CreateWorkspaceComponentInput:
     properties:
       compName:
@@ -4167,9 +4387,9 @@ definitions:
         type: integer
       bkCIProjectID:
         description: |-
-          蓝盾项目 ID;
-          创建时，新建容器项目，无需填写
-          创建时，绑定已有容器项目，必填.
+          蓝盾项目 ID / 绑定容器项目时的 BCS 项目 code。
+          创建时，新建容器项目，无需填写。
+          创建时，绑定已有容器项目，必填。
         type: string
       description:
         description: 描述信息（0-512 字符）
@@ -4564,6 +4784,8 @@ definitions:
         type: string
       startTime:
         type: string
+    type: object
+  serializer.EmptyResponse:
     type: object
   serializer.EnvAppDeployStatusOutput:
     properties:
@@ -5139,6 +5361,19 @@ definitions:
         items:
           type: string
         type: array
+    type: object
+  serializer.FrontendFeaturesOutput:
+    properties:
+      polarisWorkspaceAccessPoint:
+        description: |-
+          是否允许空间自建北极星接入点并按集群绑定。为 false 时前端隐藏接入点管理、集群绑定、组件安装等入口，
+          所有集群都使用平台托管接入点
+        type: boolean
+    type: object
+  serializer.FrontendFeaturesResponse:
+    properties:
+      data:
+        $ref: '#/definitions/serializer.FrontendFeaturesOutput'
     type: object
   serializer.GPAConfigOutputObj:
     properties:
@@ -6784,6 +7019,13 @@ definitions:
       data:
         $ref: '#/definitions/serializer.RuntimeImagesOutputObjs'
     type: object
+  serializer.ListTemplatesOutput:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/serializer.TemplateOutputObj'
+        type: array
+    type: object
   serializer.ListTopologyNodeEventsOutput:
     properties:
       data:
@@ -6932,6 +7174,13 @@ definitions:
         type: string
       status:
         type: string
+    type: object
+  serializer.NamespacesResponse:
+    properties:
+      data:
+        items:
+          type: string
+        type: array
     type: object
   serializer.NetworkParamsOutput:
     properties:
@@ -7516,6 +7765,51 @@ definitions:
       data:
         $ref: '#/definitions/serializer.PlatCfgSwitchOutput'
     type: object
+  serializer.PolarisClusterEnvOutput:
+    properties:
+      id:
+        description: 环境 ID
+        type: string
+      isFeature:
+        description: 是否为特性环境
+        type: boolean
+      name:
+        description: 环境名称
+        type: string
+    type: object
+  serializer.PolarisClusterListResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/serializer.PolarisClusterOutput'
+        type: array
+    type: object
+  serializer.PolarisClusterOutput:
+    properties:
+      accessPointID:
+        description: 绑定的自建接入点 ID；未绑定为空，此时集群不能使用北极星
+        type: string
+      accessPointName:
+        description: 绑定的自建接入点名称，未绑定为空
+        type: string
+      clusterID:
+        description: 集群 ID
+        type: string
+      clusterName:
+        description: 集群名称
+        type: string
+      clusterStatus:
+        description: 集群状态
+        type: string
+      envs:
+        description: 集群上的空间环境（含特性环境）
+        items:
+          $ref: '#/definitions/serializer.PolarisClusterEnvOutput'
+        type: array
+      inUse:
+        description: 集群上是否有环境被北极星配置使用；为 true 时不能解绑或换绑
+        type: boolean
+    type: object
   serializer.PolarisConfigOutputObj:
     properties:
       appID:
@@ -7672,6 +7966,38 @@ definitions:
       name:
         description: 配置名称
         type: string
+    type: object
+  serializer.PolarisOperatorValuesListOutput:
+    properties:
+      addonName:
+        description: 组件对应的集群插件名称，安装与状态查询使用集群插件接口
+        type: string
+      clusters:
+        description: 已绑定接入点的集群
+        items:
+          $ref: '#/definitions/serializer.PolarisOperatorValuesOutput'
+        type: array
+    type: object
+  serializer.PolarisOperatorValuesListResponse:
+    properties:
+      data:
+        $ref: '#/definitions/serializer.PolarisOperatorValuesListOutput'
+    type: object
+  serializer.PolarisOperatorValuesOutput:
+    properties:
+      accessPointID:
+        description: 集群绑定的自建接入点 ID
+        type: string
+      accessPointName:
+        description: 集群绑定的自建接入点名称
+        type: string
+      clusterID:
+        description: 集群 ID
+        type: string
+      values:
+        additionalProperties: {}
+        description: 由接入点推导出安装北极星组件的期望 values
+        type: object
     type: object
   serializer.PolicyFormInput:
     properties:
@@ -8289,6 +8615,8 @@ definitions:
     required:
     - url
     type: object
+  serializer.RainbowTConfEmptyOutput:
+    type: object
   serializer.RainbowTConfOutput:
     properties:
       updatedAt:
@@ -8305,6 +8633,63 @@ definitions:
     properties:
       data:
         $ref: '#/definitions/serializer.RainbowTConfOutput'
+    type: object
+  serializer.RankInstancesQueryInput:
+    properties:
+      endTime:
+        description: EndTime 排名时间范围的结束时间（Unix 时间戳，秒）
+        minimum: 1
+        type: integer
+      instances:
+        description: |-
+          Instances 候选实例（Pod）名称，过滤空白后最多 50 个；为空时在最新部署的工作负载的全部 Pod 中排名，
+          非空时只在这批 Pod 中排名，不校验实例是否属于该环境
+        items:
+          type: string
+        type: array
+      interval:
+        description: Interval 子查询步长（秒），最小为 60 秒，建议与图表汇聚周期一致
+        type: integer
+      limit:
+        description: Limit 取前 N 个实例，取值 1~50，默认 10
+        maximum: 50
+        minimum: 1
+        type: integer
+      method:
+        description: Method 同一 Pod 内多个容器的数据如何合并，默认 sum，建议与图表汇聚方法一致
+        enum:
+        - sum
+        - max
+        - min
+        - count
+        - avg
+        type: string
+      rankBy:
+        description: |-
+          RankBy 排名指标，默认 cpu_limit_usage：
+            - cpu_limit_usage: CPU 使用率（用量 / limits）
+            - memory_limit_usage: 内存使用率（Working Set / limits）
+            - cpu_usage: CPU 用量（核数）
+            - memory_usage: 内存用量（Working Set，字节）
+        enum:
+        - cpu_limit_usage
+        - memory_limit_usage
+        - cpu_usage
+        - memory_usage
+        type: string
+      rankType:
+        description: RankType 排名方向：top 按排名指标平均值从高到低、bottom 从低到高，默认 top
+        enum:
+        - top
+        - bottom
+        type: string
+      startTime:
+        description: StartTime 排名时间范围的开始时间（Unix 时间戳，秒）
+        minimum: 1
+        type: integer
+    required:
+    - endTime
+    - startTime
     type: object
   serializer.RankInstancesResp:
     properties:
@@ -9388,6 +9773,50 @@ definitions:
         description: 版本号类型
         type: string
     type: object
+  serializer.TemplateOutput:
+    properties:
+      data:
+        $ref: '#/definitions/serializer.TemplateOutputObj'
+    type: object
+  serializer.TemplateOutputObj:
+    properties:
+      builtin:
+        description: 是否为平台内置模板，内置模板只读
+        type: boolean
+      content:
+        description: 框架配置文件内容，列表接口不返回
+        type: string
+      createdAt:
+        description: 创建时间，内置模板为空
+        type: string
+      creator:
+        description: 创建人，内置模板为空
+        type: string
+      fileName:
+        description: 框架配置文件名
+        type: string
+      framework:
+        description: 框架
+        type: string
+      id:
+        description: 模板 ID，内置模板为 builtin-{framework}-{language}
+        type: string
+      isDefault:
+        description: 是否为所在框架、语言的默认模板
+        type: boolean
+      language:
+        description: 语言
+        type: string
+      name:
+        description: 模板名称
+        type: string
+      updatedAt:
+        description: 更新时间，内置模板为空
+        type: string
+      updater:
+        description: 最近修改人，内置模板为空
+        type: string
+    type: object
   serializer.ThresholdConfigInput:
     properties:
       method:
@@ -9729,6 +10158,7 @@ definitions:
         enum:
         - go
         - cpp
+        - python
         type: string
     required:
     - language
@@ -10154,6 +10584,27 @@ definitions:
         allOf:
         - $ref: '#/definitions/serializer.ScopedEnvVarOutputObj'
         description: 作用域级别环境变量
+    type: object
+  serializer.UpdateTemplateInput:
+    properties:
+      content:
+        description: 框架配置文件内容
+        type: string
+      fileName:
+        description: 框架配置文件名，规则与应用配置文件名一致
+        maxLength: 64
+        minLength: 1
+        type: string
+      isDefault:
+        description: 是否设为创建应用时默认使用的模板；不传不修改，取消默认后回落到平台默认模板，TAF 没有平台默认模板
+        type: boolean
+      name:
+        description: 模板名称，同一框架、同一语言下不能重复，不能为「平台默认」
+        type: string
+    required:
+    - content
+    - fileName
+    - name
     type: object
   serializer.UpdateWorkspaceInfoInput:
     properties:
@@ -15713,7 +16164,9 @@ paths:
       tags:
       - bkintegrations-bkmonitor
   /apps/{appID}/envs/{envName}/bkmonitor/instance-ranks:
-    get:
+    post:
+      consumes:
+      - application/json
       operationId: RankInstances
       parameters:
       - description: 应用 ID
@@ -15726,50 +16179,12 @@ paths:
         name: envName
         required: true
         type: string
-      - description: 取前 N 个实例，1~50，默认 10
-        in: query
-        name: limit
-        type: integer
-      - description: 排名指标
-        enum:
-        - cpu_limit_usage
-        - memory_limit_usage
-        - cpu_usage
-        - memory_usage
-        in: query
-        name: rankBy
-        type: string
-      - description: 排名方向，默认 top
-        enum:
-        - top
-        - bottom
-        in: query
-        name: rankType
-        type: string
-      - description: 排名时间范围的开始时间（Unix 时间戳，秒）
-        in: query
-        name: startTime
+      - description: 查询参数
+        in: body
+        name: body
         required: true
-        type: integer
-      - description: 排名时间范围的结束时间（Unix 时间戳，秒）
-        in: query
-        name: endTime
-        required: true
-        type: integer
-      - description: 子查询步长（秒），最小 60，默认 60
-        in: query
-        name: interval
-        type: integer
-      - description: 汇聚方法，默认 sum
-        enum:
-        - sum
-        - max
-        - min
-        - count
-        - avg
-        in: query
-        name: method
-        type: string
+        schema:
+          $ref: '#/definitions/serializer.RankInstancesQueryInput'
       produces:
       - application/json
       responses:
@@ -18432,6 +18847,32 @@ paths:
       tags:
       - app-config-file-defs
   /apps/{appID}/rainbow-tconf:
+    delete:
+      description: 删除后应用回到未配置状态；未配置时调用同样返回成功；应用所在空间未开启七彩石配置开关时不可用
+      operationId: DeleteRainbowTConf
+      parameters:
+      - description: 应用 ID
+        in: path
+        name: appID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.RainbowTConfEmptyOutput'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 删除应用的七彩石入口
+      tags:
+      - rainbowtconf
     get:
       description: 未配置时 url 为空；应用所在空间未开启七彩石配置开关时不可用
       operationId: GetRainbowTConf
@@ -20008,7 +20449,7 @@ paths:
       - env
   /envs/{envID}/cluster-addons:
     get:
-      operationId: ListClusterAddons
+      operationId: ListEnvClusterAddons
       parameters:
       - description: 环境 ID
         in: path
@@ -20033,12 +20474,12 @@ paths:
       security:
       - BkUserInfo: []
       - BkUserCredential: []
-      summary: 查询可安装的集群插件列表
+      summary: 查询环境所在集群的集群插件列表
       tags:
       - cluster-addon
   /envs/{envID}/cluster-addons/{addonName}:
     delete:
-      operationId: DeleteClusterAddon
+      operationId: DeleteEnvClusterAddon
       parameters:
       - description: 环境 ID
         in: path
@@ -20068,13 +20509,13 @@ paths:
       security:
       - BkUserInfo: []
       - BkUserCredential: []
-      summary: 卸载集群插件
+      summary: 卸载环境所在集群上的集群插件
       tags:
       - cluster-addon
     post:
       consumes:
       - application/json
-      operationId: UpsertClusterAddon
+      operationId: UpsertEnvClusterAddon
       parameters:
       - description: 环境 ID
         in: path
@@ -20104,7 +20545,7 @@ paths:
       security:
       - BkUserInfo: []
       - BkUserCredential: []
-      summary: 部署/更新集群插件
+      summary: 在环境所在集群上部署/更新集群插件
       tags:
       - cluster-addon
   /envs/{envID}/port-pools:
@@ -20229,6 +20670,27 @@ paths:
       summary: 更新端口池
       tags:
       - port-pool
+  /frontend-features:
+    get:
+      description: 返回由部署配置决定的功能开关，前端据此决定页面入口是否展示
+      operationId: GetFrontendFeatures
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.FrontendFeaturesResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 获取前端功能开关
+      tags:
+      - frontend-features
   /kube-insight/reports:
     get:
       operationId: GetLatestEnvReport
@@ -22562,6 +23024,89 @@ paths:
       summary: 获取空间的配置开关
       tags:
       - cfgswitch
+  /workspaces/{workspaceID}/clusters/{clusterID}/cluster-addons:
+    get:
+      description: |-
+        返回适用于该集群的全部插件（含未安装的），每项带安装状态、当前 chart 版本与 values。
+        集群必须是空间绑定的 BCS 项目下的非共享集群
+      operationId: ListClusterAddons
+      parameters:
+      - description: 工作空间 ID
+        in: path
+        name: workspaceID
+        required: true
+        type: string
+      - description: BCS 集群 ID
+        in: path
+        name: clusterID
+        required: true
+        type: string
+      - description: 命名空间，默认为插件定义中的 defaultNamespace
+        in: query
+        name: namespace
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.ListClusterAddonsOutput'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 查询空间集群的集群插件及安装状态
+      tags:
+      - cluster-addon
+  /workspaces/{workspaceID}/clusters/{clusterID}/cluster-addons/{addonName}:
+    post:
+      consumes:
+      - application/json
+      description: |-
+        集群必须是空间绑定的 BCS 项目下的非共享集群，可以没有环境。
+        与环境维度的接口共用安装锁，同一集群命名空间内的同一插件同时只允许一个安装或卸载操作。
+      operationId: UpsertClusterAddon
+      parameters:
+      - description: 工作空间 ID
+        in: path
+        name: workspaceID
+        required: true
+        type: string
+      - description: BCS 集群 ID
+        in: path
+        name: clusterID
+        required: true
+        type: string
+      - description: 插件名称
+        in: path
+        name: addonName
+        required: true
+        type: string
+      - description: 请求体
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/serializer.UpsertClusterAddonInput'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 在空间集群上部署/更新集群插件
+      tags:
+      - cluster-addon
   /workspaces/{workspaceID}/components:
     get:
       operationId: ListWorkspaceComponents
@@ -23061,6 +23606,219 @@ paths:
       summary: 获取指定环境下的泳道列表
       tags:
       - env
+  /workspaces/{workspaceID}/framework-config-templates:
+    get:
+      description: 返回平台内置模板与空间自定义模板，每个框架、语言先列内置模板（TAF 没有内置模板）；不返回模板内容
+      operationId: ListWorkspaceFrameworkConfigTemplates
+      parameters:
+      - description: 工作空间 ID
+        in: path
+        name: workspaceID
+        required: true
+        type: string
+      - description: 框架：trpc、taf
+        in: query
+        name: framework
+        type: string
+      - description: 语言：go、cpp、python
+        in: query
+        name: language
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.ListTemplatesOutput'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 查询工作空间框架配置模板列表
+      tags:
+      - framework-config-templates
+    post:
+      consumes:
+      - application/json
+      operationId: CreateWorkspaceFrameworkConfigTemplate
+      parameters:
+      - description: 工作空间 ID
+        in: path
+        name: workspaceID
+        required: true
+        type: string
+      - description: 框架配置模板
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/serializer.CreateTemplateInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.TemplateOutput'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+        "409":
+          description: 同一框架、语言下模板名称已存在，或并发设置了其它默认模板
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 新建工作空间框架配置模板
+      tags:
+      - framework-config-templates
+  /workspaces/{workspaceID}/framework-config-templates/{templateID}:
+    delete:
+      description: 删除默认模板后，该框架、语言回落到平台内置模板（TAF 没有内置模板，则不再有默认模板）；平台内置模板不能删除
+      operationId: DeleteWorkspaceFrameworkConfigTemplate
+      parameters:
+      - description: 工作空间 ID
+        in: path
+        name: workspaceID
+        required: true
+        type: string
+      - description: 模板 ID
+        in: path
+        name: templateID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_workload_appmodelcore_frameworkcfgtmpl_serializer.EmptyOutput'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 删除工作空间框架配置模板
+      tags:
+      - framework-config-templates
+    get:
+      operationId: GetWorkspaceFrameworkConfigTemplate
+      parameters:
+      - description: 工作空间 ID
+        in: path
+        name: workspaceID
+        required: true
+        type: string
+      - description: 模板 ID，内置模板为 builtin-{framework}-{language}
+        in: path
+        name: templateID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.TemplateOutput'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 查询工作空间框架配置模板详情
+      tags:
+      - framework-config-templates
+    put:
+      consumes:
+      - application/json
+      description: 框架与语言不可修改；平台内置模板只读
+      operationId: UpdateWorkspaceFrameworkConfigTemplate
+      parameters:
+      - description: 工作空间 ID
+        in: path
+        name: workspaceID
+        required: true
+        type: string
+      - description: 模板 ID
+        in: path
+        name: templateID
+        required: true
+        type: string
+      - description: 框架配置模板
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/serializer.UpdateTemplateInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.TemplateOutput'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+        "409":
+          description: 同一框架、语言下模板名称已存在，或并发设置了其它默认模板
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 编辑工作空间框架配置模板
+      tags:
+      - framework-config-templates
+  /workspaces/{workspaceID}/framework-config-templates/{templateID}/default:
+    put:
+      description: 创建应用时默认使用该模板；对平台内置模板调用表示恢复使用平台默认模板
+      operationId: SetWorkspaceFrameworkConfigTemplateDefault
+      parameters:
+      - description: 工作空间 ID
+        in: path
+        name: workspaceID
+        required: true
+        type: string
+      - description: 模板 ID，内置模板为 builtin-{framework}-{language}
+        in: path
+        name: templateID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.TemplateOutput'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+        "409":
+          description: 并发设置了其它默认模板
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 设为默认框架配置模板
+      tags:
+      - framework-config-templates
   /workspaces/{workspaceID}/info:
     put:
       consumes:
@@ -23171,6 +23929,270 @@ paths:
       summary: 获取操作审计记录列表
       tags:
       - operation-audit
+  /workspaces/{workspaceID}/polaris-access-points:
+    get:
+      description: 允许空间自建接入点时返回空间自建接入点
+      operationId: ListPolarisAccessPoints
+      parameters:
+      - description: 工作空间 ID
+        in: path
+        name: workspaceID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.AccessPointListResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 获取空间的北极星接入点列表
+      tags:
+      - polaris-access-points
+    post:
+      consumes:
+      - application/json
+      description: |-
+        保存前服务端重新执行连通测试，失败或北极星开启了客户端鉴权时拒绝；Token 选填，加密存储。
+        传入 clusterIDs 时同时把这些集群绑定到该接入点
+      operationId: CreatePolarisAccessPoint
+      parameters:
+      - description: 工作空间 ID
+        in: path
+        name: workspaceID
+        required: true
+        type: string
+      - description: 接入点
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/serializer.AccessPointCreateInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.AccessPointResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 创建北极星接入点
+      tags:
+      - polaris-access-points
+  /workspaces/{workspaceID}/polaris-access-points/{accessPointID}:
+    delete:
+      description: 接入点仍绑定集群，或仍有北极星配置固定使用它时拒绝删除
+      operationId: DeletePolarisAccessPoint
+      parameters:
+      - description: 工作空间 ID
+        in: path
+        name: workspaceID
+        required: true
+        type: string
+      - description: 接入点 ID
+        in: path
+        name: accessPointID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.EmptyResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 删除北极星接入点
+      tags:
+      - polaris-access-points
+    patch:
+      consumes:
+      - application/json
+      description: |-
+        字段缺省表示不修改；客户端地址或 Token 变化时重新执行连通测试，失败时拒绝保存。
+        接入点被北极星配置使用时仍允许修改地址，集群组件会显示为需要更新。
+        传入 clusterIDs 时全量替换该接入点绑定的集群
+      operationId: UpdatePolarisAccessPoint
+      parameters:
+      - description: 工作空间 ID
+        in: path
+        name: workspaceID
+        required: true
+        type: string
+      - description: 接入点 ID
+        in: path
+        name: accessPointID
+        required: true
+        type: string
+      - description: 待修改的字段
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/serializer.AccessPointUpdateInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.AccessPointResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 更新北极星接入点
+      tags:
+      - polaris-access-points
+  /workspaces/{workspaceID}/polaris-access-points/{accessPointID}/namespaces:
+    get:
+      description: 实时读取空间自建接入点上的北极星命名空间，并过滤系统命名空间 Polaris
+      operationId: ListPolarisAccessPointNamespaces
+      parameters:
+      - description: 工作空间 ID
+        in: path
+        name: workspaceID
+        required: true
+        type: string
+      - description: 接入点 ID
+        in: path
+        name: accessPointID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.NamespacesResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 获取北极星接入点的命名空间
+      tags:
+      - polaris-access-points
+  /workspaces/{workspaceID}/polaris-access-points/connectivity-test:
+    post:
+      consumes:
+      - application/json
+      description: |-
+        依次检查网络、鉴权开关、Token，返回失败的原因与北极星上的命名空间，整体 10 秒超时。
+        传入已有接入点 ID 且 token 为空时使用已保存的 Token，并记录本次结果
+      operationId: TestPolarisAccessPointConnectivity
+      parameters:
+      - description: 工作空间 ID
+        in: path
+        name: workspaceID
+        required: true
+        type: string
+      - description: 接入地址
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/serializer.ConnectivityTestInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.ConnectivityTestResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 测试北极星接入点连通性
+      tags:
+      - polaris-access-points
+  /workspaces/{workspaceID}/polaris-clusters:
+    get:
+      description: 候选集群为空间 BCS 项目下的全部非共享集群，含没有环境的集群；先列出有环境的集群，同类按集群 ID 排序。
+      operationId: ListPolarisClusters
+      parameters:
+      - description: 工作空间 ID
+        in: path
+        name: workspaceID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.PolarisClusterListResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 获取北极星集群绑定视图
+      tags:
+      - polaris-access-points
+  /workspaces/{workspaceID}/polaris-operator-values:
+    get:
+      description: 返回由接入点推导出的北极星相关 values
+      operationId: ListPolarisOperatorValues
+      parameters:
+      - description: 工作空间 ID
+        in: path
+        name: workspaceID
+        required: true
+        type: string
+      - description: 只返回绑定到该接入点的集群
+        in: query
+        name: accessPointID
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.PolarisOperatorValuesListResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 获取北极星组件的期望 values
+      tags:
+      - polaris-access-points
   /workspaces/{workspaceID}/release-strategies:
     get:
       operationId: ListReleaseStrategies

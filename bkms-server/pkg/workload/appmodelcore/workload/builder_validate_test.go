@@ -27,6 +27,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/cfgrender"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/runtimerender"
 )
 
 var _ = Describe("validateVolumeMountPaths", func() {
@@ -97,7 +98,8 @@ var _ = Describe("buildDirectConfigMap", func() {
 		Expect(result).NotTo(BeNil())
 
 		// Verify ConfigMap
-		Expect(result.configMap.Name).To(Equal("my-app-plain-direct"))
+		cmName := runtimerender.VersionedConfigMapName("my-app-plain-direct", result.configMap.Data)
+		Expect(result.configMap.Name).To(Equal(cmName))
 		Expect(result.configMap.Data).To(HaveLen(2))
 		Expect(result.configMap.Data["00-app.conf"]).To(Equal("key=value"))
 		Expect(result.configMap.Data["01-extra.conf"]).To(Equal("foo=bar"))
@@ -116,17 +118,28 @@ var _ = Describe("buildDirectConfigMap", func() {
 		Expect(volumes).To(HaveLen(1))
 		Expect(volumes[0].Name).To(Equal(plainDirectVolumeName))
 		Expect(volumes[0].ConfigMap).NotTo(BeNil())
-		Expect(volumes[0].ConfigMap.Name).To(Equal("my-app-plain-direct"))
+		Expect(volumes[0].ConfigMap.Name).To(Equal(cmName))
 		Expect(volumes[0].ConfigMap.Items).To(HaveLen(2))
 	})
 
+	It("should change ConfigMap name only when content changes", func() {
+		build := func(content string) string {
+			return buildDirectConfigMap("my-app-plain-direct", []cfgrender.RenderedMountableFile{
+				{FileName: "app.conf", FilePath: "/etc/app", FileContent: content},
+			}).configMap.Name
+		}
+		Expect(build("key=v1")).To(Equal(build("key=v1")))
+		Expect(build("key=v2")).NotTo(Equal(build("key=v1")))
+	})
+
 	It("should keep volume name within DNS-1123 label limit when ConfigMap name is long", func() {
-		cmName := strings.Repeat("a", 63) + "-plain-direct"
-		result := buildDirectConfigMap(cmName, []cfgrender.RenderedMountableFile{
+		baseName := strings.Repeat("a", 63) + "-plain-direct"
+		result := buildDirectConfigMap(baseName, []cfgrender.RenderedMountableFile{
 			{FileName: "nginx.conf", FilePath: "/etc/nginx", FileContent: "worker_processes 1;\n"},
 		})
-		Expect(result.configMap.Name).To(Equal(cmName))
-		Expect(len(result.configMap.Name)).To(BeNumerically(">", 63))
+		cmName := result.configMap.Name
+		Expect(cmName).To(HavePrefix(baseName + "-"))
+		Expect(len(cmName)).To(BeNumerically(">", 63))
 
 		mounts, volumes, err := result.Storage(context.Background())
 		Expect(err).NotTo(HaveOccurred())
@@ -145,7 +158,8 @@ var _ = Describe("buildDirectConfigMap", func() {
 		extras, err := result.ExtraResources(context.Background())
 		Expect(err).NotTo(HaveOccurred())
 		Expect(extras).To(HaveLen(1))
-		Expect(extras[0].GetName()).To(Equal("test-cm"))
+		Expect(extras[0].GetName()).To(Equal(result.configMap.Name))
+		Expect(extras[0].GetName()).To(HavePrefix("test-cm-"))
 		Expect(extras[0].GetKind()).To(Equal("ConfigMap"))
 	})
 })

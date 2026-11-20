@@ -27,7 +27,7 @@ import (
 // TrpcSpecInput is the tRPC spec input.
 type TrpcSpecInput struct {
 	// 编程语言
-	Language string `json:"language" binding:"required,oneof=go cpp"`
+	Language string `json:"language" binding:"required,oneof=go cpp python"`
 	// 配置文件名，创建应用时必填，写入 framework def，应用模型不保存。
 	// todo 兼容：更新时可不传；传了仍同步到 def。更新改走 def 接口后，该字段只用于创建。
 	FileName string `json:"fileName"`

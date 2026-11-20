@@ -20,6 +20,7 @@
 package bkci
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"io"
@@ -99,6 +100,8 @@ func New(user auth.User) (Client, error) {
 		Stage:        config.G.BkApiStages.BkCI,
 		ClientOptions: []define.BkApiClientOption{
 			bkapi.OptSetRequestHeader("x-bkapi-authorization", string(authorization)),
+			// X-DEVOPS-UID 是蓝盾用户态接口的临时兼容头，部分环境仍用它识别调用用户，值与 bk_username 一致。
+			bkapi.OptSetRequestHeader("X-DEVOPS-UID", user.ID),
 			tenant.OptBkApiTenantHeader(),
 			bkapi.OptJsonResultProvider(),
 			bkapi.OptJsonBodyProvider(),
@@ -163,8 +166,9 @@ func (c *ApiClient) GetProject(ctx context.Context, projectCode string) (*Projec
 	}
 
 	return &Project{
-		ID:            mapx.GetStr(result, "data.projectId"),
-		Code:          projectCode,
+		ID: mapx.GetStr(result, "data.projectId"),
+		// 以蓝盾返回的项目 Code 为准，多租户蓝盾的 Code 带租户前缀
+		Code:          cmp.Or(mapx.GetStr(result, "data.projectCode"), projectCode),
 		Name:          mapx.GetStr(result, "data.projectName"),
 		Creator:       mapx.GetStr(result, "data.creator"),
 		HasManagePerm: mapx.GetBool(result, "data.managePermission"),

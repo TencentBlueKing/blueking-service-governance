@@ -35,6 +35,32 @@ const (
 	testBuilderImageVersion = "3.*"
 )
 
+// findDispatchType 返回渲染后模板中的构建机 dispatchType，一份模板只有一个
+func findDispatchType(rendered map[string]any) map[string]any {
+	var found map[string]any
+	for _, stage := range rendered["stages"].([]any) {
+		for _, container := range stage.(map[string]any)["containers"].([]any) {
+			dispatchType, ok := container.(map[string]any)["dispatchType"].(map[string]any)
+			if !ok {
+				continue
+			}
+			found = dispatchType
+		}
+	}
+	return found
+}
+
+// findElementByName 按步骤名查找 element，未命中返回 nil，插入新步骤不影响定位
+func findElementByName(elements []any, name string) map[string]any {
+	element, ok := lo.Find(elements, func(item any) bool {
+		return item.(map[string]any)["name"] == name
+	})
+	if !ok {
+		return nil
+	}
+	return element.(map[string]any)
+}
+
 var _ = Describe("PipelineTemplatesReloader", func() {
 	Describe("buildRenderContext", func() {
 		It("should build context with configured builder image", func() {
@@ -79,7 +105,9 @@ var _ = Describe("PipelineTemplatesReloader", func() {
 
 			var rendered map[string]any
 			Expect(json.Unmarshal(renderedData, &rendered)).To(Succeed())
-			Expect(rendered["version"]).To(Equal("1.5.1"))
+			Expect(rendered["version"]).To(Equal("1.6.0"))
+			// 渲染结果中不得再出现构建并推送镜像插件
+			Expect(string(renderedData)).NotTo(ContainSubstring("DockerBuildAndPushImage"))
 
 			stages := rendered["stages"].([]any)
 			triggerContainer := stages[0].(map[string]any)["containers"].([]any)[0].(map[string]any)
@@ -106,25 +134,21 @@ var _ = Describe("PipelineTemplatesReloader", func() {
 			Expect(artifactDirParam["valueNotEmpty"]).To(BeFalse())
 
 			buildContainer := stages[1].(map[string]any)["containers"].([]any)[0].(map[string]any)
+			// 配置的构建镜像要写进 DOCKER 类型构建机，不再走 PUBLIC_DEVCLOUD
+			dispatchType := buildContainer["dispatchType"].(map[string]any)
+			Expect(dispatchType["buildType"]).To(Equal("DOCKER"))
+			Expect(dispatchType["imageCode"]).To(Equal(testBuilderImageCode))
+			Expect(dispatchType["imageName"]).To(Equal(testBuilderImageCode))
+			Expect(dispatchType["imageVersion"]).To(Equal(testBuilderImageVersion))
+			Expect(dispatchType["value"]).To(Equal(testBuilderImageCode))
+			Expect(dispatchType["performanceConfigId"]).To(BeNumerically("==", 0))
+			Expect(string(renderedData)).NotTo(ContainSubstring("PUBLIC_DEVCLOUD"))
+			Expect(dispatchType).NotTo(HaveKey("dockerBuildVersion"))
 			elements := buildContainer["elements"].([]any)
-			var scriptElement map[string]any
-			var dockerBuildElement map[string]any
 			for _, element := range elements {
-				candidate := element.(map[string]any)
-				switch candidate["atomCode"] {
-				case "linuxScript":
-					scriptElement = candidate
-				case "DockerBuildAndPushImage":
-					dockerBuildElement = candidate
-				}
+				Expect(element.(map[string]any)["atomCode"]).NotTo(Equal("DockerBuildAndPushImage"))
 			}
-			Expect(dockerBuildElement).NotTo(BeNil())
-			dockerInput := dockerBuildElement["data"].(map[string]any)["input"].(map[string]any)
-			sourceTickets := dockerInput["sourceMirrorTicketPair"].([]any)
-			Expect(sourceTickets).To(HaveLen(1))
-			Expect(sourceTickets[0].(map[string]any)["key"]).To(Equal("${BKMS_IMAGE_REGISTRY_HOST}"))
-			Expect(sourceTickets[0].(map[string]any)["value"]).To(Equal("${BKMS_IMAGE_CREDENTIAL}"))
-			Expect(dockerInput["targetTicketId"]).To(Equal("${BKMS_IMAGE_CREDENTIAL}"))
+			scriptElement := findElementByName(elements, "生成 Dockerfile")
 			Expect(scriptElement).NotTo(BeNil())
 			Expect(scriptElement["@type"]).To(Equal("linuxScript"))
 			Expect(scriptElement["classType"]).To(Equal("linuxScript"))
@@ -166,6 +190,96 @@ var _ = Describe("PipelineTemplatesReloader", func() {
 			Expect(script).To(ContainSubstring(`echo "===== end of generated Dockerfile ====="`))
 		})
 
+		It("should render dockerfile template with docker build and push linux script", func() {
+			templatePath := filepath.Join("assets", "pipeline_templates", "dockerfile.json")
+			rawData, err := os.ReadFile(templatePath)
+			Expect(err).NotTo(HaveOccurred())
+
+			renderedData, err := renderPipelineTemplate("dockerfile.json", rawData, map[string]any{
+				pipelineTmplCtxKeyImageCode:    testBuilderImageCode,
+				pipelineTmplCtxKeyImageVersion: testBuilderImageVersion,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			var rendered map[string]any
+			Expect(json.Unmarshal(renderedData, &rendered)).To(Succeed())
+			buildContainer := rendered["stages"].([]any)[1].(map[string]any)["containers"].([]any)[0].(map[string]any)
+
+			// 账密经 Job 环境变量从凭证 ID 兑换，模板中只有 settings 引用，不含明文
+			Expect(buildContainer["customEnv"]).To(ConsistOf(
+				map[string]any{
+					"key":   "BKMS_IMAGE_REGISTRY_USERNAME",
+					"value": "${{settings.${BKMS_IMAGE_CREDENTIAL}.username}}",
+				},
+				map[string]any{
+					"key":   "BKMS_IMAGE_REGISTRY_PASSWORD",
+					"value": "${{settings.${BKMS_IMAGE_CREDENTIAL}.password}}",
+				},
+			))
+
+			buildElement := findElementByName(buildContainer["elements"].([]any), "构建并推送 Docker 镜像")
+			Expect(buildElement).NotTo(BeNil())
+			Expect(buildElement["atomCode"]).To(Equal("linuxScript"))
+			Expect(buildElement["@type"]).To(Equal("linuxScript"))
+			Expect(buildElement["classType"]).To(Equal("linuxScript"))
+			Expect(buildElement["scriptType"]).To(Equal("SHELL"))
+			// 失败必须让步骤失败，不能被 continueNoneZero 吞掉
+			Expect(buildElement["continueNoneZero"]).To(BeFalse())
+			additionalOptions := buildElement["additionalOptions"].(map[string]any)
+			Expect(additionalOptions["enable"]).To(BeTrue())
+			Expect(additionalOptions["continueWhenFailed"]).To(BeFalse())
+			Expect(additionalOptions["timeout"]).To(BeNumerically("==", 900))
+
+			script := buildElement["script"].(string)
+			Expect(script).To(HavePrefix("set -euo pipefail\n"))
+			Expect(script).To(ContainSubstring(
+				"for var in BKMS_DOCKERFILE_PATH BKMS_DOCKER_BUILD_DIR BKMS_IMAGE_REGISTRY " +
+					"BKMS_IMAGE_NAME BKMS_IMAGE_TAG BKMS_IMAGE_CREDENTIAL; do",
+			))
+			Expect(script).To(ContainSubstring(`if ! command -v docker >/dev/null 2>&1; then`))
+			// 账密通过带引号的 heredoc 承接，由蓝盾在执行前替换为明文
+			Expect(script).To(ContainSubstring(
+				"IFS= read -r registry_username <<'BKMS_CREDENTIAL_EOF'\n${BKMS_IMAGE_REGISTRY_USERNAME}\n",
+			))
+			Expect(script).To(ContainSubstring(
+				"IFS= read -r registry_password <<'BKMS_CREDENTIAL_EOF'\n${BKMS_IMAGE_REGISTRY_PASSWORD}\n",
+			))
+			// settings 引用残留、Job 环境变量未生效两种兑换失败都要拦下
+			Expect(script).To(ContainSubstring(`'' | *'{{settings.'* | *'{BKMS_IMAGE_REGISTRY_'*)`))
+			// 登录态写入临时 DOCKER_CONFIG，取消或超时也要清理；密码只走 stdin，登录后不再保留
+			Expect(script).To(ContainSubstring(`DOCKER_CONFIG="$(mktemp -d)"`))
+			Expect(script).To(ContainSubstring("trap cleanup_docker_config EXIT\n"))
+			Expect(script).To(ContainSubstring("trap 'exit 130' INT\n"))
+			Expect(script).To(ContainSubstring("trap 'exit 143' TERM\n"))
+			Expect(script).To(ContainSubstring(
+				`printf '%s' "$registry_password" | docker login --username "$registry_username" --password-stdin "$registry_host"`,
+			))
+			Expect(script).To(ContainSubstring("unset registry_username registry_password\n"))
+			Expect(script).NotTo(ContainSubstring(`echo "$registry_password"`))
+			Expect(script).NotTo(ContainSubstring("--password \""))
+			// 构建参数不能从环境变量读：蓝盾导出时会删掉换行和单引号
+			Expect(
+				script,
+			).To(ContainSubstring("done <<'BKMS_BUILD_ARGS_EOF'\n${BKMS_DOCKER_BUILD_ARGS}\nBKMS_BUILD_ARGS_EOF\n"))
+			Expect(script).NotTo(ContainSubstring(`"${BKMS_DOCKER_BUILD_ARGS:-}"`))
+			Expect(script).To(ContainSubstring(`*'{BKMS_DOCKER_BUILD_ARGS}'*)`))
+			// 构建参数为空时不追加 --build-arg
+			Expect(script).To(ContainSubstring(
+				`docker build -f "$BKMS_DOCKERFILE_PATH" -t "$target_image" ` +
+					`${build_args[@]+"${build_args[@]}"} "$BKMS_DOCKER_BUILD_DIR"`,
+			))
+			// 镜像源地址兜底去掉 scheme 和末尾斜杠后再拼 host 与目标镜像
+			Expect(script).To(ContainSubstring(`registry="${BKMS_IMAGE_REGISTRY#http://}"`))
+			Expect(script).To(ContainSubstring(`registry="${registry#https://}"`))
+			Expect(script).To(ContainSubstring(`registry_host="${registry%%/*}"`))
+			Expect(script).To(ContainSubstring(`target_image="$registry/$BKMS_IMAGE_NAME:$BKMS_IMAGE_TAG"`))
+			Expect(script).To(ContainSubstring(`if ! docker push "$target_image"; then`))
+			// 各阶段失败都要在日志中标明阶段
+			Expect(script).To(ContainSubstring(`echo "[ERROR] docker login to $registry_host failed"`))
+			Expect(script).To(ContainSubstring(`echo "[ERROR] docker build $target_image failed"`))
+			Expect(script).To(ContainSubstring(`echo "[ERROR] docker push $target_image failed"`))
+		})
+
 		It("should return error when template key is missing", func() {
 			rawData := []byte(`{"imageCode": "[[ .missingBuilderImageCode ]]"}`)
 
@@ -192,7 +306,7 @@ var _ = Describe("PipelineTemplatesReloader", func() {
 
 			var rendered map[string]any
 			Expect(json.Unmarshal(renderedData, &rendered)).To(Succeed())
-			Expect(rendered["version"]).To(Equal("1.0.0"))
+			Expect(rendered["version"]).To(Equal("1.0.1"))
 			Expect(rendered["name"]).To(Equal("[bkms] 自动构建触发（[[ .appID ]]）"))
 			// 自逃逸经 Reload 后留下二次渲染占位；全局镜像已落地
 			Expect(string(renderedData)).To(ContainSubstring("[[ .callbackURL ]]"))
@@ -200,6 +314,35 @@ var _ = Describe("PipelineTemplatesReloader", func() {
 			Expect(string(renderedData)).NotTo(ContainSubstring("[[ `[[ .callbackURL ]]` ]]"))
 			Expect(string(renderedData)).To(ContainSubstring(defaultPipelineBuilderImageCode))
 			Expect(string(renderedData)).NotTo(ContainSubstring("[[ .builderImageCode ]]"))
+			Expect(string(renderedData)).NotTo(ContainSubstring("PUBLIC_DEVCLOUD"))
+			dispatchType := findDispatchType(rendered)
+			Expect(dispatchType["buildType"]).To(Equal("DOCKER"))
+			Expect(dispatchType["imageCode"]).To(Equal(defaultPipelineBuilderImageCode))
+			Expect(dispatchType["imageVersion"]).To(Equal(defaultPipelineBuilderImageVersion))
+		})
+
+		It("should render helm template with docker dispatch type", func() {
+			templatePath := filepath.Join("assets", "pipeline_templates", "helm_git_build.json")
+			rawData, err := os.ReadFile(templatePath)
+			Expect(err).NotTo(HaveOccurred())
+
+			reloader := newPipelineTemplatesReloader(nil, nil)
+			renderedData, err := renderPipelineTemplate(
+				"helm_git_build.json", rawData, reloader.buildRenderContext(),
+			)
+			Expect(err).NotTo(HaveOccurred())
+
+			var rendered map[string]any
+			Expect(json.Unmarshal(renderedData, &rendered)).To(Succeed())
+			Expect(rendered["version"]).To(Equal("1.0.1"))
+			Expect(string(renderedData)).NotTo(ContainSubstring("PUBLIC_DEVCLOUD"))
+			dispatchType := findDispatchType(rendered)
+			Expect(dispatchType["buildType"]).To(Equal("DOCKER"))
+			Expect(dispatchType["imageType"]).To(Equal("BKSTORE"))
+			Expect(dispatchType["imageCode"]).To(Equal(defaultPipelineBuilderImageCode))
+			Expect(dispatchType["imageVersion"]).To(Equal(defaultPipelineBuilderImageVersion))
+			Expect(dispatchType["imageRepositoryUserName"]).To(Equal(""))
+			Expect(dispatchType["imageRepositoryPassword"]).To(Equal(""))
 		})
 	})
 

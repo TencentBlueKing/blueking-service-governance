@@ -1,0 +1,21 @@
+[
+  {
+    "dropIndexes": "polaris_access_points",
+    "index": [
+      "idx_workspaceID_name",
+      "tenantID_1"
+    ]
+  },
+  {
+    "dropIndexes": "polaris_cluster_bindings",
+    "index": [
+      "idx_workspaceID_clusterID",
+      "idx_workspaceID_accessPointID",
+      "tenantID_1"
+    ]
+  },
+  {
+    "dropIndexes": "polaris_configs",
+    "index": "idx_accessPointID"
+  }
+]

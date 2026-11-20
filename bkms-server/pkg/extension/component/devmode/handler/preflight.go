@@ -239,7 +239,7 @@ func (h *Handler) resolveInstanceIDs(
 	ctx context.Context, appID, envName string, instanceIDs []string, all bool,
 ) ([]string, error) {
 	// 获取最新部署记录
-	record, err := appmodeldeploy.GetLatest(ctx, h.registry.DB, appID, envName, "")
+	record, err := appmodeldeploy.GetLatestRecord(ctx, h.registry.DB, appID, envName, "")
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			return nil, bkerrs.Wrap(err, bkerrs.ErrCodeNotFound, "no deploy record found for this environment")

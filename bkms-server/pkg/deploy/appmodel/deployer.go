@@ -19,9 +19,11 @@
 package appmodel
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"time"
 
 	tkex "github.com/Tencent/bk-bcs/bcs-scenarios/kourse/pkg/apis/tkex/v1alpha1"
@@ -123,7 +125,7 @@ func (d *Deployer) Deploy(
 		return "", err
 	}
 
-	// 找出之前部署中下发、本次不再需要的资源；以最新的部署记录为准，必须在创建本次部署记录之前计算
+	// 找出之前部署中下发、本次不再需要的资源；以已有的部署记录为准，必须在创建本次部署记录之前计算
 	resourceKeys := d.buildResourceKeys(buildResult.WorkloadKind, buildResult.Name(), extraObjs)
 	expiredResources, err := d.getExpiredResources(ctx, env.Name, trafficLaneName, resourceKeys)
 	if err != nil {
@@ -187,7 +189,7 @@ func (d *Deployer) Deploy(
 func (d *Deployer) Uninstall(ctx context.Context, env *bkmsenv.Environment, trafficLaneName string) error {
 	envName := env.Name
 	// 获取最新部署记录
-	record, err := GetLatest(ctx, d.db, d.app.ID, envName, trafficLaneName)
+	record, err := GetLatestRecord(ctx, d.db, d.app.ID, envName, trafficLaneName)
 	if err != nil {
 		return errors.Wrap(err, "get latest deploy record")
 	}
@@ -212,9 +214,15 @@ func (d *Deployer) Uninstall(ctx context.Context, env *bkmsenv.Environment, traf
 		return errors.Wrap(err, "delete rollout")
 	}
 
-	// 删除本次部署所管理的资源
+	// 删除最新部署记录管理的资源，以及最近的部署记录引用过的全部 ConfigMap：
+	// 旧版本 Pod 挂载的 ConfigMap 不在最新记录的 ResourceKeys 中，已删除的 ConfigMap 再次删除会被忽略
+	records, err := ListRecentRecord(ctx, d.db, d.app.ID, envName, trafficLaneName, recentRecordsLimit)
+	if err != nil {
+		return errors.Wrap(err, "list recent deploy records")
+	}
 	if err = d.deleteDeployedResources(
-		ctx, record.ClusterID, record.Namespace, record.ResourceKeys,
+		ctx, record.ClusterID, record.Namespace,
+		lo.Uniq(append(slices.Clone(record.ResourceKeys), listRefConfigMaps(records)...)),
 	); err != nil {
 		return errors.Wrap(err, "delete deploy resource")
 	}
@@ -286,7 +294,7 @@ func (d *Deployer) UpdateInstances(
 	podNames []string,
 ) (deployID string, err error) {
 	// 获取最新的部署记录
-	record, err := GetLatest(ctx, d.db, d.app.ID, envName, trafficLaneName)
+	record, err := GetLatestRecord(ctx, d.db, d.app.ID, envName, trafficLaneName)
 	if err != nil {
 		return "", errors.Wrap(err, "get latest deploy record")
 	}
@@ -413,7 +421,7 @@ func (d *Deployer) UpdateInstances(
 // Scale 对应用实例进行扩缩容操作
 func (d *Deployer) Scale(ctx context.Context, envName, trafficLaneName string, replicas int32) error {
 	// 获取最新的部署记录
-	record, err := GetLatest(ctx, d.db, d.app.ID, envName, trafficLaneName)
+	record, err := GetLatestRecord(ctx, d.db, d.app.ID, envName, trafficLaneName)
 	if err != nil {
 		return errors.Wrap(err, "get latest deploy record")
 	}
@@ -466,7 +474,7 @@ func (d *Deployer) BatchDeleteInstances(
 	}
 
 	// 获取最新的部署记录
-	record, err := GetLatest(ctx, d.db, d.app.ID, envName, trafficLaneName)
+	record, err := GetLatestRecord(ctx, d.db, d.app.ID, envName, trafficLaneName)
 	if err != nil {
 		return errors.Wrap(err, "get latest deploy record")
 	}
@@ -714,29 +722,31 @@ func (d *Deployer) buildResourceKeys(
 	return resources
 }
 
-// getExpiredResources 对比检查 & 删除过期的资源
-// 其中 currentResourceKeys 为当前部署需要保留的资源列表
+// getExpiredResources 计算本次部署完成后需要删除的资源，currentResourceKeys 为本次部署的资源列表：
+//   - ConfigMap 以外的资源：最新部署记录中有、本次不再需要的资源
+//   - ConfigMap：旧版本的 Pod 仍可能挂载，只删除 expiredConfigMaps 判定不再可能被挂载的 ConfigMap
 func (d *Deployer) getExpiredResources(
 	ctx context.Context,
 	envName, trafficLaneName string,
 	currentResourceKeys ResourceKeys,
 ) (ResourceKeys, error) {
-	// 获取最新部署记录
-	record, err := GetLatest(ctx, d.db, d.app.ID, envName, trafficLaneName)
+	records, err := ListRecentRecord(ctx, d.db, d.app.ID, envName, trafficLaneName, recentRecordsLimit)
 	if err != nil {
-		// 如果是首次部署，是没有历史记录的，可以直接跳过
-		if errors.Is(err, ErrDeployRecordNotFound) {
-			log.Infof(
-				ctx, "app %s env %s traffic lane %s no previous deploy record, not expired resources",
-				d.app.ID, envName, trafficLaneName,
-			)
-			return nil, nil
-		}
-		return nil, errors.Wrap(err, "get latest deploy record")
+		return nil, errors.Wrap(err, "list recent deploy records")
+	}
+	// 如果是首次部署，是没有历史记录的，可以直接跳过
+	if len(records) == 0 {
+		log.Infof(
+			ctx, "app %s env %s traffic lane %s no previous deploy record, not expired resources",
+			d.app.ID, envName, trafficLaneName,
+		)
+		return nil, nil
 	}
 
-	// 对资源进行对比，统计出需要删除的资源信息
-	return record.ResourceKeys.Diff(currentResourceKeys), nil
+	expired := lo.Filter(records[0].ResourceKeys.Diff(currentResourceKeys), func(key ResourceKey, _ int) bool {
+		return key.Kind != k8skind.CM
+	})
+	return append(expired, getExpiredConfigMaps(records, currentResourceKeys)...), nil
 }
 
 // createDeployRecord 创建部署记录
@@ -808,7 +818,7 @@ func (d *Deployer) createDeployRecord(
 
 // getRunningImageTag 返回环境 / 泳道中旧版本实例正在使用的镜像标签
 func (d *Deployer) getRunningImageTag(ctx context.Context, envName, trafficLaneName string) (string, error) {
-	record, err := GetLatest(ctx, d.db, d.app.ID, envName, trafficLaneName, StatusDeployed)
+	record, err := GetLatestRecord(ctx, d.db, d.app.ID, envName, trafficLaneName, StatusDeployed)
 	if errors.Is(err, ErrDeployRecordNotFound) {
 		return "", nil
 	}
@@ -888,7 +898,7 @@ func (d *Deployer) UpdateInstancePolaris(
 	weight *int32,
 	isolate *bool,
 ) error {
-	record, err := GetLatest(ctx, d.db, d.app.ID, envName, trafficLaneName)
+	record, err := GetLatestRecord(ctx, d.db, d.app.ID, envName, trafficLaneName)
 	if err != nil {
 		return errors.Wrap(err, "deploy record not found")
 	}
@@ -1009,4 +1019,16 @@ func replicasJSONPatch(replicas int32) map[string]any {
 		"path":  "/spec/replicas",
 		"value": replicas,
 	}
+}
+
+// sortRecord 返回按创建时间由新到旧排序的 record
+func sortRecord(records []Record) []Record {
+	sorted := slices.Clone(records)
+	slices.SortStableFunc(sorted, func(a, b Record) int {
+		if c := b.CreatedAt.Compare(a.CreatedAt); c != 0 {
+			return c
+		}
+		return bytes.Compare(b.ID[:], a.ID[:])
+	})
+	return sorted
 }

@@ -1,0 +1,76 @@
+global: # 全局配置
+  namespace: Development # 通常使用 Production 或 Development
+  env_name: ${BKMS_ENV_TYPE} # 环境类型
+  local_ip: ${BKMS_POD_IP} # 全局配置本地IP地址，需要使用容器环境变量渲染
+
+server:
+  app: ${BKMS_ENV_NAME} # 业务的应用名
+  server: ${BKMS_APP_NAME} # 进程服务名
+  bin_path: /usr/local/trpc/bin/
+  conf_path: /usr/local/trpc/conf/
+  data_path: /usr/local/trpc/data/
+  filter:
+    - recovery # 拦截框架创建的业务处理协程 panic
+    - opentelemetry #启用optl插件
+  service:
+    - name: trpc.${BKMS_ENV_NAME}.${BKMS_APP_NAME}.Greeter # trpc服务，业务需要修改
+      ip: ${BKMS_POD_IP}
+      port: 8080
+      network: tcp
+      protocol: trpc
+client:
+  filter:
+    - opentelemetry
+  service:
+    - name: trpc.${BKMS_ENV_NAME}.${BKMS_APP_NAME}.Greeter # client服务发现配置，业务需要修改
+      target: ip://trpc.${BKMS_ENV_NAME}.${BKMS_APP_NAME}.Greeter # 本地IP地址，业务根据服务发现进行修改
+      timeout: 3000
+
+plugins: # 插件配置
+  log: # 日志配置
+    default: # 默认日志的配置，可支持多输出
+      - writer: console # 控制台标准输出 默认
+        level: debug # 标准输出日志的级别
+      - writer: file # 本地文件日志
+        level: info # 本地文件滚动日志的级别
+        writer_config:
+          log_path: /usr/local/trpc/log
+          filename: ./trpc.log # 本地文件滚动日志存放的路径
+          max_size: 100 # 本地文件滚动日志的大小 单位 MB
+          max_backups: 10 # 最大日志文件数
+          max_age: 15 # 最大日志保留天数
+          compress: false # 日志文件是否压缩
+  telemetry: # 蓝鲸APM接入配置
+    opentelemetry:
+      addr: ${BKMS_BKAPM_API} # 蓝鲸APM接入API接口
+      tenant_id: ${BKMS_BKAPM_TOKEN} # 蓝鲸APM接入ID
+      sampler:
+        fraction: 1.0
+      attributes:
+        - key: 'service_name'
+          value: '${BKMS_ENV_NAME}.${BKMS_APP_NAME}' # 蓝鲸APM上报的服务标识
+      metrics:
+        enable_register: false
+        opentelemetry_push:
+          enabled: true
+          endpoint: ${BKMS_BKAPM_API} # 蓝鲸APM接口API
+          temporality: 1
+          interval: 30s
+          boundaries: [0, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 5]
+          server_filter: # 被调过滤器配置。
+            enabled_caller_ip: false # 被调过滤器，开启主调 IP 上报，默认 false。
+          client_filter: # 主调过滤器配置。
+            enabled_callee_ip: false # 主调过滤器，开启被调 IP 上报，默认 false
+            enabled_callee_container: false # 主调过滤器，开启被调容器上报，默认 false
+        prometheus_pull: # Prometheus pull 配置
+          disable: false # 是否禁用 metric Prometheus pull，默认 false.
+      traces: # 链路延迟采样相关配置
+        disable_trace_body: false
+        enable_deferred_sample: true # 开启延迟采样 在span结束后的导出采样, 额外上报出错的/高耗时的
+        deferred_sample_error: true # 采样出错的
+        deferred_sample_slow_duration: 1ms # 采样耗时大于指定值的
+      logs:
+        enabled: true # 远程日志开关，默认关闭
+        level: 'error' # 日志级别，默认error
+        trace_log_mode: 'verbose'
+        addr: ${BKMS_BKAPM_API}

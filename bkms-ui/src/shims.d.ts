@@ -47,6 +47,12 @@ declare module '*.svg' {
   export default component;
 }
 
+/** locale 词条文件：业务侧走 import.meta.glob，测试直接 import 时需要该声明 */
+declare module '*.yml' {
+  const messages: Record<string, unknown>;
+  export default messages;
+}
+
 declare module '@blueking/platform-config';
 
 declare module '@blueking/notice-component';

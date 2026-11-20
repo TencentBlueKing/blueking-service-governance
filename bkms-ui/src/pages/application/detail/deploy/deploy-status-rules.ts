@@ -15,6 +15,8 @@
  * of the project delivered to anyone in the future.
  */
 
+import { APP_DEPLOY_STATUS } from '~/common/enums/deploy';
+
 import type { LatestDeployStatus } from '~/@types/v1/deploy';
 import type { EnvOutput } from '~/@types/v1/env';
 
@@ -28,6 +30,20 @@ export function resolveInstanceListHasDeployRecord(latest: LatestDeployStatus | 
   if (!latest) return undefined;
   if (latest.stage === 'build') return true;
   return latest.hasDeployRecord;
+}
+
+/**
+ * 是否还需要继续轮询 latest-status。
+ *
+ * 已卸载（uninstalled）的环境没有任何可推进的部署状态：继续每 5s 请求只会空转，
+ * 还会让实例页的分批发布补查反复闪出骨架屏、并把历史 canary 记录误当成进行中的横幅。
+ * 构建阶段（build）仍要轮询，此时后端可能还没聚合出部署状态。
+ * 未拿到状态（null）时保持原有行为，避免首次加载就丢掉轮询。
+ */
+export function shouldContinueDeployStatusPolling(latest: LatestDeployStatus | null | undefined): boolean {
+  if (!latest) return true;
+  if (latest.stage === 'build') return true;
+  return latest.status !== APP_DEPLOY_STATUS.UNINSTALLED;
 }
 
 /**

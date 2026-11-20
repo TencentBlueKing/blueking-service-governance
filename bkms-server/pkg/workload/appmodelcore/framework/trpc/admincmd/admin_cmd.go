@@ -209,7 +209,7 @@ func NewAdminService(
 
 // GetPodIPMap 获取 Pod IP 映射
 func (s *TrpcAdminService) GetPodIPMap(ctx context.Context) (map[string]string, error) {
-	record, err := appmodeldeploy.GetLatest(ctx, s.DB, s.App.ID, s.EnvName, "")
+	record, err := appmodeldeploy.GetLatestRecord(ctx, s.DB, s.App.ID, s.EnvName, "")
 	if err != nil {
 		return nil, errors.Wrapf(err, "deploy record not found")
 	}

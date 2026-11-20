@@ -523,6 +523,11 @@ export interface OperateBatchReleaseInput {
    */
   action: Action;
   /**
+   * 预期操作的部署记录 ID（用户确认弹窗打开时的目标）。
+   * 后端据此核对最新部署记录，不一致时拒绝执行，避免确认后目标被替换。
+   */
+  deployID?: string;
+  /**
    * 部署的泳道名称（空字符串表示不使用泳道）
    */
   trafficLaneName?: string;
@@ -892,11 +897,11 @@ export interface BatchReleaseProgressOutputObj {
    */
   updatedReplicas?: number;
   /**
-   * 旧版本：工作负载 status.currentRevision；轮询任务读到工作负载前为空
+   * 旧版本：工作负载 status.currentRevision；尚未读到工作负载时为空
    */
   workloadCurrentRevision?: string;
   /**
-   * 新版本：工作负载 status.updateRevision，实例 workloadRevision 与之相等即为新版本实例；轮询任务读到工作负载前为空
+   * 新版本：工作负载 status.updateRevision，实例 workloadRevision 与之相等即为新版本实例；尚未读到工作负载时为空
    */
   workloadUpdateRevision?: string;
 }

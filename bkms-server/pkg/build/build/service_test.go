@@ -33,6 +33,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	bkciapi "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bkci"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
@@ -96,12 +97,26 @@ var _ = Describe("Service build validation", func() {
 		Expect(err).To(MatchError(ContainSubstring("imageBuild.toolchainBaseURL is required")))
 	})
 
-	It("should reject platform generated Dockerfile build for non-Go TRPC applications", func() {
+	It("should reject platform generated Dockerfile build for TRPC cpp applications", func() {
 		app.TrpcSpec.Language = appmodel.LanguageCpp
 
 		err := buildService.validateBeforeBuild(ctx, app, cfg)
 
 		Expect(err).To(MatchError(ContainSubstring("platformBuild: unsupported_stack")))
+	})
+
+	It("should accept python platform build without builder image", func() {
+		app.TrpcSpec.Language = appruntime.LanguagePython
+		cfg.CodeRepo.PlatformBuildConfig.BuilderImage = ""
+		cfg.CodeRepo.PlatformBuildConfig.RunnerImage = "python:3.12"
+		// 带上自定义镜像判定器，确认空构建镜像不会在凭证判定时被当成非法引用解析
+		buildService.customImageChecker = &stubCustomChecker{}
+		mockey.Mock((*workloadruntime.ImageReferenceValidator).ValidateTaggedReference).
+			Return(&workloadruntime.ImageReference{Name: "python", Tag: "3.12"}, nil).Build()
+
+		err := buildService.validateBeforeBuild(ctx, app, cfg)
+
+		Expect(err).NotTo(HaveOccurred())
 	})
 
 	It("should reject platform generated Dockerfile build for non-TRPC app types", func() {

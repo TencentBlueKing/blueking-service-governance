@@ -553,13 +553,13 @@ const plainDirectVolumeName = "plain-direct"
 
 // buildDirectConfigMap 为不需要 env var 渲染的 plain 文件构建直接 ConfigMap 挂载。
 // 内容直接写入 ConfigMap data，主容器通过 subPath 挂载到目标路径，无需 init container。
-func buildDirectConfigMap(configMapName string, files []cfgrender.RenderedMountableFile) *directConfigMapResult {
+// baseName 为 ConfigMap 的基础名称，实际名称带内容摘要后缀，见 runtimerender.VersionedConfigMapName
+func buildDirectConfigMap(baseName string, files []cfgrender.RenderedMountableFile) *directConfigMapResult {
 	volumeName := plainDirectVolumeName
 
 	cm := corev1.ConfigMap{
-		TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: "ConfigMap"},
-		ObjectMeta: metav1.ObjectMeta{Name: configMapName},
-		Data:       make(map[string]string, len(files)),
+		TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "ConfigMap"},
+		Data:     make(map[string]string, len(files)),
 	}
 
 	items := make([]corev1.KeyToPath, 0, len(files))
@@ -579,12 +579,13 @@ func buildDirectConfigMap(configMapName string, files []cfgrender.RenderedMounta
 			SubPath:   key,
 		})
 	}
+	cm.Name = runtimerender.VersionedConfigMapName(baseName, cm.Data)
 
 	vol := corev1.Volume{
 		Name: volumeName,
 		VolumeSource: corev1.VolumeSource{
 			ConfigMap: &corev1.ConfigMapVolumeSource{
-				LocalObjectReference: corev1.LocalObjectReference{Name: configMapName},
+				LocalObjectReference: corev1.LocalObjectReference{Name: cm.Name},
 				Items:                items,
 			},
 		},

@@ -35,6 +35,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	bkciapi "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bkci"
@@ -500,6 +501,31 @@ var _ = Describe("Build Functions", func() {
 			))
 		})
 
+		It("should pass python language and empty builder image for python platform build", func() {
+			mockey.Mock(workspace.GetWorkspaceImageRegistry).Return(&registry.ImageRegistry{
+				Registry:         "hub.example.com",
+				BkCICredentialID: "cred-123",
+			}, nil).Build()
+
+			testApp.TrpcSpec.Language = appruntime.LanguagePython
+			testCfg.CodeRepo.Dockerfile = ""
+			testCfg.CodeRepo.ImageBuildMode = ImageBuildModePlatform
+			testCfg.CodeRepo.PlatformBuildConfig = &PlatformBuildConfig{
+				RunnerImage: "python:3.12",
+				Commands:    &BuildCommands{Start: "python main.py"},
+			}
+
+			params, err := genPipelineBuildParams(ctx, testutil.NewDB(GinkgoT()), testApp, testCfg, rev, imageTag)
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(params[pipelineparam.DockerfileSourceType]).To(Equal(bkciDockerfileSourceGenerated))
+			Expect(params[pipelineparam.DockerfileLanguage]).To(Equal(appruntime.LanguagePython))
+			Expect(params[pipelineparam.DockerfileBuilderImage]).To(Equal(""))
+			Expect(params[pipelineparam.DockerfileRunnerImage]).To(Equal("python:3.12"))
+			// 未配置产物目录时传空串，由生成器按语言回落到 /app
+			Expect(params[pipelineparam.DockerfileArtifactDir]).To(Equal(""))
+		})
+
 		It("should use workspace root for generated Dockerfile path when source dir is empty", func() {
 			mockey.Mock(workspace.GetWorkspaceImageRegistry).Return(&registry.ImageRegistry{
 				Registry:         "hub.example.com",
@@ -578,6 +604,17 @@ var _ = Describe("Build Functions", func() {
 			_, err := genPipelineBuildParams(ctx, testutil.NewDB(GinkgoT()), testApp, testCfg, rev, imageTag)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("code repo config not found"))
+		})
+
+		It("should return error when stored docker build args contain line breaks", func() {
+			// 存量配置没经过写入校验，构建前也要拦下
+			testCfg.CodeRepo.DockerBuildArgs = map[string]string{"A": "1\nBKMS_BUILD_ARGS_EOF"}
+
+			params, err := genPipelineBuildParams(ctx, testutil.NewDB(GinkgoT()), testApp, testCfg, rev, imageTag)
+
+			Expect(params).To(BeNil())
+			Expect(err).To(MatchError(ContainSubstring("validate docker build args")))
+			Expect(err).To(MatchError(ContainSubstring("value of A must not contain line breaks")))
 		})
 
 		It("should return error when image params generation fails", func() {

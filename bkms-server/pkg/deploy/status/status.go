@@ -578,7 +578,7 @@ func (s *DeployStatusService) getLatestAppModelDeployRecord(
 	ctx context.Context,
 	appID, envName, laneName string,
 ) (*appmodel.Record, error) {
-	record, err := appmodel.GetLatest(ctx, s.DB, appID, envName, laneName)
+	record, err := appmodel.GetLatestRecord(ctx, s.DB, appID, envName, laneName)
 	if err != nil {
 		if errors.Is(err, appmodel.ErrDeployRecordNotFound) {
 			return nil, nil

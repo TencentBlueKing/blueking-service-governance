@@ -64,4 +64,9 @@ const (
 
 	// ErrDetailCodeScopedEnvVarKeyConflict 同一作用域内环境变量 Key 已存在
 	ErrDetailCodeScopedEnvVarKeyConflict ErrDetailCode = "SCOPED_ENV_VAR_KEY_CONFLICT"
+
+	// ErrDetailCodePolarisAccessPointInUse 北极星接入点仍绑定着集群，或仍有北极星配置固定使用它
+	ErrDetailCodePolarisAccessPointInUse ErrDetailCode = "POLARIS_ACCESS_POINT_IN_USE"
+	// ErrDetailCodePolarisClusterInUse 集群上有环境被北极星配置使用，不能解绑或换绑
+	ErrDetailCodePolarisClusterInUse ErrDetailCode = "POLARIS_CLUSTER_IN_USE"
 )

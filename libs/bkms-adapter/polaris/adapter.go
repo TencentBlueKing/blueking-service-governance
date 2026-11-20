@@ -18,8 +18,8 @@
 
 // Package polaris 提供北极星 SDK 的统一抽象接口与开源实现。
 //
-// 本包导出 Provider 接口和 Instance 数据类型，并提供基于开源北极星 SDK
-// (github.com/polarismesh/polaris-go) 的默认实现。
+// 本包导出 Provider（进程级单例）、Consumer（按接入点多实例，由 NewConsumer 创建）接口和
+// Instance 数据类型，并提供基于开源北极星 SDK (github.com/polarismesh/polaris-go) 的默认实现。
 //
 // 内部私有版本通过 go.work replace 替换本 module 为私有 SDK 实现，
 // 对外接口保持一致，调用方无需改动。
@@ -32,6 +32,7 @@ import (
 	"github.com/pkg/errors"
 	polarissdk "github.com/polarismesh/polaris-go"
 	polarisapi "github.com/polarismesh/polaris-go/api"
+	polarismodel "github.com/polarismesh/polaris-go/pkg/model"
 )
 
 // Provider 抽象北极星消费端能力，屏蔽私有 SDK 与开源 SDK 之间的实现差异。
@@ -150,7 +151,63 @@ func (p *defaultProvider) GetInstances(_ context.Context, namespace, serviceName
 	if err != nil {
 		return nil, errors.Wrapf(err, "get instances for polaris service %s/%s", namespace, serviceName)
 	}
+	return toInstances(resp), nil
+}
 
+// Consumer 一个北极星接入点的消费端。不同接入点各自创建 Consumer，进程内可同时存在多个。
+//
+// 实现必须是协程安全的；Close 之后不能再调用 GetInstances
+type Consumer interface {
+	// GetInstances 查询指定服务下的所有实例，返回已归一化的 Instance 列表。
+	GetInstances(ctx context.Context, namespace, serviceName string) ([]*Instance, error)
+	// Close 释放底层 SDK 资源。
+	Close() error
+}
+
+// NewConsumer 为一个北极星接入点创建消费端。
+//
+// joinPoint 为北极星接入点名称，仅私有 SDK 支持；addresses 为 SDK 直连地址（host:port）。
+// 开源实现不支持 joinPoint，会忽略它并只使用 addresses，因此调用方需保证 addresses 非空
+func NewConsumer(_ context.Context, _ string, addresses []string) (Consumer, error) {
+	if len(addresses) == 0 {
+		return nil, errors.New("polaris sdk addresses are required by the open-source sdk")
+	}
+	apiCfg := polarisapi.NewConfiguration()
+	apiCfg.GetGlobal().GetServerConnector().SetAddresses(addresses)
+
+	consumer, err := polarissdk.NewConsumerAPIByConfig(apiCfg)
+	if err != nil {
+		return nil, errors.Wrapf(err, "create polaris consumer api for %v", addresses)
+	}
+	return &defaultConsumer{consumer: consumer}, nil
+}
+
+// defaultConsumer 基于开源北极星 SDK 的 Consumer 实现
+type defaultConsumer struct {
+	consumer polarissdk.ConsumerAPI
+}
+
+// GetInstances 查询指定服务下的所有实例并归一化为 Instance。
+func (c *defaultConsumer) GetInstances(_ context.Context, namespace, serviceName string) ([]*Instance, error) {
+	req := &polarissdk.GetAllInstancesRequest{}
+	req.Namespace = namespace
+	req.Service = serviceName
+
+	resp, err := c.consumer.GetAllInstances(req)
+	if err != nil {
+		return nil, errors.Wrapf(err, "get instances for polaris service %s/%s", namespace, serviceName)
+	}
+	return toInstances(resp), nil
+}
+
+// Close 销毁底层 ConsumerAPI。
+func (c *defaultConsumer) Close() error {
+	c.consumer.Destroy()
+	return nil
+}
+
+// toInstances 把 SDK 返回的实例归一化为 Instance
+func toInstances(resp *polarismodel.InstancesResponse) []*Instance {
 	instances := make([]*Instance, 0, len(resp.Instances))
 	for _, item := range resp.Instances {
 		instances = append(instances, &Instance{
@@ -164,6 +221,5 @@ func (p *defaultProvider) GetInstances(_ context.Context, namespace, serviceName
 			Metadata:          item.GetMetadata(),
 		})
 	}
-
-	return instances, nil
+	return instances
 }

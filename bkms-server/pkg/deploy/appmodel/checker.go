@@ -28,7 +28,7 @@ import (
 // CheckIfTrafficLaneDeployed 检查指定的流量泳道是否已部署；分批发布已回滚时工作负载仍在运行，同样视为已部署
 func CheckIfTrafficLaneDeployed(ctx context.Context, db *mongo.Database, appID, envName, laneName string) error {
 	// 获取指定泳道的部署情况
-	record, err := GetLatest(ctx, db, appID, envName, laneName)
+	record, err := GetLatestRecord(ctx, db, appID, envName, laneName)
 	if err != nil {
 		return errors.Wrapf(err, "get app model deploy record (app: %s, env: %s, lane: %s)", appID, envName, laneName)
 	}

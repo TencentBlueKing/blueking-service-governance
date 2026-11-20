@@ -19,6 +19,7 @@
 import appDefaultConfig from '~/pages/basic/app-default-config/index.vue';
 import basic from '~/pages/basic/base-info/basic.vue';
 import operationHistory from '~/pages/basic/operation-history/index.vue';
+import releaseStrategies from '~/pages/basic/release-strategies/index.vue';
 
 import { i18n } from '../../modules/i18n';
 
@@ -54,6 +55,12 @@ export const BASIC_NAVIGATION: NavigationItem[] = [
     name: i18n.global.t('配置'),
     foldName: i18n.global.t('配置'),
     children: [
+      {
+        key: 'releaseStrategies',
+        name: i18n.global.t('发布策略'),
+        icon: 'release-strategies',
+        component: releaseStrategies,
+      },
       {
         key: 'appDefaultConfig',
         name: i18n.global.t('应用默认配置'),

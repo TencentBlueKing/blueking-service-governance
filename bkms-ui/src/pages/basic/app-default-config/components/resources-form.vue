@@ -113,7 +113,7 @@
           :width="230"
         >
           <template #default="{ row }: { row: ResourcesRuleOutputObj }">
-            <div class="flex items-center gap-[12px]">
+            <div class="flex items-center gap-[16px]">
               <Button
                 text
                 theme="primary"

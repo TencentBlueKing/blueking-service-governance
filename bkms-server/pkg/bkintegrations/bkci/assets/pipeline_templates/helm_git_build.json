@@ -1,7 +1,7 @@
 {
   "id": "26a2c7da-111f-4d5e-8fad-f7772adf6e9f",
   "type": "helm-git-build",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "name": "[bkms] 打包并推送 Helm Chart",
   "description": "[请勿删除或修改] 蓝鲸服务治理（bkms）创建的流水线，支持基于 Git 代码库打包并推送 Helm Chart 到 BkRepo Helm 仓库",
   "stages": [
@@ -187,19 +187,18 @@
           "containerHashId": "c-15708622a1d64822b0de740c594dd3e3",
           "containerId": "1",
           "dispatchType": {
-            "buildType": "PUBLIC_DEVCLOUD",
+            "buildType": "DOCKER",
             "credentialId": "",
             "credentialProject": "",
-            "dockerBuildVersion": "[[ .builderImageCode ]]",
             "imageCode": "[[ .builderImageCode ]]",
             "imageName": "[[ .builderImageCode ]]",
             "imagePublicFlag": false,
             "imageRDType": "",
+            "imageRepositoryPassword": "",
+            "imageRepositoryUserName": "",
             "imageType": "BKSTORE",
             "imageVersion": "[[ .builderImageVersion ]]",
-            "performanceConfigId": "0",
-            "performanceUid": "",
-            "persistence": false,
+            "performanceConfigId": 0,
             "recommendFlag": true,
             "value": "[[ .builderImageCode ]]"
           },

@@ -24,6 +24,7 @@ import "github.com/gin-gonic/gin"
 type Handler interface {
 	GetRainbowTConf(c *gin.Context)
 	PutRainbowTConf(c *gin.Context)
+	DeleteRainbowTConf(c *gin.Context)
 }
 
 // Register registers Gin rainbow tconf routes.
@@ -32,4 +33,6 @@ func Register(rg *gin.RouterGroup, h Handler) {
 	rg.GET("/apps/:appID/rainbow-tconf", h.GetRainbowTConf)
 	// 设置应用的七彩石入口（首次配置或修改）
 	rg.PUT("/apps/:appID/rainbow-tconf", h.PutRainbowTConf)
+	// 删除应用的七彩石入口
+	rg.DELETE("/apps/:appID/rainbow-tconf", h.DeleteRainbowTConf)
 }
