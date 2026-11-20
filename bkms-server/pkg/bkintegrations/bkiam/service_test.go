@@ -57,6 +57,8 @@ type fakeIAMClient struct {
 	gotGrantedScopesCalls int
 	gotDeletedUserGroups  []int
 	gotDeletedGM          int
+	gotIsAllowedRequest   iamsdk.Request
+	gotBatchResources     []iamsdk.Resources
 
 	// Counters for action checks
 	isAllowedReturn      bool
@@ -158,13 +160,15 @@ func (f *fakeIAMClient) ListUserGroupMembers(
 	return f.listMembers, nil
 }
 
-func (f *fakeIAMClient) IsAllowed(_ context.Context, _ iamsdk.Request) (bool, error) {
+func (f *fakeIAMClient) IsAllowed(_ context.Context, request iamsdk.Request) (bool, error) {
+	f.gotIsAllowedRequest = request
 	return f.isAllowedReturn, nil
 }
 
 func (f *fakeIAMClient) BatchResourceMultiActionsAllowed(
 	_ context.Context, _ iamsdk.MultiActionRequest, resourcesList []iamsdk.Resources,
 ) (map[string]map[string]bool, error) {
+	f.gotBatchResources = resourcesList
 	if f.multiActionsResponse != nil {
 		return f.multiActionsResponse, nil
 	}
@@ -360,6 +364,55 @@ var _ = Describe("IAMService", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(res["app-1"]["view_app"]).To(BeTrue())
 			Expect(res["app-2"]["view_app"]).To(BeFalse())
+		})
+
+		It("checks an env under its workspace and env type path", func() {
+			_, err := svc.EnvActionIsAllowed(ctx, "alice", workspaceID, "production", "env-oid", "view_env")
+			Expect(err).NotTo(HaveOccurred())
+			resources := client.gotIsAllowedRequest.Resources
+			Expect(resources).To(HaveLen(1))
+			Expect(resources[0].Type).To(Equal("env"))
+			Expect(resources[0].ID).To(Equal("env-oid"))
+			// 前缀仍为 /workspace,{id}/，只授权到空间节点的旧策略照样命中
+			Expect(resources[0].Attribute[pathAttrKey]).
+				To(Equal("/workspace," + workspaceID + "/env_type,production/"))
+		})
+
+		It("checks an app-env action with both resources in one request", func() {
+			_, err := svc.AppEnvActionIsAllowed(
+				ctx, "alice", workspaceID, "app-1", "test", "env-oid", "deploy_app_to_env",
+			)
+			Expect(err).NotTo(HaveOccurred())
+			req := client.gotIsAllowedRequest
+			Expect(req.Action.ID).To(Equal("deploy_app_to_env"))
+			Expect(req.Resources).To(HaveLen(2))
+			Expect(req.Resources[0].Type).To(Equal("app"))
+			Expect(req.Resources[0].ID).To(Equal("app-1"))
+			Expect(req.Resources[1].Type).To(Equal("env"))
+			Expect(req.Resources[1].ID).To(Equal("env-oid"))
+		})
+
+		It("maps batched multi-app app-env results back to app and env IDs", func() {
+			client.multiActionsResponse = map[string]map[string]bool{
+				"app,app-1/env,env-a": {"view_app_in_env": true},
+				"app,app-1/env,env-b": {"view_app_in_env": false},
+				"app,app-2/env,env-b": {"view_app_in_env": true},
+			}
+			res, err := svc.AppEnvPairsActionAllowed(
+				ctx, "alice", workspaceID,
+				[]AppEnvRef{
+					{AppID: "app-1", Env: EnvRef{ID: "env-a", Type: "test"}},
+					{AppID: "app-1", Env: EnvRef{ID: "env-b", Type: "production"}},
+					{AppID: "app-2", Env: EnvRef{ID: "env-b", Type: "production"}},
+				},
+				"view_app_in_env",
+			)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(res).To(Equal(map[string]map[string]bool{
+				"app-1": {"env-a": true, "env-b": false},
+				"app-2": {"env-b": true},
+			}))
+			Expect(client.gotBatchResources).To(HaveLen(3))
 		})
 	})
 

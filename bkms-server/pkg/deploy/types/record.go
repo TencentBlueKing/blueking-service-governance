@@ -41,6 +41,11 @@ func ByAppEnvLane(appID, envName, trafficLaneName string) store.Opt {
 	)
 }
 
+// InEnvs 匹配指定环境下的记录
+func InEnvs(envNames []string) store.Opt {
+	return store.Where("envName", bson.M{"$in": envNames})
+}
+
 // NewestFirst 按创建时间倒序；创建时间相同时按 _id 倒序，保证取最新一条与翻页的结果稳定
 func NewestFirst() store.Opt {
 	return store.Combine(store.Desc("createdAt"), store.Desc("_id"))

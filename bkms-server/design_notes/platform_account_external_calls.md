@@ -2,7 +2,7 @@
 
 本文说明 BKMS 调用外部系统时使用的身份，以及引入平台级虚拟账号（下称"虚拟账号"）后每个调用点的处理方式。
 
-- 代码状态以本分支为准；标注"第二阶段"的改动在后续的检查改造分支中完成。
+- 代码状态以本分支为准。
 - 外部系统的行为结论来自阅读 TencentBlueKing 组织下的开源仓库，未在真实环境逐项验证，见第九节。
 
 ---
@@ -124,7 +124,6 @@ platformAccount:
 "状态"一列：
 
 - **已改**：本分支已改为虚拟账号；
-- **第二阶段**：在检查改造分支中改为虚拟账号；
 - **保持**：按第 3.1 节必须用本人，或不受影响；
 - **待处理**：见第七节。
 
@@ -145,7 +144,7 @@ platformAccount:
 | 镜像构建日志 | `build/build/handler/build_log.go` `prepareBuildLogDeps` | 查看构建日志（检查查看应用） | 虚拟账号 | 已改 |
 | Chart 构建日志 | `build/chart/handler/build_log.go` `prepareBuildLogDeps` | 同上 | 虚拟账号 | 已改 |
 | 构建触发专用流水线 | `bkintegrations/bkci/trigger_pipeline.go` `Ensure`、`Cleanup` | 目前没有调用方，为构建触发预留 | 虚拟账号 | 已改 |
-| 代码库分支、标签 | `bkintegrations/handler/bkci.go` `ListBkCIRepositoryBranches`、`ListBkCIRepositoryTags` | 选择代码分支或标签：构建、快速部署、实例全量更新、创建 Chart 版本 | 本人 | 第二阶段：同时补上"查看空间"检查。原接口不检查任何权限，改用虚拟账号前必须先补 |
+| 代码库分支、标签 | `bkintegrations/handler/bkci.go` `ListBkCIRepositoryBranches`、`ListBkCIRepositoryTags` | 选择代码分支或标签：构建、快速部署、实例全量更新、创建 Chart 版本（检查查看空间） | 虚拟账号；蓝盾项目取自空间记录，代码库须属于该项目 | 已改 |
 | OAuth 授权地址 | `bkintegrations/handler/bkci.go` `GetBkCIOAuthUrl` | 选择代码库时检查 Git OAuth 授权 | 本人 | 保持：OAuth 只能是本人 |
 | OAuth 代码库列表 | `bkintegrations/handler/bkci.go` `ListBkCIOAuthGitProjects` | 前端未调用，前端直接请求蓝盾，见第 4.5 节 | 本人 | 保持：OAuth 只能是本人 |
 | 流水线详情、变量 | `bkintegrations/handler/bkci.go` `GetBkCIPipeline`、`GetBkCIPipelineVariables` | 配置自定义流水线构建、执行自定义流水线 | 本人 | 保持：与自定义流水线由本人执行一致 |

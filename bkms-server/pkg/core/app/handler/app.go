@@ -479,6 +479,10 @@ func (h *Handler) ListApps(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
+	if _, err := ginperm.ValidateWorkspaceByID(ctx, h.registry, uriInput.WorkspaceID, ginperm.TypeView); err != nil {
+		bkerrs.AbortWithErr(c, err)
+		return
+	}
 
 	opts := []store.Opt{bkmsapp.InWorkspace(uriInput.WorkspaceID)}
 	if queryInput.AppName != "" {
@@ -850,10 +854,22 @@ func (h *Handler) GetAppDeployStatuses(c *gin.Context) {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list app deploy statuses"))
 		return
 	}
+	// 只返回用户能查看该应用数据的环境
+	statuses, err := ginperm.FilterByViewableAppEnvs(
+		ctx,
+		h.registry,
+		app,
+		deployStatusMap[app.ID],
+		func(row deploystatus.AppDeployStatus) string { return row.EnvName },
+	)
+	if err != nil {
+		bkerrs.AbortWithErr(c, err)
+		return
+	}
 
 	ginutils.OK(c, serializer.GetAppDeployStatusesOutput{
 		Data: lo.Map(
-			deployStatusMap[app.ID],
+			statuses,
 			func(row deploystatus.AppDeployStatus, _ int) *serializer.AppDeployedEnvOutputObj {
 				return new(serializer.AppDeployedEnvOutputObj).FromModel(row)
 			},
@@ -900,6 +916,14 @@ func (h *Handler) GetAppDeployOverview(c *gin.Context) {
 	result, err := svc.GetOverview(ctx, app)
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "build app deploy overview"))
+		return
+	}
+	// 只返回用户能查看该应用数据的环境
+	result.Envs, err = ginperm.FilterByViewableAppEnvs(
+		ctx, h.registry, app, result.Envs, func(row overview.EnvRow) string { return row.EnvName },
+	)
+	if err != nil {
+		bkerrs.AbortWithErr(c, err)
 		return
 	}
 

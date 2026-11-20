@@ -24,6 +24,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
+	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime/runtimemod/mods"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
@@ -96,7 +97,7 @@ func (h *Handler) ListDefaultFilesWithDef(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	app, err := perm.ValidateAppByID(ctx, h.registry, uriInput.AppID, perm.TypeView)
+	app, err := perm.ValidateAppInAllEnvs(ctx, h.registry, uriInput.AppID, perm.TypeView)
 	if err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return
@@ -251,7 +252,7 @@ func (h *Handler) GetAppCfgFileDetail(c *gin.Context) {
 		return
 	}
 
-	def, err := h.getAppCfgFileDef(c, uriInput)
+	_, def, err := h.getAppCfgFileDef(c, uriInput, perm.TypeView)
 	if err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return
@@ -294,20 +295,13 @@ func (h *Handler) UpdateAppCfgFileDef(c *gin.Context) {
 		return
 	}
 
-	def, err := h.getAppCfgFileDef(c, uriInput)
+	app, def, err := h.getAppCfgFileDef(c, uriInput, perm.TypeEdit)
 	if err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return
 	}
 
 	ctx := c.Request.Context()
-	// 需要编辑权限
-	app, err := perm.ValidateAppByID(ctx, h.registry, uriInput.AppID, perm.TypeEdit)
-	if err != nil {
-		bkerrs.AbortWithErr(c, err)
-		return
-	}
-
 	operator := auth.MustGetUser(ctx).ID
 	update := input.ToFileDefUpdate(operator)
 	update.Framework = mods.Of(app).Stack.Framework
@@ -367,19 +361,13 @@ func (h *Handler) UpdateHelmFile(c *gin.Context) {
 		return
 	}
 
-	def, err := h.getAppCfgFileDef(c, uriInput)
+	app, def, err := h.getAppCfgFileDef(c, uriInput, perm.TypeEdit)
 	if err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return
 	}
 
 	ctx := c.Request.Context()
-	app, err := perm.ValidateAppByID(ctx, h.registry, uriInput.AppID, perm.TypeEdit)
-	if err != nil {
-		bkerrs.AbortWithErr(c, err)
-		return
-	}
-
 	svc := h.newAppCfgFileDefService()
 	defaultFile, err := svc.GetDefaultFileWithDef(ctx, def.ID)
 	if err != nil {
@@ -458,19 +446,13 @@ func (h *Handler) DeleteAppCfgFileDef(c *gin.Context) {
 		return
 	}
 
-	def, err := h.getAppCfgFileDef(c, uriInput)
+	app, def, err := h.getAppCfgFileDef(c, uriInput, perm.TypeEdit)
 	if err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return
 	}
 
 	ctx := c.Request.Context()
-	app, err := perm.ValidateAppByID(ctx, h.registry, uriInput.AppID, perm.TypeEdit)
-	if err != nil {
-		bkerrs.AbortWithErr(c, err)
-		return
-	}
-
 	// 查默认文件并通过 base service 删除（级联删 sibling / def）
 	svc := h.newAppCfgFileDefService()
 	defaultFile, fErr := h.configFiles().Get(ctx, appcfg.FileByDefEnv(def.ID, appcfg.EnvNameDefault))
@@ -517,7 +499,7 @@ func (h *Handler) ListEnvInstances(c *gin.Context) {
 		return
 	}
 
-	def, err := h.getAppCfgFileDef(c, uriInput)
+	_, def, err := h.getAppCfgFileDef(c, uriInput, perm.TypeView)
 	if err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return
@@ -566,18 +548,13 @@ func (h *Handler) UpdateContent(c *gin.Context) {
 		return
 	}
 
-	def, err := h.getAppCfgFileDef(c, uriInput)
+	app, def, err := h.getAppCfgFileDef(c, uriInput, perm.TypeEdit)
 	if err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return
 	}
 
 	ctx := c.Request.Context()
-	app, err := perm.ValidateAppByID(ctx, h.registry, uriInput.AppID, perm.TypeEdit)
-	if err != nil {
-		bkerrs.AbortWithErr(c, err)
-		return
-	}
 	operator := auth.MustGetUser(ctx).ID
 	svc := h.newAppCfgFileDefService()
 	result, err := svc.UpsertEnvContent(ctx, def, appcfg.UpsertEnvContentParams{
@@ -649,18 +626,13 @@ func (h *Handler) ResetEnvToDefault(c *gin.Context) {
 		return
 	}
 
-	def, err := h.getAppCfgFileDef(c, uriInput.DefURIInput)
+	app, def, err := h.getAppCfgFileDef(c, uriInput.DefURIInput, perm.TypeEdit)
 	if err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return
 	}
 
 	ctx := c.Request.Context()
-	app, err := perm.ValidateAppByID(ctx, h.registry, uriInput.AppID, perm.TypeEdit)
-	if err != nil {
-		bkerrs.AbortWithErr(c, err)
-		return
-	}
 	svc := h.newAppCfgFileDefService()
 	envFile, err := svc.ResetEnvInstanceToDefault(ctx, def, uriInput.EnvName)
 	if err != nil {
@@ -711,7 +683,7 @@ func (h *Handler) GetMountPreview(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	app, err := perm.ValidateAppByID(ctx, h.registry, uriInput.AppID, perm.TypeView)
+	app, err := perm.ValidateAppInAllEnvs(ctx, h.registry, uriInput.AppID, perm.TypeView)
 	if err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return
@@ -738,21 +710,23 @@ func (h *Handler) GetMountPreview(c *gin.Context) {
 	ginutils.OK(c, MountPreviewOutput{Items: output})
 }
 
-func (h *Handler) getAppCfgFileDef(ctx *gin.Context, uri DefURIInput) (*appcfg.AppConfigFileDef, error) {
-	app, err := perm.ValidateAppByID(ctx.Request.Context(), h.registry, uri.AppID, perm.TypeView)
+func (h *Handler) getAppCfgFileDef(
+	ctx *gin.Context, uri DefURIInput, permType perm.Type,
+) (*bkmsapp.Application, *appcfg.AppConfigFileDef, error) {
+	app, err := perm.ValidateAppInAllEnvs(ctx.Request.Context(), h.registry, uri.AppID, permType)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	defID, err := bson.ObjectIDFromHex(uri.ID)
 	if err != nil {
-		return nil, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "parsing def ID")
+		return nil, nil, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "parsing def ID")
 	}
 	def, err := store.Of(h.registry.DB, appcfg.AppConfigFileDefMeta).GetByID(ctx.Request.Context(), defID)
 	if err != nil {
-		return nil, bkerrs.Wrap(err, bkerrs.ErrCodeNotFound, "config file def not found")
+		return nil, nil, bkerrs.Wrap(err, bkerrs.ErrCodeNotFound, "config file def not found")
 	}
 	if def.AppID != app.ID {
-		return nil, bkerrs.New(bkerrs.ErrCodeNotFound, "config file def not found")
+		return nil, nil, bkerrs.New(bkerrs.ErrCodeNotFound, "config file def not found")
 	}
-	return def, nil
+	return app, def, nil
 }

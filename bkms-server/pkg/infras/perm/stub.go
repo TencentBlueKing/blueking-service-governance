@@ -109,23 +109,58 @@ func (m *StubAllowAnyManager) HasCreateEnvPerm(_ context.Context, _ string) erro
 }
 
 // HasEditEnvPerm 总是允许编辑环境
-func (m *StubAllowAnyManager) HasEditEnvPerm(_ context.Context, _, _ string) error {
+func (m *StubAllowAnyManager) HasEditEnvPerm(_ context.Context, _, _, _ string) error {
 	return nil
 }
 
 // HasViewEnvPerm 总是允许查看环境
-func (m *StubAllowAnyManager) HasViewEnvPerm(_ context.Context, _, _ string) error {
+func (m *StubAllowAnyManager) HasViewEnvPerm(_ context.Context, _, _, _ string) error {
 	return nil
 }
 
 // HasDeleteEnvPerm 总是允许删除环境
-func (m *StubAllowAnyManager) HasDeleteEnvPerm(_ context.Context, _, _ string) error {
+func (m *StubAllowAnyManager) HasDeleteEnvPerm(_ context.Context, _, _, _ string) error {
 	return nil
 }
 
-// HasDeployEnvPerm 总是允许部署环境
-func (m *StubAllowAnyManager) HasDeployEnvPerm(_ context.Context, _, _ string) error {
+// HasViewAppInEnvPerm 总是允许查看应用在环境中的数据
+func (m *StubAllowAnyManager) HasViewAppInEnvPerm(_ context.Context, _, _, _, _ string) error {
 	return nil
+}
+
+// HasEditAppInEnvPerm 总是允许编辑应用在环境中的配置
+func (m *StubAllowAnyManager) HasEditAppInEnvPerm(_ context.Context, _, _, _, _ string) error {
+	return nil
+}
+
+// HasDeployAppToEnvPerm 总是允许部署应用到环境
+func (m *StubAllowAnyManager) HasDeployAppToEnvPerm(_ context.Context, _, _, _, _ string) error {
+	return nil
+}
+
+// FilterViewableEnvs 过滤出用户有权限查看的环境（测试实现：允许所有）
+func (m *StubAllowAnyManager) FilterViewableEnvs(
+	_ context.Context, _ string, envs []bkiam.EnvRef,
+) (*set.StringSet, error) {
+	hasPerm := set.NewStringSet()
+	for _, env := range envs {
+		hasPerm.Add(env.ID)
+	}
+	return hasPerm, nil
+}
+
+// FilterViewableAppEnvs 一次批量过滤出用户能查看应用在环境中数据的 (app, env) 组合（测试实现：允许所有）
+func (m *StubAllowAnyManager) FilterViewableAppEnvs(
+	_ context.Context, _ string, pairs []bkiam.AppEnvRef,
+) (map[string]*set.StringSet, error) {
+	result := map[string]*set.StringSet{}
+	for _, p := range pairs {
+		if result[p.AppID] == nil {
+			result[p.AppID] = set.NewStringSet()
+		}
+		result[p.AppID].Add(p.Env.ID)
+	}
+	return result, nil
 }
 
 // FilterViewableWorkspaces 过滤出用户有权限查看的工作空间列表（测试实现：允许所有）

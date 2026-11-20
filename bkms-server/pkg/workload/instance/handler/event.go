@@ -67,8 +67,8 @@ func (h *Handler) ListEvents(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	// 校验 App 查看权限
-	app, err := perm.ValidateAppByID(ctx, h.registry, uriInput.AppID, perm.TypeView)
+	// 校验查看应用在该环境中数据的权限
+	app, _, err := perm.ValidateAppEnvByName(ctx, h.registry, uriInput.AppID, uriInput.EnvName, perm.TypeView)
 	if err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return

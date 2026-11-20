@@ -26,7 +26,6 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
-	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	bkmapi "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bkmonitor"
@@ -74,7 +73,8 @@ func (h *Handler) ListAlertEvents(c *gin.Context) {
 	queryInput.Normalize()
 
 	ctx := c.Request.Context()
-	app, err := validateAppInWorkspace(ctx, h.registry, uriInput.WorkspaceID, uriInput.AppID, ginperm.TypeView)
+	envName := strings.TrimSpace(queryInput.EnvName)
+	app, targetEnv, err := validateAppEnvInWorkspace(ctx, h.registry, uriInput.WorkspaceID, uriInput.AppID, envName)
 	if err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return
@@ -83,16 +83,6 @@ func (h *Handler) ListAlertEvents(c *gin.Context) {
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get workspace"))
 		return
-	}
-
-	envName := strings.TrimSpace(queryInput.EnvName)
-	var targetEnv *envmodel.Environment
-	if envName != "" {
-		_, targetEnv, err = ginperm.ValidateAppEnvByName(ctx, h.registry, uriInput.AppID, envName, ginperm.TypeView)
-		if err != nil {
-			bkerrs.AbortWithErr(c, err)
-			return
-		}
 	}
 
 	rules, err := h.alertStrategyService().ListByApp(ctx, app.WorkspaceID, app.ID)

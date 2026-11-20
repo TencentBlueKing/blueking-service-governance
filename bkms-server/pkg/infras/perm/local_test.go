@@ -44,12 +44,17 @@ type fakeIAMServicer struct {
 	createWSAdminResp    *role.Role
 	createBuiltinResp    []*role.Role
 	returnedErr          error
+	batchAllowed         map[string]bool
+	batchPairsAllowed    map[string]map[string]bool
 
 	// Captured arguments
 	gotUsername          string
 	gotWorkspaceID       string
 	gotAppID             string
 	gotEnvID             string
+	gotEnvType           string
+	gotEnvRefs           []bkiam.EnvRef
+	gotAppEnvRefs        []bkiam.AppEnvRef
 	gotActionID          string
 	gotIDsForMulti       []string
 	gotActionIDsForMulti []string
@@ -180,13 +185,46 @@ func (f *fakeIAMServicer) EnvCreateIsAllowed(_ context.Context, username, worksp
 }
 
 func (f *fakeIAMServicer) EnvActionIsAllowed(
-	_ context.Context, username, workspaceID, envID, actionID string,
+	_ context.Context, username, workspaceID, envType, envID, actionID string,
 ) (bool, error) {
 	f.gotUsername = username
 	f.gotWorkspaceID = workspaceID
+	f.gotEnvType = envType
 	f.gotEnvID = envID
 	f.gotActionID = actionID
 	return f.allowed, f.returnedErr
+}
+
+func (f *fakeIAMServicer) AppEnvActionIsAllowed(
+	_ context.Context, username, workspaceID, appID, envType, envID, actionID string,
+) (bool, error) {
+	f.gotUsername = username
+	f.gotWorkspaceID = workspaceID
+	f.gotAppID = appID
+	f.gotEnvType = envType
+	f.gotEnvID = envID
+	f.gotActionID = actionID
+	return f.allowed, f.returnedErr
+}
+
+func (f *fakeIAMServicer) EnvsActionAllowed(
+	_ context.Context, username, workspaceID string, envs []bkiam.EnvRef, actionID string,
+) (map[string]bool, error) {
+	f.gotUsername = username
+	f.gotWorkspaceID = workspaceID
+	f.gotEnvRefs = envs
+	f.gotActionID = actionID
+	return f.batchAllowed, f.returnedErr
+}
+
+func (f *fakeIAMServicer) AppEnvPairsActionAllowed(
+	_ context.Context, username, workspaceID string, pairs []bkiam.AppEnvRef, actionID string,
+) (map[string]map[string]bool, error) {
+	f.gotUsername = username
+	f.gotWorkspaceID = workspaceID
+	f.gotAppEnvRefs = pairs
+	f.gotActionID = actionID
+	return f.batchPairsAllowed, f.returnedErr
 }
 
 // ctxWithUser returns a context that carries the given username, mimicking
@@ -201,6 +239,7 @@ var _ = Describe("LocalManager", func() {
 		testWS      = "ws-1"
 		testApp     = "app-1"
 		testEnv     = "env-1"
+		testEnvType = "test"
 		bkCIID      = "bkci-proj"
 		bcsID       = "bcs-proj"
 		bkRepoID    = "bkrepo-proj"
@@ -273,12 +312,61 @@ var _ = Describe("LocalManager", func() {
 		})
 	})
 
-	Context("HasDeployEnvPerm", func() {
-		It("forwards workspace, env and the deploy action to IAMService", func() {
+	Context("app env permissions", func() {
+		It("checks the app and the env with the app-env action", func() {
 			fake.allowed = true
-			Expect(mgr.HasDeployEnvPerm(ctx, testWS, testEnv)).To(Succeed())
+			Expect(mgr.HasDeployAppToEnvPerm(ctx, testWS, testApp, testEnvType, testEnv)).To(Succeed())
+			Expect(fake.gotAppID).To(Equal(testApp))
+			Expect(fake.gotEnvType).To(Equal(testEnvType))
 			Expect(fake.gotEnvID).To(Equal(testEnv))
-			Expect(fake.gotActionID).To(Equal(EnvAction.Deploy))
+			Expect(fake.gotActionID).To(Equal(AppEnvAction.Deploy))
+
+			Expect(mgr.HasViewAppInEnvPerm(ctx, testWS, testApp, testEnvType, testEnv)).To(Succeed())
+			Expect(fake.gotActionID).To(Equal(AppEnvAction.View))
+			Expect(mgr.HasEditAppInEnvPerm(ctx, testWS, testApp, testEnvType, testEnv)).To(Succeed())
+			Expect(fake.gotActionID).To(Equal(AppEnvAction.Edit))
+		})
+
+		It("returns a deny error mentioning the app and the env", func() {
+			fake.allowed = false
+			err := mgr.HasDeployAppToEnvPerm(ctx, testWS, testApp, testEnvType, testEnv)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring(testApp))
+			Expect(err.Error()).To(ContainSubstring(testEnv))
+		})
+
+		It("filters viewable envs with the view env action", func() {
+			fake.batchAllowed = map[string]bool{"env-a": false, "env-b": true}
+			refs := []bkiam.EnvRef{{ID: "env-a", Type: "test"}, {ID: "env-b", Type: "production"}}
+			result, err := mgr.FilterViewableEnvs(ctx, testWS, refs)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.ToSlice()).To(ConsistOf("env-b"))
+			Expect(fake.gotActionID).To(Equal(EnvAction.View))
+		})
+
+		It("filters multiple (app, env) pairs in one batch call", func() {
+			fake.batchPairsAllowed = map[string]map[string]bool{
+				"app-1": {"env-a": true, "env-b": false},
+				"app-2": {"env-b": true},
+			}
+			pairs := []bkiam.AppEnvRef{
+				{AppID: "app-1", Env: bkiam.EnvRef{ID: "env-a", Type: "test"}},
+				{AppID: "app-1", Env: bkiam.EnvRef{ID: "env-b", Type: "production"}},
+				{AppID: "app-2", Env: bkiam.EnvRef{ID: "env-b", Type: "production"}},
+			}
+			result, err := mgr.FilterViewableAppEnvs(ctx, testWS, pairs)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result["app-1"].ToSlice()).To(ConsistOf("env-a"))
+			Expect(result["app-2"].ToSlice()).To(ConsistOf("env-b"))
+			Expect(fake.gotAppEnvRefs).To(Equal(pairs))
+			Expect(fake.gotActionID).To(Equal(AppEnvAction.View))
+		})
+
+		It("returns an empty set without calling IAM when there are no envs", func() {
+			result, err := mgr.FilterViewableAppEnvs(ctx, testWS, nil)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).To(BeEmpty())
+			Expect(fake.gotUsername).To(BeEmpty())
 		})
 	})
 

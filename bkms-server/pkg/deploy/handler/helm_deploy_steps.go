@@ -176,11 +176,18 @@ func (h *Handler) execHelmAppDeploySteps(
 }
 
 // getDeployRecordForRollback 获取回滚用的部署记录。
-func (h *Handler) getDeployRecordForRollback(ctx context.Context, appID, deployID string) (*helmdeploy.Record, error) {
+func (h *Handler) getDeployRecordForRollback(
+	ctx context.Context, appID, envName, deployID string,
+) (*helmdeploy.Record, error) {
 	// 查询数据库获取部署记录
 	record, err := helmdeploy.GetRecord(ctx, h.registry.DB, appID, deployID)
 	if err != nil {
 		return nil, err
+	}
+
+	// 回滚作用于记录所在的环境，必须与请求路径中的环境一致，否则可借某个环境的权限回滚其他环境
+	if record.EnvName != envName {
+		return nil, errors.Errorf("deploy record %s does not belong to env %s", deployID, envName)
 	}
 
 	// 检查指定回滚到的版本必须是成功部署的

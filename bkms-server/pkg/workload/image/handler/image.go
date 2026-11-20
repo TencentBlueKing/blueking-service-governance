@@ -333,6 +333,7 @@ func (h *Handler) ListAppImageUsages(c *gin.Context) {
 		return
 	}
 
+	// 镜像占用不敏感，删除前也需要看全才能判断风险，因此展示全部环境
 	ginutils.OK(c, serializer.ListAppImageUsagesOutput{
 		Data: new(serializer.ImageTagUsagesOutputObj).FromModels(usages),
 	})
@@ -370,11 +371,24 @@ func (h *Handler) DeleteAppImage(c *gin.Context) {
 		bkerrs.AbortWithErr(c, err)
 		return
 	}
+	svc := tagdeletion.NewService(h.registry.DB)
+	// 镜像被哪些环境使用，就需要编辑应用在这些环境中配置的权限，被无权环境占用的镜像不能删除
+	usages, err := svc.ListImageUsages(ctx, app.ID, uriInput.Tag)
+	if err != nil {
+		bkerrs.AbortWithErr(c, bkerrs.Wrapf(
+			err, bkerrs.ErrCodeInternalServerError, "check image usage %s for app %s", uriInput.Tag, app.ID,
+		))
+		return
+	}
+	usedEnvNames := lo.Map(usages, func(u tagdeletion.ImageUsage, _ int) string { return u.EnvName })
+	if err = perm.ValidateAppEnvNames(ctx, h.registry, app, usedEnvNames, perm.TypeEdit); err != nil {
+		bkerrs.AbortWithErr(c, err)
+		return
+	}
 	defer func() {
 		metrics.ImageTagDeleteFinished(metricStatus, startedAt)
 	}()
 
-	svc := tagdeletion.NewService(h.registry.DB)
 	if err := svc.DeleteImageTag(ctx, uriInput.AppID, uriInput.Tag); err != nil {
 		metricStatus = metrics.StatusErr
 		code := bkerrs.ErrCodeInternalServerError
@@ -444,6 +458,17 @@ func (h *Handler) ListImageTagDeployRecords(c *gin.Context) {
 		return
 	}
 
+	// 只返回用户能查看该应用数据的环境下的记录，全部可见时不按环境过滤
+	viewableEnvs, allEnvs, err := perm.ListViewableAppEnvNames(ctx, h.registry, app)
+	if err != nil {
+		bkerrs.AbortWithErr(c, err)
+		return
+	}
+	var envFilter store.Opt
+	if !allEnvs {
+		envFilter = deploytypes.InEnvs(viewableEnvs)
+	}
+
 	var (
 		total   int64
 		results []*serializer.ImageTagDeployRecordOutputObj
@@ -454,6 +479,7 @@ func (h *Handler) ListImageTagDeployRecords(c *gin.Context) {
 			queryInput.Page,
 			queryInput.PageSize,
 			appmodeldeploy.ByImageTag(uriInput.AppID, uriInput.Tag),
+			envFilter,
 			deploytypes.NewestFirst(),
 		)
 		if listErr != nil {
@@ -478,6 +504,7 @@ func (h *Handler) ListImageTagDeployRecords(c *gin.Context) {
 		recordPage, listErr := store.Of(h.registry.DB, helmdeploy.RecordMeta).ListPage(
 			ctx, queryInput.Page, queryInput.PageSize,
 			helmdeploy.ByImageTag(uriInput.AppID, uriInput.Tag),
+			envFilter,
 			deploytypes.NewestFirst(),
 		)
 		if listErr != nil {

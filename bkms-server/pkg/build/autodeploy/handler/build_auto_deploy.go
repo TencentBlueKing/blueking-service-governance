@@ -33,7 +33,6 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime/runtimemod/mods"
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/perm"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
 	ginperm "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/perm"
 	storereg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
@@ -223,15 +222,15 @@ func (h *Handler) prepareBuildAutoDeploy(
 		return nil, false
 	}
 
-	if err = perm.NewManager().HasDeployEnvPerm(ctx, app.WorkspaceID, uriInput.EnvName); err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.WrapIAMNoPermission(err, app.WorkspaceID, "check env deploy perm"))
-		return nil, false
-	}
-
 	env, err := store.Of(h.registry.DB, envmodel.EnvMeta).
 		Get(ctx, envmodel.AppEnvByName(app.WorkspaceID, app.ID, uriInput.EnvName))
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeNotFound, "get env"))
+		return nil, false
+	}
+	// 构建只和应用有关（上面已校验编辑应用），部署这一半需要部署应用到该环境的权限
+	if err = ginperm.ValidateAppEnv(ctx, h.registry, app, env, ginperm.TypeDeploy); err != nil {
+		bkerrs.AbortWithErr(c, err)
 		return nil, false
 	}
 

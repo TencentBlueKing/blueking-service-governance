@@ -60,8 +60,8 @@ func (h *Handler) ListTrpcAdminCmds(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	// 校验 App 编辑权限
-	app, err := perm.ValidateAppByID(ctx, h.registry, uriInput.AppID, perm.TypeEdit)
+	// 校验应用在该环境中的查看权限
+	app, _, err := perm.ValidateAppEnvByName(ctx, h.registry, uriInput.AppID, uriInput.EnvName, perm.TypeView)
 	if err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return
@@ -116,8 +116,8 @@ func (h *Handler) ExecuteTrpcAdminCmd(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	// 校验 App 编辑权限
-	app, err := perm.ValidateAppByID(ctx, h.registry, uriInput.AppID, perm.TypeEdit)
+	// 执行管理命令会作用于实例，需要部署权限
+	app, _, err := perm.ValidateAppEnvByName(ctx, h.registry, uriInput.AppID, uriInput.EnvName, perm.TypeDeploy)
 	if err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return
@@ -196,8 +196,8 @@ func (h *Handler) ExecuteTafAdminCmd(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	// 校验 App 编辑权限
-	app, err := perm.ValidateAppByID(ctx, h.registry, uriInput.AppID, perm.TypeEdit)
+	// 执行管理命令会作用于实例，需要部署权限
+	app, _, err := perm.ValidateAppEnvByName(ctx, h.registry, uriInput.AppID, uriInput.EnvName, perm.TypeDeploy)
 	if err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return

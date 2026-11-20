@@ -20,6 +20,7 @@ package handler
 
 import (
 	"github.com/gin-gonic/gin"
+	"github.com/samber/lo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
@@ -60,9 +61,15 @@ func (h *Handler) GetAppSpecOverview(c *gin.Context) {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list app spec overview"))
 		return
 	}
+	// 只返回用户能查看该应用数据的环境
+	viewable, err := perm.FilterViewableAppEnvNames(ctx, h.registry, app, envNames)
+	if err != nil {
+		bkerrs.AbortWithErr(c, err)
+		return
+	}
 	ginutils.OK(c, serializer.GetAppSpecOverviewOutput{
 		Data: &serializer.AppSpecOverviewOutput{
-			ConfiguredEnvs: envNames,
+			ConfiguredEnvs: lo.Filter(envNames, func(name string, _ int) bool { return viewable.Has(name) }),
 		},
 	})
 }
