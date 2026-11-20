@@ -222,10 +222,6 @@ func (c *ApiClient) CreateProject(
 
 // ListOAuthGitProjects 获取用户有 OAuth 授权给蓝盾的 Git 项目列表。
 func (c *ApiClient) ListOAuthGitProjects(ctx context.Context, projectCode, keyword string) ([]GitProject, error) {
-	if config.G.FeatureIntegrations.DisableBkCIGitOAuth {
-		return nil, FeatureDisabled
-	}
-
 	params := map[string]string{"projectId": projectCode}
 	if keyword != "" {
 		params["search"] = keyword
@@ -261,10 +257,6 @@ func (c *ApiClient) ListOAuthGitProjects(ctx context.Context, projectCode, keywo
 
 // GetOAuthUrl 获取用户授权 Git 项目给蓝盾的 OAuth 授权地址。
 func (c *ApiClient) GetOAuthUrl(ctx context.Context, projectCode string) (string, error) {
-	if config.G.FeatureIntegrations.DisableBkCIGitOAuth {
-		return "", FeatureDisabled
-	}
-
 	apiOperation := c.NewOperation(
 		// 与 ListOAuthGitProjects 共用一个 API，但是获取的不同数据字段（当 Git 项目列表为空时，会提示用户进行授权）
 		bkapi.OperationConfig{

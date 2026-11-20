@@ -147,7 +147,7 @@ func (h *Handler) CreateApp(c *gin.Context) {
 			bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, "parse helm spec"))
 			return
 		}
-		if err = resolveHelmGitRepoAlias(helmSpec.HelmSource); err != nil {
+		if err = resolveHelmGitRepo(helmSpec.HelmSource); err != nil {
 			bkerrs.AbortWithErr(c, err)
 			return
 		}

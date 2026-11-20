@@ -115,8 +115,8 @@ var _ = Describe("Build Functions", func() {
 
 	Context("ExecuteBKCIPipelineBuild", func() {
 		It("should build from code repository successfully", func() {
-			// Mock RepositoryManager.Initialize 方法
-			mockey.Mock((*bkci.RepositoryManager).Initialize).Return(
+			// Mock RepositoryManager.Ensure 方法
+			mockey.Mock((*bkci.RepositoryManager).Ensure).Return(
 				&bkci.Repository{ID: "repo-hash-123", Alias: "bkms/bkms-server"}, nil,
 			).Build()
 
@@ -228,7 +228,7 @@ var _ = Describe("Build Functions", func() {
 
 		It("should return error when build trigger fails", func() {
 			// Mock 仓库初始化成功
-			mockey.Mock((*bkci.RepositoryManager).Initialize).Return(
+			mockey.Mock((*bkci.RepositoryManager).Ensure).Return(
 				&bkci.Repository{ID: "repo-123", Alias: "bkms/bkms-server"}, nil,
 			).Build()
 

@@ -26,6 +26,7 @@ import (
 
 	"github.com/pkg/errors"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/utils/credentials"
 )
 
@@ -118,6 +119,8 @@ type RepositoryConfig struct {
 	RepoAlias string `bson:"repoAlias"`
 	// RepoURL 代码仓库地址
 	RepoURL string `bson:"repoURL"`
+	// AuthType 鉴权方式：OAUTH / PASSWORD，为空表示 OAuth（历史数据）
+	AuthType string `bson:"authType,omitempty"`
 	// Username 仓库账号，仅账号密码方式关联代码库时有值，用于展示；凭证本身保存在工作空间的蓝盾代码库记录中
 	Username string `bson:"username,omitempty"`
 	// Password 仓库密码，仅随请求传递给代码库关联流程，不落库、不输出
@@ -135,6 +138,14 @@ type RepositoryConfig struct {
 	ImageBuildMode ImageBuildMode `bson:"imageBuildMode,omitempty"`
 	// PlatformBuildConfig 平台通用构建配置，仅平台通用构建方式有效。
 	PlatformBuildConfig *PlatformBuildConfig `bson:"platformBuildConfig,omitempty"`
+}
+
+// EffectiveAuthType 返回鉴权方式，历史数据为空时视为 OAuth
+func (c *RepositoryConfig) EffectiveAuthType() string {
+	if c.AuthType == "" {
+		return config.CodeRepoAuthOAuth
+	}
+	return c.AuthType
 }
 
 // NormalizeImageBuildMode 返回规范化后的镜像构建方式。

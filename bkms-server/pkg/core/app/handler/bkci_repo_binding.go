@@ -37,6 +37,8 @@ func collectBKCIRepositoriesForCreateApp(
 		repos = append(repos, bkci.RepositoryInitSpec{
 			URL:      buildConfig.CodeRepo.RepoURL,
 			Alias:    buildConfig.CodeRepo.RepoAlias,
+			Type:     string(buildConfig.CodeRepo.Type),
+			AuthType: buildConfig.CodeRepo.AuthType,
 			Username: buildConfig.CodeRepo.Username,
 			Password: buildConfig.CodeRepo.Password,
 		})
@@ -58,21 +60,28 @@ func helmSourceRepositoriesToBind(helmSource *bkmsapp.HelmSource) []bkci.Reposit
 	return []bkci.RepositoryInitSpec{{
 		URL:      helmSource.GitRepoConfig.RepoURL,
 		Alias:    helmSource.GitRepoConfig.RepoAlias,
+		Type:     string(helmSource.GitRepoConfig.Type),
+		AuthType: helmSource.GitRepoConfig.AuthType,
 		Username: helmSource.GitRepoConfig.Username,
 		Password: helmSource.GitRepoConfig.Password,
 	}}
 }
 
-// resolveHelmGitRepoAlias 确定 Helm Git 来源的代码库别名，见 bkci.ResolveRepoAlias
-func resolveHelmGitRepoAlias(helmSource *bkmsapp.HelmSource) error {
+// resolveHelmGitRepo 确定 Helm Git 来源的鉴权方式与代码库别名，见 bkci.ResolveCodeRepo
+func resolveHelmGitRepo(helmSource *bkmsapp.HelmSource) error {
 	if helmSource == nil || helmSource.RepoType != bkmsapp.HelmSourceRepoTypeGit || helmSource.GitRepoConfig == nil {
 		return nil
 	}
 	gitRepo := helmSource.GitRepoConfig
-	alias, err := bkci.ResolveRepoAlias(gitRepo.RepoURL, gitRepo.RepoAlias)
+	authType, alias, err := bkci.ResolveCodeRepo(
+		string(gitRepo.Type),
+		gitRepo.AuthType,
+		gitRepo.RepoURL,
+		gitRepo.RepoAlias,
+	)
 	if err != nil {
-		return bkerrs.Wrapf(err, bkerrs.ErrCodeInvalidArgument, "resolve alias of repository %s", gitRepo.RepoURL)
+		return bkerrs.Wrapf(err, bkerrs.ErrCodeInvalidArgument, "resolve code repository %s", gitRepo.RepoURL)
 	}
-	gitRepo.RepoAlias = alias
+	gitRepo.AuthType, gitRepo.RepoAlias = authType, alias
 	return nil
 }

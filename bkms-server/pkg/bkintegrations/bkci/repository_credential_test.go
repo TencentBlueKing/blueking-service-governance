@@ -154,15 +154,20 @@ var _ = Describe("RepositoryManager Ensure", func() {
 		})
 	}
 
-	Context("when git oauth is disabled", func() {
+	Context("when TGit uses password auth", func() {
 		BeforeEach(func() {
-			config.G.FeatureIntegrations.DisableBkCIGitOAuth = true
+			config.G.FeatureIntegrations.CodeRepoTypes = []config.CodeRepoTypeConfig{{
+				Type:         config.CodeRepoTypeTGit,
+				BkCIRepoType: cloudbkci.RepoTypeCodeTGit,
+				AuthTypes:    []string{config.CodeRepoAuthPassword},
+			}}
 		})
 
 		It("creates a TGit repository bound with a username/password credential", func() {
 			withClient(func() {
 				repo, err := manager.Ensure(ctx, RepositoryInitSpec{
-					URL: repoURL, Alias: repoAlias, Username: "git", Password: "secret",
+					Type: config.CodeRepoTypeTGit,
+					URL:  repoURL, Alias: repoAlias, Username: "git", Password: "secret",
 				})
 				Expect(err).NotTo(HaveOccurred())
 				Expect(repo.UsesCredential()).To(BeTrue())
@@ -193,7 +198,8 @@ var _ = Describe("RepositoryManager Ensure", func() {
 		It("does not delete credentials before creating one", func() {
 			withClient(func() {
 				_, err := manager.Ensure(ctx, RepositoryInitSpec{
-					URL: repoURL, Alias: repoAlias, Username: "git", Password: "secret",
+					Type: config.CodeRepoTypeTGit,
+					URL:  repoURL, Alias: repoAlias, Username: "git", Password: "secret",
 				})
 				Expect(err).NotTo(HaveOccurred())
 				// 社区版蓝盾删除不存在的凭证返回 403，首次关联不能依赖预删除
@@ -207,7 +213,8 @@ var _ = Describe("RepositoryManager Ensure", func() {
 			client.createErr = errors.New("credential already exists")
 			withClient(func() {
 				repo, err := manager.Ensure(ctx, RepositoryInitSpec{
-					URL: repoURL, Alias: repoAlias, Username: "git", Password: "secret",
+					Type: config.CodeRepoTypeTGit,
+					URL:  repoURL, Alias: repoAlias, Username: "git", Password: "secret",
 				})
 				Expect(err).NotTo(HaveOccurred())
 				Expect(repo.CredentialID).To(Equal("bkms_repo_group_app"))
@@ -221,7 +228,8 @@ var _ = Describe("RepositoryManager Ensure", func() {
 		It("rejects wrong credentials without any side effect", func() {
 			withClient(func() {
 				_, err := manager.Ensure(ctx, RepositoryInitSpec{
-					URL: repoURL, Alias: repoAlias, Username: "git", Password: "wrong",
+					Type: config.CodeRepoTypeTGit,
+					URL:  repoURL, Alias: repoAlias, Username: "git", Password: "wrong",
 				})
 				Expect(errors.Is(err, ErrRepoCredentialInvalid)).To(BeTrue(), "unexpected error: %v", err)
 				Expect(client.credentialCalls).To(BeEmpty())
@@ -247,7 +255,10 @@ var _ = Describe("RepositoryManager Ensure", func() {
 
 		It("requires username and password for the first binding", func() {
 			withClient(func() {
-				_, err := manager.Ensure(ctx, RepositoryInitSpec{URL: repoURL, Alias: repoAlias, Username: "git"})
+				_, err := manager.Ensure(
+					ctx,
+					RepositoryInitSpec{Type: config.CodeRepoTypeTGit, URL: repoURL, Alias: repoAlias, Username: "git"},
+				)
 				Expect(errors.Is(err, ErrRepoCredentialRequired)).To(BeTrue(), "unexpected error: %v", err)
 			})
 		})
@@ -256,7 +267,8 @@ var _ = Describe("RepositoryManager Ensure", func() {
 			BeforeEach(func() {
 				withClient(func() {
 					_, err := manager.Ensure(ctx, RepositoryInitSpec{
-						URL: repoURL, Alias: repoAlias, Username: "git", Password: "secret",
+						Type: config.CodeRepoTypeTGit,
+						URL:  repoURL, Alias: repoAlias, Username: "git", Password: "secret",
 					})
 					Expect(err).NotTo(HaveOccurred())
 				})
@@ -268,12 +280,20 @@ var _ = Describe("RepositoryManager Ensure", func() {
 				withClient(func() {
 					repo, err := manager.Ensure(
 						ctx,
-						RepositoryInitSpec{URL: repoURL, Alias: repoAlias, Username: "git"},
+						RepositoryInitSpec{
+							Type:     config.CodeRepoTypeTGit,
+							URL:      repoURL,
+							Alias:    repoAlias,
+							Username: "git",
+						},
 					)
 					Expect(err).NotTo(HaveOccurred())
 					Expect(repo.Password).To(Equal("secret"))
 					// 构建时不携带账号密码，同样沿用
-					_, err = manager.Initialize(ctx, repoURL, repoAlias)
+					_, err = manager.Ensure(
+						ctx,
+						RepositoryInitSpec{Type: config.CodeRepoTypeTGit, URL: repoURL, Alias: repoAlias},
+					)
 					Expect(err).NotTo(HaveOccurred())
 					Expect(client.credentialCalls).To(BeEmpty())
 					Expect(client.createRepoOpts).To(BeEmpty())
@@ -284,7 +304,12 @@ var _ = Describe("RepositoryManager Ensure", func() {
 				withClient(func() {
 					_, err := manager.Ensure(
 						ctx,
-						RepositoryInitSpec{URL: repoURL, Alias: repoAlias, Username: "other"},
+						RepositoryInitSpec{
+							Type:     config.CodeRepoTypeTGit,
+							URL:      repoURL,
+							Alias:    repoAlias,
+							Username: "other",
+						},
 					)
 					Expect(errors.Is(err, ErrRepoPasswordRequired)).To(BeTrue(), "unexpected error: %v", err)
 				})
@@ -293,7 +318,8 @@ var _ = Describe("RepositoryManager Ensure", func() {
 			It("keeps the saved credential when the new password is wrong", func() {
 				withClient(func() {
 					_, err := manager.Ensure(ctx, RepositoryInitSpec{
-						URL: repoURL, Alias: repoAlias, Username: "git", Password: "wrong",
+						Type: config.CodeRepoTypeTGit,
+						URL:  repoURL, Alias: repoAlias, Username: "git", Password: "wrong",
 					})
 					Expect(errors.Is(err, ErrRepoCredentialInvalid)).To(BeTrue(), "unexpected error: %v", err)
 					Expect(client.credentialCalls).To(BeEmpty())
@@ -309,7 +335,8 @@ var _ = Describe("RepositoryManager Ensure", func() {
 				client.updateNotFound = true
 				withClient(func() {
 					_, err := manager.Ensure(ctx, RepositoryInitSpec{
-						URL: repoURL, Alias: repoAlias, Username: "git", Password: "new-secret",
+						Type: config.CodeRepoTypeTGit,
+						URL:  repoURL, Alias: repoAlias, Username: "git", Password: "new-secret",
 					})
 					Expect(err).NotTo(HaveOccurred())
 					// 蓝盾侧凭证不存在时重新创建
@@ -357,16 +384,63 @@ var _ = Describe("RepositoryManager Ensure", func() {
 		})
 	})
 
-	Context("when git oauth is enabled", func() {
-		It("creates a git repository with oauth and no credential", func() {
+	Context("when the code repository types are not configured", func() {
+		It("creates a TGit repository with oauth and no credential", func() {
 			withClient(func() {
-				repo, err := manager.Ensure(ctx, RepositoryInitSpec{URL: repoURL, Alias: repoAlias})
+				repo, err := manager.Ensure(
+					ctx,
+					RepositoryInitSpec{Type: config.CodeRepoTypeTGit, URL: repoURL, Alias: repoAlias},
+				)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(repo.UsesCredential()).To(BeFalse())
 				Expect(client.createRepoOpts).To(HaveLen(1))
 				Expect(client.createRepoOpts[0].RepoType).To(Equal(cloudbkci.RepoTypeCodeGit))
 				Expect(client.createRepoOpts[0].AuthType).To(BeEmpty())
 				Expect(client.credentialCalls).To(BeEmpty())
+			})
+		})
+
+		It("rejects password auth and unsupported types", func() {
+			withClient(func() {
+				_, err := manager.Ensure(ctx, RepositoryInitSpec{
+					Type: config.CodeRepoTypeTGit, AuthType: config.CodeRepoAuthPassword,
+					URL: repoURL, Alias: repoAlias, Username: "git", Password: "secret",
+				})
+				Expect(errors.Is(err, ErrCodeRepoAuthUnsupported)).To(BeTrue(), "unexpected error: %v", err)
+
+				_, err = manager.Ensure(ctx, RepositoryInitSpec{Type: "GitHub", URL: repoURL, Alias: repoAlias})
+				Expect(errors.Is(err, ErrCodeRepoTypeUnsupported)).To(BeTrue(), "unexpected error: %v", err)
+				Expect(client.createRepoOpts).To(BeEmpty())
+			})
+		})
+	})
+
+	Context("when TGit supports both oauth and password", func() {
+		BeforeEach(func() {
+			config.G.FeatureIntegrations.CodeRepoTypes = []config.CodeRepoTypeConfig{{
+				Type:         config.CodeRepoTypeTGit,
+				BkCIRepoType: cloudbkci.RepoTypeCodeTGit,
+				AuthTypes:    []string{config.CodeRepoAuthOAuth, config.CodeRepoAuthPassword},
+			}}
+		})
+
+		It("binds the repository with the requested auth type", func() {
+			withClient(func() {
+				repo, err := manager.Ensure(ctx, RepositoryInitSpec{
+					Type: config.CodeRepoTypeTGit, AuthType: config.CodeRepoAuthPassword,
+					URL: repoURL, Alias: repoAlias, Username: "git", Password: "secret",
+				})
+				Expect(err).NotTo(HaveOccurred())
+				Expect(repo.UsesCredential()).To(BeTrue())
+
+				repo, err = manager.Ensure(ctx, RepositoryInitSpec{
+					Type: config.CodeRepoTypeTGit, URL: repoURL, Alias: "group/other",
+				})
+				Expect(err).NotTo(HaveOccurred())
+				// 未指定鉴权方式时取第一个（OAUTH）
+				Expect(repo.UsesCredential()).To(BeFalse())
+				Expect(client.createRepoOpts[1].RepoType).To(Equal(cloudbkci.RepoTypeCodeTGit))
+				Expect(client.createRepoOpts[1].AuthType).To(BeEmpty())
 			})
 		})
 	})

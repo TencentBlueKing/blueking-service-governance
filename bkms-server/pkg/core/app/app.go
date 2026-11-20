@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/utils/credentials"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime"
 )
@@ -132,9 +133,17 @@ const (
 	GitRepoTypeGitHub GitRepoType = "GitHub"
 )
 
+// EffectiveAuthType 返回鉴权方式，历史数据为空时视为 OAuth
+func (c *GitRepoConfig) EffectiveAuthType() string {
+	if c.AuthType == "" {
+		return config.CodeRepoAuthOAuth
+	}
+	return c.AuthType
+}
+
 // GitRepoConfig is the config for using a Git repository as the helm chart source.
 // The repository is accessed through the bkci repository binding, authenticated via OAuth
-// or a username/password credential (when Git OAuth is disabled).
+// or a username/password credential.
 type GitRepoConfig struct {
 	// Type is the type of the Git repository, e.g. "TGit", "GitHub"
 	Type GitRepoType `json:"type" bson:"type"`
@@ -143,6 +152,8 @@ type GitRepoConfig struct {
 	RepoAlias string `json:"repoAlias" bson:"repoAlias"`
 	// RepoURL is the URL to the repository
 	RepoURL string `json:"repoURL" bson:"repoURL"`
+	// AuthType 鉴权方式：OAUTH / PASSWORD，为空表示 OAuth（历史数据）
+	AuthType string `json:"authType,omitempty" bson:"authType,omitempty"`
 	// Username 仓库账号，仅账号密码方式关联代码库时有值，用于展示；凭证本身保存在工作空间的蓝盾代码库记录中
 	Username string `json:"username,omitempty" bson:"username,omitempty"`
 	// Password 仓库密码，仅随请求传递给代码库关联流程，不落库、不输出（含操作审计）

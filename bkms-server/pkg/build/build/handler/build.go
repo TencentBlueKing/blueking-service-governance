@@ -179,6 +179,8 @@ func (h *Handler) ensureCodeRepositoryRegistered(
 	if err := bkci.EnsureWorkspaceRepositories(ctx, h.registry.DB, workspaceID, []bkci.RepositoryInitSpec{{
 		URL:      cfg.CodeRepo.RepoURL,
 		Alias:    cfg.CodeRepo.RepoAlias,
+		Type:     string(cfg.CodeRepo.Type),
+		AuthType: cfg.CodeRepo.AuthType,
 		Username: cfg.CodeRepo.Username,
 		Password: cfg.CodeRepo.Password,
 	}}); err != nil {

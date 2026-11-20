@@ -69,13 +69,15 @@ type BCSRepoConfigInput struct {
 type HelmGitRepoConfigInput struct {
 	// 代码库类型
 	Type string `json:"type" binding:"required,oneof=TGit GitHub"`
-	// 代码库别名；关闭工蜂 OAuth 时忽略，由后端按仓库地址推导
+	// 鉴权方式：OAUTH / PASSWORD，为空时取该代码库类型的默认鉴权方式
+	AuthType string `json:"authType" binding:"omitempty,oneof=OAUTH PASSWORD"`
+	// 代码库别名；仅工蜂 OAuth 使用（工蜂项目全路径），其余由后端按仓库地址推导
 	RepoAlias string `json:"repoAlias" binding:"omitempty,max=256"`
 	// 代码库地址
 	RepoURL string `json:"repoURL" binding:"required,url"`
-	// 仓库账号，仅关闭工蜂 OAuth（账号密码方式关联代码库）时使用
+	// 仓库账号，仅 PASSWORD 鉴权使用
 	Username string `json:"username" binding:"omitempty,max=128"`
-	// 仓库密码，仅关闭工蜂 OAuth 时使用；首次关联必填，代码库已关联时留空表示沿用已保存的密码
+	// 仓库密码，仅 PASSWORD 鉴权使用；首次关联必填，代码库已关联时留空表示沿用已保存的密码
 	Password string `json:"password" binding:"omitempty,max=256"`
 	// 代码库分支
 	Revision string `json:"revision" binding:"required"`
@@ -119,6 +121,7 @@ func (input *HelmSpecInput) ToModel() *bkmsapp.HelmSpec {
 			Type:      bkmsapp.GitRepoType(src.GitRepoConfig.Type),
 			RepoAlias: src.GitRepoConfig.RepoAlias,
 			RepoURL:   src.GitRepoConfig.RepoURL,
+			AuthType:  src.GitRepoConfig.AuthType,
 			Username:  src.GitRepoConfig.Username,
 			Password:  src.GitRepoConfig.Password,
 			Revision:  src.GitRepoConfig.Revision,
@@ -180,7 +183,9 @@ type HelmGitRepoConfigOutputObj struct {
 	RepoAlias string `json:"repoAlias"`
 	// 代码库地址
 	RepoURL string `json:"repoURL"`
-	// 仓库账号，仅账号密码方式关联代码库时有值；仓库密码不返回
+	// 鉴权方式：OAUTH / PASSWORD
+	AuthType string `json:"authType"`
+	// 仓库账号，仅 PASSWORD 鉴权时有值；仓库密码不返回
 	Username string `json:"username"`
 	// 代码库分支
 	Revision string `json:"revision"`
@@ -217,6 +222,7 @@ func (o *HelmSpecOutputObj) FromModel(spec *bkmsapp.HelmSpec) *HelmSpecOutputObj
 			Type:      string(src.GitRepoConfig.Type),
 			RepoAlias: src.GitRepoConfig.RepoAlias,
 			RepoURL:   src.GitRepoConfig.RepoURL,
+			AuthType:  src.GitRepoConfig.EffectiveAuthType(),
 			Username:  src.GitRepoConfig.Username,
 			Revision:  src.GitRepoConfig.Revision,
 			SourceDir: src.GitRepoConfig.SourceDir,

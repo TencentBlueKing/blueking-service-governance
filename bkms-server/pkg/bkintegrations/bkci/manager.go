@@ -459,12 +459,7 @@ func NewRepositoryManager(db *mongo.Database, workspaceID string) *RepositoryMan
 	return &RepositoryManager{db: db, workspaceID: workspaceID}
 }
 
-// Initialize 关联代码库
-func (m *RepositoryManager) Initialize(ctx context.Context, url, alias string) (*Repository, error) {
-	return m.Ensure(ctx, RepositoryInitSpec{URL: url, Alias: alias})
-}
-
-// Ensure 确保代码库已关联到工作空间。首次关联时，关闭工蜂 OAuth 则用账号密码关联，否则用 OAuth
+// Ensure 确保代码库已关联到工作空间。首次关联时按代码库类型与鉴权方式关联，已关联的按库中记录处理
 func (m *RepositoryManager) Ensure(ctx context.Context, spec RepositoryInitSpec) (*Repository, error) {
 	repository, err := store.Of(m.db, RepositoryMeta).Get(ctx, ByWorkspaceAndAlias(m.workspaceID, spec.Alias))
 	if errors.Is(err, ErrRepositoryNotFound) {
@@ -481,10 +476,18 @@ func (m *RepositoryManager) Ensure(ctx context.Context, spec RepositoryInitSpec)
 
 // createRepository 在蓝盾关联代码库并入库
 func (m *RepositoryManager) createRepository(ctx context.Context, spec RepositoryInitSpec) (*Repository, error) {
-	useCredential := config.G.FeatureIntegrations.DisableBkCIGitOAuth
+	typeCfg, err := codeRepoTypeOf(spec.Type)
+	if err != nil {
+		return nil, err
+	}
+	authType, err := ResolveAuthType(spec.Type, spec.AuthType)
+	if err != nil {
+		return nil, err
+	}
+	useCredential := authType == config.CodeRepoAuthPassword
 	if useCredential {
 		// 先校验账号密码，失败时不在蓝盾留下凭证
-		if err := VerifyRepositoryCredential(ctx, spec.URL, spec.Username, spec.Password); err != nil {
+		if err = VerifyRepositoryCredential(ctx, spec.URL, spec.Username, spec.Password); err != nil {
 			return nil, err
 		}
 	}
@@ -506,7 +509,7 @@ func (m *RepositoryManager) createRepository(ctx context.Context, spec Repositor
 		ProjectCode: project.Code,
 		Creator:     user.ID,
 	}
-	opts := bkci.CreateRepositoryOptions{RepoType: bkci.RepoTypeCodeGit, URL: spec.URL, Alias: spec.Alias}
+	opts := bkci.CreateRepositoryOptions{RepoType: typeCfg.BkCIRepoType, URL: spec.URL, Alias: spec.Alias}
 	if useCredential {
 		credentialID := repositoryCredentialID(spec.Alias)
 		if err = ensureRepositoryCredential(
@@ -514,7 +517,6 @@ func (m *RepositoryManager) createRepository(ctx context.Context, spec Repositor
 		); err != nil {
 			return nil, err
 		}
-		opts.RepoType = bkci.RepoTypeCodeTGit
 		opts.AuthType = repositoryAuthType(spec.URL)
 		opts.CredentialID = credentialID
 

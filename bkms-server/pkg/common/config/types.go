@@ -94,13 +94,48 @@ type FeatureIntegrationsConfig struct {
 	// EnableBkCIPipelineSearchByName 蓝盾流水线搜索改用 search_by_name 接口（不分页），
 	// 用于未提供分页搜索接口的蓝盾版本。
 	EnableBkCIPipelineSearchByName bool
-	// DisableBkCIGitOAuth 关闭蓝盾的工蜂 OAuth 授权，用于无法 OAuth 授权的环境。
-	// 开启后不再列出 OAuth 授权的工蜂项目，代码库改由用户填写 HTTPS 地址与仓库账号密码，
-	// 以 TGit 类型 + 账号密码凭证关联到蓝盾；分支 / Tag 也直接使用账号密码从 Git 仓库查询。
-	DisableBkCIGitOAuth bool
+	// CodeRepoTypes 当前环境支持的代码库类型及其鉴权方式，未配置时使用 DefaultCodeRepoTypes
+	CodeRepoTypes []CodeRepoTypeConfig `validate:"dive"`
 	// DisableBkCIRepositoryQuery 关闭蓝盾代码库详情 / 分支 / Tag 查询接口，用于未提供这些接口的蓝盾版本。
 	// 开启后关联代码库时不再回查蓝盾代码库详情；OAuth 关联的代码库无法列出分支 / Tag，需手动输入。
 	DisableBkCIRepositoryQuery bool
+}
+
+// 代码库类型
+const (
+	// CodeRepoTypeTGit 工蜂代码库
+	CodeRepoTypeTGit = "TGit"
+)
+
+// 代码库鉴权方式
+const (
+	// CodeRepoAuthOAuth OAuth 授权
+	CodeRepoAuthOAuth = "OAUTH"
+	// CodeRepoAuthPassword 仓库账号密码
+	CodeRepoAuthPassword = "PASSWORD"
+)
+
+// CodeRepoTypeConfig 一种代码库类型的配置
+type CodeRepoTypeConfig struct {
+	// Type 代码库类型
+	Type string `validate:"required,oneof=TGit"`
+	// BkCIRepoType 关联到蓝盾时使用的代码库类型（请求体 @type），如 codeGit、codeTGit
+	BkCIRepoType string `validate:"required,oneof=codeGit codeTGit"`
+	// AuthTypes 支持的鉴权方式，第一个为请求未指定鉴权方式时的默认值
+	AuthTypes []string `validate:"required,min=1,unique,dive,oneof=OAUTH PASSWORD"`
+}
+
+// DefaultCodeRepoTypes 未配置 CodeRepoTypes 时的默认值：工蜂 + OAuth
+var DefaultCodeRepoTypes = []CodeRepoTypeConfig{
+	{Type: CodeRepoTypeTGit, BkCIRepoType: "codeGit", AuthTypes: []string{CodeRepoAuthOAuth}},
+}
+
+// EffectiveCodeRepoTypes 返回生效的代码库类型配置，未配置时返回默认值
+func (c FeatureIntegrationsConfig) EffectiveCodeRepoTypes() []CodeRepoTypeConfig {
+	if len(c.CodeRepoTypes) == 0 {
+		return DefaultCodeRepoTypes
+	}
+	return c.CodeRepoTypes
 }
 
 // BkApiStagesConfig 蓝鲸 API 版本信息，不指定时均默认为 "prod"

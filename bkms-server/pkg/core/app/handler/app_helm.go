@@ -70,7 +70,7 @@ func (h *Handler) UpdateHelmSpec(c *gin.Context) {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "decode helm source"))
 		return
 	}
-	if err = resolveHelmGitRepoAlias(helmSource); err != nil {
+	if err = resolveHelmGitRepo(helmSource); err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return
 	}

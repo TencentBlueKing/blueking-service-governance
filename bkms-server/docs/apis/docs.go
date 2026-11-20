@@ -26658,6 +26658,26 @@ const docTemplate = `{
                 }
             }
         },
+        "serializer.CodeRepoTypeOutput": {
+            "type": "object",
+            "properties": {
+                "authTypes": {
+                    "description": "支持的鉴权方式：OAUTH 工蜂项目下拉 / PASSWORD 填写仓库地址与账号密码；第一个为默认鉴权方式",
+                    "type": "array",
+                    "items": {
+                        "type": "string",
+                        "enum": [
+                            "OAUTH",
+                            "PASSWORD"
+                        ]
+                    }
+                },
+                "type": {
+                    "description": "代码库类型，如 TGit",
+                    "type": "string"
+                }
+            }
+        },
         "serializer.CompareAppConfigFileVersionsInput": {
             "type": "object",
             "required": [
@@ -29613,9 +29633,12 @@ const docTemplate = `{
         "serializer.FrontendFeaturesOutput": {
             "type": "object",
             "properties": {
-                "codeRepoCredentialAuth": {
-                    "description": "代码库是否以仓库账号密码关联（关闭了蓝盾工蜂 OAuth）。为 true 时前端关联代码库改为填写 HTTPS 地址、\n仓库账号与仓库密码；为 false 时使用工蜂 OAuth 授权的项目下拉",
-                    "type": "boolean"
+                "codeRepoTypes": {
+                    "description": "当前环境支持的代码库类型及其鉴权方式",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/serializer.CodeRepoTypeOutput"
+                    }
                 },
                 "enableBSCP": {
                     "description": "是否启用 BSCP（服务配置中心）对接，为 false 时前端隐藏 BSCP 配置相关入口",
@@ -30599,13 +30622,21 @@ const docTemplate = `{
                 "type"
             ],
             "properties": {
+                "authType": {
+                    "description": "鉴权方式：OAUTH / PASSWORD，为空时取该代码库类型的默认鉴权方式",
+                    "type": "string",
+                    "enum": [
+                        "OAUTH",
+                        "PASSWORD"
+                    ]
+                },
                 "password": {
-                    "description": "仓库密码，仅关闭工蜂 OAuth 时使用；首次关联必填，代码库已关联时留空表示沿用已保存的密码",
+                    "description": "仓库密码，仅 PASSWORD 鉴权使用；首次关联必填，代码库已关联时留空表示沿用已保存的密码",
                     "type": "string",
                     "maxLength": 256
                 },
                 "repoAlias": {
-                    "description": "代码库别名；关闭工蜂 OAuth 时忽略，由后端按仓库地址推导",
+                    "description": "代码库别名；仅工蜂 OAuth 使用（工蜂项目全路径），其余由后端按仓库地址推导",
                     "type": "string",
                     "maxLength": 256
                 },
@@ -30630,7 +30661,7 @@ const docTemplate = `{
                     ]
                 },
                 "username": {
-                    "description": "仓库账号，仅关闭工蜂 OAuth（账号密码方式关联代码库）时使用",
+                    "description": "仓库账号，仅 PASSWORD 鉴权使用",
                     "type": "string",
                     "maxLength": 128
                 }
@@ -30639,6 +30670,10 @@ const docTemplate = `{
         "serializer.HelmGitRepoConfigOutputObj": {
             "type": "object",
             "properties": {
+                "authType": {
+                    "description": "鉴权方式：OAUTH / PASSWORD",
+                    "type": "string"
+                },
                 "repoAlias": {
                     "description": "代码库别名",
                     "type": "string"
@@ -30660,7 +30695,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "username": {
-                    "description": "仓库账号，仅账号密码方式关联代码库时有值；仓库密码不返回",
+                    "description": "仓库账号，仅 PASSWORD 鉴权时有值；仓库密码不返回",
                     "type": "string"
                 }
             }
@@ -34828,6 +34863,14 @@ const docTemplate = `{
                 "type"
             ],
             "properties": {
+                "authType": {
+                    "description": "鉴权方式：OAUTH / PASSWORD，为空时取该代码库类型的默认鉴权方式",
+                    "type": "string",
+                    "enum": [
+                        "OAUTH",
+                        "PASSWORD"
+                    ]
+                },
                 "defaultBranch": {
                     "description": "默认构建分支",
                     "type": "string",
@@ -34855,7 +34898,7 @@ const docTemplate = `{
                     ]
                 },
                 "password": {
-                    "description": "仓库密码，仅关闭工蜂 OAuth 时使用；首次关联必填，代码库已关联时留空表示沿用已保存的密码",
+                    "description": "仓库密码，仅 PASSWORD 鉴权使用；首次关联必填，代码库已关联时留空表示沿用已保存的密码",
                     "type": "string",
                     "maxLength": 256
                 },
@@ -34868,7 +34911,7 @@ const docTemplate = `{
                     ]
                 },
                 "repoAlias": {
-                    "description": "蓝盾侧仓库别名；关闭工蜂 OAuth 时忽略，由后端按仓库地址推导",
+                    "description": "蓝盾侧仓库别名；仅工蜂 OAuth 使用（工蜂项目全路径），其余由后端按仓库地址推导",
                     "type": "string",
                     "maxLength": 256
                 },
@@ -34892,7 +34935,7 @@ const docTemplate = `{
                     ]
                 },
                 "username": {
-                    "description": "仓库账号，仅关闭工蜂 OAuth（账号密码方式关联代码库）时使用",
+                    "description": "仓库账号，仅 PASSWORD 鉴权使用",
                     "type": "string",
                     "maxLength": 128
                 }
@@ -34901,6 +34944,10 @@ const docTemplate = `{
         "serializer.RepoBuildConfigOutputObj": {
             "type": "object",
             "properties": {
+                "authType": {
+                    "description": "鉴权方式：OAUTH / PASSWORD",
+                    "type": "string"
+                },
                 "defaultBranch": {
                     "description": "默认分支",
                     "type": "string"
@@ -34945,7 +34992,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "username": {
-                    "description": "仓库账号，仅账号密码方式关联代码库时有值；仓库密码不返回",
+                    "description": "仓库账号，仅 PASSWORD 鉴权时有值；仓库密码不返回",
                     "type": "string"
                 }
             }
@@ -34958,6 +35005,14 @@ const docTemplate = `{
                 "type"
             ],
             "properties": {
+                "authType": {
+                    "description": "鉴权方式：OAUTH / PASSWORD，为空时取该代码库类型的默认鉴权方式",
+                    "type": "string",
+                    "enum": [
+                        "OAUTH",
+                        "PASSWORD"
+                    ]
+                },
                 "defaultBranch": {
                     "description": "默认构建分支",
                     "type": "string",
@@ -34985,7 +35040,7 @@ const docTemplate = `{
                     ]
                 },
                 "password": {
-                    "description": "仓库密码，仅关闭工蜂 OAuth 时使用；首次关联必填，代码库已关联时留空表示沿用已保存的密码",
+                    "description": "仓库密码，仅 PASSWORD 鉴权使用；首次关联必填，代码库已关联时留空表示沿用已保存的密码",
                     "type": "string",
                     "maxLength": 256
                 },
@@ -34998,7 +35053,7 @@ const docTemplate = `{
                     ]
                 },
                 "repoAlias": {
-                    "description": "蓝盾侧仓库别名；关闭工蜂 OAuth 时忽略，由后端按仓库地址推导",
+                    "description": "蓝盾侧仓库别名；仅工蜂 OAuth 使用（工蜂项目全路径），其余由后端按仓库地址推导",
                     "type": "string",
                     "maxLength": 256
                 },
@@ -35022,7 +35077,7 @@ const docTemplate = `{
                     ]
                 },
                 "username": {
-                    "description": "仓库账号，仅关闭工蜂 OAuth（账号密码方式关联代码库）时使用",
+                    "description": "仓库账号，仅 PASSWORD 鉴权使用",
                     "type": "string",
                     "maxLength": 128
                 }
@@ -35031,6 +35086,10 @@ const docTemplate = `{
         "serializer.RepositoryBuildConfigOutputObj": {
             "type": "object",
             "properties": {
+                "authType": {
+                    "description": "鉴权方式：OAUTH / PASSWORD",
+                    "type": "string"
+                },
                 "defaultBranch": {
                     "description": "默认构建分支",
                     "type": "string"
@@ -35075,7 +35134,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "username": {
-                    "description": "仓库账号，仅账号密码方式关联代码库时有值；仓库密码不返回",
+                    "description": "仓库账号，仅 PASSWORD 鉴权时有值；仓库密码不返回",
                     "type": "string"
                 }
             }

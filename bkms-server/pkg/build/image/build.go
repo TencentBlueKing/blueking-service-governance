@@ -76,9 +76,12 @@ func ExecuteBKCIPipelineBuild(
 			return nil, nil, errors.Errorf("code repo config not found")
 		}
 		// 构建来源是代码库时，需要在蓝盾上初始化代码仓库
-		_, err := bkci.NewRepositoryManager(db, app.WorkspaceID).Initialize(
-			ctx, cfg.CodeRepo.RepoURL, cfg.CodeRepo.RepoAlias,
-		)
+		_, err := bkci.NewRepositoryManager(db, app.WorkspaceID).Ensure(ctx, bkci.RepositoryInitSpec{
+			URL:      cfg.CodeRepo.RepoURL,
+			Alias:    cfg.CodeRepo.RepoAlias,
+			Type:     string(cfg.CodeRepo.Type),
+			AuthType: cfg.CodeRepo.AuthType,
+		})
 		if err != nil {
 			return nil, nil, errors.Wrapf(err, "ensure bkci repository")
 		}

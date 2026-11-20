@@ -31,7 +31,11 @@ type RepositoryInitSpec struct {
 	URL string
 	// Alias 代码库在蓝盾侧的别名，同一工作空间内唯一
 	Alias string
-	// Username 仓库账号，仅账号密码方式（关闭工蜂 OAuth）关联时使用
+	// Type 代码库类型，如 TGit
+	Type string
+	// AuthType 鉴权方式：OAUTH / PASSWORD，为空时取该代码库类型的默认鉴权方式
+	AuthType string
+	// Username 仓库账号，仅账号密码方式关联时使用
 	Username string
 	// Password 仓库密码，仅账号密码方式关联时使用；代码库已关联时为空表示沿用已保存的密码
 	Password string

@@ -163,7 +163,9 @@ type RepoBuildConfigOutputObj struct {
 	RepoAlias string `json:"repoAlias"`
 	// 代码库地址
 	RepoURL string `json:"repoURL"`
-	// 仓库账号，仅账号密码方式关联代码库时有值；仓库密码不返回
+	// 鉴权方式：OAUTH / PASSWORD
+	AuthType string `json:"authType"`
+	// 仓库账号，仅 PASSWORD 鉴权时有值；仓库密码不返回
 	Username string `json:"username"`
 	// 默认分支
 	DefaultBranch string `json:"defaultBranch"`
@@ -244,6 +246,7 @@ func (o *BuildConfigOutputObj) FromModel(cfg *build.Config) *BuildConfigOutputOb
 			Type:            string(cfg.CodeRepo.Type),
 			RepoAlias:       cfg.CodeRepo.RepoAlias,
 			RepoURL:         cfg.CodeRepo.RepoURL,
+			AuthType:        cfg.CodeRepo.EffectiveAuthType(),
 			Username:        cfg.CodeRepo.Username,
 			DefaultBranch:   cfg.CodeRepo.DefaultBranch,
 			SourceDir:       cfg.CodeRepo.SourceDir,
