@@ -572,7 +572,7 @@
 </template>
 
 <script setup lang="ts">
-  import { computed, inject, nextTick, reactive, ref, watch } from 'vue';
+  import { computed, inject, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue';
 
   import {
     Alert,
@@ -615,6 +615,7 @@
     resolveEditorLang,
   } from '~/pages/application/detail/app-config/config-file-utils';
   import EnvPerspectiveSelect from '~/pages/application/detail/app-config/env-perspective-select.vue';
+  import { DEFAULT_ENV_NAME, useAppConfigEnv } from '~/pages/application/detail/app-config/use-app-config-env';
   import {
     MOUNT_PREVIEW_VISIBLE_KEY,
     useConfigFileDefs,
@@ -639,6 +640,7 @@
 
   const { t } = useI18n();
   const appDetailStore = useAppDetail();
+  const { getEnvStorageKey, getStoredEnvName, saveEnvNameToStorage } = useAppConfigEnv();
   const { confirmBox } = useLeaveConfirm();
   const mountPreviewVisible = inject(MOUNT_PREVIEW_VISIBLE_KEY, ref(false));
   const appID = computed(() => appDetailStore.appID);
@@ -680,6 +682,8 @@
   let detailLoadRequestID = 0;
   let envListRequestID = 0;
   let fullContentRequestID = 0;
+  let pageInitRequestID = 0;
+  let selectionRequestID = 0;
 
   // ---- 弹层与面板显隐 ----
   const showCreateSideslider = ref(false); // 新建配置文件侧滑
@@ -746,6 +750,15 @@
     if (isFrameworkFile.value || activeMountScope.value === 'all') return envList.value;
     return mountedEnvList.value;
   });
+
+  // 共享选择代表用户意图；统一配置或未挂载时只回退当前文件，不改写共享选择。
+  function restoreSharedEnv() {
+    const envName = getStoredEnvName();
+    currentEnv.value =
+      activeDef.value && !activeDef.value.isUnifiedConfig && envName
+        ? perspectiveEnvList.value.find(env => env.name === envName) || { ...defaultEnv.value }
+        : { ...defaultEnv.value };
+  }
   // 环境名 -> 展示名映射，供仅持有环境名的场景（如文件列表）渲染可读名称
   const envDisplayNameMap = computed(() => {
     const map: Record<string, string> = {};
@@ -1138,23 +1151,23 @@
       showCreateSideslider.value = false;
       await fetchDefs(createdID);
       // 列表刷新成功后再切换环境，失败时保留原环境与详情、编辑器内容的一致性。
-      currentEnv.value = { ...defaultEnv.value };
-      await loadCurrentDetail('');
+      restoreSharedEnv();
+      await loadCurrentDetail();
       Message({ theme: 'success', message: t('已创建，请填写文件内容') });
     } finally {
       isCreateSubmitting.value = false;
     }
   }
 
-  // 删除配置文件；删除当前选中文件时重置环境并加载新选中项
+  // 删除配置文件；删除当前选中文件时按共享环境加载新选中项
   async function handleDeleteFile(file: ConfigFileListItem) {
     const isDeletingActive = file.id === activeDefID.value;
     if (isDeletingActive && !(await confirmDiscardChanges())) return;
     if (isDeletingActive) discardCurrentEdits();
     await deleteDef(file.id);
     if (isDeletingActive) {
-      currentEnv.value = { ...defaultEnv.value };
-      if (activeDefID.value) await loadCurrentDetail('');
+      restoreSharedEnv();
+      if (activeDefID.value) await loadCurrentDetail();
     }
     Message({ theme: 'success', message: t('操作成功') });
   }
@@ -1180,9 +1193,9 @@
       isModeSaving.value = true;
       try {
         await updateDef({ isUnifiedConfig: !enabled });
-        if (!enabled) currentEnv.value = { ...defaultEnv.value };
         await fetchDefs(activeDefID.value);
-        await loadCurrentDetail('');
+        restoreSharedEnv();
+        await loadCurrentDetail();
         if (!enabled) Message({ theme: 'success', message: t('操作成功') });
       } finally {
         isModeSaving.value = false;
@@ -1203,15 +1216,42 @@
 
   // 切换环境视角（'__default__' 表示默认/基准配置）并重新加载详情
   async function handleEnvSelectChange(envName: string) {
-    const realName = envName === '__default__' ? '' : envName;
-    if (realName === currentEnv.value.name || !(await confirmDiscardChanges())) return;
+    if (!activeDef.value || !isIndependentConfig.value) return;
+    const selectionID = ++selectionRequestID;
+    const realName = envName === DEFAULT_ENV_NAME ? '' : envName;
+    const targetEnv = realName ? perspectiveEnvList.value.find(env => env.name === realName) : { ...defaultEnv.value };
+    if (!targetEnv) return;
+    // 本地因挂载限制已回默认时，显式选择默认仍需更新共享意图，但不丢弃草稿。
+    if (realName === currentEnv.value.name) {
+      saveEnvNameToStorage(realName);
+      return;
+    }
+    const scopeKey = getEnvStorageKey();
+    const requestedDefID = activeDefID.value;
+    const initRequestID = pageInitRequestID;
+    if (!(await confirmDiscardChanges())) return;
+    if (
+      scopeKey !== getEnvStorageKey() ||
+      requestedDefID !== activeDefID.value ||
+      initRequestID !== pageInitRequestID ||
+      selectionID !== selectionRequestID
+    ) {
+      return;
+    }
     // 切换环境时保留文件内容的编辑态：仅丢弃当前环境草稿，不退出编辑
     const wasEditing = isEditing.value;
     discardCurrentEdits();
-    currentEnv.value = realName
-      ? perspectiveEnvList.value.find(env => env.name === realName) || { ...defaultEnv.value }
-      : { ...defaultEnv.value };
+    currentEnv.value = targetEnv;
+    saveEnvNameToStorage(realName);
     await loadCurrentDetail(realName);
+    if (
+      scopeKey !== getEnvStorageKey() ||
+      requestedDefID !== activeDefID.value ||
+      initRequestID !== pageInitRequestID ||
+      selectionID !== selectionRequestID
+    ) {
+      return;
+    }
     // 目标环境存在可编辑内容时保持编辑态，否则回落到查看态
     isEditing.value = wasEditing && effectiveEditableContentField.value !== 'none';
     if (showVariables.value && realName) viewDefaultEnvVarsRef.value?.setCurEnv(realName);
@@ -1309,14 +1349,9 @@
         showFileWriteError(error, name, mountDir);
         return;
       }
-      const shouldResetEnv =
-        !isFrameworkFile.value &&
-        !!currentEnv.value.name &&
-        fileInfoFormData.scope === 'envs' &&
-        !fileInfoFormData.mountedEnvNames.includes(currentEnv.value.name);
       await fetchDefs(activeDefID.value);
-      if (shouldResetEnv) currentEnv.value = { ...defaultEnv.value };
-      await loadCurrentDetail(currentEnv.value.name || '');
+      restoreSharedEnv();
+      await loadCurrentDetail();
       isFileInfoEditing.value = false;
       Message({ theme: 'success', message: t('操作成功') });
     } finally {
@@ -1435,12 +1470,19 @@
 
   // 切换左侧选中的文件并加载其详情
   async function handleSelectFile(id: string) {
-    if (id === activeDefID.value || !(await confirmDiscardChanges())) return;
+    if (id === activeDefID.value) return;
+    const selectionID = ++selectionRequestID;
+    const scopeKey = getEnvStorageKey();
+    const initRequestID = pageInitRequestID;
+    if (!(await confirmDiscardChanges())) return;
+    if (scopeKey !== getEnvStorageKey() || initRequestID !== pageInitRequestID || selectionID !== selectionRequestID) {
+      return;
+    }
     discardCurrentEdits();
     activeDefID.value = id;
-    currentEnv.value = { ...defaultEnv.value };
+    restoreSharedEnv();
     showVariables.value = false;
-    await loadCurrentDetail('');
+    await loadCurrentDetail();
   }
 
   function handleStartEdit() {
@@ -1468,6 +1510,8 @@
 
   // 页面初始化：并行拉取应用详情、环境列表、文件定义列表，再加载当前详情
   async function initPage() {
+    const requestID = ++pageInitRequestID;
+    const scopeKey = getEnvStorageKey();
     if (!appDetailStore.appID) {
       resetPage();
       return;
@@ -1475,10 +1519,11 @@
     isLoading.value = true;
     try {
       await Promise.all([getAppData(), getEnvList(), fetchDefs()]);
-      currentEnv.value = { ...defaultEnv.value };
-      if (activeDefID.value) await loadCurrentDetail('');
+      if (requestID !== pageInitRequestID || scopeKey !== getEnvStorageKey()) return;
+      restoreSharedEnv();
+      if (activeDefID.value) await loadCurrentDetail();
     } finally {
-      isLoading.value = false;
+      if (requestID === pageInitRequestID) isLoading.value = false;
     }
   }
 
@@ -1563,8 +1608,11 @@
     }
   }
 
-  // appID 变化时重新初始化页面
-  watch(() => appDetailStore.appID, initPage, { immediate: true });
+  // 空间或应用变化时重新初始化，避免旧确认/请求更新新应用的环境选择。
+  watch(getEnvStorageKey, initPage, { immediate: true });
+  onBeforeUnmount(() => {
+    pageInitRequestID += 1;
+  });
 </script>
 
 <style lang="postcss" scoped>
