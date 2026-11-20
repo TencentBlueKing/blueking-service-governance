@@ -33,20 +33,22 @@ uv run scripts/<category>/<script-name>.py [参数...]
 
 #### `platform-build/gen-runtime-images.py`
 
-- **用途**：从 `golang` 官方镜像的 tag 清单中筛选出符合平台使用要求的精确小版本 tag
-  （形如 `golang:X.Y.Z` 或 `golang:X.Y.Z-alpineA.B`），并生成用于镜像同步的清单文件。
-- **过滤规则**：只保留三段式精确版本；只保留 go 大版本 `>= 1.20`；Debian 系精确小版本会直接保留，
+- **用途**：从 `golang`、`python` 官方镜像的 tag 清单中筛选出符合平台使用要求的精确小版本 tag
+  （形如 `golang:X.Y.Z`、`golang:X.Y.Z-alpineA.B`、`python:X.Y.Z-slim`），并生成用于镜像同步的清单文件。
+- **golang 过滤规则**：只保留三段式精确版本；只保留 go 大版本 `>= 1.20`；Debian 系精确小版本会直接保留，
   同一 go patch 的 alpine 精确小版本仅保留其中最新的 alpine 版本，并从最终结果中反向提取所需的 `alpine:A.B` 基础镜像。
+- **python 过滤规则**：作为 python 平台通用构建的运行镜像，只保留 `X.Y.Z-slim` 精确版本（基于 Debian、自带 pip、
+  不受 PEP 668 限制），只保留 python 大版本 `>= 3.10`；滚动 tag、预发布版本、带发行版代号的变体都会丢弃。
 - **数据源**：支持两种，二选一
-    - `--source skopeo`：直接调用 `skopeo list-tags docker://golang` 拉取（需本机安装 `skopeo`）
-    - `--source file --input <path>`：从本地 tag 清单文件读取
+    - `--source skopeo`：直接调用 `skopeo list-tags docker://golang` 与 `docker://python` 拉取（需本机安装 `skopeo`）
+    - `--source file --golang-input <path> --python-input <path>`：分别从本地 golang、python tag 清单文件读取，两者都必填
 - **产出**：默认写入 `configs/workload-runtime-images.txt`，可通过 `--output` 覆盖。
 - **使用示例**：
 
     ```bash
     # 从本地文件读取，生成默认位置的清单
     uv run scripts/platform-build/gen-runtime-images.py \
-        --source file --input golang-alpine.txt
+        --source file --golang-input golang-alpine.txt --python-input python.txt
 
     # 直接调用 skopeo 拉取远端 tag
     uv run scripts/platform-build/gen-runtime-images.py --source skopeo
@@ -60,7 +62,8 @@ uv run scripts/<category>/<script-name>.py [参数...]
     - 目标仓库前缀末尾多余的 `/` 会被自动裁剪
     - 目标已存在的镜像会主动跳过（通过 `docker manifest inspect` 探测），避免重复拉取和推送
     - 单个镜像失败不影响后续镜像，最终统一汇总"成功 / 跳过 / 失败"数量
-    - `golang` 镜像强制要求使用 `X.Y.Z` 或 `X.Y.Z-alpineA.B` 精确小版本，防止误同步滚动 tag
+    - `golang` 镜像强制要求使用 `X.Y.Z` 或 `X.Y.Z-alpineA.B` 精确小版本，`python` 镜像强制要求使用 `X.Y.Z-slim`，
+      防止误同步滚动 tag
     - 支持 `--dry-run` 只打印命令、不实际执行
 - **使用示例**：
 

@@ -33,8 +33,9 @@ import (
 )
 
 const (
-	trpcGoBuiltinID  = "builtin-trpc-go"
-	trpcCppBuiltinID = "builtin-trpc-cpp"
+	trpcGoBuiltinID     = "builtin-trpc-go"
+	trpcCppBuiltinID    = "builtin-trpc-cpp"
+	trpcPythonBuiltinID = "builtin-trpc-python"
 )
 
 var _ = Describe("Framework config template service", func() {
@@ -86,7 +87,7 @@ var _ = Describe("Framework config template service", func() {
 			views, err := frameworkcfgtmpl.List(ctx, db, workspaceID, frameworkcfgtmpl.Group{})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(lo.Map(views, func(v *frameworkcfgtmpl.View, _ int) string { return v.ID })).
-				To(Equal([]string{trpcCppBuiltinID, trpcGoBuiltinID}))
+				To(Equal([]string{trpcCppBuiltinID, trpcGoBuiltinID, trpcPythonBuiltinID}))
 			for _, v := range views {
 				Expect(v.Builtin).To(BeTrue())
 				Expect(v.IsDefault).To(BeTrue())
@@ -107,13 +108,13 @@ var _ = Describe("Framework config template service", func() {
 			views, err := frameworkcfgtmpl.List(ctx, db, workspaceID, frameworkcfgtmpl.Group{})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(lo.Map(views, func(v *frameworkcfgtmpl.View, _ int) string { return v.ID })).To(Equal([]string{
-				tafTpl.ID, trpcCppBuiltinID, cppTpl.ID, trpcGoBuiltinID, goTpl.ID,
+				tafTpl.ID, trpcCppBuiltinID, cppTpl.ID, trpcGoBuiltinID, goTpl.ID, trpcPythonBuiltinID,
 			}))
 			Expect(views[0].Content).To(BeEmpty())
 
 			trpcOnly, err := frameworkcfgtmpl.List(ctx, db, workspaceID, frameworkcfgtmpl.Group{Framework: "trpc"})
 			Expect(err).NotTo(HaveOccurred())
-			Expect(trpcOnly).To(HaveLen(4))
+			Expect(trpcOnly).To(HaveLen(5))
 
 			cppOnly, err := frameworkcfgtmpl.List(ctx, db, workspaceID, frameworkcfgtmpl.Group{Language: "cpp"})
 			Expect(err).NotTo(HaveOccurred())
@@ -150,7 +151,7 @@ var _ = Describe("Framework config template service", func() {
 				_, err := frameworkcfgtmpl.Get(ctx, db, workspaceID, id)
 				Expect(errors.Is(err, frameworkcfgtmpl.ErrTemplateNotFound)).To(BeTrue())
 			},
-			Entry("unknown builtin", "builtin-trpc-python"),
+			Entry("unknown builtin", "builtin-trpc-nodejs"),
 			Entry("TAF has no builtin", "builtin-taf-cpp"),
 			Entry("malformed ID", "not-an-object-id"),
 			Entry("missing custom", "000000000000000000000000"),

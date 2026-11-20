@@ -39,9 +39,12 @@ const (
 	LanguageGo = "go"
 	// LanguageCpp 指明 tRPC 应用使用 C++ 语言
 	LanguageCpp = "cpp"
+	// LanguagePython 指明 tRPC 应用使用 Python 语言
+	LanguagePython = "python"
 
-	goTemplatePath  = "templates/go.Dockerfile.tmpl"
-	cppTemplatePath = "templates/cpp.Dockerfile.tmpl"
+	goTemplatePath     = "templates/go.Dockerfile.tmpl"
+	cppTemplatePath    = "templates/cpp.Dockerfile.tmpl"
+	pythonTemplatePath = "templates/python.Dockerfile.tmpl"
 )
 
 const (
@@ -61,15 +64,23 @@ var templateFiles fs.FS = embeddedTemplates
 
 var languageSpecs = map[string]languageSpec{
 	LanguageGo: {
-		templatePath:        goTemplatePath,
-		defaultArtifactDir:  defaultArtifactDir,
-		defaultBuildCommand: defaultGoBuildCommand,
-		prepareTemplateData: prepareGoTemplateData,
+		templatePath:         goTemplatePath,
+		defaultArtifactDir:   defaultArtifactDir,
+		requiresBuilderImage: true,
+		defaultBuildCommands: defaultGoBuildCommands,
+		prepareTemplateData:  prepareGoTemplateData,
 	},
 	LanguageCpp: {
-		templatePath:        cppTemplatePath,
-		defaultArtifactDir:  defaultArtifactDir,
-		defaultBuildCommand: defaultCppBuildCommand,
+		templatePath:         cppTemplatePath,
+		defaultArtifactDir:   defaultArtifactDir,
+		requiresBuilderImage: true,
+		defaultBuildCommands: defaultCppBuildCommands,
+	},
+	LanguagePython: {
+		templatePath:         pythonTemplatePath,
+		defaultArtifactDir:   defaultPythonArtifactDir,
+		requiresBuilderImage: false,
+		defaultBuildCommands: defaultPythonBuildCommands,
 	},
 }
 
@@ -77,8 +88,13 @@ type languageSpec struct {
 	templatePath string
 	// defaultArtifactDir 未配置产物目录时使用的默认值，按语言区分
 	defaultArtifactDir string
-	// defaultBuildCommand 未指定 BuildCommands 时，按应用名和生效的产物目录构造默认构建命令
-	defaultBuildCommand func(appName string, artifactDir string) string
+	// requiresBuilderImage 模板是否有 builder 阶段；python 单阶段模板只用运行镜像
+	requiresBuilderImage bool
+	// defaultBuildCommands 未指定 BuildCommands 时构造默认构建命令，每条对应一个 RUN
+	//
+	// go / cpp 按应用名和生效的产物目录拼编译命令；python 按构建目录里的锁文件选依赖安装方式，
+	// 可能返回空列表（没有依赖文件时只拷源码），也可能因构建目录不可访问而返回错误
+	defaultBuildCommands func(input Input, appName string, artifactDir string) ([]string, error)
 	// prepareTemplateData 用于在通用字段填充完成后，追加语言特定的模板数据
 	//
 	// 目前只有 Go 需要基于源码目录探测 go.sum 是否存在；C++ 分支暂时没有类似需求，
@@ -191,9 +207,13 @@ func buildTemplateData(input Input, spec languageSpec, appName string) (*templat
 		return nil, errors.Wrap(err, "parse build commands")
 	}
 
-	// 空命令换成语言默认构建命令，输出路径用上面解析出的产物目录
+	// 空命令换成语言默认构建命令，输出路径用上面解析出的产物目录；
+	// 用户填了构建命令时只执行用户命令，python 也不再探测依赖文件
 	if len(buildCommands) == 0 {
-		buildCommands = []string{spec.defaultBuildCommand(appName, artifactDir)}
+		buildCommands, err = spec.defaultBuildCommands(input, appName, artifactDir)
+		if err != nil {
+			return nil, errors.Wrap(err, "build default build commands")
+		}
 	}
 
 	preBuildCommands, err := parseCommands("pre-build commands", input.PreBuildCommands)
@@ -233,21 +253,33 @@ func buildTemplateData(input Input, spec languageSpec, appName string) (*templat
 	return data, nil
 }
 
-// defaultGoBuildCommand 构造未指定 BuildCommands 时使用的默认 go build 命令
+// defaultGoBuildCommands 构造未指定 BuildCommands 时使用的默认 go build 命令
 //
 // 这里的 appName 来自 ImageName 的安全转换结果：BKMS 平台约定应用名与镜像名、构建产物文件名保持一致，
 // 因此可以直接用它作为 `-o <artifactDir>/<appName>` 的产物路径；未配置产物目录时即 `/out/<appName>`。
 // 整目录拷贝后二进制在 `/app/<appName>`，未配置启动命令时模板会写回 ENTRYPOINT ["/app/<appName>"]
-func defaultGoBuildCommand(appName string, artifactDir string) string {
-	return fmt.Sprintf(defaultGoBuildCommandTemplate, artifactDir, appName)
+func defaultGoBuildCommands(_ Input, appName string, artifactDir string) ([]string, error) {
+	return []string{fmt.Sprintf(defaultGoBuildCommandTemplate, artifactDir, appName)}, nil
 }
 
-// defaultCppBuildCommand 构造未指定 BuildCommands 时使用的默认 C++ 构建命令
+// defaultCppBuildCommands 构造未指定 BuildCommands 时使用的默认 C++ 构建命令
 //
 // 默认约定 CMake target、构建产物文件名与应用名保持一致，构建完成后统一复制到 `<artifactDir>/<appName>`，
 // 整目录拷贝后二进制在 `/app/<appName>`，未配置启动命令时与 Go 共用默认 ENTRYPOINT
-func defaultCppBuildCommand(appName string, artifactDir string) string {
-	return fmt.Sprintf(defaultCppBuildCommandTemplate, appName, appName, artifactDir, appName)
+func defaultCppBuildCommands(_ Input, appName string, artifactDir string) ([]string, error) {
+	return []string{fmt.Sprintf(defaultCppBuildCommandTemplate, appName, appName, artifactDir, appName)}, nil
+}
+
+// RequiresBuilderImage 返回该语言的模板是否需要构建镜像
+//
+// 未注册的语言按需要处理：宁可多要求一个构建镜像，也不默认放行留空。
+// 因此未知语言又没传构建镜像时，配置层会先报缺构建镜像，传了才由 Render 报 unsupported language
+func RequiresBuilderImage(language string) bool {
+	spec, ok := languageSpecs[strings.TrimSpace(language)]
+	if !ok {
+		return true
+	}
+	return spec.requiresBuilderImage
 }
 
 // parseDockerBuildArgNames 解析 BKMS_DOCKER_BUILD_ARG_NAMES 传入的 JSON 字符串数组

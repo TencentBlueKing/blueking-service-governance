@@ -133,8 +133,23 @@ var _ = Describe("Lifecycle", func() {
 			},
 			Entry("trpc + go", appruntime.FrameworkTRPC, appruntime.LanguageGo, appcfg.FileFormatYAML),
 			Entry("trpc + cpp", appruntime.FrameworkTRPC, appruntime.LanguageCpp, appcfg.FileFormatYAML),
+			Entry("trpc + python", appruntime.FrameworkTRPC, appruntime.LanguagePython, appcfg.FileFormatYAML),
 			Entry("taf + cpp", appruntime.FrameworkTAF, appruntime.LanguageCpp, appcfg.FileFormatTAF),
 		)
+
+		It("keeps the trpc_python.yaml framework config file name for trpc + python", func() {
+			app := newApp(appruntime.FrameworkTRPC, appruntime.LanguagePython)
+			Expect(svc.Create(ctx, app, &lifecycle.CreateParams{
+				Command: []string{"python", "main.py"},
+				FrameworkFile: &lifecycle.FrameworkFileParams{
+					Name: "trpc_python.yaml", MountDir: "/usr/local/trpc/bin/",
+				},
+			})).To(Succeed())
+
+			defs := frameworkDefs(app.ID)
+			Expect(defs).To(HaveLen(1))
+			Expect(defs[0].Name).To(Equal("trpc_python.yaml"))
+		})
 
 		DescribeTable("creates a blank app without a framework config file",
 			func(language string) {
@@ -176,7 +191,10 @@ var _ = Describe("Lifecycle", func() {
 				app.Framework = appruntime.FrameworkTAF
 			}),
 			Entry("language only open to blank", func(app *bkmsapp.Application, _ *lifecycle.CreateParams) {
-				app.Language = appruntime.LanguagePython
+				app.Language = appruntime.LanguageNodeJS
+			}),
+			Entry("unknown language", func(app *bkmsapp.Application, _ *lifecycle.CreateParams) {
+				app.Language = "java"
 			}),
 			Entry("missing language", func(app *bkmsapp.Application, _ *lifecycle.CreateParams) {
 				app.Language = ""

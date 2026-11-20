@@ -30,6 +30,8 @@ import (
 const (
 	// defaultArtifactDir go / cpp 模板未配置产物目录时使用的默认值，与历史固定路径 /out 保持一致
 	defaultArtifactDir = "/out"
+	// defaultPythonArtifactDir python 模板未配置产物目录时使用的默认值，同时是源码放置位置与工作目录
+	defaultPythonArtifactDir = "/app"
 	// maxArtifactDirLen 产物目录允许的最大长度，与 bkms-server 保存配置时的上限保持一致
 	maxArtifactDirLen = 128
 )

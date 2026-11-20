@@ -62,19 +62,6 @@ var _ = Describe("Dockerfile render", func() {
 
 	AfterEach(func() {
 		templateFiles = embeddedTemplates
-		languageSpecs = map[string]languageSpec{
-			LanguageGo: {
-				templatePath:        goTemplatePath,
-				defaultArtifactDir:  defaultArtifactDir,
-				defaultBuildCommand: defaultGoBuildCommand,
-				prepareTemplateData: prepareGoTemplateData,
-			},
-			LanguageCpp: {
-				templatePath:        cppTemplatePath,
-				defaultArtifactDir:  defaultArtifactDir,
-				defaultBuildCommand: defaultCppBuildCommand,
-			},
-		}
 	})
 
 	It("renders default Go builder and runner stages", func() {

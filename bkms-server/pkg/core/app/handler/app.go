@@ -40,6 +40,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/serializer"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime/runtimemod/mods"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	appmodeldeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/appmodel"
@@ -208,7 +209,7 @@ func (h *Handler) createBuildConfig(
 	}
 	imageReferenceValidator := workloadruntime.NewImageReferenceValidator(h.registry.DB)
 	if err = build.ValidatePlatformBuildImages(
-		ctx, imageReferenceValidator, h.persistMgr, buildConfig, app.WorkspaceID,
+		ctx, imageReferenceValidator, h.persistMgr, mods.Of(app).PlatformBuild, buildConfig, app.WorkspaceID,
 	); err != nil {
 		// 镜像源鉴权失败或不可达时改镜像引用也没用，按内部错误上报；其余按参数问题
 		errCode := bkerrs.ErrCodeInvalidArgument

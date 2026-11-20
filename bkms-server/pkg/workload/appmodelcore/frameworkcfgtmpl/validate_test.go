@@ -38,6 +38,7 @@ var _ = Describe("Template validation", func() {
 		},
 		Entry("trpc go", "trpc", "go", Group{"trpc", "go"}, appcfg.FileFormatYAML),
 		Entry("trpc cpp", "trpc", "cpp", Group{"trpc", "cpp"}, appcfg.FileFormatYAML),
+		Entry("trpc python", "trpc", "python", Group{"trpc", "python"}, appcfg.FileFormatYAML),
 		Entry("taf cpp", "taf", "cpp", Group{"taf", "cpp"}, appcfg.FileFormatTAF),
 	)
 
@@ -47,7 +48,7 @@ var _ = Describe("Template validation", func() {
 			Expect(errors.Is(err, ErrInvalidTemplate)).To(BeTrue())
 		},
 		Entry("blank framework", "blank", "go"),
-		Entry("unsupported language", "trpc", "python"),
+		Entry("unsupported language", "trpc", "nodejs"),
 		Entry("trpc without language", "trpc", ""),
 		Entry("taf without language", "taf", ""),
 		Entry("unknown framework", "unknown", "go"),
