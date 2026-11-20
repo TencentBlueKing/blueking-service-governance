@@ -499,7 +499,7 @@
   const currentEnvDeployDisabledReason = computed(() => getEnvDeployDisabledReason(trpcDeployStore.curEnvItem));
   const isFederationEnv = useIsFederationEnv(() => trpcDeployStore.curEnvItem);
   // 普通集群的隐藏环境仍可进入仅镜像维护；联邦集群不支持该操作。
-  // 分批发布进行中时禁止并发部署，提示先完成或回滚。
+  // 仍有进行中的分批发布时禁止并发部署，提示先完成或回滚（失败态已中止的灰度不再阻塞）。
   const fullUpdateDisabledReason = computed(() => {
     if (isFederationEnv.value) return currentEnvDeployDisabledReason.value;
     return batchReleaseBusyReason.value;
@@ -699,6 +699,8 @@
   } = useBatchReleaseControl({
     getAppID: () => appDetailStore.appID || '',
     getEnvName: () => trpcDeployStore.curEnvItem?.name || '',
+    // 占用判定以 latest-status 的 inProgressReleaseMode 为准（分批发布失败后不再占用环境）
+    getLatestStatus: () => latestDeployStatus.value,
     // 仅单环境实例列表展示：多环境表格、联邦集群与其它 Tab 都不涉及分批发布控制。
     isEnabled: () =>
       activeTab.value === TAB_NAMES.instance &&

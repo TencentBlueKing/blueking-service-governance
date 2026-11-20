@@ -32,7 +32,7 @@ import {
   buildBatchReleaseDismissKey,
   hasCanaryDeployRecord,
   isBatchReleaseBannerDismissed,
-  isBatchReleaseBusy,
+  isBatchReleaseOccupied,
   resolveBatchReleaseBanner,
   resolveBatchReleaseSuccessMessage,
   shouldFetchBatchReleaseProgress,
@@ -59,6 +59,11 @@ export interface UseBatchReleaseControlOptions {
   getAppID: () => string;
   /** 当前环境名称 */
   getEnvName: () => string;
+  /**
+   * 当前环境的最新部署状态：分批发布是否占用环境只以它下发的 inProgressReleaseMode 为准，
+   * 不能用进度快照的状态推断（失败态仍会保留快照，但那次灰度已经中止，必须允许重新部署）。
+   */
+  getLatestStatus: () => LatestDeployStatus | null | undefined;
   /** 是否允许展示与请求：单环境 + 应用模型 + 停留在实例 Tab */
   isEnabled: () => boolean;
   /** 操作成功后刷新环境部署状态（可选） */
@@ -114,8 +119,12 @@ export function useBatchReleaseControl(options: UseBatchReleaseControlOptions) {
     return rawView.value;
   });
 
-  /** 是否仍在进行中（完成态不再阻塞新的部署入口）。 */
-  const isBusy = computed(() => isBatchReleaseBusy(view.value));
+  /**
+   * 是否仍有进行中的分批发布（占用环境）。
+   * 只看后端 latest-status 的 inProgressReleaseMode：横幅上的失败态快照不再阻塞新的部署入口，
+   * 否则分批发布失败后环境会被一直判为占用，无法重新部署。
+   */
+  const isBusy = computed(() => options.isEnabled() && isBatchReleaseOccupied(options.getLatestStatus()));
 
   /** 顶部「部署」按钮被禁用时的提示原因。 */
   const busyReason = computed(() => (isBusy.value ? t('分批发布进行中，请先完成、跳过或回滚') : ''));
