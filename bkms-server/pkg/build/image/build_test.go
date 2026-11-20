@@ -507,7 +507,10 @@ var _ = Describe("Build Functions", func() {
 				BkCICredentialID: "cred-123",
 			}, nil).Build()
 
-			testApp.TrpcSpec.Language = appruntime.LanguagePython
+			testApp.Type = bkmsapp.AppTypeBKMSApp
+			testApp.Framework = appruntime.FrameworkBlank
+			testApp.Language = appruntime.LanguagePython
+			testApp.TrpcSpec = nil
 			testCfg.CodeRepo.Dockerfile = ""
 			testCfg.CodeRepo.ImageBuildMode = ImageBuildModePlatform
 			testCfg.CodeRepo.PlatformBuildConfig = &PlatformBuildConfig{

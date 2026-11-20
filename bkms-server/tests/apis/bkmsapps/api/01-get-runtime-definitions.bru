@@ -19,14 +19,14 @@ tests {
   test("should return the framework catalog", () => {
     const frameworks = res.body.data.frameworks;
     const byName = Object.fromEntries(frameworks.map((f) => [f.name, f]));
-    expect(byName.trpc.supportedLanguages).to.have.members(["go", "cpp", "python"]);
+    expect(byName.trpc.supportedLanguages).to.have.members(["go", "cpp"]);
     expect(byName.taf.supportedLanguages).to.deep.equal(["cpp"]);
     expect(byName.blank.supportedLanguages).to.have.members(["go", "cpp", "nodejs", "python"]);
   });
 
   test("should return the capability matrix for every valid stack", () => {
     const matrix = res.body.data.matrix;
-    expect(matrix).to.have.lengthOf(8);
+    expect(matrix).to.have.lengthOf(7);
     // blank 只有基座的配置文件合并，以及只看语言的平台构建（go / python）
     const platformBuildLanguages = ["go", "python"];
     ["go", "cpp", "nodejs", "python"].forEach((language) => {
@@ -37,10 +37,9 @@ tests {
         expect(mod.supported, `blank+${language} ${id}`).to.equal(expected);
       });
     });
-    ["go", "python"].forEach((language) => {
-      const trpc = matrix.find((v) => v.framework === "trpc" && v.language === language);
-      expect(trpc.mods.platformBuild.supported, `trpc+${language}`).to.equal(true);
-    });
+    const trpcGo = matrix.find((v) => v.framework === "trpc" && v.language === "go");
+    expect(trpcGo.mods.platformBuild.supported, "trpc+go").to.equal(true);
+    expect(matrix.find((v) => v.framework === "trpc" && v.language === "python")).to.equal(undefined);
   });
 }
 
