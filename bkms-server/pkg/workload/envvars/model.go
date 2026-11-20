@@ -51,7 +51,7 @@ type ScopedEnvVar struct {
 	// Key 环境变量名
 	Key string `bson:"key"`
 	// Value 环境变量值
-	Value string `bson:"value"`
+	Value string `bson:"value" audit:"mask,if=IsSensitive"`
 	// Description 描述
 	Description string `bson:"description"`
 	// IsBuiltin 是否内置，内置变量仅由系统写入，不允许用户修改

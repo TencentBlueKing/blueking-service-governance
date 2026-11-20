@@ -308,7 +308,7 @@ type Variable struct {
 	// Key 变量名
 	Key string `bson:"key"`
 	// Value 变量值
-	Value string `bson:"value"`
+	Value string `bson:"value" audit:"mask,if=IsSensitive"`
 	// Description 变量描述
 	Description string `bson:"description,omitempty"`
 	// IsSensitive 是否敏感

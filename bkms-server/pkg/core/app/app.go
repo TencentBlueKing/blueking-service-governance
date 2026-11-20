@@ -160,7 +160,7 @@ type HelmRepoConfig struct {
 	// Username is the username to use when authenticating to the repository
 	Username string `json:"username" bson:"username,omitempty"`
 	// Password is the password to use when authenticating to the repository
-	Password string `json:"password" bson:"password,omitempty"`
+	Password string `json:"password" bson:"password,omitempty" audit:"mask"`
 }
 
 // BCSRepoConfig is config for using bcs-repo as helm repo

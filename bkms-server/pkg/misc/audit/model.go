@@ -455,36 +455,36 @@ func WithResult(result Result) Option {
 	}
 }
 
-// WithDataBefore 添加操作前数据
+// WithDataBefore 添加操作前数据，按字段的 audit tag 先脱敏（见 sanitize.go）
 func WithDataBefore(data any) Option {
 	return func(r *OperationRecord) {
-		bytes, err := json.Marshal(data)
+		bytes, err := json.Marshal(sanitize(data))
 		if err != nil {
-			log.ErrorNoContextf("marshal dataBefore %+v failed: %v", data, err)
+			log.ErrorNoContextf("marshal dataBefore %T failed: %v", data, err)
 			return
 		}
 		r.Data.Before = bytes
 	}
 }
 
-// WithDataAfter 添加操作后数据
+// WithDataAfter 添加操作后数据，按字段的 audit tag 先脱敏（见 sanitize.go）
 func WithDataAfter(data any) Option {
 	return func(r *OperationRecord) {
-		bytes, err := json.Marshal(data)
+		bytes, err := json.Marshal(sanitize(data))
 		if err != nil {
-			log.ErrorNoContextf("marshal dataAfter %+v failed: %v", data, err)
+			log.ErrorNoContextf("marshal dataAfter %T failed: %v", data, err)
 			return
 		}
 		r.Data.After = bytes
 	}
 }
 
-// WithExtras 添加额外信息
+// WithExtras 添加额外信息，按字段的 audit tag 先脱敏（见 sanitize.go）
 func WithExtras(extras any) Option {
 	return func(r *OperationRecord) {
-		bytes, err := json.Marshal(extras)
+		bytes, err := json.Marshal(sanitize(extras))
 		if err != nil {
-			log.ErrorNoContextf("marshal extras %+v failed: %v", extras, err)
+			log.ErrorNoContextf("marshal extras %T failed: %v", extras, err)
 			return
 		}
 		r.Data.Extras = bytes
