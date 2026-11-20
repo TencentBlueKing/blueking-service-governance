@@ -34,6 +34,8 @@ type FrontendFeaturesOutput struct {
 	EnableWeTerm bool `json:"enableWeTerm"`
 	// 是否启用 BSCP（服务配置中心）对接，为 false 时前端隐藏 BSCP 配置相关入口
 	EnableBSCP bool `json:"enableBSCP"`
+	// 是否启用 KubeInsight（集群诊断）对接，为 false 时前端隐藏集群诊断相关入口
+	EnableKubeInsight bool `json:"enableKubeInsight"`
 }
 
 // NewFrontendFeaturesOutput 根据部署配置生成前端功能开关。
@@ -44,6 +46,7 @@ func NewFrontendFeaturesOutput(cfg *config.Config) *FrontendFeaturesOutput {
 		EnableIndependentBkRepo:     cfg.FeatureIntegrations.EnableIndependentBkRepo,
 		EnableWeTerm:                cfg.BCS.WeTermEnvID != "",
 		EnableBSCP:                  !cfg.FeatureIntegrations.DisableBSCP,
+		EnableKubeInsight:           !cfg.FeatureIntegrations.DisableKubeInsight,
 	}
 }
 

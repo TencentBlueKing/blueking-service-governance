@@ -50,6 +50,11 @@ type ApiClient struct {
 	define.BkApiClient
 }
 
+// IsDisabled 返回当前环境是否关闭了 KubeInsight（集群诊断）对接
+func IsDisabled() bool {
+	return config.G != nil && config.G.FeatureIntegrations.DisableKubeInsight
+}
+
 // New 创建 KubeInsight API 客户端实例
 //
 // 该函数用于创建与 KubeInsight API 网关交互的客户端，配置了必要的认证信息：

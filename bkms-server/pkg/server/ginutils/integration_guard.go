@@ -23,6 +23,7 @@ import (
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bscp"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/kubeinsight"
 )
 
 // RequireBSCP 当前环境关闭了 BSCP 对接时，拦截 BSCP 相关接口并返回明确的未启用错误
@@ -30,6 +31,17 @@ func RequireBSCP() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if bscp.IsDisabled() {
 			bkerrs.AbortWithErr(c, bscp.ErrDisabled)
+			return
+		}
+		c.Next()
+	}
+}
+
+// RequireKubeInsight 当前环境关闭了 KubeInsight（集群诊断）对接时，拦截集群诊断相关接口并返回明确的未启用错误
+func RequireKubeInsight() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if kubeinsight.IsDisabled() {
+			bkerrs.AbortWithErr(c, bkerrs.NewKubeInsightDisabled())
 			return
 		}
 		c.Next()
