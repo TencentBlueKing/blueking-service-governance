@@ -38,11 +38,12 @@ type Props struct {
 // Public 无对外内容。
 func (p Props) Public() any { return nil }
 
-// Spec 平台构建：由平台生成 Dockerfile 并构建镜像。仅 tRPC、blank 框架下的 go / python 支持。
+// Spec 平台构建：由平台生成 Dockerfile 并构建镜像。
+// tRPC、blank 的 go，以及 blank 的 python 支持。tRPC 不开放 python。
 var Spec = runtimemod.Spec[Props]{
 	ID: runtimemod.ModPlatformBuild,
 	Resolve: func(framework, language string) runtimemod.Mod[Props] {
-		// 生成的 Dockerfile 只按语言区分，与框架无关；taf 暂不开放
+		// Dockerfile 只按语言区分。taf 不开放
 		if framework != appruntime.FrameworkTRPC && framework != appruntime.FrameworkBlank {
 			return runtimemod.Unsupported[Props]()
 		}
@@ -50,6 +51,11 @@ var Spec = runtimemod.Spec[Props]{
 		case appruntime.LanguageGo:
 			return runtimemod.Supported(Props{DockerfileLanguage: appruntime.LanguageGo, RequiresBuilderImage: true})
 		case appruntime.LanguagePython:
+			// python 只作为通用应用开放，tRPC 不提供该语言的平台构建
+			if framework != appruntime.FrameworkBlank {
+				return runtimemod.Unsupported[Props]()
+			}
+
 			return runtimemod.Supported(Props{
 				DockerfileLanguage:   appruntime.LanguagePython,
 				RequiresBuilderImage: false,

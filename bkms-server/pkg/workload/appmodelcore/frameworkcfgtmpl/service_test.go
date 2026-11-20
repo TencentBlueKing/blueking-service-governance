@@ -33,9 +33,8 @@ import (
 )
 
 const (
-	trpcGoBuiltinID     = "builtin-trpc-go"
-	trpcCppBuiltinID    = "builtin-trpc-cpp"
-	trpcPythonBuiltinID = "builtin-trpc-python"
+	trpcGoBuiltinID  = "builtin-trpc-go"
+	trpcCppBuiltinID = "builtin-trpc-cpp"
 )
 
 var _ = Describe("Framework config template service", func() {
@@ -87,7 +86,7 @@ var _ = Describe("Framework config template service", func() {
 			views, err := frameworkcfgtmpl.List(ctx, db, workspaceID, frameworkcfgtmpl.Group{})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(lo.Map(views, func(v *frameworkcfgtmpl.View, _ int) string { return v.ID })).
-				To(Equal([]string{trpcCppBuiltinID, trpcGoBuiltinID, trpcPythonBuiltinID}))
+				To(Equal([]string{trpcCppBuiltinID, trpcGoBuiltinID}))
 			for _, v := range views {
 				Expect(v.Builtin).To(BeTrue())
 				Expect(v.IsDefault).To(BeTrue())
@@ -108,13 +107,13 @@ var _ = Describe("Framework config template service", func() {
 			views, err := frameworkcfgtmpl.List(ctx, db, workspaceID, frameworkcfgtmpl.Group{})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(lo.Map(views, func(v *frameworkcfgtmpl.View, _ int) string { return v.ID })).To(Equal([]string{
-				tafTpl.ID, trpcCppBuiltinID, cppTpl.ID, trpcGoBuiltinID, goTpl.ID, trpcPythonBuiltinID,
+				tafTpl.ID, trpcCppBuiltinID, cppTpl.ID, trpcGoBuiltinID, goTpl.ID,
 			}))
 			Expect(views[0].Content).To(BeEmpty())
 
 			trpcOnly, err := frameworkcfgtmpl.List(ctx, db, workspaceID, frameworkcfgtmpl.Group{Framework: "trpc"})
 			Expect(err).NotTo(HaveOccurred())
-			Expect(trpcOnly).To(HaveLen(5))
+			Expect(trpcOnly).To(HaveLen(4))
 
 			cppOnly, err := frameworkcfgtmpl.List(ctx, db, workspaceID, frameworkcfgtmpl.Group{Language: "cpp"})
 			Expect(err).NotTo(HaveOccurred())

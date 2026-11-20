@@ -40,7 +40,7 @@ type platformBuildImageValidateCall struct {
 
 var _ = Describe("ValidatePlatformBuildImages", func() {
 	goPlatformBuild := platformbuild.Spec.Resolve(appruntime.FrameworkTRPC, appruntime.LanguageGo)
-	pythonPlatformBuild := platformbuild.Spec.Resolve(appruntime.FrameworkTRPC, appruntime.LanguagePython)
+	pythonPlatformBuild := platformbuild.Spec.Resolve(appruntime.FrameworkBlank, appruntime.LanguagePython)
 
 	platformConfig := func(mut func(*imagebuild.Config)) *imagebuild.Config {
 		cfg := &imagebuild.Config{

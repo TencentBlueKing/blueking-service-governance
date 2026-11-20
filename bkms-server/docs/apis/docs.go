@@ -19994,7 +19994,7 @@ const docTemplate = `{
                     },
                     {
                         "type": "string",
-                        "description": "语言：go、cpp、python",
+                        "description": "语言：go、cpp",
                         "name": "language",
                         "in": "query"
                     }
@@ -27417,7 +27417,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "language": {
-                    "description": "语言：go、cpp、nodejs、python，须为框架支持的语言（nodejs 仅 blank 支持，python 支持 blank 与 trpc）",
+                    "description": "语言：go、cpp、nodejs、python，须为框架支持的语言（nodejs、python 仅 blank 支持）",
                     "type": "string"
                 },
                 "name": {
@@ -28037,7 +28037,7 @@ const docTemplate = `{
                     "type": "boolean"
                 },
                 "language": {
-                    "description": "语言：go、cpp、python",
+                    "description": "语言：go、cpp",
                     "type": "string"
                 },
                 "name": {

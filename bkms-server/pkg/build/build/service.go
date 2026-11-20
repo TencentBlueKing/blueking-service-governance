@@ -100,7 +100,7 @@ func (s *Service) validateBeforeBuild(ctx context.Context, app *bkmsapp.Applicat
 	if app == nil {
 		return errors.New("application must not be nil for platform generated Dockerfile build")
 	}
-	// 平台生成 Dockerfile 的支持范围由能力声明决定（目前仅 trpc、blank 框架下的 go / python）
+	// 平台生成 Dockerfile 的支持范围由能力声明决定（trpc、blank 的 go，以及 blank 的 python）
 	platformBuild := mods.Of(app).PlatformBuild
 	if _, err := platformbuild.DockerfileLanguage(platformBuild); err != nil {
 		return errors.Wrap(err, "platform generated Dockerfile build")

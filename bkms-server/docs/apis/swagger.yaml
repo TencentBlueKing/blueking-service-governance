@@ -3882,8 +3882,7 @@ definitions:
           长度范围 1~63 个字符，以小写字母开头，可包含小写字母、数字、中划线，不能以中划线结尾
         type: string
       language:
-        description: 语言：go、cpp、nodejs、python，须为框架支持的语言（nodejs 仅 blank 支持，python 支持
-          blank 与 trpc）
+        description: 语言：go、cpp、nodejs、python，须为框架支持的语言（nodejs、python 仅 blank 支持）
         type: string
       name:
         description: 应用名称. 长度范围 1~63 个字符，以小写字母开头，可包含小写字母、数字、中划线，不能以中划线结尾
@@ -4330,7 +4329,7 @@ definitions:
         description: 是否设为创建应用时默认使用的模板
         type: boolean
       language:
-        description: 语言：go、cpp、python
+        description: 语言：go、cpp
         type: string
       name:
         description: 模板名称，同一框架、同一语言下不能重复，不能为「平台默认」
@@ -23620,7 +23619,7 @@ paths:
         in: query
         name: framework
         type: string
-      - description: 语言：go、cpp、python
+      - description: 语言：go、cpp
         in: query
         name: language
         type: string

@@ -50,9 +50,6 @@ var _ = Describe("Catalog", func() {
 		Entry("trpc cpp", appruntime.Stack{
 			Type: appruntime.AppTypeBKMSApp, Framework: appruntime.FrameworkTRPC, Language: appruntime.LanguageCpp,
 		}),
-		Entry("trpc python", appruntime.Stack{
-			Type: appruntime.AppTypeBKMSApp, Framework: appruntime.FrameworkTRPC, Language: appruntime.LanguagePython,
-		}),
 		Entry("taf cpp", appruntime.Stack{
 			Type: appruntime.AppTypeBKMSApp, Framework: appruntime.FrameworkTAF, Language: appruntime.LanguageCpp,
 		}),
@@ -84,9 +81,12 @@ var _ = Describe("Catalog", func() {
 		Entry("taf go", appruntime.Stack{
 			Type: appruntime.AppTypeBKMSApp, Framework: appruntime.FrameworkTAF, Language: appruntime.LanguageGo,
 		}, "does not support language"),
-		// nodejs 目前只对 blank 开放；python 对 blank、tRPC 开放，taf 仍不支持
+		// nodejs、python 目前只对 blank 开放
 		Entry("trpc nodejs", appruntime.Stack{
 			Type: appruntime.AppTypeBKMSApp, Framework: appruntime.FrameworkTRPC, Language: appruntime.LanguageNodeJS,
+		}, "does not support language"),
+		Entry("trpc python", appruntime.Stack{
+			Type: appruntime.AppTypeBKMSApp, Framework: appruntime.FrameworkTRPC, Language: appruntime.LanguagePython,
 		}, "does not support language"),
 		Entry("taf python", appruntime.Stack{
 			Type: appruntime.AppTypeBKMSApp, Framework: appruntime.FrameworkTAF, Language: appruntime.LanguagePython,

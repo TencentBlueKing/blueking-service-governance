@@ -32,7 +32,6 @@ var _ = Describe("Builtin templates", func() {
 		Expect(groups).To(ConsistOf(
 			Group{Framework: appruntime.FrameworkTRPC, Language: appruntime.LanguageGo},
 			Group{Framework: appruntime.FrameworkTRPC, Language: appruntime.LanguageCpp},
-			Group{Framework: appruntime.FrameworkTRPC, Language: appruntime.LanguagePython},
 			Group{Framework: appruntime.FrameworkTAF, Language: appruntime.LanguageCpp},
 		))
 	})
@@ -44,7 +43,6 @@ var _ = Describe("Builtin templates", func() {
 		Expect(builtinGroups).To(ConsistOf(
 			Group{Framework: appruntime.FrameworkTRPC, Language: appruntime.LanguageGo},
 			Group{Framework: appruntime.FrameworkTRPC, Language: appruntime.LanguageCpp},
-			Group{Framework: appruntime.FrameworkTRPC, Language: appruntime.LanguagePython},
 		))
 	})
 
@@ -57,18 +55,17 @@ var _ = Describe("Builtin templates", func() {
 		}
 	})
 
-	It("shares the tRPC Go content with tRPC C++ and Python under their own file names", func() {
+	It("shares the tRPC Go content with tRPC C++ under its own file name", func() {
 		goView, ok := lookupBuiltin("builtin-trpc-go")
 		Expect(ok).To(BeTrue())
 		cppView, ok := lookupBuiltin("builtin-trpc-cpp")
 		Expect(ok).To(BeTrue())
-		pythonView, ok := lookupBuiltin("builtin-trpc-python")
-		Expect(ok).To(BeTrue())
 		Expect(cppView.Content).To(Equal(goView.Content))
-		Expect(pythonView.Content).To(Equal(goView.Content))
 		Expect(goView.FileName).To(Equal("trpc_go.yaml"))
 		Expect(cppView.FileName).To(Equal("trpc_cpp.yaml"))
-		Expect(pythonView.FileName).To(Equal("trpc_python.yaml"))
+
+		_, ok = lookupBuiltin("builtin-trpc-python")
+		Expect(ok).To(BeFalse())
 	})
 
 	It("looks up builtin templates by ID as copies", func() {

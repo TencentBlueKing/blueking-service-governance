@@ -106,7 +106,10 @@ var _ = Describe("Service build validation", func() {
 	})
 
 	It("should accept python platform build without builder image", func() {
-		app.TrpcSpec.Language = appruntime.LanguagePython
+		app.Type = bkmsapp.AppTypeBKMSApp
+		app.Framework = appruntime.FrameworkBlank
+		app.Language = appruntime.LanguagePython
+		app.TrpcSpec = nil
 		cfg.CodeRepo.PlatformBuildConfig.BuilderImage = ""
 		cfg.CodeRepo.PlatformBuildConfig.RunnerImage = "python:3.12"
 		// 带上自定义镜像判定器，确认空构建镜像不会在凭证判定时被当成非法引用解析

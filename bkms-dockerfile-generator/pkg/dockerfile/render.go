@@ -39,7 +39,7 @@ const (
 	LanguageGo = "go"
 	// LanguageCpp 指明 tRPC 应用使用 C++ 语言
 	LanguageCpp = "cpp"
-	// LanguagePython 指明 tRPC 应用使用 Python 语言
+	// LanguagePython 指明应用使用 Python 语言
 	LanguagePython = "python"
 
 	goTemplatePath     = "templates/go.Dockerfile.tmpl"
