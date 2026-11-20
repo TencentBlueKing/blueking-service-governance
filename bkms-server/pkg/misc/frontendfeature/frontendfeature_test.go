@@ -60,8 +60,11 @@ var _ = Describe("GetFrontendFeatures", func() {
 		Expect(features.PolarisWorkspaceAccessPoint).To(BeFalse())
 	})
 
-	It("should only enable BSCP with an empty config", func() {
-		Expect(getFeatures(config.Config{})).To(Equal(&slz.FrontendFeaturesOutput{EnableBSCP: true}))
+	It("should only enable BSCP and KubeInsight with an empty config", func() {
+		Expect(getFeatures(config.Config{})).To(Equal(&slz.FrontendFeaturesOutput{
+			EnableBSCP:        true,
+			EnableKubeInsight: true,
+		}))
 	})
 
 	It("should map the deployment config to the deployment features", func() {
@@ -70,6 +73,7 @@ var _ = Describe("GetFrontendFeatures", func() {
 			FeatureIntegrations: config.FeatureIntegrationsConfig{
 				EnableIndependentBkRepo: true,
 				DisableBSCP:             true,
+				DisableKubeInsight:      true,
 			},
 			BCS: config.BCSConfig{WeTermEnvID: "env-1"},
 		})

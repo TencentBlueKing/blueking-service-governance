@@ -5370,6 +5370,9 @@ definitions:
       enableIndependentBkRepo:
         description: 制品库是否为独立部署（不接入权限中心，改用制品库账号认证）
         type: boolean
+      enableKubeInsight:
+        description: 是否启用 KubeInsight（集群诊断）对接，为 false 时前端隐藏集群诊断相关入口
+        type: boolean
       enableMultiTenantMode:
         description: 是否为多租户模式。为 true 时前端需要展示租户信息、按用户所属租户选择和展示用户
         type: boolean
