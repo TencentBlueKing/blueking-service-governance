@@ -81,13 +81,14 @@ func (s *StubApiClient) ListProjects(ctx context.Context) ([]Project, error) {
 func (s *StubApiClient) GetProject(ctx context.Context, projectCode string) (*Project, error) {
 	log.Infof(ctx, "Stub: GetProject request: %s", projectCode)
 	_, disabled := stubDisabledProjects.Load(projectCode)
+	enabled := !disabled
 	return &Project{
 		ID:            "stub-project-id-" + projectCode,
 		Code:          projectCode,
 		Name:          "Stub Project",
 		Creator:       s.user.ID,
 		HasManagePerm: true,
-		Enabled:       !disabled,
+		Enabled:       &enabled,
 	}, nil
 }
 

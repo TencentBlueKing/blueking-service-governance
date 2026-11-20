@@ -136,13 +136,28 @@ var _ = Describe("Linked projects", func() {
 		It("reports missing manage permission", func() {
 			mockey.PatchConvey("no manage permission", GinkgoT(), func() {
 				mockey.Mock((*bkci.StubApiClient).GetProject).Return(&bkci.Project{
-					Code: code, Name: "蓝盾项目", Enabled: true,
+					Code: code, Name: "蓝盾项目", Enabled: lo.ToPtr(true),
 				}, nil).Build()
 
 				projects := ListLinkedProjects(ctx, ws)
 
 				Expect(projects[0].BlockedReason).To(Equal(LinkedProjectNoPermission))
 				Expect(projects[0].Operable()).To(BeFalse())
+			})
+		})
+
+		It("keeps bkci state unknown when bkci does not return the enabled state", func() {
+			mockey.PatchConvey("no enabled field", GinkgoT(), func() {
+				mockey.Mock((*bkci.StubApiClient).GetProject).Return(&bkci.Project{
+					Code: code, Name: "蓝盾项目", HasManagePerm: true,
+				}, nil).Build()
+
+				projects := ListLinkedProjects(ctx, ws)
+
+				Expect(projects[0].State).To(Equal(LinkedProjectUnknown))
+				Expect(projects[0].Operable()).To(BeTrue())
+				targets := SelectLinkedProjectsToEnable(projects)
+				Expect(targets).To(ContainElement(HaveField("System", LinkedSystemBKCI)))
 			})
 		})
 

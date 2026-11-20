@@ -100,6 +100,8 @@ func SetLinkedProjectsEnabled(ctx context.Context, projects []LinkedProject, ena
 // linkedProjectsOf 根据空间记录的平台项目生成关联项目，名称暂为项目 ID，平台侧状态待查询
 func linkedProjectsOf(ws *Workspace) []LinkedProject {
 	sys := ws.BkSystems
+	// TODO: 独立 BCS 模式下绑定已有 BCS 项目时 IsBoundExistedBKCIProject 为 false，BCS 项目会被标记为新建，
+	// 需持久化 BCS 项目的来源后按平台分别判断
 	origin := lo.Ternary(sys.IsBoundExistedBKCIProject, LinkedProjectBound, LinkedProjectCreated)
 	newProject := func(system LinkedSystem, projectID, code string) LinkedProject {
 		return LinkedProject{
@@ -148,7 +150,9 @@ func fillLinkedProject(ctx context.Context, p *LinkedProject) error {
 			return errors.Wrap(err, "get bkci project")
 		}
 		p.ProjectName = cmp.Or(proj.Name, p.ProjectName)
-		p.State = lo.Ternary(proj.Enabled, LinkedProjectReady, LinkedProjectDisabled)
+		if proj.Enabled != nil {
+			p.State = lo.Ternary(*proj.Enabled, LinkedProjectReady, LinkedProjectDisabled)
+		}
 		if !proj.HasManagePerm {
 			p.BlockedReason = LinkedProjectNoPermission
 		}

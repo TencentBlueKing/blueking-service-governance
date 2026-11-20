@@ -46,8 +46,8 @@ type Project struct {
 	Name          string
 	Creator       string
 	HasManagePerm bool
-	// Enabled 项目是否启用，false 表示项目已停用
-	Enabled bool
+	// Enabled 项目是否启用，false 表示项目已停用，nil 表示蓝盾未返回启停状态
+	Enabled *bool
 }
 
 // GitProject git 项目

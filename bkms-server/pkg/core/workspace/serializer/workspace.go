@@ -457,8 +457,8 @@ type SetWorkspaceStateOutput struct {
 
 // SetWorkspaceStateOutputObj is the result of setting workspace state.
 type SetWorkspaceStateOutputObj struct {
-	// 操作后的工作空间状态。启用时任一关联项目启用失败，空间保持 Disabled
+	// 操作后的工作空间状态
 	State string `json:"state"`
-	// 本次一并启停的关联项目结果
+	// 本次一并启停的关联项目结果。启用时任一项目启用失败会返回错误，不会返回该结果
 	LinkedProjects []LinkedProjectResultOutputObj `json:"linkedProjects"`
 }

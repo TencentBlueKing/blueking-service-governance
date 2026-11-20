@@ -9734,12 +9734,12 @@ definitions:
   serializer.SetWorkspaceStateOutputObj:
     properties:
       linkedProjects:
-        description: 本次一并启停的关联项目结果
+        description: 本次一并启停的关联项目结果。启用时任一项目启用失败会返回错误，不会返回该结果
         items:
           $ref: '#/definitions/serializer.LinkedProjectResultOutputObj'
         type: array
       state:
-        description: 操作后的工作空间状态。启用时任一关联项目启用失败，空间保持 Disabled
+        description: 操作后的工作空间状态
         type: string
     type: object
   serializer.SkippedAppInstanceObj:

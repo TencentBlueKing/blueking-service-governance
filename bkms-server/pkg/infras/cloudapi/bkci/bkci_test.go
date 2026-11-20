@@ -360,7 +360,7 @@ var _ = Describe("ApiClient", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(proj.ID).To(Equal("pid"))
 		Expect(proj.Code).To(Equal("system.demo"))
-		Expect(proj.Enabled).To(BeFalse())
+		Expect(proj.Enabled).To(BeNil())
 	})
 
 	It("parses project enabled state", func() {
@@ -370,7 +370,7 @@ var _ = Describe("ApiClient", func() {
 
 		proj, err := client.GetProject(context.Background(), "demo")
 		Expect(err).NotTo(HaveOccurred())
-		Expect(proj.Enabled).To(BeTrue())
+		Expect(proj.Enabled).To(HaveValue(BeTrue()))
 	})
 
 	It("sets project enabled state with PUT request", func() {

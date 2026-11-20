@@ -167,6 +167,10 @@ func (c *ApiClient) GetProject(ctx context.Context, projectCode string) (*Projec
 		return nil, err
 	}
 
+	var enabled *bool
+	if v, ok := mapx.Get(result, "data.enabled", nil).(bool); ok {
+		enabled = &v
+	}
 	return &Project{
 		ID: mapx.GetStr(result, "data.projectId"),
 		// 以蓝盾返回的项目 Code 为准，多租户蓝盾的 Code 带租户前缀
@@ -174,7 +178,7 @@ func (c *ApiClient) GetProject(ctx context.Context, projectCode string) (*Projec
 		Name:          mapx.GetStr(result, "data.projectName"),
 		Creator:       mapx.GetStr(result, "data.creator"),
 		HasManagePerm: mapx.GetBool(result, "data.managePermission"),
-		Enabled:       mapx.GetBool(result, "data.enabled"),
+		Enabled:       enabled,
 	}, nil
 }
 
