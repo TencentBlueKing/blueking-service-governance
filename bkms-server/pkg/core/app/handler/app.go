@@ -224,7 +224,7 @@ func (h *Handler) createBuildConfig(
 		app.WorkspaceID,
 		collectBKCIRepositoriesForCreateApp(app.Type, app.HelmSpec, buildConfig),
 	); err != nil {
-		return nil, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "ensure bkci repositories")
+		return nil, bkci.WrapRepositoryErr(err, "ensure bkci repositories")
 	}
 	if err = h.buildConfigs().Create(ctx, buildConfig); err != nil {
 		return nil, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "create build config")

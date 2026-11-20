@@ -360,4 +360,27 @@ var _ = Describe("ApiClient", func() {
 		Expect(proj.ID).To(Equal("pid"))
 		Expect(proj.Code).To(Equal("system.demo"))
 	})
+
+	It("returns PermissionDenied when bkci responds with 403", func() {
+		client := newClientWithServer(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusForbidden)
+			_, _ = w.Write([]byte(`{"message":"403 Forbidden"}`))
+		})
+
+		_, err := client.CreateRepository(context.Background(), "demo", "https://git.example.com/a/b.git", "a/b")
+		Expect(err).To(MatchError(PermissionDenied))
+		Expect(err.Error()).To(ContainSubstring("status code: 403, message: 403 Forbidden"))
+	})
+
+	It("returns ObjectNotFound when bkci responds with 404", func() {
+		client := newClientWithServer(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte(`{"message":"not found"}`))
+		})
+
+		_, err := client.ListRepositoryBranches(context.Background(), "demo", "a/b", "NAME", "", 1, 100)
+		Expect(err).To(MatchError(ObjectNotFound))
+	})
 })

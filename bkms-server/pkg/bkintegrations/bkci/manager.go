@@ -472,8 +472,35 @@ func (m *RepositoryManager) Initialize(ctx context.Context, url, alias string) (
 	return repository, nil
 }
 
-// createRepository 在数据库中添加代码库
+// Rebind 重新关联代码库，用于本地记录存在但蓝盾侧已找不到该代码库的场景（如在蓝盾上被删除）。
+// 先在蓝盾登记成功再覆盖本地记录，登记失败时保留原记录
+func (m *RepositoryManager) Rebind(ctx context.Context, url, alias string) (*Repository, error) {
+	repository, err := m.registerRepository(ctx, url, alias)
+	if err != nil {
+		return nil, err
+	}
+	if _, err = store.Of(m.db, RepositoryMeta).Upsert(
+		ctx, repository, ByWorkspaceAndAlias(m.workspaceID, alias),
+	); err != nil {
+		return nil, errors.Wrapf(err, "upsert workspace %s repository %s", m.workspaceID, alias)
+	}
+	return repository, nil
+}
+
+// createRepository 在蓝盾登记代码库并入库
 func (m *RepositoryManager) createRepository(ctx context.Context, url, alias string) (*Repository, error) {
+	repository, err := m.registerRepository(ctx, url, alias)
+	if err != nil {
+		return nil, err
+	}
+	if err = store.Of(m.db, RepositoryMeta).Create(ctx, repository); err != nil {
+		return nil, errors.Wrap(err, "insert bkci repository to db")
+	}
+	return repository, nil
+}
+
+// registerRepository 在蓝盾登记代码库（已存在则复用），返回待入库的代码库记录
+func (m *RepositoryManager) registerRepository(ctx context.Context, url, alias string) (*Repository, error) {
 	// 创建 bkci API 客户端
 	client, err := bkci.New(auth.MustGetUser(ctx))
 	if err != nil {
@@ -506,8 +533,7 @@ func (m *RepositoryManager) createRepository(ctx context.Context, url, alias str
 		return nil, errors.Wrapf(err, "get bkci repository %s in bkci project %s", repoID, project.Code)
 	}
 
-	// 构建 Repository 对象
-	repository := &Repository{
+	return &Repository{
 		ID:          repoID,
 		Alias:       alias,
 		URL:         repo.Url,
@@ -515,13 +541,7 @@ func (m *RepositoryManager) createRepository(ctx context.Context, url, alias str
 		WorkspaceID: m.workspaceID,
 		ProjectCode: project.Code,
 		Creator:     auth.MustGetUser(ctx).ID,
-	}
-
-	// 入库
-	if err = store.Of(m.db, RepositoryMeta).Create(ctx, repository); err != nil {
-		return nil, errors.Wrap(err, "insert bkci repository to db")
-	}
-	return repository, nil
+	}, nil
 }
 
 // getExistingRepository 从蓝盾获取已存在的代码库信息（当创建时发现已存在）
