@@ -64,14 +64,26 @@ type Manager interface {
 
 	// HasCreateEnvPerm 检查用户是否有创建环境的权限
 	HasCreateEnvPerm(ctx context.Context, workspaceID string) error
-	// HasEditEnvPerm 检查用户是否有编辑环境的权限
-	HasEditEnvPerm(ctx context.Context, workspaceID, envName string) error
+	// HasEditEnvPerm 检查用户是否有编辑环境的权限，envID 为环境 ObjectID，envType 为环境当前类型
+	HasEditEnvPerm(ctx context.Context, workspaceID, envType, envID string) error
 	// HasViewEnvPerm 检查用户是否有查看环境的权限
-	HasViewEnvPerm(ctx context.Context, workspaceID, envName string) error
+	HasViewEnvPerm(ctx context.Context, workspaceID, envType, envID string) error
 	// HasDeleteEnvPerm 检查用户是否有删除环境的权限
-	HasDeleteEnvPerm(ctx context.Context, workspaceID, envName string) error
-	// HasDeployEnvPerm 检查用户是否有部署环境的权限
-	HasDeployEnvPerm(ctx context.Context, workspaceID, envName string) error
+	HasDeleteEnvPerm(ctx context.Context, workspaceID, envType, envID string) error
+
+	// HasViewAppInEnvPerm 检查用户是否有查看应用在环境中数据的权限
+	HasViewAppInEnvPerm(ctx context.Context, workspaceID, appID, envType, envID string) error
+	// HasEditAppInEnvPerm 检查用户是否有编辑应用在环境中配置的权限
+	HasEditAppInEnvPerm(ctx context.Context, workspaceID, appID, envType, envID string) error
+	// HasDeployAppToEnvPerm 检查用户是否有部署应用到环境的权限
+	HasDeployAppToEnvPerm(ctx context.Context, workspaceID, appID, envType, envID string) error
+
+	// FilterViewableEnvs 过滤出用户有权限查看的环境，返回环境 ID 集合
+	FilterViewableEnvs(ctx context.Context, workspaceID string, envs []bkiam.EnvRef) (*set.StringSet, error)
+	// FilterViewableAppEnvs 一次批量过滤出用户能查看应用在环境中数据的 (app, env) 组合，返回 appID → 环境 ID 集合
+	FilterViewableAppEnvs(
+		ctx context.Context, workspaceID string, pairs []bkiam.AppEnvRef,
+	) (map[string]*set.StringSet, error)
 
 	// FilterViewableWorkspaces 过滤出用户有权限查看的工作空间列表
 	FilterViewableWorkspaces(ctx context.Context, workspaceIDs []string) (*set.StringSet, error)

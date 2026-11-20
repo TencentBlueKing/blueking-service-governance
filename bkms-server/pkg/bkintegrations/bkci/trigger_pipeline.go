@@ -35,6 +35,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/platformaccount"
 	cloudbkci "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bkci"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
@@ -106,7 +107,7 @@ func (m *TriggerPipelineManager) Ensure(ctx context.Context, appID string) (*Pip
 		return nil, errors.Wrapf(err, "get project by workspace %s", m.workspaceID)
 	}
 
-	client, err := cloudbkci.New(auth.MustGetUser(ctx))
+	client, err := cloudbkci.New(platformaccount.MustGetCaller(ctx))
 	if err != nil {
 		return nil, errors.Wrap(err, "create bkci client")
 	}
@@ -173,7 +174,7 @@ func (m *TriggerPipelineManager) Cleanup(ctx context.Context, appID string) erro
 		return errors.Wrapf(err, "get workspace %s pipeline %s", m.workspaceID, pipelineType)
 	}
 
-	client, err := cloudbkci.New(auth.MustGetUser(ctx))
+	client, err := cloudbkci.New(platformaccount.MustGetCaller(ctx))
 	if err != nil {
 		return errors.Wrap(err, "create bkci client")
 	}

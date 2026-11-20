@@ -102,6 +102,27 @@ var _ = Describe("OperationRecordStore", func() {
 			Expect(usernames(page)).To(Equal([]string{"bob", "alice"}))
 		})
 
+		It("should keep only records in the visible groups", func() {
+			mustCreate(5*time.Minute, "dave", WithWorkspaceID("ws-1"), WithEnvName("prod"))
+			mustCreate(6*time.Minute, "erin", WithWorkspaceID("ws-1"))
+			// 只能看 app-1 的 dev 环境：空间级记录保留，其它应用和环境的记录过滤掉
+			visible := &VisibleGroups{AppEnvNames: map[string][]string{"app-1": {"dev"}}}
+			Expect(usernames(list(ListOptions{WorkspaceID: "ws-1", Visible: visible}))).
+				To(Equal([]string{"erin", "bob", "alice"}))
+
+			// 能看 prod 环境本身和 app-2 的全部环境
+			visible = &VisibleGroups{EnvNames: []string{"prod"}, AppEnvNames: map[string][]string{"app-2": nil}}
+			Expect(usernames(list(ListOptions{WorkspaceID: "ws-1", Visible: visible}))).
+				To(Equal([]string{"erin", "dave", "alice"}))
+
+			// 指定的应用不可见时为空
+			visible = &VisibleGroups{EnvNames: []string{"prod"}, AppEnvNames: map[string][]string{}}
+			Expect(list(ListOptions{WorkspaceID: "ws-1", AppID: "app-1", Visible: visible}).Total).To(BeZero())
+
+			// 不限制可见范围时不过滤
+			Expect(list(ListOptions{WorkspaceID: "ws-1"}).Total).To(Equal(int64(5)))
+		})
+
 		It("should filter by operation result", func() {
 			Expect(usernames(list(ListOptions{Result: ResultFailed}))).To(Equal([]string{"alice"}))
 			Expect(list(ListOptions{OpType: OperationTypeDelete}).Total).To(BeZero())

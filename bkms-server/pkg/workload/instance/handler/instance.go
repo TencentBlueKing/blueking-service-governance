@@ -37,7 +37,6 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/batchrelease"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/hostport"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/perm"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/taskq"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/misc/audit"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/metrics"
@@ -170,14 +169,9 @@ func (h *Handler) UpdateAppInstances(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	app, err := h.validateEditableAppModel(ctx, uriInput.AppID)
+	app, _, err := h.validateAppModelInstanceOp(ctx, uriInput.AppID, uriInput.EnvName)
 	if err != nil {
 		bkerrs.AbortWithErr(c, err)
-		return
-	}
-	// 操作实例（Pod）都需要有部署当前 Env 的权限
-	if err = perm.NewManager().HasDeployEnvPerm(ctx, app.WorkspaceID, uriInput.EnvName); err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeNoPermission, "check deploy env perm"))
 		return
 	}
 
@@ -261,14 +255,9 @@ func (h *Handler) ScaleAppInstances(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	app, err := h.validateEditableAppModel(ctx, uriInput.AppID)
+	app, _, err := h.validateAppModelInstanceOp(ctx, uriInput.AppID, uriInput.EnvName)
 	if err != nil {
 		bkerrs.AbortWithErr(c, err)
-		return
-	}
-	// 操作实例（Pod）都需要有部署当前 Env 的权限
-	if err = perm.NewManager().HasDeployEnvPerm(ctx, app.WorkspaceID, uriInput.EnvName); err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeNoPermission, "check deploy env perm"))
 		return
 	}
 
@@ -333,14 +322,9 @@ func (h *Handler) BatchDeleteAppInstances(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	app, err := h.validateEditableAppModel(ctx, uriInput.AppID)
+	app, _, err := h.validateAppModelInstanceOp(ctx, uriInput.AppID, uriInput.EnvName)
 	if err != nil {
 		bkerrs.AbortWithErr(c, err)
-		return
-	}
-	// 操作实例（Pod）都需要有部署当前 Env 的权限
-	if err = perm.NewManager().HasDeployEnvPerm(ctx, app.WorkspaceID, uriInput.EnvName); err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeNoPermission, "check deploy env perm"))
 		return
 	}
 
@@ -391,14 +375,9 @@ func (h *Handler) UpdateAppInstancePolaris(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	app, err := h.validateEditableAppModel(ctx, uriInput.AppID)
+	app, _, err := h.validateAppModelInstanceOp(ctx, uriInput.AppID, uriInput.EnvName)
 	if err != nil {
 		bkerrs.AbortWithErr(c, err)
-		return
-	}
-	// 操作实例（Pod）都需要有部署当前 Env 的权限
-	if err = perm.NewManager().HasDeployEnvPerm(ctx, app.WorkspaceID, uriInput.EnvName); err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeNoPermission, "check deploy env perm"))
 		return
 	}
 	// weight 和 isolate 至少要设置一个
@@ -463,18 +442,19 @@ func (h *Handler) markDeployPollingBroken(ctx context.Context, appID, deployID s
 	}
 }
 
-// validateEditableAppModel 校验 App 编辑权限并确认应用类型为 AppModel。
-func (h *Handler) validateEditableAppModel(ctx context.Context, appID string) (*bkmsapp.Application, error) {
-	// 校验 App 编辑权限
-	app, err := ginperm.ValidateAppByID(ctx, h.registry, appID, ginperm.TypeEdit)
+// validateAppModelInstanceOp 校验部署应用到该环境的权限并确认应用类型为 AppModel，操作实例（Pod）都需要部署权限。
+func (h *Handler) validateAppModelInstanceOp(
+	ctx context.Context, appID, envName string,
+) (*bkmsapp.Application, *envmodel.Environment, error) {
+	app, env, err := ginperm.ValidateAppEnvByName(ctx, h.registry, appID, envName, ginperm.TypeDeploy)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	// 目前只支持操作 AppModel 类型应用实例
 	if !appruntime.IsAppModelType(app.Type) {
-		return nil, bkerrs.Errorf(bkerrs.ErrCodeInvalidArgument, "invalid app type: %s", app.Type)
+		return nil, nil, bkerrs.Errorf(bkerrs.ErrCodeInvalidArgument, "invalid app type: %s", app.Type)
 	}
-	return app, nil
+	return app, env, nil
 }
 
 // newDeployer 创建 AppModel 应用部署器。

@@ -66,15 +66,15 @@ func (h *Handler) bindListAppInstancesQuery(
 	return uriInput, queryInput, nil
 }
 
-// validateAppAndGetDeployRecord 依次校验 App 查看权限与 AppModel 类型，再取该环境/泳道的最新部署记录
+// validateAppAndGetDeployRecord 依次校验应用在该环境中的查看权限与 AppModel 类型，再取该环境/泳道的最新部署记录
 // 三步中任一步不通过都直接返回错误，不返回半成品；泳道单独传入，不依赖 List 专属的查询参数类型
 func (h *Handler) validateAppAndGetDeployRecord(
 	ctx context.Context,
 	uriInput serializer.AppEnvURIInput,
 	trafficLaneName string,
 ) (*bkmsapp.Application, *appmodeldeploy.Record, error) {
-	// 校验 App 查看权限
-	app, err := ginperm.ValidateAppByID(ctx, h.registry, uriInput.AppID, ginperm.TypeView)
+	// 校验应用在该环境中的查看权限
+	app, _, err := ginperm.ValidateAppEnvByName(ctx, h.registry, uriInput.AppID, uriInput.EnvName, ginperm.TypeView)
 	if err != nil {
 		return nil, nil, err
 	}

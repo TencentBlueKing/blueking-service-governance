@@ -26,8 +26,10 @@ import (
 	slz "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/serializer"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/platformaccount"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bkci"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
+	ginperm "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/perm"
 )
 
 // ListBkCIOAuthGitProjects 获取蓝盾授权 Git 项目列表
@@ -52,6 +54,10 @@ func (h *Handler) ListBkCIOAuthGitProjects(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
+	if _, err := ginperm.ValidateWorkspaceByID(ctx, h.registry, uriInput.WorkspaceID, ginperm.TypeView); err != nil {
+		bkerrs.AbortWithErr(c, err)
+		return
+	}
 	project, err := h.bkciProjects().Get(ctx, bkciproject.ByWorkspace(uriInput.WorkspaceID))
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get workspace project"))
@@ -98,6 +104,10 @@ func (h *Handler) GetBkCIOAuthUrl(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
+	if _, err := ginperm.ValidateWorkspaceByID(ctx, h.registry, uriInput.WorkspaceID, ginperm.TypeView); err != nil {
+		bkerrs.AbortWithErr(c, err)
+		return
+	}
 	project, err := h.bkciProjects().Get(ctx, bkciproject.ByWorkspace(uriInput.WorkspaceID))
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get workspace project"))
@@ -143,6 +153,10 @@ func (h *Handler) ListBkCIPipelines(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
+	if _, err := ginperm.ValidateWorkspaceByID(ctx, h.registry, uriInput.WorkspaceID, ginperm.TypeView); err != nil {
+		bkerrs.AbortWithErr(c, err)
+		return
+	}
 	project, err := h.bkciProjects().Get(ctx, bkciproject.ByWorkspace(uriInput.WorkspaceID))
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get workspace project"))
@@ -195,6 +209,10 @@ func (h *Handler) GetBkCIPipeline(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
+	if _, err := ginperm.ValidateWorkspaceByID(ctx, h.registry, uriInput.WorkspaceID, ginperm.TypeView); err != nil {
+		bkerrs.AbortWithErr(c, err)
+		return
+	}
 	project, err := h.bkciProjects().Get(ctx, bkciproject.ByWorkspace(uriInput.WorkspaceID))
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get bkci project"))
@@ -237,6 +255,10 @@ func (h *Handler) GetBkCIPipelineVariables(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
+	if _, err := ginperm.ValidateWorkspaceByID(ctx, h.registry, uriInput.WorkspaceID, ginperm.TypeView); err != nil {
+		bkerrs.AbortWithErr(c, err)
+		return
+	}
 	project, err := h.bkciProjects().Get(ctx, bkciproject.ByWorkspace(uriInput.WorkspaceID))
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get workspace project"))
@@ -291,13 +313,18 @@ func (h *Handler) ListBkCIRepositoryBranches(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
+	// 使用平台级虚拟账号查询，必须先确认用户能查看该空间
+	if _, err := ginperm.ValidateWorkspaceByID(ctx, h.registry, uriInput.WorkspaceID, ginperm.TypeView); err != nil {
+		bkerrs.AbortWithErr(c, err)
+		return
+	}
 	project, err := h.bkciProjects().Get(ctx, bkciproject.ByWorkspace(uriInput.WorkspaceID))
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get workspace project"))
 		return
 	}
 
-	client, err := bkci.New(auth.MustGetUser(ctx))
+	client, err := bkci.New(platformaccount.MustGetCaller(ctx))
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "initial bkci client"))
 		return
@@ -346,13 +373,18 @@ func (h *Handler) ListBkCIRepositoryTags(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
+	// 使用平台级虚拟账号查询，必须先确认用户能查看该空间
+	if _, err := ginperm.ValidateWorkspaceByID(ctx, h.registry, uriInput.WorkspaceID, ginperm.TypeView); err != nil {
+		bkerrs.AbortWithErr(c, err)
+		return
+	}
 	project, err := h.bkciProjects().Get(ctx, bkciproject.ByWorkspace(uriInput.WorkspaceID))
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get workspace project"))
 		return
 	}
 
-	client, err := bkci.New(auth.MustGetUser(ctx))
+	client, err := bkci.New(platformaccount.MustGetCaller(ctx))
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "initial bkci client"))
 		return

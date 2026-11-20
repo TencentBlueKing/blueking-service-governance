@@ -32,7 +32,6 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/serializer"
 	deploystatus "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/status"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/perm"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/trafficmanager"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/misc/audit"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/bkmonitor"
@@ -87,14 +86,9 @@ func (h *Handler) CreateEnv(c *gin.Context) {
 	ctx := c.Request.Context()
 
 	// 参数 & 权限校验
-	ws, err := ginperm.ValidateWorkspaceByID(ctx, h.registry, uriInput.WorkspaceID, ginperm.TypeEdit)
+	ws, err := ginperm.ValidateWorkspaceForEnvCreate(ctx, h.registry, uriInput.WorkspaceID)
 	if err != nil {
 		bkerrs.AbortWithErr(c, err)
-		return
-	}
-
-	if err = perm.NewManager().HasCreateEnvPerm(ctx, ws.ID); err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.WrapIAMNoPermission(err, ws.ID, "check app perm"))
 		return
 	}
 
@@ -213,9 +207,8 @@ func (h *Handler) CreateFeatureEnv(c *gin.Context) {
 		return
 	}
 
-	// Require source-env deploy permission; standard-kind / same-workspace checks
-	// happen later in FeatureEnvService.Create.
-	sourceEnv, err := ginperm.ValidateEnvByID(ctx, h.registry, input.SourceEnvID, ginperm.TypeDeploy)
+	// 特性环境会部署该应用，需要有部署应用到来源环境的权限
+	sourceEnv, err := ginperm.ValidateAppEnvByID(ctx, h.registry, app, input.SourceEnvID, ginperm.TypeDeploy)
 	if err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return
@@ -283,8 +276,8 @@ func (h *Handler) ListEnvs(c *gin.Context) {
 
 	ctx := c.Request.Context()
 
-	if err := perm.NewManager().HasViewWorkspacePerm(ctx, uriInput.WorkspaceID); err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.WrapIAMNoPermission(err, uriInput.WorkspaceID, "check workspace perm"))
+	if _, err := ginperm.ValidateWorkspaceByID(ctx, h.registry, uriInput.WorkspaceID, ginperm.TypeView); err != nil {
+		bkerrs.AbortWithErr(c, err)
 		return
 	}
 
@@ -293,6 +286,12 @@ func (h *Handler) ListEnvs(c *gin.Context) {
 	)
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, "list envs"))
+		return
+	}
+	// 只返回用户有权限查看的环境
+	envs, err = ginperm.FilterViewableEnvs(ctx, h.registry, uriInput.WorkspaceID, envs)
+	if err != nil {
+		bkerrs.AbortWithErr(c, err)
 		return
 	}
 
@@ -333,6 +332,14 @@ func (h *Handler) ListAppEnvs(c *gin.Context) {
 		List(ctx, envmodel.InWorkspace(app.WorkspaceID), envmodel.AvailableToApp(app.ID), envmodel.NewestFirst())
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, "list app envs"))
+		return
+	}
+	// 只返回用户能查看该应用数据的环境
+	envs, err = ginperm.FilterByViewableAppEnvs(
+		ctx, h.registry, app, envs, func(env envmodel.Environment) string { return env.Name },
+	)
+	if err != nil {
+		bkerrs.AbortWithErr(c, err)
 		return
 	}
 
@@ -376,6 +383,14 @@ func (h *Handler) ListFeatureEnvs(c *gin.Context) {
 	featureEnvs, sourceEnvByFeatEnvName, err := bkmsenv.ListAppFeatEnvs(ctx, h.registry.DB, app)
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, "list feature envs"))
+		return
+	}
+	// 特性环境按来源环境鉴权，只返回用户能查看该应用数据的部分
+	featureEnvs, err = ginperm.FilterByViewableAppEnvs(
+		ctx, h.registry, app, featureEnvs, func(env envmodel.Environment) string { return env.Name },
+	)
+	if err != nil {
+		bkerrs.AbortWithErr(c, err)
 		return
 	}
 
@@ -457,14 +472,9 @@ func (h *Handler) GetEnvByName(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	if _, err := ginperm.ValidateWorkspaceByID(ctx, h.registry, uriInput.WorkspaceID, ginperm.TypeView); err != nil {
-		bkerrs.AbortWithErr(c, err)
-		return
-	}
-
-	env, err := h.envs().Get(ctx, envmodel.ByName(uriInput.WorkspaceID, uriInput.EnvName))
+	env, err := ginperm.ValidateEnvByName(ctx, h.registry, uriInput.WorkspaceID, uriInput.EnvName, ginperm.TypeView)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, "get env by workspace and name"))
+		bkerrs.AbortWithErr(c, err)
 		return
 	}
 
@@ -668,8 +678,10 @@ func (h *Handler) ListEnvTrafficLanes(c *gin.Context) {
 
 	ctx := c.Request.Context()
 
-	if err := perm.NewManager().HasViewWorkspacePerm(ctx, uriInput.WorkspaceID); err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.WrapIAMNoPermission(err, uriInput.WorkspaceID, "check app perm"))
+	if _, err := ginperm.ValidateEnvByName(
+		ctx, h.registry, uriInput.WorkspaceID, uriInput.EnvName, ginperm.TypeView,
+	); err != nil {
+		bkerrs.AbortWithErr(c, err)
 		return
 	}
 

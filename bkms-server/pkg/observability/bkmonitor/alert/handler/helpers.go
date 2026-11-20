@@ -26,6 +26,7 @@ import (
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
+	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	alertstrategy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/bkmonitor/alert/strategy"
 	ginperm "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/perm"
@@ -84,7 +85,7 @@ func validateAppInWorkspace(
 	workspaceID, appID string,
 	permType ginperm.Type,
 ) (*bkmsapp.Application, error) {
-	app, err := ginperm.ValidateAppByID(ctx, registry, appID, permType)
+	app, err := ginperm.ValidateAppInAllEnvs(ctx, registry, appID, permType)
 	if err != nil {
 		return nil, err
 	}
@@ -92,4 +93,25 @@ func validateAppInWorkspace(
 		return nil, bkerrs.Errorf(bkerrs.ErrCodeNotFound, "app %s not found in workspace %s", appID, workspaceID)
 	}
 	return app, nil
+}
+
+// validateAppEnvInWorkspace 校验应用归属于指定空间及查看权限：指定 envName 时仅检查该环境，
+// 为空时查询全部环境告警，需要全部环境的查看权限。
+func validateAppEnvInWorkspace(
+	ctx context.Context,
+	registry *storereg.Registry,
+	workspaceID, appID, envName string,
+) (*bkmsapp.Application, *envmodel.Environment, error) {
+	if envName == "" {
+		app, err := validateAppInWorkspace(ctx, registry, workspaceID, appID, ginperm.TypeView)
+		return app, nil, err
+	}
+	app, env, err := ginperm.ValidateAppEnvByName(ctx, registry, appID, envName, ginperm.TypeView)
+	if err != nil {
+		return nil, nil, err
+	}
+	if app.WorkspaceID != workspaceID {
+		return nil, nil, bkerrs.Errorf(bkerrs.ErrCodeNotFound, "app %s not found in workspace %s", appID, workspaceID)
+	}
+	return app, env, nil
 }

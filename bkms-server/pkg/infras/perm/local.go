@@ -23,11 +23,13 @@ import (
 
 	"github.com/TencentBlueKing/gopkg/collection/set"
 	"github.com/pkg/errors"
+	"github.com/samber/lo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkiam"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkiam/role"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/platformaccount"
 )
 
 // iamServicer 是 LocalManager 内部依赖的 IAMService 编排接口。
@@ -62,7 +64,16 @@ type iamServicer interface {
 	) (map[string]map[string]bool, error)
 
 	EnvCreateIsAllowed(ctx context.Context, username, workspaceID string) (bool, error)
-	EnvActionIsAllowed(ctx context.Context, username, workspaceID, envID, actionID string) (bool, error)
+	EnvActionIsAllowed(ctx context.Context, username, workspaceID, envType, envID, actionID string) (bool, error)
+	AppEnvActionIsAllowed(
+		ctx context.Context, username, workspaceID, appID, envType, envID, actionID string,
+	) (bool, error)
+	EnvsActionAllowed(
+		ctx context.Context, username, workspaceID string, envs []bkiam.EnvRef, actionID string,
+	) (map[string]bool, error)
+	AppEnvPairsActionAllowed(
+		ctx context.Context, username, workspaceID string, pairs []bkiam.AppEnvRef, actionID string,
+	) (map[string]map[string]bool, error)
 }
 
 // 编译期检查：iam.IAMService 满足 iamServicer 接口。
@@ -88,6 +99,7 @@ const (
 	errMsgNoActionAppFmt     = "no permission to %s application %s in workspace %s"
 	errMsgNoActionWsFmt      = "no permission to %s workspace %s"
 	errMsgNoActionEnvFmt     = "no permission to %s env %s in workspace %s"
+	errMsgNoActionAppEnvFmt  = "no permission to %s application %s in env %s of workspace %s"
 	errMsgGetAuthUser        = "get auth user"
 	errMsgCallIAMServiceFmt  = "call iam service: %s"
 	errMsgWorkspaceFilterAct = "filter workspaces by action"
@@ -205,39 +217,119 @@ func (m *LocalManager) HasCreateEnvPerm(ctx context.Context, workspaceID string)
 }
 
 // HasEditEnvPerm 检查用户是否有编辑环境的权限
-func (m *LocalManager) HasEditEnvPerm(ctx context.Context, workspaceID, envName string) error {
-	return m.hasEnvActionPerm(ctx, workspaceID, envName, EnvAction.Edit)
+func (m *LocalManager) HasEditEnvPerm(ctx context.Context, workspaceID, envType, envID string) error {
+	return m.hasEnvActionPerm(ctx, workspaceID, envType, envID, EnvAction.Edit)
 }
 
 // HasViewEnvPerm 检查用户是否有查看环境的权限
-func (m *LocalManager) HasViewEnvPerm(ctx context.Context, workspaceID, envName string) error {
-	return m.hasEnvActionPerm(ctx, workspaceID, envName, EnvAction.View)
+func (m *LocalManager) HasViewEnvPerm(ctx context.Context, workspaceID, envType, envID string) error {
+	return m.hasEnvActionPerm(ctx, workspaceID, envType, envID, EnvAction.View)
 }
 
 // HasDeleteEnvPerm 检查用户是否有删除环境的权限
-func (m *LocalManager) HasDeleteEnvPerm(ctx context.Context, workspaceID, envName string) error {
-	return m.hasEnvActionPerm(ctx, workspaceID, envName, EnvAction.Delete)
-}
-
-// HasDeployEnvPerm 检查用户是否有部署环境的权限
-func (m *LocalManager) HasDeployEnvPerm(ctx context.Context, workspaceID, envName string) error {
-	return m.hasEnvActionPerm(ctx, workspaceID, envName, EnvAction.Deploy)
+func (m *LocalManager) HasDeleteEnvPerm(ctx context.Context, workspaceID, envType, envID string) error {
+	return m.hasEnvActionPerm(ctx, workspaceID, envType, envID, EnvAction.Delete)
 }
 
 // hasEnvActionPerm 检查用户是否有环境某项权限
-func (m *LocalManager) hasEnvActionPerm(ctx context.Context, workspaceID, envName, action string) error {
+func (m *LocalManager) hasEnvActionPerm(ctx context.Context, workspaceID, envType, envID, action string) error {
 	user, err := auth.GetUser(ctx)
 	if err != nil {
 		return errors.Wrap(err, errMsgGetAuthUser)
 	}
-	allowed, err := m.svc.EnvActionIsAllowed(ctx, user.ID, workspaceID, envName, action)
+	allowed, err := m.svc.EnvActionIsAllowed(ctx, user.ID, workspaceID, envType, envID, action)
 	if err != nil {
 		return errors.Wrapf(err, errMsgCallIAMServiceFmt, "EnvActionIsAllowed")
 	}
 	if !allowed {
-		return errors.Errorf(errMsgNoActionEnvFmt, action, envName, workspaceID)
+		return errors.Errorf(errMsgNoActionEnvFmt, action, envID, workspaceID)
 	}
 	return nil
+}
+
+// HasViewAppInEnvPerm 检查用户是否有查看应用在环境中数据的权限
+func (m *LocalManager) HasViewAppInEnvPerm(ctx context.Context, workspaceID, appID, envType, envID string) error {
+	return m.hasAppEnvActionPerm(ctx, workspaceID, appID, envType, envID, AppEnvAction.View)
+}
+
+// HasEditAppInEnvPerm 检查用户是否有编辑应用在环境中配置的权限
+func (m *LocalManager) HasEditAppInEnvPerm(ctx context.Context, workspaceID, appID, envType, envID string) error {
+	return m.hasAppEnvActionPerm(ctx, workspaceID, appID, envType, envID, AppEnvAction.Edit)
+}
+
+// HasDeployAppToEnvPerm 检查用户是否有部署应用到环境的权限
+func (m *LocalManager) HasDeployAppToEnvPerm(ctx context.Context, workspaceID, appID, envType, envID string) error {
+	return m.hasAppEnvActionPerm(ctx, workspaceID, appID, envType, envID, AppEnvAction.Deploy)
+}
+
+// hasAppEnvActionPerm 检查用户是否有应用在环境中的某项权限
+func (m *LocalManager) hasAppEnvActionPerm(
+	ctx context.Context, workspaceID, appID, envType, envID, action string,
+) error {
+	user, err := auth.GetUser(ctx)
+	if err != nil {
+		return errors.Wrap(err, errMsgGetAuthUser)
+	}
+	allowed, err := m.svc.AppEnvActionIsAllowed(ctx, user.ID, workspaceID, appID, envType, envID, action)
+	if err != nil {
+		return errors.Wrapf(err, errMsgCallIAMServiceFmt, "AppEnvActionIsAllowed")
+	}
+	if !allowed {
+		return errors.Errorf(errMsgNoActionAppEnvFmt, action, appID, envID, workspaceID)
+	}
+	return nil
+}
+
+// FilterViewableEnvs 过滤出用户有权限查看的环境，返回环境 ID 集合
+func (m *LocalManager) FilterViewableEnvs(
+	ctx context.Context, workspaceID string, envs []bkiam.EnvRef,
+) (*set.StringSet, error) {
+	hasPerm := set.NewStringSet()
+	if len(envs) == 0 {
+		return hasPerm, nil
+	}
+	user, err := auth.GetUser(ctx)
+	if err != nil {
+		return nil, errors.Wrap(err, errMsgGetAuthUser)
+	}
+	allowed, err := m.svc.EnvsActionAllowed(ctx, user.ID, workspaceID, envs, EnvAction.View)
+	if err != nil {
+		return nil, errors.Wrapf(err, errMsgCallIAMServiceFmt, "EnvsActionAllowed")
+	}
+	for envID, ok := range allowed {
+		if ok {
+			hasPerm.Add(envID)
+		}
+	}
+	return hasPerm, nil
+}
+
+// FilterViewableAppEnvs 一次批量过滤出用户能查看应用在环境中数据的 (app, env) 组合，返回 appID → 环境 ID 集合
+func (m *LocalManager) FilterViewableAppEnvs(
+	ctx context.Context, workspaceID string, pairs []bkiam.AppEnvRef,
+) (map[string]*set.StringSet, error) {
+	result := map[string]*set.StringSet{}
+	if len(pairs) == 0 {
+		return result, nil
+	}
+	user, err := auth.GetUser(ctx)
+	if err != nil {
+		return nil, errors.Wrap(err, errMsgGetAuthUser)
+	}
+	allowedByApp, err := m.svc.AppEnvPairsActionAllowed(ctx, user.ID, workspaceID, pairs, AppEnvAction.View)
+	if err != nil {
+		return nil, errors.Wrapf(err, errMsgCallIAMServiceFmt, "AppEnvPairsActionAllowed")
+	}
+	for appID, envAllowed := range allowedByApp {
+		hasPerm := set.NewStringSet()
+		for envID, ok := range envAllowed {
+			if ok {
+				hasPerm.Add(envID)
+			}
+		}
+		result[appID] = hasPerm
+	}
+	return result, nil
 }
 
 // FilterViewableWorkspaces 过滤出用户有权限查看的工作空间列表
@@ -318,6 +410,10 @@ func (m *LocalManager) ListRoleMembers(ctx context.Context, roleID string) ([]st
 	members, err := m.svc.ListRoleMembers(ctx, roleID)
 	if err != nil {
 		return nil, errors.Wrap(err, "list role members")
+	}
+	// 平台级虚拟账号不是真实成员，不对外展示
+	if account, ok := platformaccount.Get(); ok {
+		members = lo.Without(members, account.ID)
 	}
 	return members, nil
 }

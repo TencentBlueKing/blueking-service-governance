@@ -73,7 +73,7 @@ func (h *Handler) ListHelmDeployRecords(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	app, err := perm.ValidateAppByID(ctx, h.registry, uriInput.AppID, perm.TypeView)
+	app, _, err := perm.ValidateAppEnvByName(ctx, h.registry, uriInput.AppID, uriInput.EnvName, perm.TypeView)
 	if err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return
@@ -140,7 +140,7 @@ func (h *Handler) PreviewHelmDeploy(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	app, env, err := h.validateHelmDeployAppEnv(ctx, uriInput.AppID, uriInput.EnvName, perm.TypeEdit)
+	app, env, err := perm.ValidateAppEnvByName(ctx, h.registry, uriInput.AppID, uriInput.EnvName, perm.TypeView)
 	if err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return
@@ -200,7 +200,7 @@ func (h *Handler) CreateHelmDeploy(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	app, env, err := h.validateHelmDeployAppEnv(ctx, uriInput.AppID, uriInput.EnvName, perm.TypeEdit)
+	app, env, err := perm.ValidateAppEnvByName(ctx, h.registry, uriInput.AppID, uriInput.EnvName, perm.TypeDeploy)
 	if err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return
@@ -279,14 +279,14 @@ func (h *Handler) PreviewRollbackHelmDeploy(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	app, err := perm.ValidateAppByID(ctx, h.registry, uriInput.AppID, perm.TypeEdit)
+	app, _, err := perm.ValidateAppEnvByName(ctx, h.registry, uriInput.AppID, uriInput.EnvName, perm.TypeView)
 	if err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return
 	}
 
 	// 获取回滚目标部署记录
-	record, err := h.getDeployRecordForRollback(ctx, app.ID, uriInput.DeployID)
+	record, err := h.getDeployRecordForRollback(ctx, app.ID, uriInput.EnvName, uriInput.DeployID)
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "get deploy record"))
 		return
@@ -334,14 +334,14 @@ func (h *Handler) RollbackHelmDeploy(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	app, err := perm.ValidateAppByID(ctx, h.registry, uriInput.AppID, perm.TypeEdit)
+	app, _, err := perm.ValidateAppEnvByName(ctx, h.registry, uriInput.AppID, uriInput.EnvName, perm.TypeDeploy)
 	if err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return
 	}
 
 	// 获取回滚目标部署记录
-	record, err := h.getDeployRecordForRollback(ctx, app.ID, uriInput.DeployID)
+	record, err := h.getDeployRecordForRollback(ctx, app.ID, uriInput.EnvName, uriInput.DeployID)
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "get deploy record"))
 		return
@@ -415,7 +415,7 @@ func (h *Handler) DeleteHelmDeploy(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	app, err := perm.ValidateAppByID(ctx, h.registry, uriInput.AppID, perm.TypeEdit)
+	app, _, err := perm.ValidateAppEnvByName(ctx, h.registry, uriInput.AppID, uriInput.EnvName, perm.TypeDeploy)
 	if err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return

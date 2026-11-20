@@ -32,6 +32,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/component"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/misc/audit"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
+	ginperm "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/perm"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
@@ -58,6 +59,10 @@ func (h *Handler) CreateWorkspaceComponent(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
+	if _, err := ginperm.ValidateWorkspaceByID(ctx, h.registry, uriInput.WorkspaceID, ginperm.TypeEdit); err != nil {
+		bkerrs.AbortWithErr(c, err)
+		return
+	}
 	newComp := input.ToModel(uriInput.WorkspaceID)
 	if _, err := store.Of(h.registry.DB, component.ComponentDefMeta).
 		Get(ctx, component.ByNameVersion(newComp.Type, newComp.Version),
@@ -117,6 +122,10 @@ func (h *Handler) PatchWorkspaceComponent(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
+	if _, err := ginperm.ValidateWorkspaceByID(ctx, h.registry, uriInput.WorkspaceID, ginperm.TypeEdit); err != nil {
+		bkerrs.AbortWithErr(c, err)
+		return
+	}
 	oldComp, err := h.components().Get(ctx, workspace.ComponentByName(uriInput.WorkspaceID, uriInput.CompName))
 	if err != nil {
 		if errors.Is(err, workspace.ErrComponentNotFound) {
@@ -176,6 +185,10 @@ func (h *Handler) DeleteWorkspaceComponent(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
+	if _, err := ginperm.ValidateWorkspaceByID(ctx, h.registry, uriInput.WorkspaceID, ginperm.TypeEdit); err != nil {
+		bkerrs.AbortWithErr(c, err)
+		return
+	}
 	oldComp, err := h.components().Get(ctx, workspace.ComponentByName(uriInput.WorkspaceID, uriInput.CompName))
 	if err != nil {
 		if errors.Is(err, workspace.ErrComponentNotFound) {
@@ -240,6 +253,10 @@ func (h *Handler) ListWorkspaceComponents(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
+	if _, err := ginperm.ValidateWorkspaceByID(ctx, h.registry, uriInput.WorkspaceID, ginperm.TypeView); err != nil {
+		bkerrs.AbortWithErr(c, err)
+		return
+	}
 	comps, err := h.components().List(ctx, workspace.ComponentsIn(uriInput.WorkspaceID))
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list workspace components"))

@@ -24,7 +24,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
 
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/platformaccount"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bcs"
 )
 
@@ -38,11 +38,12 @@ func ListClusters(ctx context.Context, bcsProjectID string) ([]bcs.Cluster, erro
 	if bcsProjectID == "" {
 		return nil, nil
 	}
-	user, err := auth.GetUser(ctx)
+	// 调用方已检查空间权限，项目取自空间记录，用平台级虚拟账号查询
+	caller, err := platformaccount.GetCaller(ctx)
 	if err != nil {
-		return nil, errors.Wrap(err, "get user for bcs client")
+		return nil, errors.Wrap(err, "get caller for bcs client")
 	}
-	client, err := bcs.New(user)
+	client, err := bcs.New(caller)
 	if err != nil {
 		return nil, errors.Wrap(err, "init bcs client")
 	}

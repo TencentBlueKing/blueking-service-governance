@@ -61,7 +61,7 @@ func (h *Handler) ListAppConfigFileVersions(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	app, err := perm.ValidateAppByID(ctx, h.registry, uriInput.AppID, perm.TypeView)
+	app, err := perm.ValidateAppInAllEnvs(ctx, h.registry, uriInput.AppID, perm.TypeView)
 	if err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return
@@ -113,7 +113,7 @@ func (h *Handler) GetAppConfigFileVersion(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	app, err := perm.ValidateAppByID(ctx, h.registry, uriInput.AppID, perm.TypeView)
+	app, err := perm.ValidateAppInAllEnvs(ctx, h.registry, uriInput.AppID, perm.TypeView)
 	if err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return
@@ -161,7 +161,7 @@ func (h *Handler) CompareAppConfigFileVersions(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	app, err := perm.ValidateAppByID(ctx, h.registry, uriInput.AppID, perm.TypeView)
+	app, err := perm.ValidateAppInAllEnvs(ctx, h.registry, uriInput.AppID, perm.TypeView)
 	if err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return

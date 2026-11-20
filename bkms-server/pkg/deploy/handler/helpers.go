@@ -24,36 +24,17 @@ import (
 	"fmt"
 
 	"github.com/gin-gonic/gin"
+	"github.com/pkg/errors"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime"
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/perm"
+	appmodeldeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/appmodel"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
 	ginperm "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/perm"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/snapshot"
 )
-
-// validateHelmDeployAppEnv 校验 appID、envName 和应用权限，并返回部署环境信息
-func (h *Handler) validateHelmDeployAppEnv(
-	ctx context.Context,
-	appID string,
-	envName string,
-	permType ginperm.Type,
-) (*bkmsapp.Application, *bkmsenv.Environment, error) {
-	app, err := ginperm.ValidateAppByID(ctx, h.registry, appID, permType)
-	if err != nil {
-		return nil, nil, err
-	}
-	env, err := store.Of(h.registry.DB, bkmsenv.EnvMeta).
-		Get(ctx, bkmsenv.AppEnvByName(app.WorkspaceID, app.ID, envName))
-	if err != nil {
-		return nil, nil, bkerrs.Wrapf(err, bkerrs.ErrCodeNotFound, "get workspace %s env %s", app.WorkspaceID, envName)
-	}
-	return app, env, nil
-}
 
 // validateAppModelDeployAppEnv 是 AppModel 部署相关 handler 的统一前置校验
 func (h *Handler) validateAppModelDeployAppEnv(
@@ -61,7 +42,6 @@ func (h *Handler) validateAppModelDeployAppEnv(
 	appID string,
 	envName string,
 	permType ginperm.Type,
-	requireDeployEnvPerm bool,
 ) (*bkmsapp.Application, *bkmsenv.Environment, error) {
 	app, env, err := ginperm.ValidateAppEnvByName(ctx, h.registry, appID, envName, permType)
 	if err != nil {
@@ -70,12 +50,22 @@ func (h *Handler) validateAppModelDeployAppEnv(
 	if !appruntime.IsAppModelType(app.Type) {
 		return nil, nil, bkerrs.New(bkerrs.ErrCodeInvalidRequest, "not appmodel app")
 	}
-	if requireDeployEnvPerm {
-		if err = perm.NewManager().HasDeployEnvPerm(ctx, app.WorkspaceID, envName); err != nil {
-			return nil, nil, bkerrs.WrapIAMNoPermission(err, app.WorkspaceID, "check env deploy perm")
-		}
-	}
 	return app, env, nil
+}
+
+// checkAppModelDeployRecordInEnv 校验部署记录属于路径中的环境，避免借某个环境的权限读取其他环境的记录
+func (h *Handler) checkAppModelDeployRecordInEnv(ctx context.Context, appID, envName, deployID string) error {
+	record, err := appmodeldeploy.GetRecord(ctx, h.registry.DB, appID, deployID)
+	if err != nil {
+		if errors.Is(err, appmodeldeploy.ErrDeployRecordNotFound) {
+			return bkerrs.Errorf(bkerrs.ErrCodeNotFound, "deploy record %s not found", deployID)
+		}
+		return bkerrs.Wrapf(err, bkerrs.ErrCodeInvalidArgument, "get deploy record %s", deployID)
+	}
+	if record.EnvName != envName {
+		return bkerrs.Errorf(bkerrs.ErrCodeNotFound, "deploy record %s not found in env %s", deployID, envName)
+	}
+	return nil
 }
 
 // bindOptionalJSON 兼容旧 PUT 接口可只依赖路径参数的调用方式；请求体存在时仍按 Gin JSON binding 校验

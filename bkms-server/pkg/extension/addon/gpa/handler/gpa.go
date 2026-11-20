@@ -149,7 +149,8 @@ func (h *Handler) UpsertAppEnvGPAConfig(c *gin.Context) {
 
 	ctx := c.Request.Context()
 
-	_, env, err := perm.ValidateAppEnvByName(ctx, h.registry, uriInput.AppID, uriInput.EnvName, perm.TypeEdit)
+	// GPA 配置变更会立即作用到集群，因此要求部署权限
+	_, env, err := perm.ValidateAppEnvByName(ctx, h.registry, uriInput.AppID, uriInput.EnvName, perm.TypeDeploy)
 	if err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return
@@ -239,7 +240,8 @@ func (h *Handler) DeleteAppEnvGPAConfig(c *gin.Context) {
 
 	ctx := c.Request.Context()
 
-	_, env, err := perm.ValidateAppEnvByName(ctx, h.registry, uriInput.AppID, uriInput.EnvName, perm.TypeEdit)
+	// GPA 配置变更会立即作用到集群，因此要求部署权限
+	_, env, err := perm.ValidateAppEnvByName(ctx, h.registry, uriInput.AppID, uriInput.EnvName, perm.TypeDeploy)
 	if err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return
@@ -310,7 +312,8 @@ func (h *Handler) ToggleAppEnvGPAConfig(c *gin.Context) {
 
 	ctx := c.Request.Context()
 
-	_, env, err := perm.ValidateAppEnvByName(ctx, h.registry, uriInput.AppID, uriInput.EnvName, perm.TypeEdit)
+	// GPA 配置变更会立即作用到集群，因此要求部署权限
+	_, env, err := perm.ValidateAppEnvByName(ctx, h.registry, uriInput.AppID, uriInput.EnvName, perm.TypeDeploy)
 	if err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return

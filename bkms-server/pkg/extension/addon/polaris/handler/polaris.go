@@ -90,7 +90,7 @@ func (h *Handler) ListAppPolarisConfigs(c *gin.Context) {
 
 	ctx := c.Request.Context()
 
-	app, err := perm.ValidateAppByID(ctx, h.registry, uriInput.AppID, perm.TypeView)
+	app, err := perm.ValidateAppInAllEnvs(ctx, h.registry, uriInput.AppID, perm.TypeView)
 	if err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return
@@ -143,7 +143,8 @@ func (h *Handler) CreateAppPolarisConfig(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	app, err := perm.ValidateAppByID(ctx, h.registry, uriInput.AppID, perm.TypeEdit)
+	// 北极星配置修改会立即下发到所有环境，不等部署，因此要求全部环境的部署权限
+	app, err := perm.ValidateAppInAllEnvs(ctx, h.registry, uriInput.AppID, perm.TypeDeploy)
 	if err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return
@@ -226,7 +227,8 @@ func (h *Handler) PatchAppPolarisConfig(c *gin.Context) {
 		return
 	}
 	ctx := c.Request.Context()
-	app, err := perm.ValidateAppByID(ctx, h.registry, uriInput.AppID, perm.TypeEdit)
+	// 北极星配置修改会立即下发到所有环境，不等部署，因此要求全部环境的部署权限
+	app, err := perm.ValidateAppInAllEnvs(ctx, h.registry, uriInput.AppID, perm.TypeDeploy)
 	if err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return
@@ -321,7 +323,8 @@ func (h *Handler) DeleteAppPolarisConfig(c *gin.Context) {
 
 	ctx := c.Request.Context()
 
-	app, err := perm.ValidateAppByID(ctx, h.registry, uriInput.AppID, perm.TypeEdit)
+	// 北极星配置修改会立即下发到所有环境，不等部署，因此要求全部环境的部署权限
+	app, err := perm.ValidateAppInAllEnvs(ctx, h.registry, uriInput.AppID, perm.TypeDeploy)
 	if err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return
@@ -398,7 +401,7 @@ func (h *Handler) ListAppPolarisConfigVars(c *gin.Context) {
 
 	ctx := c.Request.Context()
 
-	app, err := perm.ValidateAppByID(ctx, h.registry, uriInput.AppID, perm.TypeView)
+	app, err := perm.ValidateAppInAllEnvs(ctx, h.registry, uriInput.AppID, perm.TypeView)
 	if err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return
@@ -449,7 +452,7 @@ func (h *Handler) ValidateAppPolarisConfig(c *gin.Context) {
 
 	ctx := c.Request.Context()
 
-	app, err := perm.ValidateAppByID(ctx, h.registry, uriInput.AppID, perm.TypeView)
+	app, err := perm.ValidateAppInAllEnvs(ctx, h.registry, uriInput.AppID, perm.TypeView)
 	if err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return
@@ -493,7 +496,8 @@ func (h *Handler) GetImportedPolarisService(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	if _, err := perm.ValidateAppByID(ctx, h.registry, uriInput.AppID, perm.TypeEdit); err != nil {
+	// 查询导入的服务是导入的前一步，要求与导入相同的权限
+	if _, err := perm.ValidateAppInAllEnvs(ctx, h.registry, uriInput.AppID, perm.TypeDeploy); err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return
 	}
@@ -539,7 +543,8 @@ func (h *Handler) UpdateImportedPolaris(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	app, err := perm.ValidateAppByID(ctx, h.registry, uriInput.AppID, perm.TypeEdit)
+	// 北极星配置修改会立即下发到所有环境，不等部署，因此要求全部环境的部署权限
+	app, err := perm.ValidateAppInAllEnvs(ctx, h.registry, uriInput.AppID, perm.TypeDeploy)
 	if err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return
@@ -601,7 +606,8 @@ func (h *Handler) PutEnvWeight(c *gin.Context) {
 
 	ctx := c.Request.Context()
 
-	app, err := perm.ValidateAppByID(ctx, h.registry, uriInput.AppID, perm.TypeEdit)
+	// 各环境的权重因子一起计算，改一个环境会影响所有环境，且会立即同步到集群，因此要求全部环境的部署权限
+	app, err := perm.ValidateAppInAllEnvs(ctx, h.registry, uriInput.AppID, perm.TypeDeploy)
 	if err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return
@@ -684,7 +690,7 @@ func (h *Handler) GetEnvInstanceStats(c *gin.Context) {
 
 	ctx := c.Request.Context()
 
-	app, err := perm.ValidateAppByID(ctx, h.registry, uriInput.AppID, perm.TypeView)
+	app, err := perm.ValidateAppInAllEnvs(ctx, h.registry, uriInput.AppID, perm.TypeView)
 	if err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return

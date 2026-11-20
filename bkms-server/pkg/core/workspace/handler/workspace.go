@@ -465,6 +465,19 @@ func (h *Handler) loadWorkspaceOverviewApps(
 		)
 		return
 	}
+	// 只返回用户能查看该应用数据的环境
+	deployStatusMap, err = ginperm.FilterByViewableAppEnvsByApp(
+		ctx, h.registry, wsObj.ID, deployStatusMap,
+		func(row deploystatus.AppDeployStatus) string { return row.EnvName },
+	)
+	if err != nil {
+		log.WarnAttrs(ctx, "filter viewable app deploy status failed, keep apps empty",
+			slog.String("workspace_id", wsObj.ID),
+			slog.String("username", username),
+			slog.String("err", err.Error()),
+		)
+		return
+	}
 
 	appList := make([]*serializer.AppInfoOutputObj, 0, len(filteredAppDetails))
 	for _, ad := range filteredAppDetails {

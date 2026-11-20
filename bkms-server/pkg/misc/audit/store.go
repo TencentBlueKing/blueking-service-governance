@@ -75,6 +75,8 @@ type ListOptions struct {
 	ResType ResourceType
 	// Result 操作结果
 	Result Result
+	// Visible 按权限限定的可见范围，为 nil 时不限制
+	Visible *VisibleGroups
 
 	// 分页参数
 	Page, PageSize int64
@@ -110,7 +112,51 @@ func (o *ListOptions) Cond() store.Opt {
 	if o.Result != "" {
 		filter["result"] = o.Result
 	}
-	return store.Combine(store.Filter(filter), store.ContainsIgnoreCase(o.Username, "username"))
+	return store.Combine(
+		store.Filter(filter), store.ContainsIgnoreCase(o.Username, "username"), o.visibleCond(),
+	)
+}
+
+// VisibleGroups 记录的可见范围：空间级记录总是可见，只带环境的记录按 EnvNames，
+// 带应用的记录按 AppEnvNames，值为 nil 表示该应用的全部环境（含已删除的环境）
+type VisibleGroups struct {
+	EnvNames    []string
+	AppEnvNames map[string][]string
+}
+
+// visibleCond 将可见范围转换为查询条件；指定了 AppID 时只按该应用生成，避免覆盖全空间应用的宽 $or
+func (o *ListOptions) visibleCond() store.Opt {
+	if o.Visible == nil {
+		return nil
+	}
+	appEnvNames := o.Visible.AppEnvNames
+	if o.AppID != "" {
+		appEnvNames = lo.PickByKeys(appEnvNames, []string{o.AppID})
+	}
+
+	// 记录的 appID、envName 为空时不落库，用 nil 匹配字段不存在
+	empty := bson.A{nil, ""}
+	conds := bson.A{
+		bson.M{"group.appID": bson.M{"$in": empty}, "group.envName": bson.M{"$in": empty}},
+	}
+	if len(o.Visible.EnvNames) > 0 {
+		conds = append(conds, bson.M{
+			"group.appID": bson.M{"$in": empty}, "group.envName": bson.M{"$in": o.Visible.EnvNames},
+		})
+	}
+	var allEnvApps []string
+	for appID, names := range appEnvNames {
+		if names == nil {
+			allEnvApps = append(allEnvApps, appID)
+			continue
+		}
+		envNameIn := append(bson.A{nil, ""}, lo.ToAnySlice(names)...)
+		conds = append(conds, bson.M{"group.appID": appID, "group.envName": bson.M{"$in": envNameIn}})
+	}
+	if len(allEnvApps) > 0 {
+		conds = append(conds, bson.M{"group.appID": bson.M{"$in": allEnvApps}})
+	}
+	return store.Where("$or", conds)
 }
 
 // ListRecords 按选项分页获取操作记录，最新的在前

@@ -34,6 +34,7 @@ import (
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/platformaccount"
 	bkciapi "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bkci"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/helmcore/credential"
@@ -87,13 +88,13 @@ func (s *ChartBuildService) prepare(ctx context.Context, app *bkmsapp.Applicatio
 	gitRepoConfig := app.HelmSpec.HelmSource.GitRepoConfig
 
 	// 1. 确保 Helm Git Build 流水线已初始化
-	if _, err := bkci.NewPipelineManager(s.db, app.WorkspaceID).Initialize(
-		ctx, string(bkci.PipelineTypeHelmGitBuild),
-	); err != nil {
+	if _, err := bkci.NewPipelineManager(s.db, app.WorkspaceID).
+		WithCaller(platformaccount.MustGetCaller(ctx)).
+		Initialize(ctx, string(bkci.PipelineTypeHelmGitBuild)); err != nil {
 		return errors.Wrapf(err, "ensure helm-git-build pipeline for workspace %s", app.WorkspaceID)
 	}
 
-	// 2. 确保代码库已关联到蓝盾
+	// 2. 确保代码库已关联到蓝盾（依赖调用者的 Git OAuth 授权，不能用虚拟账号）
 	if _, err := bkci.NewRepositoryManager(s.db, app.WorkspaceID).Initialize(
 		ctx, gitRepoConfig.RepoURL, gitRepoConfig.RepoAlias,
 	); err != nil {
@@ -174,7 +175,7 @@ func (s *ChartBuildService) execute(
 	}
 
 	// 4. 触发蓝盾流水线构建
-	bkciClient, err := bkciapi.New(auth.MustGetUser(ctx))
+	bkciClient, err := bkciapi.New(platformaccount.MustGetCaller(ctx))
 	if err != nil {
 		return nil, errors.Wrap(err, "create bkci client")
 	}

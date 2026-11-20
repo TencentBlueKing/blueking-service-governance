@@ -35,13 +35,14 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/perm"
 )
 
+// validateAndGetAppConfigFile 检查应用在全部环境中的权限并加载其下的配置文件
 func (h *Handler) validateAndGetAppConfigFile(
 	ctx context.Context,
 	appID string,
 	id string,
 	permType perm.Type,
 ) (*bkmsapp.Application, *appcfg.AppConfigFile, error) {
-	app, err := perm.ValidateAppByID(ctx, h.registry, appID, permType)
+	app, err := perm.ValidateAppInAllEnvs(ctx, h.registry, appID, permType)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -53,6 +54,10 @@ func (h *Handler) validateAndGetAppConfigFile(
 	acf, err := h.configFiles().GetByID(ctx, oid)
 	if err != nil {
 		return nil, nil, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "getting values file")
+	}
+	// 文件必须属于路径中的应用，否则可借 A 应用的权限操作 B 应用的文件
+	if acf.AppID != app.ID {
+		return nil, nil, bkerrs.Errorf(bkerrs.ErrCodeNotFound, "app config file %s not found in app %s", id, app.ID)
 	}
 	return app, acf, nil
 }

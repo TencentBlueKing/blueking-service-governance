@@ -70,7 +70,7 @@ func (h *Handler) listAppModelDeployRecords(c *gin.Context) {
 
 	// 参数 & 权限校验
 	ctx := c.Request.Context()
-	app, _, err := h.validateAppModelDeployAppEnv(ctx, uriInput.AppID, uriInput.EnvName, perm.TypeView, false)
+	app, _, err := h.validateAppModelDeployAppEnv(ctx, uriInput.AppID, uriInput.EnvName, perm.TypeView)
 	if err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return
@@ -111,9 +111,7 @@ func (h *Handler) preCheckDeploy(c *gin.Context, expectedFramework string) {
 	}
 
 	ctx := c.Request.Context()
-	app, environment, err := h.validateAppModelDeployAppEnv(
-		ctx, uriInput.AppID, uriInput.EnvName, perm.TypeEdit, true,
-	)
+	app, environment, err := h.validateAppModelDeployAppEnv(ctx, uriInput.AppID, uriInput.EnvName, perm.TypeView)
 	if err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return
@@ -164,7 +162,7 @@ func (h *Handler) createAppModelDeploy(c *gin.Context) {
 
 	// 参数 & 权限校验
 	ctx := c.Request.Context()
-	app, environment, err := h.validateAppModelDeployAppEnv(ctx, uriInput.AppID, uriInput.EnvName, perm.TypeEdit, true)
+	app, environment, err := h.validateAppModelDeployAppEnv(ctx, uriInput.AppID, uriInput.EnvName, perm.TypeDeploy)
 	if err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return
@@ -238,7 +236,7 @@ func (h *Handler) deleteAppModelDeploy(c *gin.Context) {
 
 	// 参数 & 权限校验
 	ctx := c.Request.Context()
-	app, env, err := h.validateAppModelDeployAppEnv(ctx, uriInput.AppID, uriInput.EnvName, perm.TypeEdit, true)
+	app, env, err := h.validateAppModelDeployAppEnv(ctx, uriInput.AppID, uriInput.EnvName, perm.TypeDeploy)
 	if err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return
@@ -331,8 +329,13 @@ func (h *Handler) listAppModelResourceSnapshots(c *gin.Context) {
 
 	// 参数 & 权限校验
 	ctx := c.Request.Context()
-	app, _, err := h.validateAppModelDeployAppEnv(ctx, uriInput.AppID, uriInput.EnvName, perm.TypeView, false)
+	app, _, err := h.validateAppModelDeployAppEnv(ctx, uriInput.AppID, uriInput.EnvName, perm.TypeView)
 	if err != nil {
+		bkerrs.AbortWithErr(c, err)
+		return
+	}
+
+	if err = h.checkAppModelDeployRecordInEnv(ctx, app.ID, uriInput.EnvName, uriInput.DeployID); err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return
 	}
@@ -367,8 +370,13 @@ func (h *Handler) getAppModelResourceSnapshot(c *gin.Context) {
 
 	// 参数 & 权限校验
 	ctx := c.Request.Context()
-	app, _, err := h.validateAppModelDeployAppEnv(ctx, uriInput.AppID, uriInput.EnvName, perm.TypeView, false)
+	app, _, err := h.validateAppModelDeployAppEnv(ctx, uriInput.AppID, uriInput.EnvName, perm.TypeView)
 	if err != nil {
+		bkerrs.AbortWithErr(c, err)
+		return
+	}
+
+	if err = h.checkAppModelDeployRecordInEnv(ctx, app.ID, uriInput.EnvName, uriInput.DeployID); err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return
 	}

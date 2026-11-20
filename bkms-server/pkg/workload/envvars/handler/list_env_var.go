@@ -27,7 +27,6 @@ import (
 	"github.com/samber/lo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
-	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/perm"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
@@ -164,16 +163,9 @@ func (h *Handler) ListAppBgEnvVars(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	app, err := perm.ValidateAppByID(ctx, h.registry, uriInput.AppID, perm.TypeView)
+	app, env, err := perm.ValidateAppEnvByName(ctx, h.registry, uriInput.AppID, uriInput.EnvName, perm.TypeView)
 	if err != nil {
 		bkerrs.AbortWithErr(c, err)
-		return
-	}
-
-	env, err := store.Of(h.registry.DB, envmodel.EnvMeta).
-		Get(ctx, envmodel.AppEnvByName(app.WorkspaceID, app.ID, uriInput.EnvName))
-	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrapf(err, bkerrs.ErrCodeNotFound, "get env by name"))
 		return
 	}
 
