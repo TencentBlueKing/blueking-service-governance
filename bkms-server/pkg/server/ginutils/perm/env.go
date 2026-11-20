@@ -21,6 +21,7 @@ package perm
 import (
 	"context"
 	"errors"
+	"log/slog"
 
 	"github.com/TencentBlueKing/gopkg/collection/set"
 	pkgerrors "github.com/pkg/errors"
@@ -29,6 +30,7 @@ import (
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkiam"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
+	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
@@ -77,11 +79,11 @@ func deniedEnvsError(workspaceID, operation string, envs []envmodel.Environment,
 	)
 }
 
-// getAuthEnvs returns the env used for authorization of each env in `envs`,
-// in the same order: the env itself for a standard env, or its source
-// standard env for a feature env. The source envs are loaded in one query,
-// and each must be a standard env in the same workspace.
-func getAuthEnvs(
+// resolveAuthEnvs returns the env used for authorization of each env in `envs`,
+// in the same order: the env itself for a standard env, or its source standard
+// env for a feature env. Feature envs whose source env is missing or invalid
+// have nil in the returned slice.
+func resolveAuthEnvs(
 	ctx context.Context, registry *storereg.Registry, envs []envmodel.Environment,
 ) ([]*envmodel.Environment, error) {
 	sourceIDs := lo.Uniq(lo.FilterMap(envs, func(env envmodel.Environment, _ int) (bson.ObjectID, bool) {
@@ -108,25 +110,67 @@ func getAuthEnvs(
 		}
 		sourceEnv, ok := sourceEnvs[env.SourceEnvID]
 		if !ok || sourceEnv.WorkspaceID != env.WorkspaceID || sourceEnv.IsFeatureEnv() {
-			return nil, bkerrs.Errorf(
-				bkerrs.ErrCodeInternalServerError,
-				"invalid source env %s of feature env %s", env.SourceEnvID.Hex(), env.Name,
-			)
+			continue
 		}
 		authEnvs[i] = sourceEnv
 	}
 	return authEnvs, nil
 }
 
+// getAuthEnvs resolves the auth env of each env in `envs` strictly, returning
+// an error if any feature env has a missing or invalid source env.
+func getAuthEnvs(
+	ctx context.Context, registry *storereg.Registry, envs []envmodel.Environment,
+) ([]*envmodel.Environment, error) {
+	authEnvs, err := resolveAuthEnvs(ctx, registry, envs)
+	if err != nil {
+		return nil, err
+	}
+	for i, authEnv := range authEnvs {
+		if authEnv == nil {
+			return nil, bkerrs.Errorf(
+				bkerrs.ErrCodeInternalServerError,
+				"invalid source env %s of feature env %s", envs[i].SourceEnvID.Hex(), envs[i].Name,
+			)
+		}
+	}
+	return authEnvs, nil
+}
+
+// findAuthEnvs resolves the auth env for list-filtering paths. Feature envs
+// whose source env is missing or invalid are left as nil (skipped as
+// non-viewable) and logged as a warning so one orphan does not fail the list.
+func findAuthEnvs(
+	ctx context.Context, registry *storereg.Registry, envs []envmodel.Environment,
+) ([]*envmodel.Environment, error) {
+	authEnvs, err := resolveAuthEnvs(ctx, registry, envs)
+	if err != nil {
+		return nil, err
+	}
+	for i, authEnv := range authEnvs {
+		if authEnv == nil {
+			log.WarnAttrs(ctx, "skip feature env with invalid source env",
+				slog.String("workspace_id", envs[i].WorkspaceID),
+				slog.String("env_name", envs[i].Name),
+				slog.String("source_env_id", envs[i].SourceEnvID.Hex()),
+			)
+		}
+	}
+	return authEnvs, nil
+}
+
 // groupByAuthEnv groups `envs` by the env used for their authorization, where
-// authEnvs[i] is the auth env of envs[i]. It returns the distinct auth envs
-// to check and the env names authorized by each of them.
+// authEnvs[i] is the auth env of envs[i] (nil entries are skipped). It returns
+// the distinct auth envs to check and the env names authorized by each of them.
 func groupByAuthEnv(
 	envs []envmodel.Environment, authEnvs []*envmodel.Environment,
 ) ([]bkiam.EnvRef, map[string][]string) {
 	var refs []bkiam.EnvRef
 	namesByAuthEnvID := make(map[string][]string, len(envs))
 	for i, authEnv := range authEnvs {
+		if authEnv == nil {
+			continue
+		}
 		authEnvID := authEnv.ID.Hex()
 		if _, ok := namesByAuthEnvID[authEnvID]; !ok {
 			refs = append(refs, bkiam.EnvRef{ID: authEnvID, Type: authEnv.Type})

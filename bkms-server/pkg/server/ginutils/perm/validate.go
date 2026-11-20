@@ -203,18 +203,33 @@ func ValidateEnvByName(
 // validateEnv checks the requested permission on an already loaded env.
 //
 // A feature env is authorized by its source standard env, using the current
-// ID and type of the source env.
+// ID and type of the source env. If the source env has been deleted, TypeDelete
+// falls back to workspace edit permission so workspace admins can clean up
+// orphan feature envs, while TypeView and TypeEdit fail closed.
 func validateEnv(
 	ctx context.Context,
 	registry *storereg.Registry,
 	env *envmodel.Environment,
 	permType Type,
 ) error {
-	authEnvs, err := getAuthEnvs(ctx, registry, []envmodel.Environment{*env})
+	authEnvs, err := resolveAuthEnvs(ctx, registry, []envmodel.Environment{*env})
 	if err != nil {
 		return err
 	}
 	authEnv := authEnvs[0]
+	if authEnv == nil {
+		// 来源标准环境已删除的孤儿特性环境：删除时回退为校验空间编辑权限，避免管理员无法清理
+		if permType == TypeDelete {
+			if err = perm.NewManager().HasEditWorkspacePerm(ctx, env.WorkspaceID); err != nil {
+				return bkerrs.WrapIAMNoPermission(err, env.WorkspaceID, "check workspace perm")
+			}
+			return nil
+		}
+		return bkerrs.Errorf(
+			bkerrs.ErrCodeInternalServerError,
+			"invalid source env %s of feature env %s", env.SourceEnvID.Hex(), env.Name,
+		)
+	}
 	workspaceID, envType, envID := authEnv.WorkspaceID, authEnv.Type, authEnv.ID.Hex()
 
 	permMgr := perm.NewManager()

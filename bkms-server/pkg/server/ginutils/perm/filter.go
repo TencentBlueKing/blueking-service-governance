@@ -35,7 +35,8 @@ import (
 )
 
 // FilterViewableEnvs returns the envs among `envs` that the current user has
-// permission to view. A feature env is checked by its source env.
+// permission to view. A feature env is checked by its source env; feature envs
+// whose source env is missing or invalid are skipped as non-viewable.
 func FilterViewableEnvs(
 	ctx context.Context,
 	registry *storereg.Registry,
@@ -45,7 +46,7 @@ func FilterViewableEnvs(
 	if len(envs) == 0 {
 		return envs, nil
 	}
-	authEnvs, err := getAuthEnvs(ctx, registry, envs)
+	authEnvs, err := findAuthEnvs(ctx, registry, envs)
 	if err != nil {
 		return nil, err
 	}
@@ -54,7 +55,9 @@ func FilterViewableEnvs(
 	if err != nil {
 		return nil, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "filter viewable envs")
 	}
-	return lo.Filter(envs, func(_ envmodel.Environment, i int) bool { return viewable.Has(authEnvs[i].ID.Hex()) }), nil
+	return lo.Filter(envs, func(_ envmodel.Environment, i int) bool {
+		return authEnvs[i] != nil && viewable.Has(authEnvs[i].ID.Hex())
+	}), nil
 }
 
 // FilterViewableAppEnvNames returns the names among `envNames` in which the
@@ -121,10 +124,62 @@ func ListViewableAppEnvNames(
 	return append([]string{}, viewable.ToSlice()...), viewable.Size() == len(envs), nil
 }
 
+// FilterByViewableAppEnvsByApp filters, for each app in `itemsByApp`, the
+// items the current user can view, using one IAM request for all apps.
+// `envName` returns the env an item is bound to; env-independent items, whose
+// env name is empty, are always kept. Names that don't refer to an env
+// available to the app are dropped.
+func FilterByViewableAppEnvsByApp[T any](
+	ctx context.Context,
+	registry *storereg.Registry,
+	workspaceID string,
+	itemsByApp map[string][]T,
+	envName func(T) string,
+) (map[string][]T, error) {
+	envNames := lo.Uniq(lo.Compact(lo.FlatMap(lo.Values(itemsByApp), func(items []T, _ int) []string {
+		return lo.Map(items, func(item T, _ int) string { return envName(item) })
+	})))
+	if len(envNames) == 0 {
+		return itemsByApp, nil
+	}
+
+	envs, err := store.Of(registry.DB, envmodel.EnvMeta).List(
+		ctx, envmodel.InWorkspace(workspaceID), store.Where("name", bson.M{"$in": envNames}),
+	)
+	if err != nil {
+		return nil, bkerrs.Wrapf(err, bkerrs.ErrCodeInternalServerError, "list envs of workspace %s", workspaceID)
+	}
+	envByName := lo.SliceToMap(envs, func(env envmodel.Environment) (string, envmodel.Environment) {
+		return env.Name, env
+	})
+
+	envsByApp := lo.MapValues(itemsByApp, func(items []T, appID string) []envmodel.Environment {
+		names := lo.Uniq(lo.Compact(lo.Map(items, func(item T, _ int) string { return envName(item) })))
+		return lo.FilterMap(names, func(name string, _ int) (envmodel.Environment, bool) {
+			env, ok := envByName[name]
+			return env, ok && env.IsAvailableToApp(appID)
+		})
+	})
+
+	viewableByApp, err := FilterViewableAppEnvNamesByApp(ctx, registry, workspaceID, envsByApp)
+	if err != nil {
+		return nil, err
+	}
+
+	return lo.MapValues(itemsByApp, func(items []T, appID string) []T {
+		viewable := viewableByApp[appID]
+		return lo.Filter(items, func(item T, _ int) bool {
+			name := envName(item)
+			return name == "" || viewable.Has(name)
+		})
+	}), nil
+}
+
 // FilterViewableAppEnvNamesByApp returns, for each app in `envsByApp`, the
 // names of its envs in which the current user can view the app's data, with
 // one IAM request for all apps. The envs of each app must be available to
-// it, and a feature env is checked by its source env.
+// it, and a feature env is checked by its source env; feature envs whose
+// source env is missing or invalid are skipped as non-viewable.
 func FilterViewableAppEnvNamesByApp(
 	ctx context.Context,
 	registry *storereg.Registry,
@@ -132,7 +187,7 @@ func FilterViewableAppEnvNamesByApp(
 	envsByApp map[string][]envmodel.Environment,
 ) (map[string]*set.StringSet, error) {
 	appIDs := lo.Keys(envsByApp)
-	authEnvs, err := getAuthEnvs(ctx, registry, lo.FlatMap(appIDs, func(appID string, _ int) []envmodel.Environment {
+	authEnvs, err := findAuthEnvs(ctx, registry, lo.FlatMap(appIDs, func(appID string, _ int) []envmodel.Environment {
 		return envsByApp[appID]
 	}))
 	if err != nil {

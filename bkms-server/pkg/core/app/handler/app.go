@@ -536,6 +536,15 @@ func (h *Handler) ListApps(c *gin.Context) {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list apps deploy statuses"))
 		return
 	}
+	// 只返回用户能查看该应用数据的环境
+	deployStatusMap, err = ginperm.FilterByViewableAppEnvsByApp(
+		ctx, h.registry, uriInput.WorkspaceID, deployStatusMap,
+		func(row deploystatus.AppDeployStatus) string { return row.EnvName },
+	)
+	if err != nil {
+		bkerrs.AbortWithErr(c, err)
+		return
+	}
 
 	output := make([]*serializer.AppInfoOutputObj, 0, len(filteredApps))
 	for _, app := range filteredApps {
