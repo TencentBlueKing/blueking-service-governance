@@ -3324,7 +3324,7 @@ definitions:
   serializer.CodeRepoTypeOutput:
     properties:
       authTypes:
-        description: 支持的鉴权方式：OAUTH 工蜂项目下拉 / PASSWORD 填写仓库地址与账号密码；第一个为默认鉴权方式
+        description: 支持的鉴权方式：OAUTH（OAuth 授权）/ PASSWORD（账号、密码），第一个为默认鉴权方式
         items:
           enum:
           - OAUTH
@@ -6088,17 +6088,17 @@ definitions:
   serializer.HelmGitRepoConfigInput:
     properties:
       authType:
-        description: 鉴权方式：OAUTH / PASSWORD，为空时取该代码库类型的默认鉴权方式
+        description: 鉴权方式：OAUTH（OAuth 授权）/ PASSWORD（账号、密码），不传时使用默认鉴权方式
         enum:
         - OAUTH
         - PASSWORD
         type: string
       password:
-        description: 仓库密码，仅 PASSWORD 鉴权使用；首次关联必填，代码库已关联时留空表示沿用已保存的密码
+        description: 仓库密码，仅账号、密码方式使用
         maxLength: 256
         type: string
       repoAlias:
-        description: 代码库别名；仅工蜂 OAuth 使用（工蜂项目全路径），其余由后端按仓库地址推导
+        description: 代码库别名，仅 OAuth 方式使用
         maxLength: 256
         type: string
       repoURL:
@@ -6117,7 +6117,7 @@ definitions:
         - GitHub
         type: string
       username:
-        description: 仓库账号，仅 PASSWORD 鉴权使用
+        description: 仓库账号，仅账号、密码方式使用
         maxLength: 128
         type: string
     required:
@@ -6129,7 +6129,7 @@ definitions:
   serializer.HelmGitRepoConfigOutputObj:
     properties:
       authType:
-        description: 鉴权方式：OAUTH / PASSWORD
+        description: 鉴权方式：OAUTH（OAuth 授权）/ PASSWORD（账号、密码）
         type: string
       repoAlias:
         description: 代码库别名
@@ -6147,7 +6147,7 @@ definitions:
         description: 代码库类型
         type: string
       username:
-        description: 仓库账号，仅 PASSWORD 鉴权时有值；仓库密码不返回
+        description: 仓库账号，仅账号、密码方式有值
         type: string
     type: object
   serializer.HelmRepoConfigInput:
@@ -8978,7 +8978,7 @@ definitions:
   serializer.RepoBuildConfigInput:
     properties:
       authType:
-        description: 鉴权方式：OAUTH / PASSWORD，为空时取该代码库类型的默认鉴权方式
+        description: 鉴权方式：OAUTH（OAuth 授权）/ PASSWORD（账号、密码），不传时使用默认鉴权方式
         enum:
         - OAUTH
         - PASSWORD
@@ -9005,7 +9005,7 @@ definitions:
         - repositoryDockerfile
         type: string
       password:
-        description: 仓库密码，仅 PASSWORD 鉴权使用；首次关联必填，代码库已关联时留空表示沿用已保存的密码
+        description: 仓库密码，仅账号、密码方式使用
         maxLength: 256
         type: string
       platformBuildConfig:
@@ -9014,7 +9014,7 @@ definitions:
         description: PlatformBuildConfig 平台通用构建配置，仅 imageBuildMode=platform 时有效；Dockerfile
           是流水线内部中间产物
       repoAlias:
-        description: 蓝盾侧仓库别名；仅工蜂 OAuth 使用（工蜂项目全路径），其余由后端按仓库地址推导
+        description: 代码库别名，仅 OAuth 方式使用
         maxLength: 256
         type: string
       repoURL:
@@ -9033,7 +9033,7 @@ definitions:
         - GitHub
         type: string
       username:
-        description: 仓库账号，仅 PASSWORD 鉴权使用
+        description: 仓库账号，仅账号、密码方式使用
         maxLength: 128
         type: string
     required:
@@ -9044,7 +9044,7 @@ definitions:
   serializer.RepoBuildConfigOutputObj:
     properties:
       authType:
-        description: 鉴权方式：OAUTH / PASSWORD
+        description: 鉴权方式：OAUTH（OAuth 授权）/ PASSWORD（账号、密码）
         type: string
       defaultBranch:
         description: 默认分支
@@ -9078,13 +9078,13 @@ definitions:
         description: 代码库类型
         type: string
       username:
-        description: 仓库账号，仅 PASSWORD 鉴权时有值；仓库密码不返回
+        description: 仓库账号，仅账号、密码方式有值
         type: string
     type: object
   serializer.RepositoryBuildConfigInput:
     properties:
       authType:
-        description: 鉴权方式：OAUTH / PASSWORD，为空时取该代码库类型的默认鉴权方式
+        description: 鉴权方式：OAUTH（OAuth 授权）/ PASSWORD（账号、密码），不传时使用默认鉴权方式
         enum:
         - OAUTH
         - PASSWORD
@@ -9111,7 +9111,7 @@ definitions:
         - repositoryDockerfile
         type: string
       password:
-        description: 仓库密码，仅 PASSWORD 鉴权使用；首次关联必填，代码库已关联时留空表示沿用已保存的密码
+        description: 仓库密码，仅账号、密码方式使用
         maxLength: 256
         type: string
       platformBuildConfig:
@@ -9120,7 +9120,7 @@ definitions:
         description: PlatformBuildConfig 平台通用构建配置，仅 imageBuildMode=platform 时有效；Dockerfile
           是流水线内部中间产物
       repoAlias:
-        description: 蓝盾侧仓库别名；仅工蜂 OAuth 使用（工蜂项目全路径），其余由后端按仓库地址推导
+        description: 代码库别名，仅 OAuth 方式使用
         maxLength: 256
         type: string
       repoURL:
@@ -9139,7 +9139,7 @@ definitions:
         - GitHub
         type: string
       username:
-        description: 仓库账号，仅 PASSWORD 鉴权使用
+        description: 仓库账号，仅账号、密码方式使用
         maxLength: 128
         type: string
     required:
@@ -9150,7 +9150,7 @@ definitions:
   serializer.RepositoryBuildConfigOutputObj:
     properties:
       authType:
-        description: 鉴权方式：OAUTH / PASSWORD
+        description: 鉴权方式：OAUTH（OAuth 授权）/ PASSWORD（账号、密码）
         type: string
       defaultBranch:
         description: 默认构建分支
@@ -9184,7 +9184,7 @@ definitions:
         description: 代码仓库类型
         type: string
       username:
-        description: 仓库账号，仅 PASSWORD 鉴权时有值；仓库密码不返回
+        description: 仓库账号，仅账号、密码方式有值
         type: string
     type: object
   serializer.ResolveAppOutput:

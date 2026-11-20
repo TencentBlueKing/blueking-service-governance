@@ -72,15 +72,15 @@ type RepositoryBuildConfigInput struct {
 	Type string `json:"type" binding:"required,oneof=TGit GitHub"`
 	// 默认构建分支
 	DefaultBranch string `json:"defaultBranch" binding:"required,min=1,max=255"`
-	// 鉴权方式：OAUTH / PASSWORD，为空时取该代码库类型的默认鉴权方式
+	// 鉴权方式：OAUTH（OAuth 授权）/ PASSWORD（账号、密码），不传时使用默认鉴权方式
 	AuthType string `json:"authType" binding:"omitempty,oneof=OAUTH PASSWORD"`
-	// 蓝盾侧仓库别名；仅工蜂 OAuth 使用（工蜂项目全路径），其余由后端按仓库地址推导
+	// 代码库别名，仅 OAuth 方式使用
 	RepoAlias string `json:"repoAlias" binding:"omitempty,max=256"`
 	// 代码仓库地址
 	RepoURL string `json:"repoURL" binding:"required,min=1,max=512,url"`
-	// 仓库账号，仅 PASSWORD 鉴权使用
+	// 仓库账号，仅账号、密码方式使用
 	Username string `json:"username" binding:"omitempty,max=128"`
-	// 仓库密码，仅 PASSWORD 鉴权使用；首次关联必填，代码库已关联时留空表示沿用已保存的密码
+	// 仓库密码，仅账号、密码方式使用
 	Password string `json:"password" binding:"omitempty,max=256"`
 	// 构建目录，空表示仓库根目录；非空时必须是仓库内相对路径，不能以 / 开头，也不能包含 .. 路径段
 	SourceDir string `json:"sourceDir" binding:"omitempty,max=64"`
@@ -462,9 +462,9 @@ type RepositoryBuildConfigOutputObj struct {
 	RepoAlias string `json:"repoAlias"`
 	// 代码仓库地址
 	RepoURL string `json:"repoURL"`
-	// 鉴权方式：OAUTH / PASSWORD
+	// 鉴权方式：OAUTH（OAuth 授权）/ PASSWORD（账号、密码）
 	AuthType string `json:"authType"`
-	// 仓库账号，仅 PASSWORD 鉴权时有值；仓库密码不返回
+	// 仓库账号，仅账号、密码方式有值
 	Username string `json:"username"`
 	// 构建目录
 	SourceDir string `json:"sourceDir"`

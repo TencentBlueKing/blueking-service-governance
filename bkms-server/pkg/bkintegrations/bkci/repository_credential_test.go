@@ -175,8 +175,6 @@ var _ = Describe("RepositoryManager Ensure", func() {
 
 				Expect(client.createRepoOpts).To(HaveLen(1))
 				Expect(client.createRepoOpts[0].RepoType).To(Equal(cloudbkci.RepoTypeCodeTGit))
-				// 测试 Git 服务为 http 地址
-				Expect(client.createRepoOpts[0].AuthType).To(Equal(cloudbkci.AuthTypeHTTP))
 				Expect(client.createRepoOpts[0].CredentialID).To(Equal("bkms_repo_group_app"))
 				Expect(client.credentialCalls).To(ContainElement(
 					credentialCall{"create", "bkms_repo_group_app", "git", "secret"},
@@ -395,7 +393,7 @@ var _ = Describe("RepositoryManager Ensure", func() {
 				Expect(repo.UsesCredential()).To(BeFalse())
 				Expect(client.createRepoOpts).To(HaveLen(1))
 				Expect(client.createRepoOpts[0].RepoType).To(Equal(cloudbkci.RepoTypeCodeGit))
-				Expect(client.createRepoOpts[0].AuthType).To(BeEmpty())
+				Expect(client.createRepoOpts[0].CredentialID).To(BeEmpty())
 				Expect(client.credentialCalls).To(BeEmpty())
 			})
 		})
@@ -440,7 +438,7 @@ var _ = Describe("RepositoryManager Ensure", func() {
 				// 未指定鉴权方式时取第一个（OAUTH）
 				Expect(repo.UsesCredential()).To(BeFalse())
 				Expect(client.createRepoOpts[1].RepoType).To(Equal(cloudbkci.RepoTypeCodeTGit))
-				Expect(client.createRepoOpts[1].AuthType).To(BeEmpty())
+				Expect(client.createRepoOpts[1].CredentialID).To(BeEmpty())
 			})
 		})
 	})

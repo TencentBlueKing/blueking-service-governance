@@ -517,10 +517,8 @@ func (m *RepositoryManager) createRepository(ctx context.Context, spec Repositor
 		); err != nil {
 			return nil, err
 		}
-		opts.AuthType = repositoryAuthType(spec.URL)
 		opts.CredentialID = credentialID
 
-		repository.AuthType = opts.AuthType
 		repository.CredentialID = credentialID
 		repository.Username = spec.Username
 		repository.Password = spec.Password
@@ -536,14 +534,12 @@ func (m *RepositoryManager) createRepository(ctx context.Context, spec Repositor
 	repository.Type = bkci.ScmCodeOf(opts.RepoType)
 
 	// 回查代码库，确认已关联成功
-	if !config.G.FeatureIntegrations.DisableBkCIRepositoryQuery {
-		repo, getErr := client.GetRepository(ctx, project.Code, repository.ID)
-		if getErr != nil {
-			return nil, errors.Wrapf(getErr, "get bkci repository %s in bkci project %s", repository.ID, project.Code)
-		}
-		repository.URL = repo.Url
-		repository.Type = repo.Type
+	repo, err := client.GetRepository(ctx, project.Code, repository.ID)
+	if err != nil {
+		return nil, errors.Wrapf(err, "get bkci repository %s in bkci project %s", repository.ID, project.Code)
 	}
+	repository.URL = repo.Url
+	repository.Type = repo.Type
 
 	if err = store.Of(m.db, RepositoryMeta).Create(ctx, repository); err != nil {
 		return nil, errors.Wrap(err, "insert bkci repository to db")

@@ -163,9 +163,9 @@ type RepoBuildConfigOutputObj struct {
 	RepoAlias string `json:"repoAlias"`
 	// 代码库地址
 	RepoURL string `json:"repoURL"`
-	// 鉴权方式：OAUTH / PASSWORD
+	// 鉴权方式：OAUTH（OAuth 授权）/ PASSWORD（账号、密码）
 	AuthType string `json:"authType"`
-	// 仓库账号，仅 PASSWORD 鉴权时有值；仓库密码不返回
+	// 仓库账号，仅账号、密码方式有值
 	Username string `json:"username"`
 	// 默认分支
 	DefaultBranch string `json:"defaultBranch"`

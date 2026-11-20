@@ -46,7 +46,7 @@ type FrontendFeaturesOutput struct {
 type CodeRepoTypeOutput struct {
 	// 代码库类型，如 TGit
 	Type string `json:"type"`
-	// 支持的鉴权方式：OAUTH 工蜂项目下拉 / PASSWORD 填写仓库地址与账号密码；第一个为默认鉴权方式
+	// 支持的鉴权方式：OAUTH（OAuth 授权）/ PASSWORD（账号、密码），第一个为默认鉴权方式
 	AuthTypes []string `json:"authTypes" enums:"OAUTH,PASSWORD"`
 }
 

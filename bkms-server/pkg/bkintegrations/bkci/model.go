@@ -94,8 +94,6 @@ type Repository struct {
 	WorkspaceID string `bson:"workspaceID"`
 	// ProjectCode 蓝盾项目 Code
 	ProjectCode string `bson:"projectCode"`
-	// AuthType 蓝盾代码库授权方式：HTTP / HTTPS 表示账号密码凭证；为空表示 OAuth（历史数据均为 OAuth）
-	AuthType string `bson:"authType,omitempty"`
 	// CredentialID 账号密码方式关联时，蓝盾侧保存仓库账号密码的凭证 ID
 	CredentialID string `bson:"credentialID,omitempty"`
 	// Username 仓库账号，仅账号密码方式关联时有值

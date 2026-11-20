@@ -59,14 +59,11 @@ func ScmCodeOf(repoType string) string {
 	return repoType
 }
 
-// 蓝盾代码库授权方式
+// 蓝盾代码库的仓库认证类型（请求体 authType，蓝盾 RepoAuthType），蓝盾按它校验仓库地址前缀
 const (
-	// AuthTypeOAuth OAuth 授权
-	AuthTypeOAuth = "OAUTH"
-	// AuthTypeHTTP HTTP 凭证
-	AuthTypeHTTP = "HTTP"
-	// AuthTypeHTTPS HTTPS 凭证
-	AuthTypeHTTPS = "HTTPS"
+	repoAuthTypeOAuth = "OAUTH"
+	repoAuthTypeHTTP  = "HTTP"
+	repoAuthTypeHTTPS = "HTTPS"
 )
 
 // CreateRepositoryOptions 创建蓝盾代码库的参数
@@ -77,9 +74,7 @@ type CreateRepositoryOptions struct {
 	URL string
 	// Alias 代码库别名
 	Alias string
-	// AuthType 授权方式，留空默认 OAuth
-	AuthType string
-	// CredentialID 访问凭据 ID，凭证方式使用
+	// CredentialID 仓库账号密码凭证 ID，为空时以 OAuth 关联
 	CredentialID string
 }
 

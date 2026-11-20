@@ -26662,7 +26662,7 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "authTypes": {
-                    "description": "支持的鉴权方式：OAUTH 工蜂项目下拉 / PASSWORD 填写仓库地址与账号密码；第一个为默认鉴权方式",
+                    "description": "支持的鉴权方式：OAUTH（OAuth 授权）/ PASSWORD（账号、密码），第一个为默认鉴权方式",
                     "type": "array",
                     "items": {
                         "type": "string",
@@ -30623,7 +30623,7 @@ const docTemplate = `{
             ],
             "properties": {
                 "authType": {
-                    "description": "鉴权方式：OAUTH / PASSWORD，为空时取该代码库类型的默认鉴权方式",
+                    "description": "鉴权方式：OAUTH（OAuth 授权）/ PASSWORD（账号、密码），不传时使用默认鉴权方式",
                     "type": "string",
                     "enum": [
                         "OAUTH",
@@ -30631,12 +30631,12 @@ const docTemplate = `{
                     ]
                 },
                 "password": {
-                    "description": "仓库密码，仅 PASSWORD 鉴权使用；首次关联必填，代码库已关联时留空表示沿用已保存的密码",
+                    "description": "仓库密码，仅账号、密码方式使用",
                     "type": "string",
                     "maxLength": 256
                 },
                 "repoAlias": {
-                    "description": "代码库别名；仅工蜂 OAuth 使用（工蜂项目全路径），其余由后端按仓库地址推导",
+                    "description": "代码库别名，仅 OAuth 方式使用",
                     "type": "string",
                     "maxLength": 256
                 },
@@ -30661,7 +30661,7 @@ const docTemplate = `{
                     ]
                 },
                 "username": {
-                    "description": "仓库账号，仅 PASSWORD 鉴权使用",
+                    "description": "仓库账号，仅账号、密码方式使用",
                     "type": "string",
                     "maxLength": 128
                 }
@@ -30671,7 +30671,7 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "authType": {
-                    "description": "鉴权方式：OAUTH / PASSWORD",
+                    "description": "鉴权方式：OAUTH（OAuth 授权）/ PASSWORD（账号、密码）",
                     "type": "string"
                 },
                 "repoAlias": {
@@ -30695,7 +30695,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "username": {
-                    "description": "仓库账号，仅 PASSWORD 鉴权时有值；仓库密码不返回",
+                    "description": "仓库账号，仅账号、密码方式有值",
                     "type": "string"
                 }
             }
@@ -34864,7 +34864,7 @@ const docTemplate = `{
             ],
             "properties": {
                 "authType": {
-                    "description": "鉴权方式：OAUTH / PASSWORD，为空时取该代码库类型的默认鉴权方式",
+                    "description": "鉴权方式：OAUTH（OAuth 授权）/ PASSWORD（账号、密码），不传时使用默认鉴权方式",
                     "type": "string",
                     "enum": [
                         "OAUTH",
@@ -34898,7 +34898,7 @@ const docTemplate = `{
                     ]
                 },
                 "password": {
-                    "description": "仓库密码，仅 PASSWORD 鉴权使用；首次关联必填，代码库已关联时留空表示沿用已保存的密码",
+                    "description": "仓库密码，仅账号、密码方式使用",
                     "type": "string",
                     "maxLength": 256
                 },
@@ -34911,7 +34911,7 @@ const docTemplate = `{
                     ]
                 },
                 "repoAlias": {
-                    "description": "蓝盾侧仓库别名；仅工蜂 OAuth 使用（工蜂项目全路径），其余由后端按仓库地址推导",
+                    "description": "代码库别名，仅 OAuth 方式使用",
                     "type": "string",
                     "maxLength": 256
                 },
@@ -34935,7 +34935,7 @@ const docTemplate = `{
                     ]
                 },
                 "username": {
-                    "description": "仓库账号，仅 PASSWORD 鉴权使用",
+                    "description": "仓库账号，仅账号、密码方式使用",
                     "type": "string",
                     "maxLength": 128
                 }
@@ -34945,7 +34945,7 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "authType": {
-                    "description": "鉴权方式：OAUTH / PASSWORD",
+                    "description": "鉴权方式：OAUTH（OAuth 授权）/ PASSWORD（账号、密码）",
                     "type": "string"
                 },
                 "defaultBranch": {
@@ -34992,7 +34992,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "username": {
-                    "description": "仓库账号，仅 PASSWORD 鉴权时有值；仓库密码不返回",
+                    "description": "仓库账号，仅账号、密码方式有值",
                     "type": "string"
                 }
             }
@@ -35006,7 +35006,7 @@ const docTemplate = `{
             ],
             "properties": {
                 "authType": {
-                    "description": "鉴权方式：OAUTH / PASSWORD，为空时取该代码库类型的默认鉴权方式",
+                    "description": "鉴权方式：OAUTH（OAuth 授权）/ PASSWORD（账号、密码），不传时使用默认鉴权方式",
                     "type": "string",
                     "enum": [
                         "OAUTH",
@@ -35040,7 +35040,7 @@ const docTemplate = `{
                     ]
                 },
                 "password": {
-                    "description": "仓库密码，仅 PASSWORD 鉴权使用；首次关联必填，代码库已关联时留空表示沿用已保存的密码",
+                    "description": "仓库密码，仅账号、密码方式使用",
                     "type": "string",
                     "maxLength": 256
                 },
@@ -35053,7 +35053,7 @@ const docTemplate = `{
                     ]
                 },
                 "repoAlias": {
-                    "description": "蓝盾侧仓库别名；仅工蜂 OAuth 使用（工蜂项目全路径），其余由后端按仓库地址推导",
+                    "description": "代码库别名，仅 OAuth 方式使用",
                     "type": "string",
                     "maxLength": 256
                 },
@@ -35077,7 +35077,7 @@ const docTemplate = `{
                     ]
                 },
                 "username": {
-                    "description": "仓库账号，仅 PASSWORD 鉴权使用",
+                    "description": "仓库账号，仅账号、密码方式使用",
                     "type": "string",
                     "maxLength": 128
                 }
@@ -35087,7 +35087,7 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "authType": {
-                    "description": "鉴权方式：OAUTH / PASSWORD",
+                    "description": "鉴权方式：OAUTH（OAuth 授权）/ PASSWORD（账号、密码）",
                     "type": "string"
                 },
                 "defaultBranch": {
@@ -35134,7 +35134,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "username": {
-                    "description": "仓库账号，仅 PASSWORD 鉴权时有值；仓库密码不返回",
+                    "description": "仓库账号，仅账号、密码方式有值",
                     "type": "string"
                 }
             }

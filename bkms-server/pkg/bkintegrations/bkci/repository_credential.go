@@ -22,7 +22,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"net/url"
 	"slices"
 	"strings"
 
@@ -120,14 +119,6 @@ func repositoryCredentialID(alias string) string {
 // repositoryCredentialDesc 代码库凭证在蓝盾侧的描述
 func repositoryCredentialDesc(alias string) string {
 	return "[bkms] 代码库 " + alias + " 的仓库账号密码"
-}
-
-// repositoryAuthType 按仓库地址协议选择蓝盾代码库授权方式（账号密码凭证）
-func repositoryAuthType(repoURL string) string {
-	if u, err := url.Parse(repoURL); err == nil && u.Scheme == "http" {
-		return bkci.AuthTypeHTTP
-	}
-	return bkci.AuthTypeHTTPS
 }
 
 // ensureRepositoryCredential 创建代码库凭证，创建失败时（如蓝盾残留同 ID 凭证）改为更新

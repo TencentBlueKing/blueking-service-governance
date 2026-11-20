@@ -170,6 +170,17 @@ var _ = Describe("StubApiClient repository refs", func() {
 		Expect(refs[0].Path).To(HavePrefix("refs/tags/"))
 	})
 
+	DescribeTable("repoAuthTypeOf",
+		func(opts CreateRepositoryOptions, expected string) {
+			Expect(repoAuthTypeOf(opts)).To(Equal(expected))
+		},
+		Entry("oauth without credential", CreateRepositoryOptions{URL: "https://git.example.com/g/a.git"}, "OAUTH"),
+		Entry("https with credential",
+			CreateRepositoryOptions{URL: "https://git.example.com/g/a.git", CredentialID: "c"}, "HTTPS"),
+		Entry("http with credential",
+			CreateRepositoryOptions{URL: "HTTP://git.example.com/g/a.git", CredentialID: "c"}, "HTTP"),
+	)
+
 	It("should return stable unique repository ids for different repositories", func() {
 		client := NewStub(auth.User{ID: "tester"})
 
