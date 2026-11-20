@@ -20,6 +20,7 @@ package bkci
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/Masterminds/semver/v3"
@@ -531,8 +532,6 @@ func (m *RepositoryManager) createRepository(ctx context.Context, spec Repositor
 		}
 		return nil, err
 	}
-	repository.Type = bkci.ScmCodeOf(opts.RepoType)
-
 	// 回查代码库，确认已关联成功
 	repo, err := client.GetRepository(ctx, project.Code, repository.ID)
 	if err != nil {
@@ -588,15 +587,17 @@ func (m *RepositoryManager) updateCredential(
 	if err != nil {
 		return nil, errors.Wrap(err, "create bkci client")
 	}
-	err = client.UpdateCredential(
-		ctx, repository.ProjectCode, repository.CredentialID,
-		repositoryCredentialDesc(repository.Alias), username, spec.Password,
-	)
+	desc := fmt.Sprintf(repoCredentialDescFmt, repository.Alias)
+	err = client.UpdateCredential(ctx, repository.ProjectCode, repository.CredentialID, desc, username, spec.Password)
 	// 凭证在蓝盾侧被删除时重新创建
 	if errors.Is(err, bkci.ObjectNotFound) {
 		err = client.CreateCredential(
-			ctx, repository.ProjectCode, repository.CredentialID,
-			repositoryCredentialDesc(repository.Alias), username, spec.Password,
+			ctx,
+			repository.ProjectCode,
+			repository.CredentialID,
+			desc,
+			username,
+			spec.Password,
 		)
 	}
 	if err != nil {

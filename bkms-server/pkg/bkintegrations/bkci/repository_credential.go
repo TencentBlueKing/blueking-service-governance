@@ -22,6 +22,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"slices"
 	"strings"
 
@@ -54,6 +55,8 @@ const (
 	repoCredentialIDPrefix = "bkms_repo_" // #nosec G101
 	// repoCredentialIDMaxLen 代码库凭证 ID 最大长度，与触发流水线凭证保持一致
 	repoCredentialIDMaxLen = buildTriggerCredentialIDMaxLen
+	// repoCredentialDescFmt 代码库凭证在蓝盾侧的描述
+	repoCredentialDescFmt = "bkms repository credential for %s" // #nosec G101
 )
 
 // RefKind 代码库引用类型
@@ -116,16 +119,11 @@ func repositoryCredentialID(alias string) string {
 	return repoCredentialIDPrefix + hex.EncodeToString(sum[:digestLen/2])
 }
 
-// repositoryCredentialDesc 代码库凭证在蓝盾侧的描述
-func repositoryCredentialDesc(alias string) string {
-	return "[bkms] 代码库 " + alias + " 的仓库账号密码"
-}
-
 // ensureRepositoryCredential 创建代码库凭证，创建失败时（如蓝盾残留同 ID 凭证）改为更新
 func ensureRepositoryCredential(
 	ctx context.Context, client bkci.Client, projectCode, credentialID, alias, username, password string,
 ) error {
-	desc := repositoryCredentialDesc(alias)
+	desc := fmt.Sprintf(repoCredentialDescFmt, alias)
 	createErr := client.CreateCredential(ctx, projectCode, credentialID, desc, username, password)
 	if createErr == nil {
 		return nil

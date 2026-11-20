@@ -45,20 +45,6 @@ const (
 	RepoTypeCodeTGit = "codeTGit"
 )
 
-// scmCodes 蓝盾代码库类型到代码源标识（scmCode / repositoryType 枚举）的映射
-var scmCodes = map[string]string{
-	RepoTypeCodeGit:  "CODE_GIT",
-	RepoTypeCodeTGit: "CODE_TGIT",
-}
-
-// ScmCodeOf 返回代码库类型对应的代码源标识，如 codeTGit -> CODE_TGIT；未知类型原样返回
-func ScmCodeOf(repoType string) string {
-	if code, ok := scmCodes[repoType]; ok {
-		return code
-	}
-	return repoType
-}
-
 // 蓝盾代码库的仓库认证类型（请求体 authType，蓝盾 RepoAuthType），蓝盾按它校验仓库地址前缀
 const (
 	repoAuthTypeOAuth = "OAUTH"

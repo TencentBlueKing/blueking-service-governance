@@ -780,7 +780,7 @@ func (c *ApiClient) CreateRepository(
 		"projectName": opts.Alias,
 		"userName":    c.user.ID,
 		"authType":    repoAuthTypeOf(opts),
-		"scmCode":     ScmCodeOf(opts.RepoType),
+		"scmCode":     opts.RepoType,
 		// OAUTH 不需要指定凭证，但蓝盾 API 有做检查
 		"credentialId": opts.CredentialID,
 	}
