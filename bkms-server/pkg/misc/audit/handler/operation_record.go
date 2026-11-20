@@ -88,6 +88,12 @@ func (h *Handler) ListOperationRecords(c *gin.Context) {
 		return
 	}
 
+	// 只返回用户能查看的记录，全部可见时不过滤
+	if opts.Visible, err = listVisibleGroups(ctx, h.registry, uriInput.WorkspaceID); err != nil {
+		bkerrs.AbortWithErr(c, err)
+		return
+	}
+
 	page, err := audit.ListRecords(ctx, h.registry.DB, opts)
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list operation records"))

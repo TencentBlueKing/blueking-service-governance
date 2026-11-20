@@ -85,7 +85,8 @@ func (h *Handler) RestartDevModeProcesses(c *gin.Context) {
 		bkerrs.AbortWithErr(c, err)
 		return
 	}
-	app, err := perm.ValidateAppByID(ctx, h.registry, uriInput.AppID, perm.TypeEdit)
+	// 重启作用于各环境的实例，部署权限在解析每个目标环境时校验
+	app, err := perm.ValidateAppByID(ctx, h.registry, uriInput.AppID, perm.TypeView)
 	if err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return
@@ -221,7 +222,8 @@ func isSkippableRestartErr(err error) bool {
 		return false
 	}
 	switch bkErr.Code() {
-	case bkerrs.ErrCodeInvalidArgument, bkerrs.ErrCodeInvalidRequest, bkerrs.ErrCodeNotFound:
+	case bkerrs.ErrCodeInvalidArgument, bkerrs.ErrCodeInvalidRequest, bkerrs.ErrCodeNotFound,
+		bkerrs.ErrCodeIAMNoPermission:
 		return true
 	default:
 		return false
@@ -248,6 +250,9 @@ func (h *Handler) resolveRestartTarget(
 	ctx context.Context, app *bkmsapp.Application, env *envmodel.Environment, instanceIDs []string,
 ) (*restartEnvTarget, error) {
 	if err := checkEnvSupported(env); err != nil {
+		return nil, err
+	}
+	if err := perm.ValidateAppEnv(ctx, h.registry, app, env, perm.TypeDeploy); err != nil {
 		return nil, err
 	}
 	devModeSpec, err := h.getEffectiveDevMode(ctx, app, env.Name)

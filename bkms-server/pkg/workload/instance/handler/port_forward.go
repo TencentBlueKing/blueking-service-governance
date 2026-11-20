@@ -30,8 +30,6 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
-	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/perm"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/misc/audit"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/metrics"
 	pfwhitelist "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/platmgt/portforward"
@@ -67,22 +65,13 @@ func (h *Handler) PortForward(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	app, err := h.validateEditableAppModel(ctx, uriInput.AppID)
+	app, envInfo, err := h.validateAppModelInstanceOp(ctx, uriInput.AppID, uriInput.EnvName)
 	if err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return
 	}
-	if err = perm.NewManager().HasDeployEnvPerm(ctx, app.WorkspaceID, uriInput.EnvName); err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeNoPermission, "check deploy env perm"))
-		return
-	}
 
 	// 校验环境类型：禁止在正式环境使用 port-forward
-	envInfo, err := h.envs().Get(ctx, envmodel.AppEnvByName(app.WorkspaceID, uriInput.AppID, uriInput.EnvName))
-	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get environment info"))
-		return
-	}
 	if bkmsenv.IsProductionType(bkmsenv.Type(envInfo.Type)) {
 		bkerrs.AbortWithErr(c, bkerrs.New(
 			bkerrs.ErrCodeInvalidRequest,

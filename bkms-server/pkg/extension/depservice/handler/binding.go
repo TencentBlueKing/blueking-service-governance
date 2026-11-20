@@ -110,7 +110,7 @@ func (h *Handler) ListBindings(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	app, err := perm.ValidateAppByID(ctx, h.registry, uriInput.AppID, perm.TypeView)
+	app, err := perm.ValidateAppInAllEnvs(ctx, h.registry, uriInput.AppID, perm.TypeView)
 	if err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return
@@ -151,7 +151,7 @@ func (h *Handler) GetBinding(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	app, err := perm.ValidateAppByID(ctx, h.registry, uriInput.AppID, perm.TypeView)
+	app, err := perm.ValidateAppInAllEnvs(ctx, h.registry, uriInput.AppID, perm.TypeView)
 	if err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return

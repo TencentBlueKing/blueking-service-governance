@@ -142,7 +142,7 @@ func (h *Handler) validateEnv(
 	}
 
 	// 校验 app 和 env（包含权限检查）
-	app, env, err := perm.ValidateAppEnvByName(ctx, h.registry, appID, envName, perm.TypeEdit)
+	app, env, err := perm.ValidateAppEnvByName(ctx, h.registry, appID, envName, perm.TypeView)
 	if err != nil {
 		return nil, nil, err
 	}

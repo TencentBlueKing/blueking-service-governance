@@ -66,7 +66,7 @@ func (h *Handler) CreateDevModePublishRecords(c *gin.Context) {
 		return
 	}
 	ctx := c.Request.Context()
-	app, _, err := perm.ValidateAppEnvByName(ctx, h.registry, uriInput.AppID, uriInput.EnvName, perm.TypeEdit)
+	app, _, err := perm.ValidateAppEnvByName(ctx, h.registry, uriInput.AppID, uriInput.EnvName, perm.TypeDeploy)
 	if err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return
@@ -187,7 +187,17 @@ func (h *Handler) ListDevModePublishRecords(c *gin.Context) {
 			}
 			ids = append(ids, id)
 		}
-		opts = append(opts, store.Where("appID", app.ID), store.Where("_id", bson.M{"$in": ids}))
+		// 只返回用户能查看该应用数据的环境下的记录，全部可见时不按环境过滤
+		viewableEnvs, allEnvs, fErr := perm.ListViewableAppEnvNames(ctx, h.registry, app)
+		if fErr != nil {
+			bkerrs.AbortWithErr(c, fErr)
+			return
+		}
+		appCond := store.Opt(store.Where("appID", app.ID))
+		if !allEnvs {
+			appCond = devmode.ByAppEnvs(app.ID, viewableEnvs)
+		}
+		opts = append(opts, appCond, store.Where("_id", bson.M{"$in": ids}))
 		h.respondPublishRecords(c, ctx, opts, input.Page, input.PageSize)
 		return
 	}
@@ -221,6 +231,13 @@ func (h *Handler) ListDevModePublishRecords(c *gin.Context) {
 			return env.Name, lo.Contains(input.EnvTypes, env.Type)
 		})
 	}
+	// 只返回用户能查看该应用数据的环境下的记录
+	viewable, err := perm.FilterViewableAppEnvNames(ctx, h.registry, app, envNames)
+	if err != nil {
+		bkerrs.AbortWithErr(c, err)
+		return
+	}
+	envNames = lo.Filter(envNames, func(name string, _ int) bool { return viewable.Has(name) })
 	if len(envNames) == 0 {
 		ginutils.OK(c, slz.ListPublishRecordsOutput{
 			Data: slz.PaginatedPublishRecords{Results: []*slz.PublishRecordOutputObj{}},

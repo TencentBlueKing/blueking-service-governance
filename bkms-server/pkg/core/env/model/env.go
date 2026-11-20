@@ -100,6 +100,11 @@ func (e Environment) IsFeatureEnv() bool {
 	return e.GetKind() == EnvironmentKindFeature
 }
 
+// IsAvailableToApp 判断环境是否对应用可用：全部标准环境，以及该应用拥有的特性环境，与查询条件 AvailableToApp 一致。
+func (e Environment) IsAvailableToApp(appID string) bool {
+	return !e.IsFeatureEnv() || e.OwnerAppID == appID
+}
+
 // BizCluster 业务集群信息
 type BizCluster struct {
 	// ProjectCode 蓝鲸 BCS 项目 Code

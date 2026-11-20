@@ -51,8 +51,13 @@ const (
 	pathAttrKey = "_bk_iam_path_"
 
 	// pathAttrWorkspaceTmpl is the parent-path template used for
-	// resources nested under a workspace, e.g. apps and envs.
+	// resources nested under a workspace, e.g. apps.
 	pathAttrWorkspaceTmpl = "/workspace,%s/"
+
+	// pathAttrEnvTmpl is the parent-path template of envs, which are nested
+	// under workspace -> env_type. IAM matches paths by prefix, so policies
+	// granted on the workspace node still cover every env.
+	pathAttrEnvTmpl = "/workspace,%s/env_type,%s/"
 
 	// adminRoleDescTmpl is the admin role description template.
 	adminRoleDescTmpl = "工作空间(%s)的管理员, 拥有该工作空间下的所有权限"
@@ -512,8 +517,57 @@ func (s *IAMService) EnvCreateIsAllowed(ctx context.Context, username, workspace
 
 // EnvActionIsAllowed checks whether the user is allowed to perform a
 // non-create action on a single env under the given workspace.
+//
+// envID is the env ObjectID hex, envType is the current type of the env.
 func (s *IAMService) EnvActionIsAllowed(
-	ctx context.Context, username, workspaceID, envID, actionID string,
+	ctx context.Context, username, workspaceID, envType, envID, actionID string,
+) (bool, error) {
+	return s.iamClient.IsAllowed(
+		ctx,
+		iamsdk.NewRequest(
+			config.G.BkIAMSystemIDs.Bkms,
+			iamsdk.NewSubject(subjectTypeUser, username),
+			iamsdk.NewAction(actionID),
+			iamsdk.Resources{envResourceNode(workspaceID, envType, envID)},
+		),
+	)
+}
+
+// EnvsActionAllowed checks a single action against multiple envs under the
+// given workspace in one policy query, and returns whether it's allowed for
+// each env ID.
+func (s *IAMService) EnvsActionAllowed(
+	ctx context.Context, username, workspaceID string, envs []EnvRef, actionID string,
+) (map[string]bool, error) {
+	request := iamsdk.MultiActionRequest{
+		System:    config.G.BkIAMSystemIDs.Bkms,
+		Subject:   iamsdk.NewSubject(subjectTypeUser, username),
+		Actions:   []iamsdk.Action{iamsdk.NewAction(actionID)},
+		Resources: []iamsdk.ResourceNode{},
+	}
+	resourcesList := make([]iamsdk.Resources, 0, len(envs))
+	for _, env := range envs {
+		resourcesList = append(resourcesList, iamsdk.Resources{envResourceNode(workspaceID, env.Type, env.ID)})
+	}
+	results, err := s.iamClient.BatchResourceMultiActionsAllowed(ctx, request, resourcesList)
+	if err != nil {
+		return nil, errors.Wrap(err, "batch check env action")
+	}
+
+	allowed := make(map[string]bool, len(envs))
+	for _, env := range envs {
+		// iam-go-sdk 以资源 ID 作为单资源节点的结果键
+		allowed[env.ID] = results[env.ID][actionID]
+	}
+	return allowed, nil
+}
+
+// AppEnvActionIsAllowed checks whether the user is allowed to perform an
+// action that relates to both an app and an env, e.g. deploying the app to
+// the env. Both resources are evaluated against the same policy, so the app
+// scope and env scope granted by different roles can not be combined.
+func (s *IAMService) AppEnvActionIsAllowed(
+	ctx context.Context, username, workspaceID, appID, envType, envID, actionID string,
 ) (bool, error) {
 	return s.iamClient.IsAllowed(
 		ctx,
@@ -522,43 +576,75 @@ func (s *IAMService) EnvActionIsAllowed(
 			iamsdk.NewSubject(subjectTypeUser, username),
 			iamsdk.NewAction(actionID),
 			iamsdk.Resources{
-				iamsdk.NewResourceNode(
-					config.G.BkIAMSystemIDs.Bkms, resourceTypeEnv, envID,
-					map[string]any{pathAttrKey: fmt.Sprintf(pathAttrWorkspaceTmpl, workspaceID)},
-				),
+				appResourceNode(workspaceID, appID),
+				envResourceNode(workspaceID, envType, envID),
 			},
 		),
 	)
 }
 
-// EnvsMultiActionsAllowed checks multiple actions against multiple envs
-// under the given workspace, in a single batched request.
-func (s *IAMService) EnvsMultiActionsAllowed(
-	ctx context.Context, username, workspaceID string, envIDs, actionIDs []string,
+// EnvRef identifies an env for authorization: its ObjectID hex and current type.
+type EnvRef struct {
+	ID   string
+	Type string
+}
+
+// AppEnvRef identifies an (app, env) pair for batch authorization.
+type AppEnvRef struct {
+	AppID string
+	Env   EnvRef
+}
+
+// AppEnvPairsActionAllowed checks a single app-env action against multiple
+// (app, env) pairs in one policy query, and returns whether it's allowed for
+// each pair, keyed by appID then envID.
+func (s *IAMService) AppEnvPairsActionAllowed(
+	ctx context.Context, username, workspaceID string, pairs []AppEnvRef, actionID string,
 ) (map[string]map[string]bool, error) {
-	acts := make([]iamsdk.Action, 0, len(actionIDs))
-	for _, actionID := range actionIDs {
-		acts = append(acts, iamsdk.NewAction(actionID))
-	}
 	request := iamsdk.MultiActionRequest{
 		System:    config.G.BkIAMSystemIDs.Bkms,
 		Subject:   iamsdk.NewSubject(subjectTypeUser, username),
-		Actions:   acts,
+		Actions:   []iamsdk.Action{iamsdk.NewAction(actionID)},
 		Resources: []iamsdk.ResourceNode{},
 	}
-	resources := make([]iamsdk.Resources, 0, len(envIDs))
-	for _, id := range envIDs {
-		resources = append(
-			resources,
-			iamsdk.Resources{
-				iamsdk.NewResourceNode(
-					config.G.BkIAMSystemIDs.Bkms, resourceTypeEnv, id,
-					map[string]any{pathAttrKey: fmt.Sprintf(pathAttrWorkspaceTmpl, workspaceID)},
-				),
-			},
-		)
+	resourcesList := make([]iamsdk.Resources, 0, len(pairs))
+	for _, p := range pairs {
+		resourcesList = append(resourcesList, iamsdk.Resources{
+			appResourceNode(workspaceID, p.AppID),
+			envResourceNode(workspaceID, p.Env.Type, p.Env.ID),
+		})
 	}
-	return s.iamClient.BatchResourceMultiActionsAllowed(ctx, request, resources)
+	results, err := s.iamClient.BatchResourceMultiActionsAllowed(ctx, request, resourcesList)
+	if err != nil {
+		return nil, errors.Wrap(err, "batch check app env action")
+	}
+
+	allowed := make(map[string]map[string]bool)
+	for _, p := range pairs {
+		// iam-go-sdk 以 "type,id/type,id" 作为多资源节点的结果键
+		key := fmt.Sprintf("%s,%s/%s,%s", resourceTypeApp, p.AppID, resourceTypeEnv, p.Env.ID)
+		if allowed[p.AppID] == nil {
+			allowed[p.AppID] = make(map[string]bool)
+		}
+		allowed[p.AppID][p.Env.ID] = results[key][actionID]
+	}
+	return allowed, nil
+}
+
+// appResourceNode builds the IAM resource node of an app.
+func appResourceNode(workspaceID, appID string) iamsdk.ResourceNode {
+	return iamsdk.NewResourceNode(
+		config.G.BkIAMSystemIDs.Bkms, resourceTypeApp, appID,
+		map[string]any{pathAttrKey: fmt.Sprintf(pathAttrWorkspaceTmpl, workspaceID)},
+	)
+}
+
+// envResourceNode builds the IAM resource node of an env.
+func envResourceNode(workspaceID, envType, envID string) iamsdk.ResourceNode {
+	return iamsdk.NewResourceNode(
+		config.G.BkIAMSystemIDs.Bkms, resourceTypeEnv, envID,
+		map[string]any{pathAttrKey: fmt.Sprintf(pathAttrEnvTmpl, workspaceID, envType)},
+	)
 }
 
 // createRole creates a single role under the given grade manager: it

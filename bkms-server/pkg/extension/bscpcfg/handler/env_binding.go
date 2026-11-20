@@ -246,6 +246,15 @@ func (h *Handler) ListEnvBindings(c *gin.Context) {
 		return
 	}
 
+	// 只返回用户能查看该应用数据的环境
+	configs, err = perm.FilterByViewableAppEnvs(ctx, h.registry, app, configs, func(config *cfgmodel.Snapshot) string {
+		return config.EnvBinding.EnvName
+	})
+	if err != nil {
+		bkerrs.AbortWithErr(c, err)
+		return
+	}
+
 	ginutils.OK(
 		c,
 		&slz.EnvBindingListResponse{

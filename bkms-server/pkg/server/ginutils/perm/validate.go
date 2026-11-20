@@ -23,8 +23,6 @@ import (
 	"context"
 	"errors"
 
-	"go.mongodb.org/mongo-driver/v2/bson"
-
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
@@ -44,7 +42,7 @@ const (
 	TypeEdit Type = "edit"
 	// TypeDelete checks delete permission.
 	TypeDelete Type = "delete"
-	// TypeDeploy checks deploy permission.
+	// TypeDeploy checks the permission to deploy an app to an env, only used by app-env checks.
 	TypeDeploy Type = "deploy"
 )
 
@@ -111,6 +109,30 @@ func ValidateWorkspaceForAppCreate(
 	return ws, nil
 }
 
+// ValidateWorkspaceForEnvCreate validates the workspace referenced by a
+// `workspaceID` path parameter, then checks create-env permission within that
+// workspace. It's used by APIs that create envs under
+// "/workspaces/{workspaceID}/...".
+//
+// The error returned from this function is an instance of bkerrs and can be
+// returned directly to the client without any wrapping.
+func ValidateWorkspaceForEnvCreate(
+	ctx context.Context,
+	registry *storereg.Registry,
+	workspaceID string,
+) (*workspace.Workspace, error) {
+	ws, err := getWorkspaceByID(ctx, registry, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+
+	err = perm.NewManager().HasCreateEnvPerm(ctx, ws.ID)
+	if err != nil {
+		return nil, bkerrs.WrapIAMNoPermission(err, ws.ID, "check env perm")
+	}
+	return ws, nil
+}
+
 func getWorkspaceByID(
 	ctx context.Context,
 	registry *storereg.Registry,
@@ -147,40 +169,69 @@ func ValidateEnvByID(
 	envID string,
 	permType Type,
 ) (*envmodel.Environment, error) {
-	if envID == "" {
-		return nil, bkerrs.New(bkerrs.ErrCodeInvalidRequest, "envID is required")
+	env, err := getEnvByID(ctx, registry, envID)
+	if err != nil {
+		return nil, err
 	}
 
-	envBsonID, err := bson.ObjectIDFromHex(envID)
+	if err = validateEnv(ctx, registry, env, permType); err != nil {
+		return nil, err
+	}
+	return env, nil
+}
+
+// ValidateEnvByName validates and returns an environment by `workspaceID` and
+// `envName` path parameters, then checks the requested permission. It's
+// usually used in APIs such as "/workspaces/{workspaceID}/envs/{envName}/...".
+func ValidateEnvByName(
+	ctx context.Context,
+	registry *storereg.Registry,
+	workspaceID, envName string,
+	permType Type,
+) (*envmodel.Environment, error) {
+	env, err := getEnv(ctx, registry, envmodel.ByName(workspaceID, envName), envName)
 	if err != nil {
-		return nil, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "invalid env id")
+		return nil, err
 	}
 
-	env, err := store.Of(registry.DB, envmodel.EnvMeta).GetByID(ctx, envBsonID)
-	if err != nil {
-		if errors.Is(err, envmodel.ErrEnvNotFound) {
-			return nil, bkerrs.Errorf(bkerrs.ErrCodeNotFound, "environment %s not found", envID)
-		}
-		return nil, bkerrs.Wrapf(err, bkerrs.ErrCodeInternalServerError, "get environment %s", envID)
+	if err = validateEnv(ctx, registry, env, permType); err != nil {
+		return nil, err
 	}
+	return env, nil
+}
+
+// validateEnv checks the requested permission on an already loaded env.
+//
+// A feature env is authorized by its source standard env, using the current
+// ID and type of the source env.
+func validateEnv(
+	ctx context.Context,
+	registry *storereg.Registry,
+	env *envmodel.Environment,
+	permType Type,
+) error {
+	authEnvs, err := getAuthEnvs(ctx, registry, []envmodel.Environment{*env})
+	if err != nil {
+		return err
+	}
+	authEnv := authEnvs[0]
+	workspaceID, envType, envID := authEnv.WorkspaceID, authEnv.Type, authEnv.ID.Hex()
 
 	permMgr := perm.NewManager()
 	switch permType {
 	case TypeView:
-		err = permMgr.HasViewEnvPerm(ctx, env.WorkspaceID, env.Name)
+		err = permMgr.HasViewEnvPerm(ctx, workspaceID, envType, envID)
 	case TypeEdit:
-		err = permMgr.HasEditEnvPerm(ctx, env.WorkspaceID, env.Name)
+		err = permMgr.HasEditEnvPerm(ctx, workspaceID, envType, envID)
 	case TypeDelete:
-		err = permMgr.HasDeleteEnvPerm(ctx, env.WorkspaceID, env.Name)
-	case TypeDeploy:
-		err = permMgr.HasDeployEnvPerm(ctx, env.WorkspaceID, env.Name)
+		err = permMgr.HasDeleteEnvPerm(ctx, workspaceID, envType, envID)
 	default:
-		return nil, bkerrs.Errorf(bkerrs.ErrCodeInternalServerError, "invalid permission type: %v", permType)
+		return bkerrs.Errorf(bkerrs.ErrCodeInternalServerError, "invalid permission type: %v", permType)
 	}
 	if err != nil {
-		return nil, bkerrs.WrapIAMNoPermission(err, env.WorkspaceID, "check env perm")
+		return bkerrs.WrapIAMNoPermission(err, env.WorkspaceID, "check env perm")
 	}
-	return env, nil
+	return nil
 }
 
 // ValidateAppByID validates and returns an app by an `appID` path parameter,
@@ -200,16 +251,9 @@ func ValidateAppByID(
 	appID string,
 	permType Type,
 ) (*bkmsapp.Application, error) {
-	if appID == "" {
-		return nil, bkerrs.New(bkerrs.ErrCodeInvalidRequest, "appID is required")
-	}
-
-	app, err := store.Of(registry.DB, bkmsapp.AppMeta).Get(ctx, bkmsapp.ByID(appID))
+	app, err := getAppByID(ctx, registry, appID)
 	if err != nil {
-		if errors.Is(err, bkmsapp.ErrAppNotFound) {
-			return nil, bkerrs.Errorf(bkerrs.ErrCodeNotFound, "app %s not found", appID)
-		}
-		return nil, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get app")
+		return nil, err
 	}
 
 	permMgr := perm.NewManager()
@@ -229,15 +273,25 @@ func ValidateAppByID(
 	return app, nil
 }
 
+func getAppByID(ctx context.Context, registry *storereg.Registry, appID string) (*bkmsapp.Application, error) {
+	if appID == "" {
+		return nil, bkerrs.New(bkerrs.ErrCodeInvalidRequest, "appID is required")
+	}
+
+	app, err := store.Of(registry.DB, bkmsapp.AppMeta).Get(ctx, bkmsapp.ByID(appID))
+	if err != nil {
+		if errors.Is(err, bkmsapp.ErrAppNotFound) {
+			return nil, bkerrs.Errorf(bkerrs.ErrCodeNotFound, "app %s not found", appID)
+		}
+		return nil, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get app")
+	}
+	return app, nil
+}
+
 // ValidateAppEnvByName validates and returns an app and env by `appID` and
-// `envName` path or request parameters, then checks the requested app permission.
-// It's usually used in APIs with {appID} and {envName} in path or request.
-//
-// Parameters:
-// - registry: stores and services used by Gin handlers.
-// - appID: the app ID from path parameters.
-// - envName: the environment name from path or request parameters.
-// - permType: the type of app permission to check.
+// `envName` path or request parameters, then checks the requested permission
+// of the app in the env. It's usually used in APIs with {appID} and {envName}
+// in path or request.
 //
 // The error returned from this function is an instance of bkerrs and can be
 // returned directly to the client without any wrapping.
@@ -248,7 +302,7 @@ func ValidateAppEnvByName(
 	envName string,
 	permType Type,
 ) (*bkmsapp.Application, *envmodel.Environment, error) {
-	app, err := ValidateAppByID(ctx, registry, appID, permType)
+	app, err := getAppByID(ctx, registry, appID)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -256,13 +310,12 @@ func ValidateAppEnvByName(
 		return nil, nil, bkerrs.New(bkerrs.ErrCodeInvalidRequest, "envName is required")
 	}
 
-	env, err := store.Of(registry.DB, envmodel.EnvMeta).
-		Get(ctx, envmodel.AppEnvByName(app.WorkspaceID, app.ID, envName))
+	env, err := getAppEnvByName(ctx, registry, app, envName)
 	if err != nil {
-		if errors.Is(err, envmodel.ErrEnvNotFound) {
-			return nil, nil, bkerrs.Errorf(bkerrs.ErrCodeNotFound, "environment %s not found", envName)
-		}
-		return nil, nil, bkerrs.Wrapf(err, bkerrs.ErrCodeInternalServerError, "get env %s by name", envName)
+		return nil, nil, err
+	}
+	if err = ValidateAppEnv(ctx, registry, app, env, permType); err != nil {
+		return nil, nil, err
 	}
 	return app, env, nil
 }

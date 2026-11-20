@@ -48,14 +48,13 @@ type consoleTarget struct {
 	containerName string
 }
 
-// resolveConsoleTarget 校验应用编辑权限，并解析登录实例终端所需的空间、环境与容器名称。
+// resolveConsoleTarget 校验部署应用到当前环境的权限（终端可以直接操作实例），并解析登录实例终端所需的空间、环境与容器名称。
 //
 // 涉及模型：App、Workspace、Environment。
 func (h *Handler) resolveConsoleTarget(
 	ctx context.Context, uriInput serializer.AppInstanceURIInput,
 ) (*consoleTarget, error) {
-	// 校验 App 编辑权限
-	app, err := perm.ValidateAppByID(ctx, h.registry, uriInput.AppID, perm.TypeEdit)
+	app, env, err := perm.ValidateAppEnvByName(ctx, h.registry, uriInput.AppID, uriInput.EnvName, perm.TypeDeploy)
 	if err != nil {
 		return nil, err
 	}
@@ -63,11 +62,6 @@ func (h *Handler) resolveConsoleTarget(
 		Get(ctx, bkmsworkspace.ByWorkspaceID(app.WorkspaceID))
 	if err != nil {
 		return nil, bkerrs.Wrap(err, bkerrs.ErrCodeNotFound, "get workspace failed")
-	}
-	// 获取当前部署对应的集群环境
-	env, err := h.envs().Get(ctx, envmodel.AppEnvByName(app.WorkspaceID, app.ID, uriInput.EnvName))
-	if err != nil {
-		return nil, bkerrs.Wrap(err, bkerrs.ErrCodeNotFound, "get env by name")
 	}
 
 	containerName := defaults.WorkloadMainContainerName

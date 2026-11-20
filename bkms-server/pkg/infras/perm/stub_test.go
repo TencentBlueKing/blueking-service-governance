@@ -42,7 +42,7 @@ var _ = Describe("StubAllowAnyManager", func() {
 			Expect(stub.HasViewWorkspacePerm(ctx, "any-ws")).To(Succeed())
 			Expect(stub.HasCreateAppPerm(ctx, "any-ws")).To(Succeed())
 			Expect(stub.HasDeleteAppPerm(ctx, "any-ws", "any-app")).To(Succeed())
-			Expect(stub.HasDeployEnvPerm(ctx, "any-ws", "any-env")).To(Succeed())
+			Expect(stub.HasDeployAppToEnvPerm(ctx, "any-ws", "any-app", "test", "any-env")).To(Succeed())
 		})
 
 		It("returns all requested resources as viewable", func() {

@@ -89,7 +89,7 @@ func (h *Handler) CreateAppConfigFile(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	app, err := perm.ValidateAppByID(ctx, h.registry, uriInput.AppID, perm.TypeView)
+	app, err := perm.ValidateAppByID(ctx, h.registry, uriInput.AppID, perm.TypeEdit)
 	if err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return
@@ -277,7 +277,7 @@ func (h *Handler) ListAppConfigFiles(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	app, err := perm.ValidateAppByID(ctx, h.registry, uriInput.AppID, perm.TypeView)
+	app, err := perm.ValidateAppInAllEnvs(ctx, h.registry, uriInput.AppID, perm.TypeView)
 	if err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return
@@ -385,6 +385,11 @@ func (h *Handler) DeleteAppConfigFile(c *gin.Context) {
 	// 先查 def 获取 name
 	defName := ""
 	if acf, gErr := h.configFiles().GetByID(ctx, id); gErr == nil {
+		// 文件必须属于路径中的应用
+		if acf.AppID != app.ID {
+			bkerrs.AbortWithErr(c, bkerrs.Errorf(bkerrs.ErrCodeNotFound, "app config file %s not found", uriInput.ID))
+			return
+		}
 		if def, dErr := h.configFileDefs().GetByID(ctx, acf.DefID); dErr == nil {
 			defName = def.Name
 			// 禁止通过旧接口删除 plain 环境实例
@@ -598,7 +603,8 @@ func (h *Handler) PreviewOverlayMerge(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	if _, err := perm.ValidateAppByID(ctx, h.registry, uriInput.AppID, perm.TypeView); err != nil {
+	app, err := perm.ValidateAppInAllEnvs(ctx, h.registry, uriInput.AppID, perm.TypeView)
+	if err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return
 	}
@@ -611,6 +617,11 @@ func (h *Handler) PreviewOverlayMerge(c *gin.Context) {
 	baseFile, err := h.configFiles().GetByID(ctx, baseID)
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get base app config file"))
+		return
+	}
+	// 基础文件必须属于路径中的应用
+	if baseFile.AppID != app.ID {
+		bkerrs.AbortWithErr(c, bkerrs.Errorf(bkerrs.ErrCodeNotFound, "app config file %s not found", uriInput.ID))
 		return
 	}
 

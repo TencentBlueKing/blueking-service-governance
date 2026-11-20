@@ -62,7 +62,7 @@ func (h *Handler) GetBatchReleaseProgress(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	app, _, err := h.validateAppModelDeployAppEnv(ctx, uriInput.AppID, uriInput.EnvName, perm.TypeView, false)
+	app, _, err := h.validateAppModelDeployAppEnv(ctx, uriInput.AppID, uriInput.EnvName, perm.TypeView)
 	if err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return
@@ -131,7 +131,7 @@ func (h *Handler) OperateBatchRelease(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	app, _, err := h.validateAppModelDeployAppEnv(ctx, uriInput.AppID, uriInput.EnvName, perm.TypeEdit, true)
+	app, _, err := h.validateAppModelDeployAppEnv(ctx, uriInput.AppID, uriInput.EnvName, perm.TypeDeploy)
 	if err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return

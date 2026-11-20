@@ -350,7 +350,8 @@ func (h *Handler) ListPublicScopedEnvVars(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	ws, err := perm.ValidateWorkspaceByID(ctx, h.registry, uriInput.WorkspaceID, perm.TypeView)
+	// 公共变量作用于多个环境，要求能查看全部环境
+	ws, err := perm.ValidateWorkspaceViewInAllEnvs(ctx, h.registry, uriInput.WorkspaceID)
 	if err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return
@@ -457,7 +458,7 @@ func (h *Handler) ListDetailedAppEnvVars(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	app, err := perm.ValidateAppByID(ctx, h.registry, uriInput.AppID, perm.TypeView)
+	app, err := perm.ValidateAppInAllEnvs(ctx, h.registry, uriInput.AppID, perm.TypeView)
 	if err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return
@@ -527,7 +528,7 @@ func (h *Handler) ListAppDefinedEnvVars(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	app, err := perm.ValidateAppByID(ctx, h.registry, uriInput.AppID, perm.TypeView)
+	app, err := perm.ValidateAppInAllEnvs(ctx, h.registry, uriInput.AppID, perm.TypeView)
 	if err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return

@@ -23,6 +23,7 @@ import (
 	"errors"
 
 	"github.com/gin-gonic/gin"
+	"github.com/samber/lo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/hostport"
@@ -79,7 +80,17 @@ func (h *Handler) ListHostPorts(c *gin.Context) {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get hostports"))
 		return
 	}
-	ginutils.OK(c, new(serializer.HostPortsOutput).FromModel(result))
+	output := new(serializer.HostPortsOutput).FromModel(result)
+	// 各环境的生效状态只返回用户能查看该应用数据的环境
+	viewable, err := perm.FilterViewableAppEnvNames(ctx, h.registry, app, lo.Keys(output.EnvStates))
+	if err != nil {
+		bkerrs.AbortWithErr(c, err)
+		return
+	}
+	output.EnvStates = lo.PickBy(output.EnvStates, func(envName string, _ serializer.HostPortEnvStateOutput) bool {
+		return viewable.Has(envName)
+	})
+	ginutils.OK(c, output)
 }
 
 // PutHostPorts 全量保存应用 HostPort 端口列表。
