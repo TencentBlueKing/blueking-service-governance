@@ -22,16 +22,14 @@ package usertoken
 import (
 	"context"
 	"encoding/json"
-	"fmt"
-	"log/slog"
 	"net/url"
 
 	"github.com/mitchellh/mapstructure"
+	"github.com/pkg/errors"
 	"github.com/samber/lo"
 	"github.com/spf13/cast"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/httpcli"
-	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 )
 
 // TokenClient is the interface for managing user access tokens.
@@ -94,7 +92,7 @@ func (b *APIGatewayTokenClient) GetToken(
 ) (*AccessToken, error) {
 	requestURL, err := url.JoinPath(b.BaseURL, "/auth_api/token/")
 	if err != nil {
-		return nil, fmt.Errorf("constructing token api url: %w", err)
+		return nil, errors.Wrap(err, "construct token api url")
 	}
 	client := httpcli.NewRestyClient(ctx)
 
@@ -118,11 +116,11 @@ func (b *APIGatewayTokenClient) GetToken(
 		SetBody(body).
 		Post(requestURL)
 	if err != nil {
-		return nil, fmt.Errorf("requesting token api: %w", err)
+		return nil, errors.Wrap(err, "request token api")
 	}
 	respObj, err := toSuccessRespObj(resp.Body())
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "token api")
 	}
 	return parseUserAccessToken(respObj)
 }
@@ -137,7 +135,7 @@ func (b *APIGatewayTokenClient) RefreshToken(
 ) (*AccessToken, error) {
 	requestURL, err := url.JoinPath(b.BaseURL, "/auth_api/refresh_token/")
 	if err != nil {
-		return nil, fmt.Errorf("constructing refresh token api url: %w", err)
+		return nil, errors.Wrap(err, "construct refresh token api url")
 	}
 	client := httpcli.NewRestyClient(ctx)
 
@@ -159,11 +157,11 @@ func (b *APIGatewayTokenClient) RefreshToken(
 		SetQueryParams(query).
 		Get(requestURL)
 	if err != nil {
-		return nil, fmt.Errorf("requesting refresh_token api: %w", err)
+		return nil, errors.Wrap(err, "request refresh_token api")
 	}
 	respObj, err := toSuccessRespObj(resp.Body())
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "refresh_token api")
 	}
 	return parseUserAccessToken(respObj)
 }
@@ -171,10 +169,10 @@ func (b *APIGatewayTokenClient) RefreshToken(
 func parseUserAccessToken(respObj ClientResp) (*AccessToken, error) {
 	var data TokenResultData
 	if err := mapstructure.Decode(respObj.Data, &data); err != nil {
-		return nil, fmt.Errorf("parsing token data error")
+		return nil, errors.Wrap(err, "parse token data")
 	}
 	if data.AccessToken == "" {
-		return nil, fmt.Errorf("access token not found")
+		return nil, errors.New("access token not found")
 	}
 	return &AccessToken{
 		AccessToken:  data.AccessToken,
@@ -196,7 +194,7 @@ func boolToBoolIntString(v bool) string {
 func (b *APIGatewayTokenClient) GetUserInfo(ctx context.Context, token string) (string, error) {
 	requestURL, err := url.JoinPath(b.BaseURL, "/auth_api/check_token/")
 	if err != nil {
-		return "", fmt.Errorf("constructing check token api url: %w", err)
+		return "", errors.Wrap(err, "construct check token api url")
 	}
 	client := httpcli.NewRestyClient(ctx)
 
@@ -204,32 +202,27 @@ func (b *APIGatewayTokenClient) GetUserInfo(ctx context.Context, token string) (
 	headers := map[string]string{"X-Bk-App-Code": b.BkAppCode, "X-Bk-App-Secret": b.BkAppSecret}
 
 	// Send the request
-	log.Debug(ctx, "Get user info using the token client.")
 	resp, err := client.R().
 		SetContext(ctx).
 		SetHeaders(headers).
 		SetQueryParam("access_token", token).
 		Get(requestURL)
-	if resp != nil {
-		log.DebugAttrs(ctx, "Get user info response", slog.String("body", resp.String()))
-	}
-
 	if err != nil {
-		return "", fmt.Errorf("requesting token api: %w", err)
+		return "", errors.Wrap(err, "request check token api")
 	}
 	respObj, err := toSuccessRespObj(resp.Body())
 	if err != nil {
-		return "", err
+		return "", errors.Wrap(err, "check token api")
 	}
 
 	// Get the username and return
 	var data UserInfoResultData
 	if err = mapstructure.Decode(respObj.Data, &data); err != nil {
-		return "", fmt.Errorf("parsing user info data error")
+		return "", errors.Wrap(err, "parse user info data")
 	}
 	username := data.IDProviders.Rtx.Username
 	if username == "" {
-		return "", fmt.Errorf("username not provided")
+		return "", errors.New("username not provided")
 	}
 	return username, nil
 }
@@ -242,12 +235,12 @@ func toSuccessRespObj(body []byte) (ClientResp, error) {
 	// Try to parse the response and check the "code"
 	respObj := ClientResp{}
 	if err := json.Unmarshal(body, &respObj); err != nil {
-		return respObj, fmt.Errorf("parsing response result: %w", err)
+		return respObj, errors.Wrap(err, "parse response result")
 	}
 	// The code might be int(1308406) or string("0"), cast it to int anyway.
 	code := cast.ToInt(respObj.Code)
 	if code != 0 {
-		return respObj, fmt.Errorf("api error: %d-%s", code, respObj.Message)
+		return respObj, errors.Errorf("api error: %d-%s", code, respObj.Message)
 	}
 	return respObj, nil
 }

@@ -88,6 +88,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/misc/frontendfeature"
 	frontendfeaturehandler "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/misc/frontendfeature/handler"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/apm"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/apm/apitracking"
 	bkmalert "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/bkmonitor/alert"
 	bkmalerthandler "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/bkmonitor/alert/handler"
 	bkmdashboard "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/bkmonitor/dashboard"
@@ -137,9 +138,11 @@ import (
 func RegisterRouter(ctx context.Context, cfg config.Config, serverRole string) (*gin.Engine, error) {
 	gin.SetMode(cfg.HTTPServer.Mode)
 	r := gin.New()
+	// 映射在全部路由注册后由 Load 构建
+	apiHandlerNames := apitracking.NewHandlerNames()
 	r.Use(
 		apm.OTelMiddleware(cfg.BkMonitor, serverRole),
-		apm.HTTPLogMiddleware(),
+		apm.HTTPLogMiddleware(apiHandlerNames),
 		gin.Recovery(),
 		apm.ResponseTraceMiddleware(),
 		metrics.Middleware(),
@@ -284,6 +287,7 @@ func RegisterRouter(ctx context.Context, cfg config.Config, serverRole string) (
 		platworkspacecfgswitchh.New(storereg.G()),
 		platmgt.RequirePlatformRole(storereg.G().DB, admin.RoleCodeAdmin),
 	)
+	apiHandlerNames.Load(ctx, r.Routes())
 
 	return r, nil
 }
