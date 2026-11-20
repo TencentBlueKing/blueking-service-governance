@@ -26,12 +26,13 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/ownership"
 	k8sclient "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/client"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/cluster"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/discovery"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
 )
 
 // 服务层错误定义
@@ -46,14 +47,18 @@ var (
 
 // GPAService 负责将 GPA 配置下发为 GeneralPodAutoscaler CR 并管理其生命周期。
 // 直接操作目标集群的 K8s ApiServer，状态完全以集群中的 CR 为准，不使用 DB 存储状态。
+//
+// 共用命名空间的环境中，CR 在集群中的名称带 resourceKey 前缀（env.PrefixName），对调用方仍使用配置中的原名。
 type GPAService struct {
-	appModels *appmodel.AppModelStore
+	db   *mongo.Database
+	apps *bkmsapp.ApplicationStore
 }
 
 // NewGPAService 创建 GPA 下发服务
 func NewGPAService(db *mongo.Database) *GPAService {
 	return &GPAService{
-		appModels: store.Of(db, appmodel.AppModelMeta),
+		db:   db,
+		apps: store.Of(db, bkmsapp.AppMeta),
 	}
 }
 
@@ -63,7 +68,7 @@ func (s *GPAService) Apply(ctx context.Context, env *bkmsenv.Environment, config
 		return ErrFederationNotSupported
 	}
 
-	scaleTargetName, err := s.resolveScaleTargetName(ctx, config.AppID)
+	scaleTargetName, err := s.resolveScaleTargetName(ctx, env, config.AppID)
 	if err != nil {
 		return err
 	}
@@ -77,7 +82,16 @@ func (s *GPAService) Apply(ctx context.Context, env *bkmsenv.Environment, config
 		return errors.Wrap(err, "create k8s client for gpa")
 	}
 
-	manifest := buildGPAManifest(config, env.WorkspaceID, env.Name, scaleTargetName)
+	k8sConfig := *config
+	k8sConfig.Name = env.PrefixName(config.Name)
+	manifest := buildGPAManifest(&k8sConfig, env.WorkspaceID, env.Name, scaleTargetName)
+	owner, err := ownership.ForApp(ctx, s.db, env, config.AppID)
+	if err != nil {
+		return err
+	}
+	if err = owner.Claim(ctx, k8sClient, env.Cluster.Namespace, manifest); err != nil {
+		return errors.Wrapf(err, "claim gpa CR %s", k8sConfig.Name)
+	}
 	if _, err = k8sClient.Upsert(ctx, env.Cluster.Namespace, manifest, metav1.PatchOptions{}); err != nil {
 		// discovery 缓存可能过期：缓存中仍有 GPA 的 GVR 信息，但 CRD 实际已被卸载，
 		// apiserver 会返回 404 "the server could not find the requested resource"。
@@ -96,7 +110,13 @@ func (s *GPAService) Get(ctx context.Context, env *bkmsenv.Environment, name str
 	if err != nil {
 		return nil, err
 	}
-	return clusterClient.GetStatus(ctx, env.Cluster.Namespace, name)
+	// 环境共用命名空间时，会往下发的 CR 命名中添加 resourceKey 前缀
+	status, err := clusterClient.GetStatus(ctx, env.Cluster.Namespace, env.PrefixName(name))
+	if err != nil {
+		return nil, err
+	}
+	status.Name = name
+	return status, nil
 }
 
 // ListByEnv 列出指定环境下所有 GPA CR 的运行状态
@@ -114,7 +134,15 @@ func (s *GPAService) ListByEnv(ctx context.Context, env *bkmsenv.Environment) ([
 		return nil, errors.Wrap(err, "list gpa CRs from k8s")
 	}
 
-	return parseGPAStatusListFromUnstructured(list)
+	statuses, err := parseGPAStatusListFromUnstructured(list)
+	if err != nil {
+		return nil, err
+	}
+	// 环境共用命名空间时，会往下发的 CR 命名中添加 resourceKey 前缀，因此这里返回时需要把前缀去掉
+	for _, status := range statuses {
+		status.Name = env.TrimPrefix(status.Name)
+	}
+	return statuses, nil
 }
 
 // Delete 删除集群中指定的 GPA CR
@@ -124,7 +152,7 @@ func (s *GPAService) Delete(ctx context.Context, env *bkmsenv.Environment, name 
 		return errors.Wrap(err, "create k8s client for gpa")
 	}
 
-	if err = k8sClient.Delete(ctx, env.Cluster.Namespace, name, metav1.DeleteOptions{}); err != nil {
+	if err = k8sClient.Delete(ctx, env.Cluster.Namespace, env.PrefixName(name), metav1.DeleteOptions{}); err != nil {
 		if errors.Is(err, k8sclient.ErrResourceNotFound) {
 			return ErrCRNotFound
 		}
@@ -175,16 +203,16 @@ func (c *ClusterClient) GetStatus(ctx context.Context, namespace, name string) (
 	return parseGPAStatusFromUnstructured(obj)
 }
 
-// resolveScaleTargetName 解析 scaleTargetRef 指向的工作负载名（与应用工作负载名一致，见 workload builder）。
-func (s *GPAService) resolveScaleTargetName(ctx context.Context, appID string) (string, error) {
-	appModel, err := s.appModels.Get(ctx, appmodel.ByApp(appID))
+// resolveScaleTargetName 解析 scaleTargetRef 指向的工作负载名，即应用在该环境（非泳道）部署的主工作负载名。
+// 不能读取持久化的 AppModel.Workload.Name：它是应用级的一份，会被最近一次任意环境/泳道的部署覆盖。
+func (s *GPAService) resolveScaleTargetName(
+	ctx context.Context, env *bkmsenv.Environment, appID string,
+) (string, error) {
+	app, err := s.apps.Get(ctx, bkmsapp.ByID(appID))
 	if err != nil {
-		return "", errors.Wrapf(err, "get app model for app %s", appID)
+		return "", errors.Wrapf(err, "get app %s", appID)
 	}
-	if appModel.Workload.Name == "" {
-		return "", errors.Errorf("app %s has empty workload name", appID)
-	}
-	return appModel.Workload.Name, nil
+	return env.PrefixName(app.Name), nil
 }
 
 // newK8sClient 创建 GeneralPodAutoscaler CR 的 K8s 客户端

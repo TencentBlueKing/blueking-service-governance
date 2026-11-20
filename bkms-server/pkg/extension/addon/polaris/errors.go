@@ -33,6 +33,8 @@ var (
 	ErrOperatorEmpty = errors.New("operator cannot be empty")
 	// ErrNotManaged 部分字段仅平台创建的北极星服务允许修改
 	ErrNotManaged = errors.New("field can only be set for platform-created polaris services")
+	// ErrInvalidResourceName 生成的集群资源名不符合 K8s 命名规则（如超长）
+	ErrInvalidResourceName = errors.New("invalid polaris resource name")
 )
 
 // IsClientRequestError 调用方输入问题（Token、权限、服务不存在、不允许改的字段），handler 映射为 400。
@@ -40,5 +42,6 @@ func IsClientRequestError(err error) bool {
 	return errors.Is(err, polarisprovider.ErrUnauthorized) ||
 		errors.Is(err, polarisprovider.ErrServiceNotFound) ||
 		errors.Is(err, ErrOperatorEmpty) ||
-		errors.Is(err, ErrNotManaged)
+		errors.Is(err, ErrNotManaged) ||
+		errors.Is(err, ErrInvalidResourceName)
 }

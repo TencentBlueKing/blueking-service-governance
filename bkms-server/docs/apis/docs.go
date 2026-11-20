@@ -27662,6 +27662,10 @@ const docTemplate = `{
                     "description": "特性环境展示名称",
                     "type": "string"
                 },
+                "shareSourceNamespace": {
+                    "description": "是否复用来源环境的命名空间；未传时新建独立的命名空间。\n复用时仅支持 AppModel 应用且不能使用组件，资源名会带上平台生成的 resourceKey 前缀",
+                    "type": "boolean"
+                },
                 "sourceEnvID": {
                     "description": "来源标准环境 ID",
                     "type": "string"
@@ -29016,6 +29020,10 @@ const docTemplate = `{
                 },
                 "ownerAppID": {
                     "description": "特性环境所属应用 ID，仅特性环境返回",
+                    "type": "string"
+                },
+                "resourceKey": {
+                    "description": "资源名前缀，仅复用来源环境命名空间的特性环境返回",
                     "type": "string"
                 },
                 "sourceEnvID": {

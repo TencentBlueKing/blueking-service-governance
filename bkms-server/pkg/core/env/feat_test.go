@@ -22,8 +22,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
+	"github.com/bytedance/mockey"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/samber/lo"
@@ -36,6 +38,7 @@ import (
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/trafficmanager"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars"
 	envvarhooks "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars/hooks"
@@ -470,6 +473,93 @@ var _ = Describe("FeatureEnvService", func() {
 			DisplayName: "   ",
 		})
 		Expect(err).To(MatchError(ContainSubstring("DisplayName must not be blank")))
+	})
+
+	Describe("sharing the source namespace", func() {
+		var (
+			app       *bkmsapp.Application
+			sourceEnv *model.Environment
+		)
+
+		BeforeEach(func() {
+			app = dbfactory.Application(ctx, appStore)
+			sourceEnv = dbfactory.Env(ctx, envSvc, app.WorkspaceID)
+		})
+
+		createShared := func() (*model.Environment, error) {
+			return service.Create(ctx, bkmsenv.CreateFeatureEnvInput{
+				App: app, SourceEnv: sourceEnv, DisplayName: "shared", Creator: "alice", ShareSourceNamespace: true,
+			})
+		}
+
+		It("reuses the source namespace with a resource key and skips namespace initialization", func() {
+			featEnv, err := createShared()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(featEnv.ResourceKey).To(MatchRegexp(`^f[a-z0-9]{4}$`))
+
+			expectedEnv := deriveFeatureEnv(sourceEnv, model.Environment{
+				ID:          featEnv.ID,
+				Name:        fmt.Sprintf("feat-%s-1", app.ID),
+				DisplayName: "shared",
+				OwnerAppID:  app.ID,
+				Creator:     "alice",
+			})
+			expectedEnv.Cluster.Namespace = sourceEnv.Cluster.Namespace
+			expectedEnv.ResourceKey = featEnv.ResourceKey
+			storedEnv, err := envStore.GetByID(ctx, featEnv.ID)
+			Expect(err).NotTo(HaveOccurred())
+			expectEnvironmentsEqual(storedEnv, expectedEnv)
+			// nsInitializer 没有设置期望，被调用时 mock 会直接失败
+		})
+
+		It("regenerates the resource key when it collides with another feature env", func() {
+			mockey.PatchConvey("resource-key-collision", GinkgoT(), func() {
+				mockey.Mock(bkmsenv.GenResourceKey).Return(
+					mockey.Sequence("fab12", nil).Times(2).Then("fcd34", nil),
+				).Build()
+
+				first, err := createShared()
+				Expect(err).NotTo(HaveOccurred())
+				Expect(first.ResourceKey).To(Equal("fab12"))
+				second, err := createShared()
+				Expect(err).NotTo(HaveOccurred())
+				Expect(second.ResourceKey).To(Equal("fcd34"))
+				Expect(second.Cluster.Namespace).To(Equal(first.Cluster.Namespace))
+			})
+		})
+
+		It("skips resource keys equal to a traffic lane name of the source env", func() {
+			mockey.PatchConvey("resource-key-lane-conflict", GinkgoT(), func() {
+				mockey.Mock((*trafficmanager.StubTrafficManager).ListTrafficLanes).Return(
+					[]*trafficmanager.TrafficLane{{LaneName: "fab12"}}, nil,
+				).Build()
+				mockey.Mock(bkmsenv.GenResourceKey).Return(
+					mockey.Sequence("fab12", nil).Then("fcd34", nil),
+				).Build()
+
+				featEnv, err := createShared()
+				Expect(err).NotTo(HaveOccurred())
+				Expect(featEnv.ResourceKey).To(Equal("fcd34"))
+			})
+		})
+
+		It("rejects an app name too long for prefixed resource names", func() {
+			app.Name = strings.Repeat("a", 42)
+			_, err := createShared()
+			Expect(errors.Is(err, bkmsenv.ErrInvalidFeatureEnvInput)).To(BeTrue())
+			Expect(err).To(MatchError(ContainSubstring("too long to share namespace")))
+
+			featureEnvs, err := envStore.List(ctx, model.FeatEnvsOf(app.ID))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(featureEnvs).To(BeEmpty())
+		})
+
+		It("rejects a source env without a namespace", func() {
+			sourceEnv.Cluster.Namespace = ""
+			_, err := createShared()
+			Expect(errors.Is(err, bkmsenv.ErrInvalidFeatureEnvInput)).To(BeTrue())
+			Expect(err).To(MatchError(ContainSubstring("has no cluster namespace to share")))
+		})
 	})
 
 	It("reports required fields using their input field names", func() {

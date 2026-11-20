@@ -24,6 +24,7 @@ import (
 	"github.com/TencentBlueKing/gopkg/stringx"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
@@ -159,6 +160,82 @@ var _ = Describe("Test EnvService", func() {
 			Expect(occupiedErr.Namespace).To(Equal(occupiedCluster.Namespace))
 			Expect(occupiedErr.OccupiedByEnvName).To(Equal(occupiedEnvName))
 			Expect(occupiedErr.OccupiedByWorkspaceID).To(Equal(occupiedWorkspaceID))
+		})
+
+		It("rejects moving a source env while feature envs share its namespace", func() {
+			envs := testutil.NewStore(GinkgoT(), model.EnvMeta)
+			Expect(envs.Create(ctx, &model.Environment{
+				Name:        "feat-" + stringx.Random(6),
+				WorkspaceID: workspaceID,
+				Kind:        model.EnvironmentKindFeature,
+				SourceEnvID: envID,
+				ResourceKey: "fab12",
+				Cluster:     Cluster,
+			})).To(Succeed())
+
+			newNamespace := stringx.Random(10)
+			updateErr := envSvc.Update(ctx, envID, &model.EnvironmentUpdateData{Namespace: &newNamespace})
+			Expect(errors.Is(updateErr, ErrEnvHasNamespaceSharers)).To(BeTrue())
+
+			// 集群与命名空间未实际变化时不拦截
+			updateErr = envSvc.Update(ctx, envID, &model.EnvironmentUpdateData{
+				ClusterID: &Cluster.ClusterID, Namespace: &Cluster.Namespace,
+			})
+			Expect(updateErr).NotTo(HaveOccurred())
+		})
+
+		It("allows moving a source env whose feature envs use their own namespaces", func() {
+			envs := testutil.NewStore(GinkgoT(), model.EnvMeta)
+			ownCluster := Cluster
+			ownCluster.Namespace = stringx.Random(10)
+			Expect(envs.Create(ctx, &model.Environment{
+				Name:        "feat-" + stringx.Random(6),
+				WorkspaceID: workspaceID,
+				Kind:        model.EnvironmentKindFeature,
+				SourceEnvID: envID,
+				Cluster:     ownCluster,
+			})).To(Succeed())
+
+			newNamespace := stringx.Random(10)
+			updateErr := envSvc.Update(ctx, envID, &model.EnvironmentUpdateData{Namespace: &newNamespace})
+			Expect(updateErr).NotTo(HaveOccurred())
+		})
+
+		It("rejects moving an env sharing namespace into another namespace", func() {
+			otherCluster := model.BizCluster{
+				ClusterID:   "cluster-" + stringx.Random(6),
+				ClusterType: "single",
+				Namespace:   "ns-" + stringx.Random(6),
+			}
+			Expect(envSvc.Create(ctx, &model.Environment{
+				Name:        "other-" + stringx.Random(6),
+				DisplayName: "other",
+				Type:        "test",
+				WorkspaceID: "ws-" + stringx.Random(6),
+				Cluster:     otherCluster,
+			})).To(Succeed())
+
+			featEnv := &model.Environment{
+				Name:        "feat-" + stringx.Random(6),
+				WorkspaceID: workspaceID,
+				Kind:        model.EnvironmentKindFeature,
+				SourceEnvID: envID,
+				ResourceKey: "fab12",
+				Cluster:     Cluster,
+			}
+			Expect(envSvc.Create(ctx, featEnv)).To(Succeed())
+
+			updateErr := envSvc.Update(ctx, featEnv.ID, &model.EnvironmentUpdateData{
+				ClusterID: &otherCluster.ClusterID,
+				Namespace: &otherCluster.Namespace,
+			})
+			Expect(errors.Is(updateErr, model.ErrSharedNamespaceUnsupported)).To(BeTrue())
+
+			// 集群与命名空间未实际变化时不拦截
+			updateErr = envSvc.Update(ctx, featEnv.ID, &model.EnvironmentUpdateData{
+				ClusterID: &Cluster.ClusterID, Namespace: &Cluster.Namespace,
+			})
+			Expect(updateErr).NotTo(HaveOccurred())
 		})
 
 		It("runs update hooks with before and after env when type changes", func() {
