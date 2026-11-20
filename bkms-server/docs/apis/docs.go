@@ -15664,6 +15664,12 @@ const docTemplate = `{
                     },
                     {
                         "type": "string",
+                        "description": "租户 ID 过滤，为空时返回全部租户的工作空间",
+                        "name": "tenantID",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
                         "description": "排序字段：id / displayName / updatedAt",
                         "name": "sortBy",
                         "in": "query"
@@ -29525,6 +29531,22 @@ const docTemplate = `{
         "serializer.FrontendFeaturesOutput": {
             "type": "object",
             "properties": {
+                "enableBSCP": {
+                    "description": "是否启用 BSCP（服务配置中心）对接，为 false 时前端隐藏 BSCP 配置相关入口",
+                    "type": "boolean"
+                },
+                "enableIndependentBkRepo": {
+                    "description": "制品库是否为独立部署（不接入权限中心，改用制品库账号认证）",
+                    "type": "boolean"
+                },
+                "enableMultiTenantMode": {
+                    "description": "是否为多租户模式。为 true 时前端需要展示租户信息、按用户所属租户选择和展示用户",
+                    "type": "boolean"
+                },
+                "enableWeTerm": {
+                    "description": "是否配置了 WeTerm 环境，为 false 时前端隐藏 WeTerm 入口",
+                    "type": "boolean"
+                },
                 "polarisWorkspaceAccessPoint": {
                     "description": "是否允许空间自建北极星接入点并按集群绑定。为 false 时前端隐藏接入点管理、集群绑定、组件安装等入口，\n所有集群都使用平台托管接入点",
                     "type": "boolean"
@@ -37554,6 +37576,10 @@ const docTemplate = `{
                     "description": "工作空间状态",
                     "type": "string"
                 },
+                "tenantID": {
+                    "description": "所属租户 ID",
+                    "type": "string"
+                },
                 "updatedAt": {
                     "description": "更新时间",
                     "type": "string"
@@ -37719,6 +37745,10 @@ const docTemplate = `{
                 },
                 "state": {
                     "description": "工作空间状态",
+                    "type": "string"
+                },
+                "tenantID": {
+                    "description": "所属租户 ID",
                     "type": "string"
                 },
                 "updatedAt": {

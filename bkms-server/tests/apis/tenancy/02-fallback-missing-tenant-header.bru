@@ -1,0 +1,35 @@
+docs {
+  测的是：多租户模式下不带租户头的请求回退到登录态中的租户，租户 A 的用户仍能访问租户 A 的工作空间。
+}
+
+meta {
+  name: 02-fallback-missing-tenant-header
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{serviceURL}}/workspaces/{{tenancyWorkspaceID}}
+  body: none
+  auth: inherit
+}
+
+script:pre-request {
+  // Bruno 3 的 req 没有 deleteHeader；服务端按 Header.Get 读取，空值与未传等价
+  req.setHeader("X-Bk-Tenant-Id", "");
+}
+
+assert {
+  res.status: eq 200
+}
+
+tests {
+  test("should resolve the tenant from the login state", () => {
+    expect(res.body.data.id).to.equal(bru.getVar("tenancyWorkspaceID"));
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 10000
+}

@@ -60,9 +60,10 @@ func NewHandler(cfg Config, tokenClient usertoken.TokenClient) *APIHandler {
 //	@Produce	json
 //	@Router		/user_token/token [get]
 func (h *APIHandler) CreateToken(c *gin.Context) {
+	credentialName := h.tokenClient.CredentialName()
 	username, _ := c.Cookie("bk_uid")
-	ticket, _ := c.Cookie("bk_ticket")
-	if username == "" || ticket == "" {
+	credential, _ := c.Cookie(credentialName)
+	if credential == "" || (h.tokenClient.RequiresUsername() && username == "") {
 		if c.Query("redirect_login") != "true" {
 			writeLegacyError(c, "no user credentials found in cookie, please login first.")
 			return
@@ -80,7 +81,7 @@ func (h *APIHandler) CreateToken(c *gin.Context) {
 	token, err := h.tokenClient.GetToken(
 		ctx,
 		username,
-		map[string]string{"bk_ticket": ticket},
+		map[string]string{credentialName: credential},
 		h.cfg.AuthEnvName,
 		parseNeedNewToken(c.Query("need_new_token")),
 	)

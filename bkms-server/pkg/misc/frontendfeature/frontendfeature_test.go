@@ -59,4 +59,24 @@ var _ = Describe("GetFrontendFeatures", func() {
 		features := getFeatures(config.Config{Polaris: config.PolarisConfig{AllowWorkspaceAccessPoints: false}})
 		Expect(features.PolarisWorkspaceAccessPoint).To(BeFalse())
 	})
+
+	It("should only enable BSCP with an empty config", func() {
+		Expect(getFeatures(config.Config{})).To(Equal(&slz.FrontendFeaturesOutput{EnableBSCP: true}))
+	})
+
+	It("should map the deployment config to the deployment features", func() {
+		features := getFeatures(config.Config{
+			Tenant: config.TenantConfig{EnableMultiTenantMode: true},
+			FeatureIntegrations: config.FeatureIntegrationsConfig{
+				EnableIndependentBkRepo: true,
+				DisableBSCP:             true,
+			},
+			BCS: config.BCSConfig{WeTermEnvID: "env-1"},
+		})
+		Expect(features).To(Equal(&slz.FrontendFeaturesOutput{
+			EnableMultiTenantMode:   true,
+			EnableIndependentBkRepo: true,
+			EnableWeTerm:            true,
+		}))
+	})
 })

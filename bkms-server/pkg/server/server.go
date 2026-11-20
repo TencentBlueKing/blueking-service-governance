@@ -155,7 +155,7 @@ func RegisterRouter(ctx context.Context, cfg config.Config, serverRole string) (
 
 	// 初始化用户账号 account 相关 API
 	// 这批 API 不要求请求必须携带有效身份信息
-	tokenClient := usertoken.NewAPIGatewayTokenClient(cfg.Account.AuthBaseURL, cfg.BkApp.Code, cfg.BkApp.Secret)
+	tokenClient := usertoken.NewTokenClient(ctx, cfg.Account, cfg.BkApp)
 	accountHandler := account.NewHandler(account.Config{
 		AuthEnvName: cfg.Account.AuthEnvName,
 		LoginURL:    cfg.Account.LoginURL,
