@@ -58,6 +58,8 @@ type Handler interface {
 	ListBkCIRepositoryBranches(c *gin.Context)
 	// ListBkCIRepositoryTags 获取代码仓库标签列表
 	ListBkCIRepositoryTags(c *gin.Context)
+	// TestBkCIRepositoryConnectivity 测试代码库连通性（校验地址与仓库账号密码）
+	TestBkCIRepositoryConnectivity(c *gin.Context)
 
 	// --- BCS（蓝鲸容器服务）相关 API ---
 
@@ -130,6 +132,7 @@ func Register(rg *gin.RouterGroup, h Handler) {
 	rg.GET("/workspaces/:workspaceID/bkci-pipelines/:pipelineID", h.GetBkCIPipeline)
 	rg.GET("/workspaces/:workspaceID/bkci-repositories/branches", h.ListBkCIRepositoryBranches)
 	rg.GET("/workspaces/:workspaceID/bkci-repositories/tags", h.ListBkCIRepositoryTags)
+	rg.POST("/workspaces/:workspaceID/bkci-repositories/connectivity-test", h.TestBkCIRepositoryConnectivity)
 
 	// --- BCS 相关路由 ---
 	rg.GET("/bcs/projects/authorized", h.ListBCSAuthorizedProjects)

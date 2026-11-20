@@ -20,10 +20,12 @@ package bkci
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/pkg/errors"
+	"github.com/samber/lo"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
@@ -458,69 +460,158 @@ func NewRepositoryManager(db *mongo.Database, workspaceID string) *RepositoryMan
 	return &RepositoryManager{db: db, workspaceID: workspaceID}
 }
 
-// Initialize 初始化代码库，如果已存在则跳过
-func (m *RepositoryManager) Initialize(ctx context.Context, url, alias string) (*Repository, error) {
-	repository, err := store.Of(m.db, RepositoryMeta).Get(ctx, ByWorkspaceAndAlias(m.workspaceID, alias))
-	if err != nil {
-		if errors.Is(err, ErrRepositoryNotFound) {
-			// 不存在，需要创建
-			return m.createRepository(ctx, url, alias)
-		}
-		return nil, errors.Wrapf(err, "get workspace %s repository %s", m.workspaceID, alias)
+// Ensure 确保代码库已关联到工作空间。首次关联时按代码库类型与鉴权方式关联，已关联的按库中记录处理
+func (m *RepositoryManager) Ensure(ctx context.Context, spec RepositoryInitSpec) (*Repository, error) {
+	repository, err := store.Of(m.db, RepositoryMeta).Get(ctx, ByWorkspaceAndAlias(m.workspaceID, spec.Alias))
+	if errors.Is(err, ErrRepositoryNotFound) {
+		return m.createRepository(ctx, spec)
 	}
-
+	if err != nil {
+		return nil, errors.Wrapf(err, "get workspace %s repository %s", m.workspaceID, spec.Alias)
+	}
+	if repository.UsesCredential() {
+		return m.updateCredential(ctx, repository, spec)
+	}
 	return repository, nil
 }
 
-// createRepository 在数据库中添加代码库
-func (m *RepositoryManager) createRepository(ctx context.Context, url, alias string) (*Repository, error) {
-	// 创建 bkci API 客户端
-	client, err := bkci.New(auth.MustGetUser(ctx))
+// createRepository 在蓝盾关联代码库并入库
+func (m *RepositoryManager) createRepository(ctx context.Context, spec RepositoryInitSpec) (*Repository, error) {
+	typeCfg, err := codeRepoTypeOf(spec.Type)
+	if err != nil {
+		return nil, err
+	}
+	authType, err := ResolveAuthType(spec.Type, spec.AuthType)
+	if err != nil {
+		return nil, err
+	}
+	useCredential := authType == config.CodeRepoAuthPassword
+	if useCredential {
+		// 先校验账号密码，失败时不在蓝盾留下凭证
+		if err = VerifyRepositoryCredential(ctx, spec.URL, spec.Username, spec.Password); err != nil {
+			return nil, err
+		}
+	}
+
+	user := auth.MustGetUser(ctx)
+	client, err := bkci.New(user)
 	if err != nil {
 		return nil, errors.Wrap(err, "create bkci client")
 	}
-
-	// 获取项目信息
 	project, err := store.Of(m.db, ProjectMeta).Get(ctx, ByWorkspace(m.workspaceID))
 	if err != nil {
 		return nil, errors.Wrapf(err, "get project by workspace %s", m.workspaceID)
 	}
 
-	// 调用 bkci API 创建代码库
-	repoID, err := client.CreateRepository(ctx, project.Code, url, alias)
-	if err != nil {
-		// 如果代码库已存在，尝试从蓝盾获取已有的代码库信息
-		if errors.Is(err, bkci.RepoAlreadyExist) {
-			repoID, err = m.getExistingRepository(ctx, client, project.Code, alias)
-			if err != nil {
-				return nil, errors.Wrapf(err, "get existing bkci repository with url: %s, alias: %s", url, alias)
-			}
-		} else {
-			return nil, errors.Wrapf(err, "create bkci repository with url: %s, alias: %s", url, alias)
-		}
-	}
-
-	// 调用 bkci API 获取代码库信息，确保代码库确实存在
-	repo, err := client.GetRepository(ctx, project.Code, repoID)
-	if err != nil {
-		return nil, errors.Wrapf(err, "get bkci repository %s in bkci project %s", repoID, project.Code)
-	}
-
-	// 构建 Repository 对象
 	repository := &Repository{
-		ID:          repoID,
-		Alias:       alias,
-		URL:         repo.Url,
-		Type:        repo.Type,
+		Alias:       spec.Alias,
+		URL:         spec.URL,
 		WorkspaceID: m.workspaceID,
 		ProjectCode: project.Code,
-		Creator:     auth.MustGetUser(ctx).ID,
+		Creator:     user.ID,
+	}
+	opts := bkci.CreateRepositoryOptions{RepoType: typeCfg.BkCIRepoType, URL: spec.URL, Alias: spec.Alias}
+	if useCredential {
+		credentialID := repositoryCredentialID(spec.Alias)
+		if err = ensureRepositoryCredential(
+			ctx, client, project.Code, credentialID, spec.Alias, spec.Username, spec.Password,
+		); err != nil {
+			return nil, err
+		}
+		opts.CredentialID = credentialID
+
+		repository.CredentialID = credentialID
+		repository.Username = spec.Username
+		repository.Password = spec.Password
 	}
 
-	// 入库
+	repository.ID, err = m.createBkCIRepository(ctx, client, project.Code, opts)
+	if err != nil {
+		if useCredential {
+			rollbackRepositoryCredential(ctx, client, project.Code, opts.CredentialID)
+		}
+		return nil, err
+	}
+	// 回查代码库，确认已关联成功
+	repo, err := client.GetRepository(ctx, project.Code, repository.ID)
+	if err != nil {
+		return nil, errors.Wrapf(err, "get bkci repository %s in bkci project %s", repository.ID, project.Code)
+	}
+	repository.URL = repo.Url
+	repository.Type = repo.Type
+
 	if err = store.Of(m.db, RepositoryMeta).Create(ctx, repository); err != nil {
 		return nil, errors.Wrap(err, "insert bkci repository to db")
 	}
+	return repository, nil
+}
+
+// createBkCIRepository 在蓝盾关联代码库，别名已存在时复用已有代码库
+func (m *RepositoryManager) createBkCIRepository(
+	ctx context.Context, client bkci.Client, projectCode string, opts bkci.CreateRepositoryOptions,
+) (string, error) {
+	repoID, err := client.CreateRepository(ctx, projectCode, opts)
+	if err == nil {
+		return repoID, nil
+	}
+	if !errors.Is(err, bkci.RepoAlreadyExist) {
+		return "", errors.Wrapf(err, "create bkci repository with url: %s, alias: %s", opts.URL, opts.Alias)
+	}
+	repoID, err = m.getExistingRepository(ctx, client, projectCode, opts.Alias)
+	if err != nil {
+		return "", errors.Wrapf(err, "get existing bkci repository with url: %s, alias: %s", opts.URL, opts.Alias)
+	}
+	return repoID, nil
+}
+
+// updateCredential 更新代码库的仓库账号密码，未传密码时沿用
+func (m *RepositoryManager) updateCredential(
+	ctx context.Context, repository *Repository, spec RepositoryInitSpec,
+) (*Repository, error) {
+	if spec.Password == "" {
+		if spec.Username != "" && spec.Username != repository.Username {
+			return nil, errors.Wrapf(ErrRepoPasswordRequired, "change username of repository %s", repository.Alias)
+		}
+		return repository, nil
+	}
+	username := lo.Ternary(spec.Username != "", spec.Username, repository.Username)
+	if username == repository.Username && spec.Password == repository.Password {
+		return repository, nil
+	}
+
+	if err := VerifyRepositoryCredential(ctx, repository.URL, username, spec.Password); err != nil {
+		return nil, err
+	}
+
+	client, err := bkci.New(auth.MustGetUser(ctx))
+	if err != nil {
+		return nil, errors.Wrap(err, "create bkci client")
+	}
+	desc := fmt.Sprintf(repoCredentialDescFmt, repository.Alias)
+	err = client.UpdateCredential(ctx, repository.ProjectCode, repository.CredentialID, desc, username, spec.Password)
+	// 凭证在蓝盾侧被删除时重新创建
+	if errors.Is(err, bkci.ObjectNotFound) {
+		err = client.CreateCredential(
+			ctx,
+			repository.ProjectCode,
+			repository.CredentialID,
+			desc,
+			username,
+			spec.Password,
+		)
+	}
+	if err != nil {
+		return nil, errors.Wrapf(err, "update bkci credential of repository %s", repository.Alias)
+	}
+
+	if err = store.Of(m.db, RepositoryMeta).Update(
+		ctx,
+		map[string]any{"username": username, "password": spec.Password},
+		ByWorkspaceAndAlias(m.workspaceID, repository.Alias),
+	); err != nil {
+		return nil, errors.Wrapf(err, "update credential of repository %s", repository.Alias)
+	}
+	repository.Username, repository.Password = username, spec.Password
 	return repository, nil
 }
 
@@ -534,9 +625,9 @@ func (m *RepositoryManager) getExistingRepository(
 		return "", errors.Wrapf(err, "list bkci repositories for project %s", projectCode)
 	}
 
-	// 查找匹配 alias 的代码库
+	// 查找匹配 alias 的代码库，蓝盾别名忽略大小写
 	for _, repo := range repositories {
-		if repo.Alias == alias {
+		if strings.EqualFold(repo.Alias, alias) {
 			// 找到匹配的代码库
 			return repo.ID, nil
 		}

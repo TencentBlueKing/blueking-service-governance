@@ -21,6 +21,7 @@ package handler
 import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkci"
 	build "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime"
 )
@@ -34,8 +35,12 @@ func collectBKCIRepositoriesForCreateApp(
 
 	if buildConfig != nil && buildConfig.SourceType == build.SourceTypeCodeRepository && buildConfig.CodeRepo != nil {
 		repos = append(repos, bkci.RepositoryInitSpec{
-			URL:   buildConfig.CodeRepo.RepoURL,
-			Alias: buildConfig.CodeRepo.RepoAlias,
+			URL:      buildConfig.CodeRepo.RepoURL,
+			Alias:    buildConfig.CodeRepo.RepoAlias,
+			Type:     string(buildConfig.CodeRepo.Type),
+			AuthType: buildConfig.CodeRepo.AuthType,
+			Username: buildConfig.CodeRepo.Username,
+			Password: buildConfig.CodeRepo.Password,
 		})
 	}
 
@@ -53,7 +58,30 @@ func helmSourceRepositoriesToBind(helmSource *bkmsapp.HelmSource) []bkci.Reposit
 		return nil
 	}
 	return []bkci.RepositoryInitSpec{{
-		URL:   helmSource.GitRepoConfig.RepoURL,
-		Alias: helmSource.GitRepoConfig.RepoAlias,
+		URL:      helmSource.GitRepoConfig.RepoURL,
+		Alias:    helmSource.GitRepoConfig.RepoAlias,
+		Type:     string(helmSource.GitRepoConfig.Type),
+		AuthType: helmSource.GitRepoConfig.AuthType,
+		Username: helmSource.GitRepoConfig.Username,
+		Password: helmSource.GitRepoConfig.Password,
 	}}
+}
+
+// resolveHelmGitRepo 确定 Helm Git 来源的鉴权方式与代码库别名，见 bkci.ResolveCodeRepo
+func resolveHelmGitRepo(helmSource *bkmsapp.HelmSource) error {
+	if helmSource == nil || helmSource.RepoType != bkmsapp.HelmSourceRepoTypeGit || helmSource.GitRepoConfig == nil {
+		return nil
+	}
+	gitRepo := helmSource.GitRepoConfig
+	authType, alias, err := bkci.ResolveCodeRepo(
+		string(gitRepo.Type),
+		gitRepo.AuthType,
+		gitRepo.RepoURL,
+		gitRepo.RepoAlias,
+	)
+	if err != nil {
+		return bkerrs.Wrapf(err, bkerrs.ErrCodeInvalidArgument, "resolve code repository %s", gitRepo.RepoURL)
+	}
+	gitRepo.AuthType, gitRepo.RepoAlias = authType, alias
+	return nil
 }

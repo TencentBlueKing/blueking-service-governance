@@ -37,6 +37,33 @@ const (
 	PageSizeForAllItems = 1000
 )
 
+// 蓝盾代码库类型
+const (
+	// RepoTypeCodeGit 工蜂代码库
+	RepoTypeCodeGit = "codeGit"
+	// RepoTypeCodeTGit TGit 代码库
+	RepoTypeCodeTGit = "codeTGit"
+)
+
+// 蓝盾代码库的仓库认证类型（请求体 authType，蓝盾 RepoAuthType），蓝盾按它校验仓库地址前缀
+const (
+	repoAuthTypeOAuth = "OAUTH"
+	repoAuthTypeHTTP  = "HTTP"
+	repoAuthTypeHTTPS = "HTTPS"
+)
+
+// CreateRepositoryOptions 创建蓝盾代码库的参数
+type CreateRepositoryOptions struct {
+	// RepoType 代码库类型
+	RepoType string
+	// URL 代码库地址
+	URL string
+	// Alias 代码库别名
+	Alias string
+	// CredentialID 仓库账号密码凭证 ID，为空时以 OAuth 关联
+	CredentialID string
+}
+
 // Project 蓝盾项目
 type Project struct {
 	ID            string

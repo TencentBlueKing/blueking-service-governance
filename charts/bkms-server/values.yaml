@@ -229,6 +229,12 @@ svcConf:
     # false：新建/绑定都按蓝盾项目处理，BCS ID/Code 复用蓝盾项目
     #     （绑定已有项目时拉取 BCS 和蓝盾授权项目的交集）。
     enableIndependentBCSProject: false
+    # 支持的代码库类型与鉴权方式（OAUTH 工蜂 OAuth / PASSWORD 仓库账号密码），不配置时为 TGit + OAUTH
+    # 配置后整体替换默认值，authTypes 第一个为默认鉴权方式；bkciRepoType 为蓝盾代码库类型（codeGit / codeTGit）
+    # codeRepoTypes:
+    #   - type: TGit
+    #     bkciRepoType: codeTGit
+    #     authTypes: [PASSWORD]
   # 蓝鲸 API 环境配置
   bkApiStages:
     # BSCP
@@ -402,3 +408,7 @@ svcConf:
       timeout: 1200
       # 轮询间隔（单位：秒）
       interval: 15
+  # 多租户配置
+  tenant:
+    # 是否开启多租户模式；关闭时仅接受空 tenant 或 default
+    enableMultiTenantMode: false

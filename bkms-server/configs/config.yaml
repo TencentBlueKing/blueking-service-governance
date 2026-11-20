@@ -40,6 +40,12 @@ featureIntegrations:
   # 关闭 BSCP 对接，未部署 BSCP 的环境设为 true
   # 关闭期间创建的工作空间没有 BSCP 绑定，重新启用后需逐个执行 bind-bscp-project 命令补绑
   disableBSCP: false
+  # 支持的代码库类型与鉴权方式（OAUTH 工蜂 OAuth / PASSWORD 仓库账号密码），不配置时为 TGit + OAUTH
+  # 配置后整体替换默认值，authTypes 第一个为默认鉴权方式；bkciRepoType 为蓝盾代码库类型（codeGit / codeTGit）
+  # codeRepoTypes:
+  #   - type: TGit
+  #     bkciRepoType: codeTGit
+  #     authTypes: [PASSWORD]
 # 蓝鲸 API 环境配置
 bkApiStages:
   # BSCP

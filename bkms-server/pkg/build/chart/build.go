@@ -94,9 +94,12 @@ func (s *ChartBuildService) prepare(ctx context.Context, app *bkmsapp.Applicatio
 	}
 
 	// 2. 确保代码库已关联到蓝盾
-	if _, err := bkci.NewRepositoryManager(s.db, app.WorkspaceID).Initialize(
-		ctx, gitRepoConfig.RepoURL, gitRepoConfig.RepoAlias,
-	); err != nil {
+	if _, err := bkci.NewRepositoryManager(s.db, app.WorkspaceID).Ensure(ctx, bkci.RepositoryInitSpec{
+		URL:      gitRepoConfig.RepoURL,
+		Alias:    gitRepoConfig.RepoAlias,
+		Type:     string(gitRepoConfig.Type),
+		AuthType: gitRepoConfig.AuthType,
+	}); err != nil {
 		return errors.Wrapf(err, "ensure bkci repository for app %s", appInfo)
 	}
 

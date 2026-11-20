@@ -33,6 +33,11 @@ import (
 	slz "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/misc/frontendfeature/serializer"
 )
 
+// defaultCodeRepoTypes 未配置代码库类型时下发的默认值
+var defaultCodeRepoTypes = []*slz.CodeRepoTypeOutput{
+	{Type: config.CodeRepoTypeTGit, AuthTypes: []string{config.CodeRepoAuthOAuth}},
+}
+
 var _ = Describe("GetFrontendFeatures", func() {
 	getFeatures := func(cfg config.Config) *slz.FrontendFeaturesOutput {
 		origin := config.G
@@ -61,7 +66,10 @@ var _ = Describe("GetFrontendFeatures", func() {
 	})
 
 	It("should only enable BSCP with an empty config", func() {
-		Expect(getFeatures(config.Config{})).To(Equal(&slz.FrontendFeaturesOutput{EnableBSCP: true}))
+		Expect(getFeatures(config.Config{})).To(Equal(&slz.FrontendFeaturesOutput{
+			EnableBSCP:    true,
+			CodeRepoTypes: defaultCodeRepoTypes,
+		}))
 	})
 
 	It("should map the deployment config to the deployment features", func() {
@@ -77,6 +85,25 @@ var _ = Describe("GetFrontendFeatures", func() {
 			EnableMultiTenantMode:   true,
 			EnableIndependentBkRepo: true,
 			EnableWeTerm:            true,
+			CodeRepoTypes:           defaultCodeRepoTypes,
 		}))
+	})
+
+	It("should return the configured code repository types", func() {
+		features := getFeatures(config.Config{
+			FeatureIntegrations: config.FeatureIntegrationsConfig{CodeRepoTypes: []config.CodeRepoTypeConfig{{
+				Type: config.CodeRepoTypeTGit, BkCIRepoType: "codeTGit", AuthTypes: []string{config.CodeRepoAuthPassword},
+			}}},
+		})
+		Expect(features.CodeRepoTypes).To(HaveLen(1))
+		Expect(features.CodeRepoTypes[0].Type).To(Equal(config.CodeRepoTypeTGit))
+		Expect(features.CodeRepoTypes[0].AuthTypes).To(Equal([]string{config.CodeRepoAuthPassword}))
+	})
+
+	It("should return TGit with oauth when code repository types are not configured", func() {
+		features := getFeatures(config.Config{})
+		Expect(features.CodeRepoTypes).To(HaveLen(1))
+		Expect(features.CodeRepoTypes[0].Type).To(Equal(config.CodeRepoTypeTGit))
+		Expect(features.CodeRepoTypes[0].AuthTypes).To(Equal([]string{config.CodeRepoAuthOAuth}))
 	})
 })

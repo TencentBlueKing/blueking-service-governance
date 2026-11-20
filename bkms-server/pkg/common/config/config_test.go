@@ -669,5 +669,74 @@ httpServer:
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("'Mode' failed on the 'oneof' tag"))
 		})
+
+		Describe("code repository types", func() {
+			const baseConfig = `
+bkApp:
+  code: test-app
+  secret: test-secret
+account:
+  authBaseURL: http://auth.example.com
+  loginURL: http://login.example.com
+metrics:
+  port: 8081
+httpServer:
+  address: 127.0.0.1
+  port: 32303
+asynq:
+  redis:
+    host: localhost
+    port: 6380
+`
+			load := func(extra string) (*config.Config, error) {
+				GinkgoHelper()
+				Expect(os.WriteFile(configFile, []byte(baseConfig+extra), 0o644)).To(Succeed())
+				return config.Load(ctx, configFile)
+			}
+
+			It("should use TGit with oauth when not configured", func() {
+				cfg, err := load("")
+				Expect(err).NotTo(HaveOccurred())
+				Expect(cfg.FeatureIntegrations.CodeRepoTypes).To(BeEmpty())
+				Expect(cfg.FeatureIntegrations.EffectiveCodeRepoTypes()).To(Equal(config.DefaultCodeRepoTypes))
+			})
+
+			It("should load configured code repository types", func() {
+				cfg, err := load(`featureIntegrations:
+  codeRepoTypes:
+    - type: TGit
+      bkciRepoType: codeTGit
+      authTypes: [PASSWORD]
+`)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(cfg.FeatureIntegrations.EffectiveCodeRepoTypes()).To(Equal([]config.CodeRepoTypeConfig{{
+					Type: config.CodeRepoTypeTGit, BkCIRepoType: "codeTGit", AuthTypes: []string{config.CodeRepoAuthPassword},
+				}}))
+			})
+
+			DescribeTable("should reject invalid code repository types",
+				func(extra string) {
+					_, err := load(extra)
+					Expect(err).To(HaveOccurred())
+				},
+				Entry("unknown type", `featureIntegrations:
+  codeRepoTypes:
+    - {type: GitHub, bkciRepoType: codeGit, authTypes: [OAUTH]}
+`),
+				Entry("unknown auth type", `featureIntegrations:
+  codeRepoTypes:
+    - {type: TGit, bkciRepoType: codeGit, authTypes: [SSH]}
+`),
+				Entry("empty auth types", `featureIntegrations:
+  codeRepoTypes:
+    - {type: TGit, bkciRepoType: codeGit, authTypes: []}
+`),
+				Entry("duplicated type", `featureIntegrations:
+  codeRepoTypes:
+    - {type: TGit, bkciRepoType: codeGit, authTypes: [OAUTH]}
+    - {type: TGit, bkciRepoType: codeTGit, authTypes: [PASSWORD]}
+`),
+			)
+		})
 	})
 })

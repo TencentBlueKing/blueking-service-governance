@@ -18482,6 +18482,62 @@ const docTemplate = `{
                 }
             }
         },
+        "/workspaces/{workspaceID}/bkci-repositories/connectivity-test": {
+            "post": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "description": "使用仓库账号密码访问代码库，校验地址与账号密码是否正确，不关联代码库",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "bkintegrations-bkci"
+                ],
+                "summary": "测试代码库连通性",
+                "operationId": "TestBkCIRepositoryConnectivity",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "代码库地址与账号密码",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/serializer.BkCIRepositoryConnectivityTestInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_bkintegrations_serializer.EmptyOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
         "/workspaces/{workspaceID}/bkci-repositories/tags": {
             "get": {
                 "security": [
@@ -25940,6 +25996,32 @@ const docTemplate = `{
                 }
             }
         },
+        "serializer.BkCIRepositoryConnectivityTestInput": {
+            "type": "object",
+            "required": [
+                "password",
+                "repoURL",
+                "username"
+            ],
+            "properties": {
+                "password": {
+                    "description": "仓库密码",
+                    "type": "string",
+                    "maxLength": 256
+                },
+                "repoURL": {
+                    "description": "代码仓库地址，HTTP(S) 地址",
+                    "type": "string",
+                    "maxLength": 512,
+                    "minLength": 1
+                },
+                "username": {
+                    "description": "仓库账号",
+                    "type": "string",
+                    "maxLength": 128
+                }
+            }
+        },
         "serializer.BkCIRepositoryRefOutput": {
             "type": "object",
             "properties": {
@@ -26572,6 +26654,26 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "startTime": {
+                    "type": "string"
+                }
+            }
+        },
+        "serializer.CodeRepoTypeOutput": {
+            "type": "object",
+            "properties": {
+                "authTypes": {
+                    "description": "支持的鉴权方式：OAUTH（OAuth 授权）/ PASSWORD（账号、密码），第一个为默认鉴权方式",
+                    "type": "array",
+                    "items": {
+                        "type": "string",
+                        "enum": [
+                            "OAUTH",
+                            "PASSWORD"
+                        ]
+                    }
+                },
+                "type": {
+                    "description": "代码库类型，如 TGit",
                     "type": "string"
                 }
             }
@@ -29531,6 +29633,13 @@ const docTemplate = `{
         "serializer.FrontendFeaturesOutput": {
             "type": "object",
             "properties": {
+                "codeRepoTypes": {
+                    "description": "当前环境支持的代码库类型及其鉴权方式",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/serializer.CodeRepoTypeOutput"
+                    }
+                },
                 "enableBSCP": {
                     "description": "是否启用 BSCP（服务配置中心）对接，为 false 时前端隐藏 BSCP 配置相关入口",
                     "type": "boolean"
@@ -30507,16 +30616,29 @@ const docTemplate = `{
         "serializer.HelmGitRepoConfigInput": {
             "type": "object",
             "required": [
-                "repoAlias",
                 "repoURL",
                 "revision",
                 "sourceDir",
                 "type"
             ],
             "properties": {
+                "authType": {
+                    "description": "鉴权方式：OAUTH（OAuth 授权）/ PASSWORD（账号、密码），不传时使用默认鉴权方式",
+                    "type": "string",
+                    "enum": [
+                        "OAUTH",
+                        "PASSWORD"
+                    ]
+                },
+                "password": {
+                    "description": "仓库密码，仅账号、密码方式使用",
+                    "type": "string",
+                    "maxLength": 256
+                },
                 "repoAlias": {
-                    "description": "代码库别名",
-                    "type": "string"
+                    "description": "代码库别名，仅 OAuth 方式使用",
+                    "type": "string",
+                    "maxLength": 256
                 },
                 "repoURL": {
                     "description": "代码库地址",
@@ -30537,12 +30659,21 @@ const docTemplate = `{
                         "TGit",
                         "GitHub"
                     ]
+                },
+                "username": {
+                    "description": "仓库账号，仅账号、密码方式使用",
+                    "type": "string",
+                    "maxLength": 128
                 }
             }
         },
         "serializer.HelmGitRepoConfigOutputObj": {
             "type": "object",
             "properties": {
+                "authType": {
+                    "description": "鉴权方式：OAUTH（OAuth 授权）/ PASSWORD（账号、密码）",
+                    "type": "string"
+                },
                 "repoAlias": {
                     "description": "代码库别名",
                     "type": "string"
@@ -30561,6 +30692,10 @@ const docTemplate = `{
                 },
                 "type": {
                     "description": "代码库类型",
+                    "type": "string"
+                },
+                "username": {
+                    "description": "仓库账号，仅账号、密码方式有值",
                     "type": "string"
                 }
             }
@@ -34724,11 +34859,18 @@ const docTemplate = `{
             "type": "object",
             "required": [
                 "defaultBranch",
-                "repoAlias",
                 "repoURL",
                 "type"
             ],
             "properties": {
+                "authType": {
+                    "description": "鉴权方式：OAUTH（OAuth 授权）/ PASSWORD（账号、密码），不传时使用默认鉴权方式",
+                    "type": "string",
+                    "enum": [
+                        "OAUTH",
+                        "PASSWORD"
+                    ]
+                },
                 "defaultBranch": {
                     "description": "默认构建分支",
                     "type": "string",
@@ -34755,6 +34897,11 @@ const docTemplate = `{
                         "repositoryDockerfile"
                     ]
                 },
+                "password": {
+                    "description": "仓库密码，仅账号、密码方式使用",
+                    "type": "string",
+                    "maxLength": 256
+                },
                 "platformBuildConfig": {
                     "description": "PlatformBuildConfig 平台通用构建配置，仅 imageBuildMode=platform 时有效；Dockerfile 是流水线内部中间产物",
                     "allOf": [
@@ -34764,10 +34911,9 @@ const docTemplate = `{
                     ]
                 },
                 "repoAlias": {
-                    "description": "蓝盾侧仓库别名",
+                    "description": "代码库别名，仅 OAuth 方式使用",
                     "type": "string",
-                    "maxLength": 256,
-                    "minLength": 1
+                    "maxLength": 256
                 },
                 "repoURL": {
                     "description": "代码仓库地址",
@@ -34787,12 +34933,21 @@ const docTemplate = `{
                         "TGit",
                         "GitHub"
                     ]
+                },
+                "username": {
+                    "description": "仓库账号，仅账号、密码方式使用",
+                    "type": "string",
+                    "maxLength": 128
                 }
             }
         },
         "serializer.RepoBuildConfigOutputObj": {
             "type": "object",
             "properties": {
+                "authType": {
+                    "description": "鉴权方式：OAUTH（OAuth 授权）/ PASSWORD（账号、密码）",
+                    "type": "string"
+                },
                 "defaultBranch": {
                     "description": "默认分支",
                     "type": "string"
@@ -34835,6 +34990,10 @@ const docTemplate = `{
                 "type": {
                     "description": "代码库类型",
                     "type": "string"
+                },
+                "username": {
+                    "description": "仓库账号，仅账号、密码方式有值",
+                    "type": "string"
                 }
             }
         },
@@ -34842,11 +35001,18 @@ const docTemplate = `{
             "type": "object",
             "required": [
                 "defaultBranch",
-                "repoAlias",
                 "repoURL",
                 "type"
             ],
             "properties": {
+                "authType": {
+                    "description": "鉴权方式：OAUTH（OAuth 授权）/ PASSWORD（账号、密码），不传时使用默认鉴权方式",
+                    "type": "string",
+                    "enum": [
+                        "OAUTH",
+                        "PASSWORD"
+                    ]
+                },
                 "defaultBranch": {
                     "description": "默认构建分支",
                     "type": "string",
@@ -34873,6 +35039,11 @@ const docTemplate = `{
                         "repositoryDockerfile"
                     ]
                 },
+                "password": {
+                    "description": "仓库密码，仅账号、密码方式使用",
+                    "type": "string",
+                    "maxLength": 256
+                },
                 "platformBuildConfig": {
                     "description": "PlatformBuildConfig 平台通用构建配置，仅 imageBuildMode=platform 时有效；Dockerfile 是流水线内部中间产物",
                     "allOf": [
@@ -34882,10 +35053,9 @@ const docTemplate = `{
                     ]
                 },
                 "repoAlias": {
-                    "description": "蓝盾侧仓库别名",
+                    "description": "代码库别名，仅 OAuth 方式使用",
                     "type": "string",
-                    "maxLength": 256,
-                    "minLength": 1
+                    "maxLength": 256
                 },
                 "repoURL": {
                     "description": "代码仓库地址",
@@ -34905,12 +35075,21 @@ const docTemplate = `{
                         "TGit",
                         "GitHub"
                     ]
+                },
+                "username": {
+                    "description": "仓库账号，仅账号、密码方式使用",
+                    "type": "string",
+                    "maxLength": 128
                 }
             }
         },
         "serializer.RepositoryBuildConfigOutputObj": {
             "type": "object",
             "properties": {
+                "authType": {
+                    "description": "鉴权方式：OAUTH（OAuth 授权）/ PASSWORD（账号、密码）",
+                    "type": "string"
+                },
                 "defaultBranch": {
                     "description": "默认构建分支",
                     "type": "string"
@@ -34952,6 +35131,10 @@ const docTemplate = `{
                 },
                 "type": {
                     "description": "代码仓库类型",
+                    "type": "string"
+                },
+                "username": {
+                    "description": "仓库账号，仅账号、密码方式有值",
                     "type": "string"
                 }
             }

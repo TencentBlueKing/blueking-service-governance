@@ -69,10 +69,16 @@ type BCSRepoConfigInput struct {
 type HelmGitRepoConfigInput struct {
 	// 代码库类型
 	Type string `json:"type" binding:"required,oneof=TGit GitHub"`
-	// 代码库别名
-	RepoAlias string `json:"repoAlias" binding:"required"`
+	// 鉴权方式：OAUTH（OAuth 授权）/ PASSWORD（账号、密码），不传时使用默认鉴权方式
+	AuthType string `json:"authType" binding:"omitempty,oneof=OAUTH PASSWORD"`
+	// 代码库别名，仅 OAuth 方式使用
+	RepoAlias string `json:"repoAlias" binding:"omitempty,max=256"`
 	// 代码库地址
 	RepoURL string `json:"repoURL" binding:"required,url"`
+	// 仓库账号，仅账号、密码方式使用
+	Username string `json:"username" binding:"omitempty,max=128"`
+	// 仓库密码，仅账号、密码方式使用
+	Password string `json:"password" binding:"omitempty,max=256"`
 	// 代码库分支
 	Revision string `json:"revision" binding:"required"`
 	// Helm Chart 目录
@@ -115,6 +121,9 @@ func (input *HelmSpecInput) ToModel() *bkmsapp.HelmSpec {
 			Type:      bkmsapp.GitRepoType(src.GitRepoConfig.Type),
 			RepoAlias: src.GitRepoConfig.RepoAlias,
 			RepoURL:   src.GitRepoConfig.RepoURL,
+			AuthType:  src.GitRepoConfig.AuthType,
+			Username:  src.GitRepoConfig.Username,
+			Password:  src.GitRepoConfig.Password,
 			Revision:  src.GitRepoConfig.Revision,
 			SourceDir: src.GitRepoConfig.SourceDir,
 		}
@@ -174,6 +183,10 @@ type HelmGitRepoConfigOutputObj struct {
 	RepoAlias string `json:"repoAlias"`
 	// 代码库地址
 	RepoURL string `json:"repoURL"`
+	// 鉴权方式：OAUTH（OAuth 授权）/ PASSWORD（账号、密码）
+	AuthType string `json:"authType"`
+	// 仓库账号，仅账号、密码方式有值
+	Username string `json:"username"`
 	// 代码库分支
 	Revision string `json:"revision"`
 	// Helm Chart 目录
@@ -209,6 +222,8 @@ func (o *HelmSpecOutputObj) FromModel(spec *bkmsapp.HelmSpec) *HelmSpecOutputObj
 			Type:      string(src.GitRepoConfig.Type),
 			RepoAlias: src.GitRepoConfig.RepoAlias,
 			RepoURL:   src.GitRepoConfig.RepoURL,
+			AuthType:  src.GitRepoConfig.EffectiveAuthType(),
+			Username:  src.GitRepoConfig.Username,
 			Revision:  src.GitRepoConfig.Revision,
 			SourceDir: src.GitRepoConfig.SourceDir,
 		}

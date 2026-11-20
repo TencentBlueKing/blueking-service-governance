@@ -91,6 +91,45 @@ type FeatureIntegrationsConfig struct {
 	// 为 true：蓝盾始终新建；新建容器则创建 BCS 项目，绑定已有容器则绑定已有 BCS 项目。
 	// 为 false：新建/绑定都按蓝盾项目处理，BCS ID/Code 复用蓝盾项目。
 	EnableIndependentBCSProject bool
+	// CodeRepoTypes 当前环境支持的代码库类型及其鉴权方式，未配置时使用 DefaultCodeRepoTypes
+	CodeRepoTypes []CodeRepoTypeConfig `validate:"dive"`
+}
+
+// 代码库类型
+const (
+	// CodeRepoTypeTGit 工蜂代码库
+	CodeRepoTypeTGit = "TGit"
+)
+
+// 代码库鉴权方式
+const (
+	// CodeRepoAuthOAuth OAuth 授权
+	CodeRepoAuthOAuth = "OAUTH"
+	// CodeRepoAuthPassword 仓库账号密码
+	CodeRepoAuthPassword = "PASSWORD"
+)
+
+// CodeRepoTypeConfig 一种代码库类型的配置
+type CodeRepoTypeConfig struct {
+	// Type 代码库类型
+	Type string `validate:"required,oneof=TGit"`
+	// BkCIRepoType 关联到蓝盾时使用的代码库类型（请求体 @type），如 codeGit、codeTGit
+	BkCIRepoType string `validate:"required,oneof=codeGit codeTGit"`
+	// AuthTypes 支持的鉴权方式，第一个为请求未指定鉴权方式时的默认值
+	AuthTypes []string `validate:"required,min=1,unique,dive,oneof=OAUTH PASSWORD"`
+}
+
+// DefaultCodeRepoTypes 未配置 CodeRepoTypes 时的默认值：工蜂 + OAuth
+var DefaultCodeRepoTypes = []CodeRepoTypeConfig{
+	{Type: CodeRepoTypeTGit, BkCIRepoType: "codeGit", AuthTypes: []string{CodeRepoAuthOAuth}},
+}
+
+// EffectiveCodeRepoTypes 返回生效的代码库类型配置，未配置时返回默认值
+func (c FeatureIntegrationsConfig) EffectiveCodeRepoTypes() []CodeRepoTypeConfig {
+	if len(c.CodeRepoTypes) == 0 {
+		return DefaultCodeRepoTypes
+	}
+	return c.CodeRepoTypes
 }
 
 // BkApiStagesConfig 蓝鲸 API 版本信息，不指定时均默认为 "prod"

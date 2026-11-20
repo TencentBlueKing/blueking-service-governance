@@ -19,7 +19,11 @@
 // Package serializer 定义前端功能开关接口的 Gin Input/Output 结构体。
 package serializer
 
-import "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
+import (
+	"github.com/samber/lo"
+
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
+)
 
 // FrontendFeaturesOutput 前端功能开关，只用于控制页面入口是否展示，后端接口仍各自校验。
 type FrontendFeaturesOutput struct {
@@ -34,6 +38,16 @@ type FrontendFeaturesOutput struct {
 	EnableWeTerm bool `json:"enableWeTerm"`
 	// 是否启用 BSCP（服务配置中心）对接，为 false 时前端隐藏 BSCP 配置相关入口
 	EnableBSCP bool `json:"enableBSCP"`
+	// 当前环境支持的代码库类型及其鉴权方式
+	CodeRepoTypes []*CodeRepoTypeOutput `json:"codeRepoTypes"`
+}
+
+// CodeRepoTypeOutput 一种代码库类型支持的鉴权方式
+type CodeRepoTypeOutput struct {
+	// 代码库类型，如 TGit
+	Type string `json:"type"`
+	// 支持的鉴权方式：OAUTH（OAuth 授权）/ PASSWORD（账号、密码），第一个为默认鉴权方式
+	AuthTypes []string `json:"authTypes" enums:"OAUTH,PASSWORD"`
 }
 
 // NewFrontendFeaturesOutput 根据部署配置生成前端功能开关。
@@ -44,6 +58,12 @@ func NewFrontendFeaturesOutput(cfg *config.Config) *FrontendFeaturesOutput {
 		EnableIndependentBkRepo:     cfg.FeatureIntegrations.EnableIndependentBkRepo,
 		EnableWeTerm:                cfg.BCS.WeTermEnvID != "",
 		EnableBSCP:                  !cfg.FeatureIntegrations.DisableBSCP,
+		CodeRepoTypes: lo.Map(
+			cfg.FeatureIntegrations.EffectiveCodeRepoTypes(),
+			func(t config.CodeRepoTypeConfig, _ int) *CodeRepoTypeOutput {
+				return &CodeRepoTypeOutput{Type: t.Type, AuthTypes: t.AuthTypes}
+			},
+		),
 	}
 }
 
