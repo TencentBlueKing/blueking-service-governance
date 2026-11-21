@@ -24,4 +24,5 @@ var (
 	EnsureIndependentBCSProject  = ensureIndependentBCSProject
 	EnsureBCSProjectNotBound     = ensureBCSProjectNotBound
 	RunPreDeleteHooks            = runPreDeleteHooks
+	ClassifyLinkedProjectError   = classifyLinkedProjectError
 )

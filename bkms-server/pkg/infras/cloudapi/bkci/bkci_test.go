@@ -25,6 +25,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/pkg/errors"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
@@ -359,5 +360,60 @@ var _ = Describe("ApiClient", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(proj.ID).To(Equal("pid"))
 		Expect(proj.Code).To(Equal("system.demo"))
+		Expect(proj.Enabled).To(BeNil())
+	})
+
+	It("parses project enabled state", func() {
+		client := newClientWithServer(func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = w.Write([]byte(`{"code":0,"data":{"projectCode":"demo","enabled":true}}`))
+		})
+
+		proj, err := client.GetProject(context.Background(), "demo")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(proj.Enabled).To(HaveValue(BeTrue()))
+	})
+
+	It("sets project enabled state with PUT request", func() {
+		gotReq := make(chan *http.Request, 1)
+		client := newClientWithServer(func(w http.ResponseWriter, r *http.Request) {
+			gotReq <- r
+			_, _ = w.Write([]byte(`{"status":0,"data":true}`))
+		})
+
+		Expect(client.SetProjectEnabled(context.Background(), "bkms-demo", false)).To(Succeed())
+
+		req := <-gotReq
+		Expect(req.Method).To(Equal(http.MethodPut))
+		Expect(req.URL.Path).To(HaveSuffix("/v4/apigw-user/projects/project/bkms-demo/enable"))
+		Expect(req.URL.Query().Get("enabled")).To(Equal("false"))
+	})
+
+	It("returns APIError with request id on http failure", func() {
+		client := newClientWithServer(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("X-Bkapi-Request-Id", "req-1")
+			w.WriteHeader(http.StatusForbidden)
+			_, _ = w.Write([]byte(`{"status":2119020,"message":"no permission"}`))
+		})
+
+		err := client.SetProjectEnabled(context.Background(), "bkms-demo", true)
+
+		var apiErr *APIError
+		Expect(errors.As(err, &apiErr)).To(BeTrue())
+		Expect(apiErr.HTTPStatus).To(Equal(http.StatusForbidden))
+		Expect(apiErr.Message).To(Equal("no permission"))
+		Expect(apiErr.RequestID).To(Equal("req-1"))
+	})
+
+	It("returns APIError on business failure", func() {
+		client := newClientWithServer(func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = w.Write([]byte(`{"status":2119001,"message":"project not exist","requestId":"req-2"}`))
+		})
+
+		err := client.SetProjectEnabled(context.Background(), "bkms-demo", true)
+
+		var apiErr *APIError
+		Expect(errors.As(err, &apiErr)).To(BeTrue())
+		Expect(apiErr.Status).To(Equal(ProjectNotExistStatus))
+		Expect(apiErr.RequestID).To(Equal("req-2"))
 	})
 })

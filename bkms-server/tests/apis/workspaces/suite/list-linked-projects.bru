@@ -1,0 +1,33 @@
+meta {
+  name: list-linked-projects
+  type: http
+  seq: 8
+}
+
+get {
+  url: {{serviceURL}}/workspaces/{{imageRegistryWsID}}/linked-projects
+  body: none
+  auth: inherit
+}
+
+assert {
+  res.status: eq 200
+  res.body: isJson
+}
+
+tests {
+  test("should list linked projects of the workspace", () => {
+    const projects = res.body.data;
+    const bkci = projects.find((p) => p.system === "bkci");
+    const bcs = projects.find((p) => p.system === "bcs");
+    expect(bkci.state).to.equal("Ready");
+    expect(bkci.origin).to.equal("created");
+    expect(bkci.blockedReason).to.equal("");
+    expect(bcs.blockedReason).to.equal("unsupported");
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 10000
+}

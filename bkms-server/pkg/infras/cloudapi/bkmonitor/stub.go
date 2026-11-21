@@ -92,6 +92,8 @@ func ResetStubStateForTest() {
 	stubUserGroupsMu.Lock()
 	stubUserGroups = newDefaultStubUserGroups()
 	stubUserGroupsMu.Unlock()
+
+	stubDisabledSpaces.Clear()
 }
 
 // StubClient 测试用的蓝鲸监控 API 客户端实现，返回模拟数据
@@ -284,6 +286,10 @@ func cloneStubUserGroupDetail(detail *UserGroupDetail) *UserGroupDetail {
 // GetMetadataSpaceDetail 模拟获取空间详情
 func (s *StubClient) GetMetadataSpaceDetail(ctx context.Context, bcsProjectCode string) (*Space, error) {
 	log.Infof(ctx, "Stub: GetMetadataSpaceDetail request: bcsProjectCode=%s", bcsProjectCode)
+	status := SpaceStatusNormal
+	if _, disabled := stubDisabledSpaces.Load(bcsProjectCode); disabled {
+		status = SpaceStatusDisabled
+	}
 	return &Space{
 		ID:          -100001,
 		SpaceTypeID: "bkci",
@@ -292,10 +298,24 @@ func (s *StubClient) GetMetadataSpaceDetail(ctx context.Context, bcsProjectCode 
 		SpaceName:   "Stub 项目",
 		SpaceUid:    fmt.Sprintf("bkci__%s", bcsProjectCode),
 		IsBcsValid:  true,
-		Status:      "normal",
+		Status:      status,
 		Creator:     "stub-user",
 		CreatedAt:   "2026-01-01 00:00:00",
 	}, nil
+}
+
+// stubDisabledSpaces 记录被停用的空间（key 为 bcsProjectCode），未记录的空间视为正常
+var stubDisabledSpaces sync.Map
+
+// SetBkmsSpaceStatus 模拟设置空间启停状态，GetMetadataSpaceDetail 会返回对应状态
+func (s *StubClient) SetBkmsSpaceStatus(ctx context.Context, bcsProjectCode, status string) error {
+	log.Infof(ctx, "Stub: SetBkmsSpaceStatus request: bcsProjectCode=%s, status=%s", bcsProjectCode, status)
+	if status == SpaceStatusDisabled {
+		stubDisabledSpaces.Store(bcsProjectCode, struct{}{})
+	} else {
+		stubDisabledSpaces.Delete(bcsProjectCode)
+	}
+	return nil
 }
 
 // SearchUserGroups 模拟查询告警组列表

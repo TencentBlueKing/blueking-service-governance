@@ -4738,6 +4738,31 @@ definitions:
       enabled:
         type: boolean
     type: object
+  serializer.DisableWorkspaceLinkedProjectsInput:
+    properties:
+      linkedProjects:
+        description: 要停用的关联项目所属平台，可选值：bkci、bkmonitor
+        items:
+          type: string
+        minItems: 1
+        type: array
+        uniqueItems: true
+    required:
+    - linkedProjects
+    type: object
+  serializer.DisableWorkspaceLinkedProjectsOutput:
+    properties:
+      data:
+        $ref: '#/definitions/serializer.DisableWorkspaceLinkedProjectsOutputObj'
+    type: object
+  serializer.DisableWorkspaceLinkedProjectsOutputObj:
+    properties:
+      linkedProjects:
+        description: 关联项目停用结果
+        items:
+          $ref: '#/definitions/serializer.LinkedProjectResultOutputObj'
+        type: array
+    type: object
   serializer.EdgeReasonOutputObj:
     properties:
       matchedLabels:
@@ -6538,6 +6563,51 @@ definitions:
         description: 处理器类型：EXEC 或 HTTP
         type: string
     type: object
+  serializer.LinkedProjectOutputObj:
+    properties:
+      blockedReason:
+        description: 不能启停的原因，为空表示可以启停。可选值：unsupported（平台不支持）、noPermission（没有项目管理权限）
+        type: string
+      origin:
+        description: 来源，可选值：created（随空间创建）、bound（绑定的已有项目）
+        type: string
+      projectID:
+        description: 平台项目 ID：蓝盾、容器为项目 Code，监控为空间 ID
+        type: string
+      projectName:
+        description: 平台项目名称，查询平台失败时为项目 ID
+        type: string
+      state:
+        description: 平台侧状态，可选值：Ready（启用中）、Disabled（已停用）、Unknown（查询平台失败）
+        type: string
+      system:
+        description: 所属平台，可选值：bkci（蓝盾）、bkmonitor（监控）、bcs（容器服务）
+        type: string
+    type: object
+  serializer.LinkedProjectResultOutputObj:
+    properties:
+      detail:
+        description: 平台返回的原始错误信息，仅用于排查
+        type: string
+      projectID:
+        description: 平台项目 ID
+        type: string
+      projectName:
+        description: 平台项目名称
+        type: string
+      reason:
+        description: 失败原因，可选值：archived、notFound、permission、unavailable、unknown；成功时为空
+        type: string
+      requestID:
+        description: 平台请求 ID
+        type: string
+      success:
+        description: 是否成功
+        type: boolean
+      system:
+        description: 所属平台
+        type: string
+    type: object
   serializer.ListAlertEventsOutput:
     properties:
       count:
@@ -7096,6 +7166,13 @@ definitions:
       data:
         items:
           $ref: '#/definitions/serializer.WorkspaceComponentOutputObj'
+        type: array
+    type: object
+  serializer.ListWorkspaceLinkedProjectsOutput:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/serializer.LinkedProjectOutputObj'
         type: array
     type: object
   serializer.ListWorkspaceRoleMemberGroupsOutput:
@@ -9644,6 +9721,14 @@ definitions:
     type: object
   serializer.SetWorkspaceStateInput:
     properties:
+      linkedProjects:
+        description: |-
+          停用空间时一并停用的关联项目所属平台，可选值：bkci、bkmonitor。
+          启用空间时忽略该字段，已停用的关联项目会全部一并启用
+        items:
+          type: string
+        type: array
+        uniqueItems: true
       state:
         description: 工作空间状态
         enum:
@@ -9652,6 +9737,22 @@ definitions:
         type: string
     required:
     - state
+    type: object
+  serializer.SetWorkspaceStateOutput:
+    properties:
+      data:
+        $ref: '#/definitions/serializer.SetWorkspaceStateOutputObj'
+    type: object
+  serializer.SetWorkspaceStateOutputObj:
+    properties:
+      linkedProjects:
+        description: 本次一并启停的关联项目结果。启用时任一项目启用失败会返回错误，不会返回该结果
+        items:
+          $ref: '#/definitions/serializer.LinkedProjectResultOutputObj'
+        type: array
+      state:
+        description: 操作后的工作空间状态
+        type: string
     type: object
   serializer.SkippedAppInstanceObj:
     properties:
@@ -23875,6 +23976,66 @@ paths:
       summary: 更新工作空间信息
       tags:
       - workspace
+  /workspaces/{workspaceID}/linked-projects:
+    get:
+      operationId: ListWorkspaceLinkedProjects
+      parameters:
+      - description: 工作空间 ID
+        in: path
+        name: workspaceID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.ListWorkspaceLinkedProjectsOutput'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 获取工作空间的关联项目
+      tags:
+      - workspace
+  /workspaces/{workspaceID}/linked-projects/disable:
+    post:
+      consumes:
+      - application/json
+      operationId: DisableWorkspaceLinkedProjects
+      parameters:
+      - description: 工作空间 ID
+        in: path
+        name: workspaceID
+        required: true
+        type: string
+      - description: 停用关联项目请求
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/serializer.DisableWorkspaceLinkedProjectsInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.DisableWorkspaceLinkedProjectsOutput'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 停用已停用工作空间的关联项目
+      tags:
+      - workspace
   /workspaces/{workspaceID}/operation-records:
     get:
       operationId: ListOperationRecords
@@ -24693,7 +24854,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_core_workspace_serializer.EmptyOutput'
+            $ref: '#/definitions/serializer.SetWorkspaceStateOutput'
         "400":
           description: Bad Request
           schema:

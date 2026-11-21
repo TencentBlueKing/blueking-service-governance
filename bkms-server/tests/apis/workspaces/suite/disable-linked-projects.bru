@@ -1,0 +1,36 @@
+meta {
+  name: disable-linked-projects
+  type: http
+  seq: 11
+}
+
+post {
+  url: {{serviceURL}}/workspaces/{{imageRegistryWsID}}/linked-projects/disable
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "linkedProjects": ["bkci"]
+  }
+}
+
+assert {
+  res.status: eq 200
+  res.body: isJson
+}
+
+tests {
+  test("should disable linked projects of a disabled workspace", () => {
+    const results = res.body.data.linkedProjects;
+    expect(results).to.have.lengthOf(1);
+    expect(results[0].system).to.equal("bkci");
+    expect(results[0].success).to.equal(true);
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 10000
+}

@@ -69,4 +69,7 @@ const (
 	ErrDetailCodePolarisAccessPointInUse ErrDetailCode = "POLARIS_ACCESS_POINT_IN_USE"
 	// ErrDetailCodePolarisClusterInUse 集群上有环境被北极星配置使用，不能解绑或换绑
 	ErrDetailCodePolarisClusterInUse ErrDetailCode = "POLARIS_CLUSTER_IN_USE"
+
+	// ErrDetailCodeLinkedProjectEnableFailed 启用工作空间时关联项目启用失败（通过 module 区分平台）
+	ErrDetailCodeLinkedProjectEnableFailed ErrDetailCode = "LINKED_PROJECT_ENABLE_FAILED"
 )

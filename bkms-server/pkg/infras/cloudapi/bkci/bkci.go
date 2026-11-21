@@ -23,8 +23,10 @@ import (
 	"cmp"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/TencentBlueKing/bk-apigateway-sdks/core/bkapi"
@@ -165,6 +167,10 @@ func (c *ApiClient) GetProject(ctx context.Context, projectCode string) (*Projec
 		return nil, err
 	}
 
+	var enabled *bool
+	if v, ok := mapx.Get(result, "data.enabled", nil).(bool); ok {
+		enabled = &v
+	}
 	return &Project{
 		ID: mapx.GetStr(result, "data.projectId"),
 		// 以蓝盾返回的项目 Code 为准，多租户蓝盾的 Code 带租户前缀
@@ -172,7 +178,27 @@ func (c *ApiClient) GetProject(ctx context.Context, projectCode string) (*Projec
 		Name:          mapx.GetStr(result, "data.projectName"),
 		Creator:       mapx.GetStr(result, "data.creator"),
 		HasManagePerm: mapx.GetBool(result, "data.managePermission"),
+		Enabled:       enabled,
 	}, nil
+}
+
+// SetProjectEnabled 启用或停用蓝盾项目（通过项目 Code）
+//
+// 蓝盾不校验项目当前状态，重复设置为同一状态不会报错。
+// 蓝盾停用项目时会同时停用同名制品库项目
+func (c *ApiClient) SetProjectEnabled(ctx context.Context, projectCode string, enabled bool) error {
+	apiOperation := c.NewOperation(
+		bkapi.OperationConfig{
+			Name:   "v4_user_project_enable",
+			Method: "PUT",
+			Path:   "/v4/apigw-user/projects/project/{projectCode}/enable",
+		},
+		bkapi.OptSetRequestPathParams(map[string]string{
+			"projectCode": projectCode,
+		}),
+	).SetQueryParams(map[string]string{"enabled": strconv.FormatBool(enabled)})
+
+	return c.handleOperationWithoutResult(ctx, apiOperation)
 }
 
 // CreateProject 创建蓝盾项目
@@ -993,32 +1019,68 @@ func (c *ApiClient) handleOperation(
 		return nil, RepoAlreadyExist
 	}
 
+	requestID := cmp.Or(resp.Header.Get(bkapiRequestIDHeader), mapx.GetStr(result, "requestId"))
+
 	// 其他 HTTP 错误 -> 蓝盾 API 错误（从 result 中多字段兜底提取 message）
 	if !httpresp.IsSuccess(resp) {
-		return nil, newHTTPError(opName, resp.StatusCode, result)
+		apiErr := newHTTPError(opName, resp.StatusCode, result)
+		apiErr.RequestID = requestID
+		return nil, apiErr
 	}
 
 	// 业务错误（HTTP 200 但 code/status 非零）-> 蓝盾 API 错误
 	if code != 0 || status != 0 {
-		return nil, newBusinessError(opName, code, status, result)
+		apiErr := newBusinessError(opName, code, status, result)
+		apiErr.RequestID = requestID
+		return nil, apiErr
 	}
 	return result, nil
 }
 
-// newHTTPError 构造 HTTP 非 2xx 场景的错误
-func newHTTPError(opName string, statusCode int, result map[string]any) error {
-	return errors.Errorf(
-		"call bkci api %s failed, status code: %d, message: %s",
-		opName, statusCode, extractErrorMessage(result),
+// bkapiRequestIDHeader 蓝鲸 API 网关返回的请求 ID 响应头
+const bkapiRequestIDHeader = "X-Bkapi-Request-Id"
+
+// APIError 蓝盾 API 调用返回的错误（HTTP 非 2xx，或 HTTP 200 但业务错误码非零）
+type APIError struct {
+	// OpName 网关资源名
+	OpName string
+	// HTTPStatus HTTP 状态码
+	HTTPStatus int
+	// Code 网关错误码
+	Code int
+	// Status 蓝盾错误码
+	Status int
+	// Message 蓝盾或网关返回的原始错误信息
+	Message string
+	// RequestID 网关请求 ID
+	RequestID string
+}
+
+func (e *APIError) Error() string {
+	if e.HTTPStatus < http.StatusOK || e.HTTPStatus >= http.StatusMultipleChoices {
+		return fmt.Sprintf(
+			"call bkci api %s failed, status code: %d, message: %s", e.OpName, e.HTTPStatus, e.Message,
+		)
+	}
+	return fmt.Sprintf(
+		"call bkci api %s failed, code: %d, status: %d, message: %s", e.OpName, e.Code, e.Status, e.Message,
 	)
 }
 
+// newHTTPError 构造 HTTP 非 2xx 场景的错误
+func newHTTPError(opName string, statusCode int, result map[string]any) *APIError {
+	return &APIError{OpName: opName, HTTPStatus: statusCode, Message: extractErrorMessage(result)}
+}
+
 // newBusinessError 构造 HTTP 200 但业务错误码非零的错误
-func newBusinessError(opName string, code, status int, result map[string]any) error {
-	return errors.Errorf(
-		"call bkci api %s failed, code: %d, status: %d, message: %s",
-		opName, code, status, extractErrorMessage(result),
-	)
+func newBusinessError(opName string, code, status int, result map[string]any) *APIError {
+	return &APIError{
+		OpName:     opName,
+		HTTPStatus: http.StatusOK,
+		Code:       code,
+		Status:     status,
+		Message:    extractErrorMessage(result),
+	}
 }
 
 // handleStreamOperation 发起请求并返回原始响应流，适用于文件下载场景
