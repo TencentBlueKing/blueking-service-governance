@@ -165,12 +165,12 @@ var _ = Describe("Test EnvService", func() {
 		It("rejects moving a source env while feature envs share its namespace", func() {
 			envs := testutil.NewStore(GinkgoT(), model.EnvMeta)
 			Expect(envs.Create(ctx, &model.Environment{
-				Name:        "feat-" + stringx.Random(6),
-				WorkspaceID: workspaceID,
-				Kind:        model.EnvironmentKindFeature,
-				SourceEnvID: envID,
-				ResourceKey: "fab12",
-				Cluster:     Cluster,
+				Name:           "feat-" + stringx.Random(6),
+				WorkspaceID:    workspaceID,
+				Kind:           model.EnvironmentKindFeature,
+				SourceEnvID:    envID,
+				ResourcePrefix: "fab12",
+				Cluster:        Cluster,
 			})).To(Succeed())
 
 			newNamespace := stringx.Random(10)
@@ -216,12 +216,12 @@ var _ = Describe("Test EnvService", func() {
 			})).To(Succeed())
 
 			featEnv := &model.Environment{
-				Name:        "feat-" + stringx.Random(6),
-				WorkspaceID: workspaceID,
-				Kind:        model.EnvironmentKindFeature,
-				SourceEnvID: envID,
-				ResourceKey: "fab12",
-				Cluster:     Cluster,
+				Name:           "feat-" + stringx.Random(6),
+				WorkspaceID:    workspaceID,
+				Kind:           model.EnvironmentKindFeature,
+				SourceEnvID:    envID,
+				ResourcePrefix: "fab12",
+				Cluster:        Cluster,
 			}
 			Expect(envSvc.Create(ctx, featEnv)).To(Succeed())
 

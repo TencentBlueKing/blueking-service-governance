@@ -346,18 +346,18 @@ var _ = Describe("Environment store", func() {
 		Expect(found).To(BeNil())
 	})
 
-	It("separates environments sharing a cluster namespace by resource key", func() {
+	It("separates environments sharing a cluster namespace by resource prefix", func() {
 		app := newApp("sharer", workspaceID1)
 		sharer := &envmodel.Environment{
-			Name:        "feat-sharer-1",
-			WorkspaceID: workspaceID1,
-			Kind:        envmodel.EnvironmentKindFeature,
-			OwnerAppID:  app.ID,
-			SourceEnvID: env1.ID,
-			Cluster:     env1.Cluster,
-			ResourceKey: "fab12",
+			Name:           "feat-sharer-1",
+			WorkspaceID:    workspaceID1,
+			Kind:           envmodel.EnvironmentKindFeature,
+			OwnerAppID:     app.ID,
+			SourceEnvID:    env1.ID,
+			Cluster:        env1.Cluster,
+			ResourcePrefix: "fab12",
 		}
-		// 与来源环境同集群同命名空间，仅 resourceKey 不同，唯一索引允许共存
+		// 与来源环境同集群同命名空间，仅 resourcePrefix 不同，唯一索引允许共存
 		Expect(envs.Create(ctx, sharer)).To(Succeed())
 
 		found, err := envmodel.FindByClusterNamespace(
@@ -372,7 +372,7 @@ var _ = Describe("Environment store", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(found.ID).To(Equal(sharer.ID))
 
-		// 同一 resourceKey 再次绑定同一命名空间会被唯一索引拦截
+		// 同一 resourcePrefix 再次绑定同一命名空间会被唯一索引拦截
 		duplicated := *sharer
 		duplicated.ID = bson.NilObjectID
 		duplicated.Name = "feat-sharer-2"

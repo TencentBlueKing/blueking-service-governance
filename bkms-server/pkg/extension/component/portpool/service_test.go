@@ -132,9 +132,9 @@ var _ = Describe("fillItemNames", func() {
 })
 
 var _ = Describe("buildEnvPortPoolManifest", func() {
-	DescribeTable("names the CR by the env resource key",
-		func(resourceKey, wantName string) {
-			env := &bkmsenv.Environment{Name: "dev", WorkspaceID: "ws-1", ResourceKey: resourceKey}
+	DescribeTable("names the CR by the env resource prefix",
+		func(resourcePrefix, wantName string) {
+			env := &bkmsenv.Environment{Name: "dev", WorkspaceID: "ws-1", ResourcePrefix: resourcePrefix}
 			config := &PortPoolConfig{Name: "pool", WorkspaceID: "ws-1", EnvName: "dev"}
 
 			manifest := buildEnvPortPoolManifest(env, config)

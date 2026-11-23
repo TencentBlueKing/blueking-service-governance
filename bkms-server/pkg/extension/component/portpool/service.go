@@ -32,6 +32,7 @@ import (
 
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/resname"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/ownership"
 	k8sclient "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/client"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/cluster"
@@ -99,10 +100,10 @@ func (s *PortPoolService) Create(ctx context.Context, config *PortPoolConfig, en
 	return nil
 }
 
-// buildEnvPortPoolManifest 生成下发到环境的 PortPool manifest；共用命名空间时 CR 名带 resourceKey 前缀。
+// buildEnvPortPoolManifest 生成下发到环境的 PortPool manifest；共用命名空间时 CR 名带 resourcePrefix 前缀。
 func buildEnvPortPoolManifest(env *bkmsenv.Environment, config *PortPoolConfig) map[string]any {
 	k8sConfig := *config
-	k8sConfig.Name = env.PrefixName(config.Name)
+	k8sConfig.Name = resname.Build(env, config.Name)
 	return buildPortPoolManifest(&k8sConfig)
 }
 
@@ -120,7 +121,7 @@ func (s *PortPoolService) Get(ctx context.Context, env *bkmsenv.Environment, nam
 func getLive(
 	ctx context.Context, k8sClient *k8sclient.Client, env *bkmsenv.Environment, name string,
 ) (*unstructured.Unstructured, *PortPoolConfig, error) {
-	obj, err := k8sClient.Get(ctx, env.Cluster.Namespace, env.PrefixName(name), metav1.GetOptions{})
+	obj, err := k8sClient.Get(ctx, env.Cluster.Namespace, resname.Build(env, name), metav1.GetOptions{})
 	if err != nil {
 		if errors.Is(err, k8sclient.ErrResourceNotFound) {
 			return nil, nil, ErrConfigNotFound
@@ -156,9 +157,9 @@ func (s *PortPoolService) ListByEnv(ctx context.Context, env *bkmsenv.Environmen
 	if err != nil {
 		return nil, err
 	}
-	// 共用命名空间时 CR 名带 resourceKey 前缀，返回前还原为原名
+	// 共用命名空间时 CR 名带 resourcePrefix 前缀，返回前还原为原名
 	for _, config := range configs {
-		config.Name = env.TrimPrefix(config.Name)
+		config.Name = resname.TrimEnvPrefix(env, config.Name)
 	}
 	return configs, nil
 }
@@ -236,7 +237,8 @@ func (s *PortPoolService) Delete(ctx context.Context, env *bkmsenv.Environment, 
 		return errors.Wrap(err, "create k8s client for portpool")
 	}
 
-	if err = k8sClient.Delete(ctx, env.Cluster.Namespace, env.PrefixName(name), metav1.DeleteOptions{}); err != nil {
+	crName := resname.Build(env, name)
+	if err = k8sClient.Delete(ctx, env.Cluster.Namespace, crName, metav1.DeleteOptions{}); err != nil {
 		if errors.Is(err, k8sclient.ErrResourceNotFound) {
 			return ErrConfigNotFound
 		}

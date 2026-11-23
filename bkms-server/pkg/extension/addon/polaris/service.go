@@ -28,11 +28,11 @@ import (
 	"github.com/samber/lo"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
-	"k8s.io/apimachinery/pkg/util/validation"
 
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/resname"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appspec"
@@ -270,7 +270,7 @@ func (s *PolarisConfigService) Delete(
 }
 
 // checkResourceNamesInScope 校验配置在生效范围内各环境中的 CR 名与 Service 名不超长。
-// 共用命名空间的环境创建时只校验应用自身的资源名，北极星资源名带 resourceKey 前缀后更长，在加入生效范围时校验。
+// 共用命名空间的环境创建时只校验应用自身的资源名，北极星资源名带 resourcePrefix 前缀后更长，在加入生效范围时校验。
 func (s *PolarisConfigService) checkResourceNamesInScope(
 	ctx context.Context, app *bkmsapp.Application, configName string, envNames []string,
 ) error {
@@ -294,12 +294,12 @@ func (s *PolarisConfigService) checkResourceNamesInScope(
 	return nil
 }
 
-// checkResourceNames 按 Service 名的约束（DNS-1035 label）校验 PolarisConfig CR 名与配套 Service 名。
+// checkResourceNames 校验环境中生成的 PolarisConfig CR 名与配套 Service 名合法性。
 func checkResourceNames(env *bkmsenv.Environment, names ...string) error {
 	for _, name := range names {
-		if errs := validation.IsDNS1035Label(name); len(errs) > 0 {
+		if err := resname.Validate(name); err != nil {
 			return errors.Wrapf(
-				ErrInvalidResourceName, "resource name %s in env %s: %s", name, env.Name, strings.Join(errs, "; "),
+				ErrInvalidResourceName, "resource name %s in env %s: %v", name, env.Name, err,
 			)
 		}
 	}

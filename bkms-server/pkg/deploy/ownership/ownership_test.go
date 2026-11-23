@@ -69,7 +69,7 @@ var _ = Describe("Owner", func() {
 		ctx = testutil.NewDefaultTenantContext()
 		cluster := envmodel.BizCluster{ClusterID: "cluster-" + stringx.Random(6), Namespace: "ns-" + stringx.Random(6)}
 		standardEnv = &envmodel.Environment{Name: "dev", Cluster: cluster}
-		sharedEnv = &envmodel.Environment{Name: "feat-app-1-1", ResourceKey: "fab12", Cluster: cluster}
+		sharedEnv = &envmodel.Environment{Name: "feat-app-1-1", ResourcePrefix: "fab12", Cluster: cluster}
 	})
 
 	Describe("Stamp", func() {

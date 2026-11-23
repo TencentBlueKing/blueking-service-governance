@@ -245,9 +245,9 @@ var _ = Describe("GPAService K8s interactions", func() {
 			})
 		})
 
-		It("prefixes the CR name with the resource key in an env sharing namespace", func() {
+		It("prefixes the CR name with the resource prefix in an env sharing namespace", func() {
 			mockey.PatchConvey("apply-shared-namespace", GinkgoT(), func() {
-				env.ResourceKey = "fab12"
+				env.ResourcePrefix = "fab12"
 				mockey.Mock((*GPAService).resolveScaleTargetName).Return("fab12-web", nil).Build()
 				mockK8sClientChain()
 
@@ -285,7 +285,7 @@ var _ = Describe("GPAService K8s interactions", func() {
 
 		It("rejects overwriting a CR owned by another env in an env sharing namespace", func() {
 			mockey.PatchConvey("apply-not-owned", GinkgoT(), func() {
-				env.ResourceKey = "fab12"
+				env.ResourcePrefix = "fab12"
 				mockey.Mock((*GPAService).resolveScaleTargetName).Return("fab12-web", nil).Build()
 				mockK8sClientChain()
 				live := &unstructured.Unstructured{}

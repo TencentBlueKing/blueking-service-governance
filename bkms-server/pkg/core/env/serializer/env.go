@@ -136,7 +136,7 @@ type CreateFeatureEnvInput struct {
 	// 是否复制来源环境的环境变量；未传时不复制
 	CopyEnvVars bool `json:"copyEnvVars"`
 	// 是否复用来源环境的命名空间；未传时新建独立的命名空间。
-	// 复用时仅支持 AppModel 应用且不能使用组件，资源名会带上平台生成的 resourceKey 前缀
+	// 复用时仅支持 AppModel 应用且不能使用组件，资源名会带上平台生成的 resourcePrefix 前缀
 	ShareSourceNamespace bool `json:"shareSourceNamespace"`
 }
 
@@ -198,7 +198,7 @@ type EnvOutput struct {
 	// 特性环境来源环境 ID，仅特性环境返回
 	SourceEnvID string `json:"sourceEnvID,omitempty"`
 	// 资源名前缀，仅复用来源环境命名空间的特性环境返回
-	ResourceKey string `json:"resourceKey,omitempty"`
+	ResourcePrefix string `json:"resourcePrefix,omitempty"`
 }
 
 // FromModel fills output fields from an environment model.
@@ -223,10 +223,10 @@ func (o *EnvOutput) FromModel(env envmodel.Environment) *EnvOutput {
 		AppIDs: env.AppIDs,
 
 		// 实现特性环境后新增字段
-		Kind:        string(env.GetKind()),
-		OwnerAppID:  env.OwnerAppID,
-		SourceEnvID: sourceEnvID,
-		ResourceKey: env.ResourceKey,
+		Kind:           string(env.GetKind()),
+		OwnerAppID:     env.OwnerAppID,
+		SourceEnvID:    sourceEnvID,
+		ResourcePrefix: env.ResourcePrefix,
 	}
 	return o
 }

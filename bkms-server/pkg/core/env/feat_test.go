@@ -38,6 +38,7 @@ import (
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/resname"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/trafficmanager"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars"
@@ -492,10 +493,10 @@ var _ = Describe("FeatureEnvService", func() {
 			})
 		}
 
-		It("reuses the source namespace with a resource key and skips namespace initialization", func() {
+		It("reuses the source namespace with a resource prefix and skips namespace initialization", func() {
 			featEnv, err := createShared()
 			Expect(err).NotTo(HaveOccurred())
-			Expect(featEnv.ResourceKey).To(MatchRegexp(`^f[a-z0-9]{4}$`))
+			Expect(featEnv.ResourcePrefix).To(MatchRegexp(`^f[a-z0-9]{4}$`))
 
 			expectedEnv := deriveFeatureEnv(sourceEnv, model.Environment{
 				ID:          featEnv.ID,
@@ -505,41 +506,41 @@ var _ = Describe("FeatureEnvService", func() {
 				Creator:     "alice",
 			})
 			expectedEnv.Cluster.Namespace = sourceEnv.Cluster.Namespace
-			expectedEnv.ResourceKey = featEnv.ResourceKey
+			expectedEnv.ResourcePrefix = featEnv.ResourcePrefix
 			storedEnv, err := envStore.GetByID(ctx, featEnv.ID)
 			Expect(err).NotTo(HaveOccurred())
 			expectEnvironmentsEqual(storedEnv, expectedEnv)
 			// nsInitializer 没有设置期望，被调用时 mock 会直接失败
 		})
 
-		It("regenerates the resource key when it collides with another feature env", func() {
-			mockey.PatchConvey("resource-key-collision", GinkgoT(), func() {
-				mockey.Mock(bkmsenv.GenResourceKey).Return(
+		It("regenerates the resource prefix when it collides with another feature env", func() {
+			mockey.PatchConvey("resource-prefix-collision", GinkgoT(), func() {
+				mockey.Mock(resname.GenEnvPrefix).Return(
 					mockey.Sequence("fab12", nil).Times(2).Then("fcd34", nil),
 				).Build()
 
 				first, err := createShared()
 				Expect(err).NotTo(HaveOccurred())
-				Expect(first.ResourceKey).To(Equal("fab12"))
+				Expect(first.ResourcePrefix).To(Equal("fab12"))
 				second, err := createShared()
 				Expect(err).NotTo(HaveOccurred())
-				Expect(second.ResourceKey).To(Equal("fcd34"))
+				Expect(second.ResourcePrefix).To(Equal("fcd34"))
 				Expect(second.Cluster.Namespace).To(Equal(first.Cluster.Namespace))
 			})
 		})
 
-		It("skips resource keys equal to a traffic lane name of the source env", func() {
-			mockey.PatchConvey("resource-key-lane-conflict", GinkgoT(), func() {
+		It("skips resource prefixes equal to a traffic lane name of the source env", func() {
+			mockey.PatchConvey("resource-prefix-lane-conflict", GinkgoT(), func() {
 				mockey.Mock((*trafficmanager.StubTrafficManager).ListTrafficLanes).Return(
 					[]*trafficmanager.TrafficLane{{LaneName: "fab12"}}, nil,
 				).Build()
-				mockey.Mock(bkmsenv.GenResourceKey).Return(
+				mockey.Mock(resname.GenEnvPrefix).Return(
 					mockey.Sequence("fab12", nil).Then("fcd34", nil),
 				).Build()
 
 				featEnv, err := createShared()
 				Expect(err).NotTo(HaveOccurred())
-				Expect(featEnv.ResourceKey).To(Equal("fcd34"))
+				Expect(featEnv.ResourcePrefix).To(Equal("fcd34"))
 			})
 		})
 

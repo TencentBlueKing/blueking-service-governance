@@ -143,7 +143,7 @@ type CreateFeatureEnvInput struct {
 	// CopyEnvVars 决定是否在创建时复制来源环境的自定义变量；默认不复制
 	CopyEnvVars bool
 	// ShareSourceNamespace 决定是否复用来源环境的命名空间；为 true 时不新建命名空间，
-	// 而是生成 resourceKey 作为资源名前缀，与来源环境共存于同一命名空间
+	// 而是生成 resourcePrefix 作为资源名前缀，与来源环境共存于同一命名空间
 	ShareSourceNamespace bool
 }
 
@@ -205,14 +205,13 @@ func ListAppFeatEnvs(
 // - sourceEnv 必须是应用可见的标准环境，且与应用属于同一个 workspace；
 // - name / namespace 由平台按 feat-<appID>-<index> 自动生成，调用方不能指定；
 // - 集群的 namespace 也是自动生成，将由后台自动完成初始化；
-// - ShareSourceNamespace 时改为复用来源环境的 namespace，不创建 namespace，并生成 resourceKey 区分资源；
+// - ShareSourceNamespace 时改为复用来源环境的 namespace，不创建 namespace，并生成 resourcePrefix 区分资源；
 // - 按需复制来源环境的自定义变量；之后双方独立修改，不持续同步；
 func (s *FeatureEnvService) Create(ctx context.Context, input CreateFeatureEnvInput) (*model.Environment, error) {
 	if err := validate.Struct(input); err != nil {
 		return nil, errors.Wrapf(
 			ErrInvalidFeatureEnvInput,
-			"validate create feature environment input: %v",
-			formatError(err),
+			"validate create feature environment input: %v", formatError(err),
 		)
 	}
 	if err := input.App.CheckVisibleEnv(input.SourceEnv); err != nil {
@@ -228,7 +227,6 @@ func (s *FeatureEnvService) Create(ctx context.Context, input CreateFeatureEnvIn
 	if err != nil {
 		return nil, errors.Wrap(err, "allocate feature environment index")
 	}
-
 	// 特性环境的内部 name 与 namespace 使用同一套规则生成，确保在工作空间内稳定唯一。
 	name := fmt.Sprintf("%s-%s-%d", featureEnvNamePrefix, input.App.ID, index)
 	env := &model.Environment{
@@ -251,7 +249,7 @@ func (s *FeatureEnvService) Create(ctx context.Context, input CreateFeatureEnvIn
 
 	if input.ShareSourceNamespace {
 		env.Cluster.Namespace = input.SourceEnv.Cluster.Namespace
-		err = s.createEnvWithResourceKey(ctx, env, input.SourceEnv)
+		err = s.createEnvWithResourcePrefix(ctx, env, input.SourceEnv)
 	} else {
 		err = s.createEnv(ctx, env)
 	}
@@ -291,16 +289,16 @@ func (s *FeatureEnvService) Create(ctx context.Context, input CreateFeatureEnvIn
 	return env, nil
 }
 
-// createEnv 校验 cluster+namespace+resourceKey 未被占用后落库特性环境记录。
+// createEnv 校验 cluster+namespace+resourcePrefix 未被占用后落库特性环境记录。
 func (s *FeatureEnvService) createEnv(ctx context.Context, env *model.Environment) error {
 	if conflictErr := findClusterNamespaceOccupant(
-		ctx, s.db, env.Cluster, env.ResourceKey, bson.NilObjectID,
+		ctx, s.db, env.Cluster, env.ResourcePrefix, bson.NilObjectID,
 	); conflictErr != nil {
 		return errors.Wrap(conflictErr, "check feature environment cluster namespace conflict")
 	}
 
 	if err := store.Of(s.db, model.EnvMeta).Create(ctx, env); err != nil {
-		err = rewriteWriteErrIfClusterOccupied(ctx, s.db, env.Cluster, env.ResourceKey, bson.NilObjectID, err)
+		err = rewriteWriteErrIfClusterOccupied(ctx, s.db, env.Cluster, env.ResourcePrefix, bson.NilObjectID, err)
 		return errors.Wrap(err, "create feature environment")
 	}
 	return nil

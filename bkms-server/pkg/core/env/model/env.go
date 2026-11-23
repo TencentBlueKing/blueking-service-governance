@@ -20,7 +20,6 @@ package model
 
 import (
 	"cmp"
-	"strings"
 	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -70,9 +69,9 @@ type Environment struct {
 	OwnerAppID string `bson:"ownerAppID,omitempty"`
 	// SourceEnvID 特性环境来源环境 ID，仅特性环境使用
 	SourceEnvID bson.ObjectID `bson:"sourceEnvID,omitempty"`
-	// ResourceKey 资源名前缀，仅复用来源环境命名空间的特性环境有值，用于区分同一命名空间内不同环境的资源。
+	// ResourcePrefix 资源名前缀，仅复用来源环境命名空间的特性环境有值，用于区分同一命名空间内不同环境的资源。
 	// 为空时资源名与独占命名空间时保持一致
-	ResourceKey string `bson:"resourceKey,omitempty"`
+	ResourcePrefix string `bson:"resourcePrefix,omitempty"`
 
 	// Cluster 业务集群信息
 	Cluster BizCluster `bson:"cluster"`
@@ -104,25 +103,9 @@ func (e Environment) IsFeatureEnv() bool {
 	return e.GetKind() == EnvironmentKindFeature
 }
 
-// SharesNamespace 判断环境是否与其他环境共用命名空间（即资源名需要带 ResourceKey 前缀）。
+// SharesNamespace 判断环境是否与其他环境共用命名空间（即资源名需要带 ResourcePrefix 前缀）。
 func (e Environment) SharesNamespace() bool {
-	return e.ResourceKey != ""
-}
-
-// PrefixName 返回 base 在该环境中实际下发到集群的资源名：共用命名空间时加 ResourceKey 前缀。
-func (e Environment) PrefixName(base string) string {
-	if e.ResourceKey == "" {
-		return base
-	}
-	return e.ResourceKey + "-" + base
-}
-
-// TrimPrefix 是 PrefixName 的逆操作：去掉集群中资源名上的 ResourceKey 前缀，还原为用户填写的原名。
-func (e Environment) TrimPrefix(name string) string {
-	if e.ResourceKey == "" {
-		return name
-	}
-	return strings.TrimPrefix(name, e.ResourceKey+"-")
+	return e.ResourcePrefix != ""
 }
 
 // BizCluster 业务集群信息

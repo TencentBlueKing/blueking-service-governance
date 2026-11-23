@@ -215,13 +215,13 @@ var _ = Describe("PolarisConfigService", func() {
 			// 30 + "-" + 13 位配置名 + "-polaris-service" = 60，带 "fab12-" 前缀后为 66
 			app.Name = strings.Repeat("a", 30)
 			sharedEnv = &bkmsenv.Environment{
-				Name:        "feat-" + stringx.Random(6),
-				WorkspaceID: app.WorkspaceID,
-				Kind:        bkmsenv.EnvironmentKindFeature,
-				OwnerAppID:  app.ID,
-				SourceEnvID: environment.ID,
-				ResourceKey: "fab12",
-				Cluster:     environment.Cluster,
+				Name:           "feat-" + stringx.Random(6),
+				WorkspaceID:    app.WorkspaceID,
+				Kind:           bkmsenv.EnvironmentKindFeature,
+				OwnerAppID:     app.ID,
+				SourceEnvID:    environment.ID,
+				ResourcePrefix: "fab12",
+				Cluster:        environment.Cluster,
 			}
 			Expect(envService.Create(ctx, sharedEnv)).To(Succeed())
 		})

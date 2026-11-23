@@ -28,6 +28,7 @@ import (
 
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/resname"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/ownership"
 	k8sclient "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/client"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/cluster"
@@ -48,7 +49,7 @@ var (
 // GPAService 负责将 GPA 配置下发为 GeneralPodAutoscaler CR 并管理其生命周期。
 // 直接操作目标集群的 K8s ApiServer，状态完全以集群中的 CR 为准，不使用 DB 存储状态。
 //
-// 共用命名空间的环境中，CR 在集群中的名称带 resourceKey 前缀（env.PrefixName），对调用方仍使用配置中的原名。
+// 共用命名空间的环境中，CR 在集群中的名称带 resourcePrefix 前缀（GPACRName），对调用方仍使用配置中的原名。
 type GPAService struct {
 	db   *mongo.Database
 	apps *bkmsapp.ApplicationStore
@@ -60,6 +61,12 @@ func NewGPAService(db *mongo.Database) *GPAService {
 		db:   db,
 		apps: store.Of(db, bkmsapp.AppMeta),
 	}
+}
+
+// GPACRName 返回 GPA 配置在环境集群中下发的 GeneralPodAutoscaler CR 名称；
+// 共用命名空间的环境中会自动附加 resourcePrefix 前缀。
+func GPACRName(env *bkmsenv.Environment, configName string) string {
+	return resname.Build(env, configName)
 }
 
 // Apply 将 GPA 配置下发到目标集群（幂等 Upsert）。
@@ -83,7 +90,7 @@ func (s *GPAService) Apply(ctx context.Context, env *bkmsenv.Environment, config
 	}
 
 	k8sConfig := *config
-	k8sConfig.Name = env.PrefixName(config.Name)
+	k8sConfig.Name = GPACRName(env, config.Name)
 	manifest := buildGPAManifest(&k8sConfig, env.WorkspaceID, env.Name, scaleTargetName)
 	owner, err := ownership.ForApp(ctx, s.db, env, config.AppID)
 	if err != nil {
@@ -110,8 +117,8 @@ func (s *GPAService) Get(ctx context.Context, env *bkmsenv.Environment, name str
 	if err != nil {
 		return nil, err
 	}
-	// 环境共用命名空间时，会往下发的 CR 命名中添加 resourceKey 前缀
-	status, err := clusterClient.GetStatus(ctx, env.Cluster.Namespace, env.PrefixName(name))
+	// 环境共用命名空间时，会往下发的 CR 命名中添加 resourcePrefix 前缀
+	status, err := clusterClient.GetStatus(ctx, env.Cluster.Namespace, GPACRName(env, name))
 	if err != nil {
 		return nil, err
 	}
@@ -138,9 +145,9 @@ func (s *GPAService) ListByEnv(ctx context.Context, env *bkmsenv.Environment) ([
 	if err != nil {
 		return nil, err
 	}
-	// 环境共用命名空间时，会往下发的 CR 命名中添加 resourceKey 前缀，因此这里返回时需要把前缀去掉
+	// 环境共用命名空间时，会往下发的 CR 命名中添加 resourcePrefix 前缀，因此这里返回时需要把前缀去掉
 	for _, status := range statuses {
-		status.Name = env.TrimPrefix(status.Name)
+		status.Name = resname.TrimEnvPrefix(env, status.Name)
 	}
 	return statuses, nil
 }
@@ -152,7 +159,7 @@ func (s *GPAService) Delete(ctx context.Context, env *bkmsenv.Environment, name 
 		return errors.Wrap(err, "create k8s client for gpa")
 	}
 
-	if err = k8sClient.Delete(ctx, env.Cluster.Namespace, env.PrefixName(name), metav1.DeleteOptions{}); err != nil {
+	if err = k8sClient.Delete(ctx, env.Cluster.Namespace, GPACRName(env, name), metav1.DeleteOptions{}); err != nil {
 		if errors.Is(err, k8sclient.ErrResourceNotFound) {
 			return ErrCRNotFound
 		}
@@ -212,7 +219,7 @@ func (s *GPAService) resolveScaleTargetName(
 	if err != nil {
 		return "", errors.Wrapf(err, "get app %s", appID)
 	}
-	return env.PrefixName(app.Name), nil
+	return resname.Build(env, app.Name), nil
 }
 
 // newK8sClient 创建 GeneralPodAutoscaler CR 的 K8s 客户端

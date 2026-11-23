@@ -30,6 +30,7 @@ import (
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/resname"
 	k8skind "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/kind"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/topology"
@@ -290,11 +291,7 @@ func (s *Service) resolveHelmWorkloads(ctx context.Context, appID, envName, traf
 	return workloads
 }
 
-// fallbackWorkloads 在无法解析真实 workload 时回退到与部署一致的命名规则（泳道、resourceKey 前缀 + 应用名）。
+// fallbackWorkloads 在无法解析真实 workload 时回退到与部署一致的命名规则。
 func fallbackWorkloads(env envmodel.Environment, appName, trafficLaneName string) []string {
-	name := env.PrefixName(appName)
-	if trafficLaneName != "" {
-		return []string{trafficLaneName + "-" + name}
-	}
-	return []string{name}
+	return []string{resname.Build(&env, appName, resname.WithTrafficLane(trafficLaneName))}
 }

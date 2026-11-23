@@ -77,7 +77,7 @@ func validateEnv(env *bkmsenv.Environment) error {
 	if env.Cluster.Namespace == "" {
 		return errors.New("env cluster namespace is empty")
 	}
-	// Chart 内资源名由模板决定，无法保证带 resourceKey 前缀，共用命名空间时可能覆盖来源环境的资源
+	// Chart 内资源名由模板决定，无法保证带 resourcePrefix 前缀，共用命名空间时可能覆盖来源环境的资源
 	if env.SharesNamespace() {
 		return errors.Wrapf(bkmsenv.ErrSharedNamespaceUnsupported, "helm app cannot deploy to env %s", env.Name)
 	}

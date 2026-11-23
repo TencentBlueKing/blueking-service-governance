@@ -33,6 +33,7 @@ import (
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/render"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/resname"
 	k8skind "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/kind"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/envvarrefs"
 )
@@ -164,7 +165,7 @@ func buildExtraResources(
 			Name: serviceName,
 		},
 		Spec: corev1.ServiceSpec{
-			Selector: map[string]string{"app.kubernetes.io/name": env.PrefixName(app.Name)},
+			Selector: map[string]string{"app.kubernetes.io/name": resname.Build(env, app.Name)},
 			Ports: []corev1.ServicePort{{
 				Protocol:   corev1.ProtocolTCP,
 				Port:       cfg.ServicePort,
@@ -184,9 +185,9 @@ func buildExtraResources(
 }
 
 // PolarisResourceNames 返回该配置在环境集群中的 PolarisConfig CR 名与配套 Service 名；
-// 共用命名空间的环境中带 resourceKey 前缀。
+// 以环境内的应用基础资源名（resname.Build）为底座拼接北极星配置名与附属后缀。
 func PolarisResourceNames(env *envmodel.Environment, appName, configName string) (crName, serviceName string) {
-	baseName := env.PrefixName(strings.ToLower(fmt.Sprintf("%s-%s", appName, configName)))
+	baseName := strings.ToLower(fmt.Sprintf("%s-%s", resname.Build(env, appName), configName))
 	return baseName + "-polaris", baseName + "-polaris-service"
 }
 

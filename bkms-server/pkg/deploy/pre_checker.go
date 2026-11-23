@@ -90,7 +90,7 @@ func (c *PreDeployChecker) Do(ctx context.Context, params *PreDeployCheckParams)
 	return nil
 }
 
-// checkSharedNamespaceSupported 共用命名空间的环境只支持 AppModel 应用：Helm Chart 内的资源名无法加 resourceKey 前缀，
+// checkSharedNamespaceSupported 共用命名空间的环境只支持 AppModel 应用：Helm Chart 内的资源名无法加 resourcePrefix 前缀，
 // 且 Helm 部署流程会同步、清理命名空间内的应用 Service，必须在下发任何资源前拒绝。
 func (c *PreDeployChecker) checkSharedNamespaceSupported(ctx context.Context, params *PreDeployCheckParams) error {
 	if params == nil || !appruntime.IsHelmBasedType(params.AppType) {

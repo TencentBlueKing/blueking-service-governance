@@ -42,6 +42,7 @@ import (
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/resname"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/batchrelease"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/ownership"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/releasestrategy"
@@ -593,12 +594,8 @@ func (d *Deployer) setupAppModel(
 	imageRegistry *registry.ImageRegistry,
 	trafficLaneName, imageTag, updateStrategy string,
 ) {
-	// 设置工作负载名称，共用命名空间时带 resourceKey 前缀
-	appModel.Workload.Name = env.PrefixName(d.app.Name)
-	// 如果指定泳道，则将泳道名作为工作负载名称前缀以做区分
-	if trafficLaneName != "" {
-		appModel.Workload.Name = fmt.Sprintf("%s-%s", trafficLaneName, appModel.Workload.Name)
-	}
+	// 统一计算集群中的工作负载名称（含环境资源前缀与流量泳道前缀）
+	appModel.Workload.Name = resname.Build(env, d.app.Name, resname.WithTrafficLane(trafficLaneName))
 
 	// 根据目前用户选中的镜像仓库 + 镜像 tag 生成镜像地址
 	appModel.Workload.Image = fmt.Sprintf("%s/%s:%s", imageRegistry.Registry, d.app.Name, imageTag)

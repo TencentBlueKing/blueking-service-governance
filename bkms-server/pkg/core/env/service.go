@@ -58,14 +58,14 @@ type ImageRegistryInfoInput struct {
 // Create 创建环境数据，成功后 environment.ID 为新环境的 ID.
 func (s *EnvService) Create(ctx context.Context, environment *model.Environment) error {
 	if err := findClusterNamespaceOccupant(
-		ctx, s.db, environment.Cluster, environment.ResourceKey, bson.NilObjectID,
+		ctx, s.db, environment.Cluster, environment.ResourcePrefix, bson.NilObjectID,
 	); err != nil {
 		return errors.Wrap(err, "check environment cluster namespace conflict")
 	}
 
 	if err := store.Of(s.db, model.EnvMeta).Create(ctx, environment); err != nil {
 		err = rewriteWriteErrIfClusterOccupied(
-			ctx, s.db, environment.Cluster, environment.ResourceKey, bson.NilObjectID, err,
+			ctx, s.db, environment.Cluster, environment.ResourcePrefix, bson.NilObjectID, err,
 		)
 		return errors.Wrapf(err, "create environment %s", environment.Name)
 	}
@@ -102,14 +102,14 @@ func (s *EnvService) Update(
 		if err = s.checkNoNamespaceSharers(ctx, environment, finalCluster); err != nil {
 			return err
 		}
-		if err = findClusterNamespaceOccupant(ctx, s.db, finalCluster, environment.ResourceKey, envID); err != nil {
+		if err = findClusterNamespaceOccupant(ctx, s.db, finalCluster, environment.ResourcePrefix, envID); err != nil {
 			return errors.Wrap(err, "check environment cluster namespace conflict")
 		}
 	}
 
 	if err = model.UpdateEnv(ctx, s.db, envID, updateData); err != nil {
 		if updateData.ClusterID != nil || updateData.Namespace != nil {
-			err = rewriteWriteErrIfClusterOccupied(ctx, s.db, finalCluster, environment.ResourceKey, envID, err)
+			err = rewriteWriteErrIfClusterOccupied(ctx, s.db, finalCluster, environment.ResourcePrefix, envID, err)
 		}
 		return errors.Wrap(err, "update environment")
 	}

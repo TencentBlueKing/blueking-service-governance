@@ -98,7 +98,7 @@ var _ = Describe("WorkloadBuilder", func() {
 
 	It("prefixes resource names and selects the prefixed workload in an env sharing namespace", func() {
 		config := createConfig("primary", []string{environment.Name}, 8080, nil)
-		environment.ResourceKey = "fab12"
+		environment.ResourcePrefix = "fab12"
 
 		result, err := builder.Build(ctx, app, environment, map[string]string{}, corev1.PodSpec{}, nil)
 		Expect(err).NotTo(HaveOccurred())

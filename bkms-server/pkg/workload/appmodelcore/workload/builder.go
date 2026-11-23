@@ -431,7 +431,7 @@ func (b *Builder) applyPostProcessing(
 }
 
 // checkComponentsSupported 校验环境能否使用组件（含已解析的空间组件引用）。
-// 组件会生成自定义名称的 Service 等资源，无法保证带 resourceKey 前缀，因此共用命名空间的环境不支持组件。
+// 组件会生成自定义名称的 Service 等资源，无法保证带 resourcePrefix 前缀，因此共用命名空间的环境不支持组件。
 func checkComponentsSupported(env *envmodel.Environment, comps []*component.Component) error {
 	if !env.SharesNamespace() || len(comps) == 0 {
 		return nil

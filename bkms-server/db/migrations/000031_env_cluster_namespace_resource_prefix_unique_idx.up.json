@@ -1,7 +1,7 @@
 [
   {
     "dropIndexes": "environments",
-    "index": "cluster.clusterID_1_cluster.namespace_1_resourceKey_1"
+    "index": "cluster.clusterID_1_cluster.namespace_1"
   },
   {
     "createIndexes": "environments",
@@ -9,9 +9,10 @@
       {
         "key": {
           "cluster.clusterID": 1,
-          "cluster.namespace": 1
+          "cluster.namespace": 1,
+          "resourcePrefix": 1
         },
-        "name": "cluster.clusterID_1_cluster.namespace_1",
+        "name": "cluster.clusterID_1_cluster.namespace_1_resourcePrefix_1",
         "unique": true,
         "partialFilterExpression": {
           "cluster.clusterID": { "$gt": "" },

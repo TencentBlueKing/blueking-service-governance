@@ -23,21 +23,13 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("Environment resource naming", func() {
-	DescribeTable("PrefixName and TrimPrefix",
-		func(resourceKey, base, want string) {
-			env := Environment{ResourceKey: resourceKey}
-			Expect(env.SharesNamespace()).To(Equal(resourceKey != ""))
-			Expect(env.PrefixName(base)).To(Equal(want))
-			Expect(env.TrimPrefix(want)).To(Equal(base))
+var _ = Describe("Environment", func() {
+	DescribeTable("SharesNamespace",
+		func(resourcePrefix string, want bool) {
+			env := Environment{ResourcePrefix: resourcePrefix}
+			Expect(env.SharesNamespace()).To(Equal(want))
 		},
-		Entry("keeps the base name without resource key", "", "web", "web"),
-		Entry("prefixes the resource key", "fab12", "web", "fab12-web"),
+		Entry("returns false without resource prefix", "", false),
+		Entry("returns true with resource prefix", "fab12", true),
 	)
-
-	It("leaves names without the prefix unchanged when trimming", func() {
-		env := Environment{ResourceKey: "fab12"}
-		Expect(env.TrimPrefix("web")).To(Equal("web"))
-		Expect(env.TrimPrefix("fab12web")).To(Equal("fab12web"))
-	})
 })

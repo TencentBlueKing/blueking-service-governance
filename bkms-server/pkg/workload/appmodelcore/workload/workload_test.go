@@ -524,7 +524,7 @@ var _ = Describe("Builder Shared Tests", func() {
 				},
 			}})
 			testEnv := dbfactory.Env(ctx, envSvc, app.WorkspaceID)
-			testEnv.ResourceKey = "fab12"
+			testEnv.ResourcePrefix = "fab12"
 
 			_, err := workload.NewBuilder(builderSvc, app, appModel).Build(ctx, testEnv)
 			Expect(errors.Is(err, envmodel.ErrSharedNamespaceUnsupported)).To(BeTrue())
@@ -544,7 +544,7 @@ var _ = Describe("Builder Shared Tests", func() {
 			})
 			app, appModel := createApplication(ctx, tc, stores, nil, nil)
 			testEnv := dbfactory.Env(ctx, envSvc, app.WorkspaceID)
-			testEnv.ResourceKey = "fab12"
+			testEnv.ResourcePrefix = "fab12"
 
 			workspaceCompName := "workspace-replicas-shared"
 			Expect(workspace.AddComponents(ctx, stores.DB, &workspace.Component{
