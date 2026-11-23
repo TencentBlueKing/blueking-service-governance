@@ -18,9 +18,11 @@
 
 import BkUserDisplayName from '@blueking/bk-user-display-name';
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils';
+import { createPinia, setActivePinia } from 'pinia';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getUserDisplayConfig } from '~/common/bk-user-api';
 import UserDisplay from '~/components/user-display.vue';
+import { useFrontendFeaturesStore } from '~/stores/frontend-features';
 
 const gateway = 'https://bk-user-web.example.test/prod';
 const fetchUser = vi.fn<typeof fetch>();
@@ -42,6 +44,8 @@ beforeEach(() => {
   vi.stubEnv('BK_API_URL_TMPL', 'https://{api_name}.example.test');
   vi.stubGlobal('fetch', fetchUser);
   fetchUser.mockReset();
+  setActivePinia(createPinia());
+  useFrontendFeaturesStore().enableMultiTenantMode = true;
   BkUserDisplayName.userCache.clear();
   BkUserDisplayName.tenantId = '';
   BkUserDisplayName.apiBaseUrl = '';
@@ -54,7 +58,7 @@ afterEach(() => {
 });
 
 describe('UserDisplay', () => {
-  it.each(['system', 'tenant-a'])('looks up the original user ID in tenant %s', async tenantId => {
+  it.each(['system', 'tenant-a', 'default'])('looks up the original user ID in tenant %s', async tenantId => {
     fetchUser.mockResolvedValueOnce(userResponse('张三'));
     const wrapper = mountDisplay({ value: 'opaque-user-id' }, tenantId);
 
@@ -94,9 +98,16 @@ describe('UserDisplay', () => {
     expect(fetchUser).toHaveBeenCalledTimes(2);
   });
 
-  it.each([undefined, 'default'])('preserves the original text when tenant_id is %s', async tenantId => {
-    const wrapper = mountDisplay({ value: ['first', 'second'], separator: ' / ' }, tenantId);
+  it('preserves the original text when tenant_id is missing', () => {
+    const wrapper = mountDisplay({ value: ['first', 'second'], separator: ' / ' }, undefined);
     expect(wrapper.text()).toBe('first / second');
+    expect(fetchUser).not.toHaveBeenCalled();
+  });
+
+  it('preserves the original text when multi-tenant mode is off', () => {
+    useFrontendFeaturesStore().enableMultiTenantMode = false;
+    const wrapper = mountDisplay({ value: 'opaque-user-id' }, 'tenant-a');
+    expect(wrapper.text()).toBe('opaque-user-id');
     expect(fetchUser).not.toHaveBeenCalled();
   });
 

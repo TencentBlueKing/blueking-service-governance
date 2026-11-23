@@ -6,23 +6,9 @@
 import type { Config } from '~/api/interceptors';
 import type { NoInfer } from '~/api/ts-helpers';
 import { v1Fetch } from '~/api/clients';
-import type { GetEnvPolarisOperatorRequest, PolarisOperatorOutput, ListPolarisAccessPointsRequest, AccessPointOutput, CreatePolarisAccessPointRequest, TestPolarisAccessPointConnectivityRequest, ConnectivityTestOutput, GetPolarisAccessPointNetworkInfoRequest, NetworkInfoOutput, DeletePolarisAccessPointRequest, EmptyResponse, UpdatePolarisAccessPointRequest, ListPolarisAccessPointNamespacesRequest, InstallPolarisOperatorsRequest, OperatorTaskOutput, ListPolarisClustersRequest, PolarisClusterOutput, ListPolarisOperatorsRequest, PolarisOperatorListOutput } from '~/@types/v1/polaris-access-points';
+import type { ListPolarisAccessPointsRequest, AccessPointOutput, CreatePolarisAccessPointRequest, TestPolarisAccessPointConnectivityRequest, ConnectivityTestOutput, DeletePolarisAccessPointRequest, EmptyResponse, UpdatePolarisAccessPointRequest, ListPolarisAccessPointNamespacesRequest, ListPolarisClustersRequest, PolarisClusterOutput, ListPolarisOperatorValuesRequest, PolarisOperatorValuesListOutput } from '~/@types/v1/polaris-access-points';
 
 export const PolarisAccessPointsService = {
-  /**
-   * 获取环境的北极星组件状态
-   *
-   * @method GET
-   * @path /envs/{envID}/polaris-operator
-   * @tag polaris-access-points
-   * @param envID path string required 环境 ID
-   * @response 200 PolarisOperatorResponse OK
-   * @response 400 GinErrorOutput Bad Request
-   */
-  getEnvPolarisOperator: async <Request extends GetEnvPolarisOperatorRequest = GetEnvPolarisOperatorRequest, ResponseData = PolarisOperatorOutput>(
-    params?: NoInfer<Request>,
-    config?: Config,
-  ) => await v1Fetch.get<Request, ResponseData>('/envs/{envID}/polaris-operator')(params, config),
   /**
    * 获取空间的北极星接入点列表
    *
@@ -75,22 +61,6 @@ export const PolarisAccessPointsService = {
     params?: NoInfer<Request>,
     config?: Config,
   ) => await v1Fetch.post<Request, ResponseData>('/workspaces/{workspaceID}/polaris-access-points/connectivity-test')(params, config),
-  /**
-   * 获取平台访问北极星的网络信息
-   *
-   * 返回平台访问北极星的出口 IP，用户需要把它们加入自建北极星的白名单
-   *
-   * @method GET
-   * @path /workspaces/{workspaceID}/polaris-access-points/network-info
-   * @tag polaris-access-points
-   * @param workspaceID path string required 工作空间 ID
-   * @response 200 NetworkInfoResponse OK
-   * @response 400 GinErrorOutput Bad Request
-   */
-  getPolarisAccessPointNetworkInfo: async <Request extends GetPolarisAccessPointNetworkInfoRequest = GetPolarisAccessPointNetworkInfoRequest, ResponseData = NetworkInfoOutput>(
-    params?: NoInfer<Request>,
-    config?: Config,
-  ) => await v1Fetch.get<Request, ResponseData>('/workspaces/{workspaceID}/polaris-access-points/network-info')(params, config),
   /**
    * 删除北极星接入点
    *
@@ -146,24 +116,6 @@ export const PolarisAccessPointsService = {
     config?: Config,
   ) => await v1Fetch.get<Request, ResponseData>('/workspaces/{workspaceID}/polaris-access-points/{accessPointID}/namespaces')(params, config),
   /**
-   * 安装或更新北极星组件
-   *
-   * 集群必须已绑定该接入点；每个集群创建一个异步任务，同一集群同时只允许一个运行中的任务。
-   *
-   * @method POST
-   * @path /workspaces/{workspaceID}/polaris-access-points/{accessPointID}/operator-installs
-   * @tag polaris-access-points
-   * @param workspaceID path string required 工作空间 ID
-   * @param accessPointID path string required 接入点 ID
-   * @param body body OperatorInstallInput required 目标集群与 chart 版本
-   * @response 200 OperatorTaskListResponse OK
-   * @response 400 GinErrorOutput Bad Request
-   */
-  installPolarisOperators: async <Request extends InstallPolarisOperatorsRequest = InstallPolarisOperatorsRequest, ResponseData = OperatorTaskOutput[]>(
-    params?: NoInfer<Request>,
-    config?: Config,
-  ) => await v1Fetch.post<Request, ResponseData>('/workspaces/{workspaceID}/polaris-access-points/{accessPointID}/operator-installs')(params, config),
-  /**
    * 获取北极星集群绑定视图
    *
    * 候选集群为空间 BCS 项目下的全部非共享集群，含没有环境的集群；先列出有环境的集群，同类按集群 ID 排序。
@@ -180,19 +132,20 @@ export const PolarisAccessPointsService = {
     config?: Config,
   ) => await v1Fetch.get<Request, ResponseData>('/workspaces/{workspaceID}/polaris-clusters')(params, config),
   /**
-   * 获取北极星组件状态视图
+   * 获取北极星组件的期望 values
    *
-   * 返回候选集群的组件状态、与接入点不一致的参数、最近的安装任务，以及可选的 chart 版本。
+   * 返回由接入点推导出的北极星相关 values
    *
    * @method GET
-   * @path /workspaces/{workspaceID}/polaris-operators
+   * @path /workspaces/{workspaceID}/polaris-operator-values
    * @tag polaris-access-points
    * @param workspaceID path string required 工作空间 ID
-   * @response 200 PolarisOperatorListResponse OK
+   * @param accessPointID query string 只返回绑定到该接入点的集群
+   * @response 200 PolarisOperatorValuesListResponse OK
    * @response 400 GinErrorOutput Bad Request
    */
-  listPolarisOperators: async <Request extends ListPolarisOperatorsRequest = ListPolarisOperatorsRequest, ResponseData = PolarisOperatorListOutput>(
+  listPolarisOperatorValues: async <Request extends ListPolarisOperatorValuesRequest = ListPolarisOperatorValuesRequest, ResponseData = PolarisOperatorValuesListOutput>(
     params?: NoInfer<Request>,
     config?: Config,
-  ) => await v1Fetch.get<Request, ResponseData>('/workspaces/{workspaceID}/polaris-operators')(params, config),
+  ) => await v1Fetch.get<Request, ResponseData>('/workspaces/{workspaceID}/polaris-operator-values')(params, config),
 };

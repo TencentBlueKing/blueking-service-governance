@@ -52,7 +52,7 @@ interface BkUserSearchResponse {
 export default function useUserSearch(fieldId = 'username') {
   const userStore = useUserStore();
 
-  /** 是否多租户：已配置用户网关且租户非 default */
+  /** 是否多租户：部署开关开启、已配置用户网关且当前用户有租户 */
   const isMultiTenant = computed(() => checkMultiTenant(userStore.tenantId));
 
   /** 请求序号：递增即令所有在途请求过期，用于丢弃乱序返回的旧响应 */

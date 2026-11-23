@@ -3,7 +3,7 @@
 // 来源：apps/bkms-server/docs/apis/swagger.json
 // 模块：cluster-addon
 
-export interface ListClusterAddonsRequest {
+export interface ListEnvClusterAddonsRequest {
   /**
    * 环境 ID
    */
@@ -14,7 +14,7 @@ export interface ListClusterAddonsRequest {
   namespace?: string;
 }
 
-export type UpsertClusterAddonRequest = UpsertClusterAddonInput & {
+export type UpsertEnvClusterAddonRequest = UpsertClusterAddonInput & {
   /**
    * 环境 ID
    */
@@ -25,7 +25,7 @@ export type UpsertClusterAddonRequest = UpsertClusterAddonInput & {
   addonName: string;
 };
 
-export interface DeleteClusterAddonRequest {
+export interface DeleteEnvClusterAddonRequest {
   /**
    * 环境 ID
    */
@@ -39,6 +39,36 @@ export interface DeleteClusterAddonRequest {
    */
   namespace?: string;
 }
+
+export interface ListClusterAddonsRequest {
+  /**
+   * 工作空间 ID
+   */
+  workspaceID: string;
+  /**
+   * BCS 集群 ID
+   */
+  clusterID: string;
+  /**
+   * 命名空间，默认为插件定义中的 defaultNamespace
+   */
+  namespace?: string;
+}
+
+export type UpsertClusterAddonRequest = UpsertClusterAddonInput & {
+  /**
+   * 工作空间 ID
+   */
+  workspaceID: string;
+  /**
+   * BCS 集群 ID
+   */
+  clusterID: string;
+  /**
+   * 插件名称
+   */
+  addonName: string;
+};
 
 export interface ListClusterAddonsOutput {
   /**
@@ -133,7 +163,7 @@ export interface ClusterInstallInfoOutput {
    */
   currentChartVersion?: string;
   /**
-   * 当前已安装的 values 参数（JSON 字符串，未安装时为空）
+   * 当前已安装的 values 参数（YAML 字符串，未安装时为空）
    */
   currentValues?: string;
   /**

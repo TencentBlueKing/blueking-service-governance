@@ -41,6 +41,7 @@ import { getUser } from '~/api/modules/user';
 import { getUserDisplayConfig } from '~/common/bk-user-api';
 import { scopeIconSpriteIds } from '~/fonts/icon-sprite';
 import { registerMonitorChartApi } from '~/pages/application/detail/deploy/monitor-chart-bridge.js';
+import { useFrontendFeaturesStore } from '~/stores/frontend-features';
 import { useUserStore } from '~/stores/user';
 
 import App from './App.vue';
@@ -66,7 +67,7 @@ import '@blueking/table/vue3/vue3.css';
 import '@unocss/reset/tailwind.css';
 import 'uno.css';
 
-getUser({}, { needRes: true }).then(res => {
+getUser({}, { needRes: true }).then(async res => {
   const app = createApp(App);
   // 安装modules下面所有模块
   Object.values(import.meta.glob<{ install: UserModule }>('./modules/*.ts', { eager: true })).forEach(i => {
@@ -74,6 +75,7 @@ getUser({}, { needRes: true }).then(res => {
   });
   const userStore = useUserStore();
   userStore.setUserInfo(res);
+  await useFrontendFeaturesStore().load();
   const userDisplayConfig = getUserDisplayConfig(userStore.tenantId);
   if (userDisplayConfig) BkUserDisplayName.configure(userDisplayConfig);
   registerMonitorChartApi(app);

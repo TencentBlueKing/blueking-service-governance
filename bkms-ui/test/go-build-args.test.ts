@@ -38,10 +38,12 @@ vi.mock('~/api/modules/v1/frontend-features', () => ({
 describe('GoBuildArgs feature flag', () => {
   beforeEach(() => {
     getFrontendFeatures.mockReset();
+    vi.spyOn(console, 'error').mockImplementation(() => {});
     vi.stubEnv('BK_GOLANG_PROXY_URL', 'https://goproxy.example.com');
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     vi.unstubAllEnvs();
   });
 
@@ -104,7 +106,7 @@ describe('GoBuildArgs feature flag', () => {
     expect(wrapper.findComponent(keyValueStub).props('valuePlaceholder')).toBeUndefined();
   });
 
-  it('deduplicates concurrent fetches and renders GoProxy guide when explicitly enabled', async () => {
+  it('shares startup loading with concurrent fetches and applies all feature flags', async () => {
     let resolveFeatures!: (val: FrontendFeaturesOutput) => void;
     getFrontendFeatures.mockImplementationOnce(
       () =>
@@ -114,15 +116,27 @@ describe('GoBuildArgs feature flag', () => {
     );
 
     const { wrapper, store, args, keyValueStub } = createHarness('go', { GOPROXY: 'https://custom.example.com' });
-    const req1 = store.getFrontendFeatures();
+    const req1 = store.load();
     const req2 = store.getFrontendFeatures();
+    const req3 = store.getFrontendFeatures();
     expect(getFrontendFeatures).toHaveBeenCalledTimes(1);
     expect(wrapper.find('a[href="https://goproxy.example.com"]').exists()).toBe(false);
 
-    resolveFeatures({ enableGoProxyBuildArgsTips: true });
-    await Promise.all([req1, req2]);
+    const loadedFeatures = {
+      enableGoProxyBuildArgsTips: true,
+      polarisWorkspaceAccessPoint: true,
+      enableMultiTenantMode: true,
+      enableIndependentBkRepo: true,
+      enableWeTerm: true,
+      enableBSCP: false,
+      enableKubeInsight: false,
+    };
+    resolveFeatures(loadedFeatures);
+    await Promise.all([req1, req2, req3]);
     await flushPromises();
 
+    expect(store).toMatchObject(loadedFeatures);
+    expect(store.features).toEqual(loadedFeatures);
     expect(wrapper.find('a[href="https://goproxy.example.com"]').exists()).toBe(true);
     expect(wrapper.findComponent(keyValueStub).props('valuePlaceholder')).toMatchObject({
       GOPROXY: expect.any(String),
@@ -136,5 +150,56 @@ describe('GoBuildArgs feature flag', () => {
       GOPRIVATE: '',
       GOSUMDB: '',
     });
+  });
+
+  it('keeps feature defaults while honoring explicit false values', async () => {
+    setActivePinia(createPinia());
+    const store = useFrontendFeaturesStore();
+    const defaults = {
+      enableGoProxyBuildArgsTips: false,
+      polarisWorkspaceAccessPoint: false,
+      enableMultiTenantMode: false,
+      enableIndependentBkRepo: false,
+      enableWeTerm: false,
+      enableBSCP: true,
+      enableKubeInsight: true,
+    };
+    expect(store).toMatchObject(defaults);
+
+    const disabledFeatures = { ...defaults, enableBSCP: false, enableKubeInsight: false };
+    getFrontendFeatures.mockResolvedValueOnce(disabledFeatures);
+    await store.load();
+    expect(store).toMatchObject(disabledFeatures);
+
+    getFrontendFeatures.mockResolvedValueOnce({});
+    await store.load();
+    expect(store).toMatchObject(defaults);
+  });
+
+  it('preserves loaded flags after a failed refresh and allows a retry', async () => {
+    const { store, wrapper } = createHarness('go');
+    const loadedFeatures = {
+      enableGoProxyBuildArgsTips: true,
+      enableMultiTenantMode: true,
+      enableBSCP: false,
+      enableKubeInsight: false,
+    };
+    getFrontendFeatures.mockResolvedValueOnce(loadedFeatures);
+    await store.load();
+    await flushPromises();
+    expect(wrapper.find('a[href="https://goproxy.example.com"]').exists()).toBe(true);
+
+    getFrontendFeatures.mockRejectedValueOnce(new Error('network error'));
+    await store.load();
+    expect(store).toMatchObject(loadedFeatures);
+    expect(store.features).toEqual(loadedFeatures);
+    expect(wrapper.find('a[href="https://goproxy.example.com"]').exists()).toBe(true);
+
+    getFrontendFeatures.mockResolvedValueOnce({ enableMultiTenantMode: false, enableGoProxyBuildArgsTips: false });
+    await store.load();
+    await flushPromises();
+    expect(getFrontendFeatures).toHaveBeenCalledTimes(3);
+    expect(store.enableMultiTenantMode).toBe(false);
+    expect(wrapper.find('a[href="https://goproxy.example.com"]').exists()).toBe(false);
   });
 });

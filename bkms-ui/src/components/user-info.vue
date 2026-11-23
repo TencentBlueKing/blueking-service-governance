@@ -32,6 +32,7 @@
   import LoginUserinfo from '@blueking/login-userinfo/vue3';
   import { useI18n } from 'vue-i18n';
   import { useRouter } from 'vue-router';
+  import { useFrontendFeaturesStore } from '~/stores/frontend-features';
   import { useSpaceStore } from '~/stores/space';
   import { useUserStore } from '~/stores/user';
 
@@ -52,6 +53,7 @@
 
   // 用户store
   const userStore = useUserStore();
+  const featuresStore = useFrontendFeaturesStore();
   // 空间相关全局store
   const spaceStore = useSpaceStore();
 
@@ -62,8 +64,8 @@
 
   const loginTenant = computed(() => {
     const id = userStore.tenantId;
-    // 登录接口仅返回租户 ID，暂以 ID 作为展示名称。
-    return id && id !== 'default' ? { id, name: id } : undefined;
+    // 多租户模式下展示当前租户。登录接口仅返回租户 ID，暂以 ID 作为展示名称。
+    return featuresStore.enableMultiTenantMode && id ? { id, name: id } : undefined;
   });
 
   // 用户操作列表

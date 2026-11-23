@@ -79,6 +79,7 @@ export const PlatmgtService = {
    * @tag platmgt
    * @param keyword query string 搜索关键词，匹配空间 ID / 空间名称
    * @param state query string 空间状态过滤：Ready / Processing / Disabled
+   * @param tenantID query string 租户 ID 过滤，为空时返回全部租户的工作空间
    * @param sortBy query string 排序字段：id / displayName / updatedAt
    * @param sortOrder query string 排序方向：asc / desc
    * @param page query number required 页码，从 1 开始

@@ -16,17 +16,20 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
-import { createPinia } from 'pinia';
+import { createPinia, setActivePinia } from 'pinia';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { useFrontendFeaturesStore } from '~/stores/frontend-features';
 import { useUserStore } from '~/stores/user';
 import { useUserNameStore } from '~/stores/user-name';
 
 const initialTime = Date.parse('2026-01-01T00:00:00Z');
 const fetchMock = vi.fn<typeof fetch>();
 
-function createStore(tenantId = 'tenant-a') {
+function createStore(tenantId = 'tenant-a', multiTenant = true) {
   const pinia = createPinia();
+  setActivePinia(pinia);
   useUserStore(pinia).setUserInfo({ user_id: 'viewer', tenant_id: tenantId });
+  useFrontendFeaturesStore(pinia).enableMultiTenantMode = multiTenant;
   return useUserNameStore(pinia);
 }
 
@@ -49,8 +52,8 @@ afterEach(() => {
 });
 
 describe('user name resolution', () => {
-  it('skips resolution for the default tenant', async () => {
-    const store = createStore('default');
+  it('skips resolution when multi-tenant mode is off', async () => {
+    const store = createStore('tenant-a', false);
 
     await store.resolveUserNames(['member']);
     expect(fetchMock).not.toHaveBeenCalled();

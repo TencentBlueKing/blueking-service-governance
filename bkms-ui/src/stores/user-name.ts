@@ -61,7 +61,7 @@ export const useUserNameStore = defineStore('user-name', () => {
     return nameMap.value[id] ?? '';
   }
 
-  /** 是否具备解析条件：已配置用户网关且为多租户（非 default）租户 */
+  /** 是否具备解析条件：多租户模式、已配置用户网关且当前用户有租户 */
   function canResolve() {
     return isMultiTenant(useUserStore().tenantId);
   }
@@ -114,7 +114,7 @@ export const useUserNameStore = defineStore('user-name', () => {
 
   /**
    * 批量解析 userid -> display_name（并发调用会自动合并为同一轮请求）
-   * 未配置用户网关或非多租户环境时静默跳过，nameMap 保持为空，由调用方降级按 userid 处理
+   * 未开启多租户模式、未配置用户网关或没有租户 ID 时静默跳过，nameMap 保持为空，由调用方降级按 userid 处理
    */
   async function resolveUserNames(ids: (null | string | undefined)[]) {
     if (!canResolve()) return;

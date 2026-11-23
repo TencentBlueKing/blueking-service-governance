@@ -16,6 +16,9 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
+import { getActivePinia } from 'pinia';
+import { useFrontendFeaturesStore } from '~/stores/frontend-features';
+
 export function getBkUserApiUrl() {
   const template = import.meta.env.BK_API_URL_TMPL?.trim().replace(/\/+$/, '');
   if (!template) return '';
@@ -23,15 +26,20 @@ export function getBkUserApiUrl() {
   return template.includes('{api_name}') ? `${template.replace('{api_name}', 'bk-user-web')}/prod` : template;
 }
 
-/** 多租户（非 default）且已配置用户网关时返回姓名组件配置，否则返回 undefined 沿用原文本 */
+/** 多租户模式且已配置用户网关、当前用户有租户时返回姓名组件配置，否则返回 undefined 沿用原文本 */
 export function getUserDisplayConfig(tenantId?: string) {
   return isMultiTenant(tenantId) ? { tenantId, apiBaseUrl: getBkUserApiUrl() } : undefined;
 }
 
 /**
- * 是否多租户：已配置用户网关且租户非 default
- * 项目的展示、远程搜索、批量解析共用此判定，改动判定条件只需改这里
+ * 是否按多租户处理当前用户：部署开关 enableMultiTenantMode 为 true，且已配置用户网关、租户 ID 非空。
+ * 人员展示、远程搜索、批量解析共用此判定。
  */
 export function isMultiTenant(tenantId?: string): tenantId is string {
-  return !!getBkUserApiUrl() && !!tenantId && tenantId !== 'default';
+  return isMultiTenantModeEnabled() && !!getBkUserApiUrl() && !!tenantId;
+}
+
+function isMultiTenantModeEnabled() {
+  if (!getActivePinia()) return false;
+  return useFrontendFeaturesStore().enableMultiTenantMode;
 }

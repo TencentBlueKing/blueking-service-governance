@@ -18,9 +18,10 @@
 
 import userEvent from '@testing-library/user-event';
 import { render, screen, waitFor } from '@testing-library/vue';
-import { createPinia } from 'pinia';
+import { createPinia, setActivePinia } from 'pinia';
 import { afterEach, beforeAll, expect, it, vi } from 'vitest';
 import WorkspaceBasic from '~/pages/basic/base-info/basic.vue';
+import { useFrontendFeaturesStore } from '~/stores/frontend-features';
 import { useUserStore } from '~/stores/user';
 
 import { i18nGlobalMocks, I18nTStub } from './helpers/mock-i18n';
@@ -73,7 +74,9 @@ it('matches the user ID before names resolve and the display name after the look
   vi.stubGlobal('fetch', fetchNames);
 
   const pinia = createPinia();
+  setActivePinia(pinia);
   useUserStore(pinia).setUserInfo({ user_id: 'viewer', tenant_id: 'tenant-a' });
+  useFrontendFeaturesStore(pinia).enableMultiTenantMode = true;
   render(WorkspaceBasic, {
     global: {
       plugins: [pinia],
