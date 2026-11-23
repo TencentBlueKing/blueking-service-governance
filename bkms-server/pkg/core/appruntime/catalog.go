@@ -47,7 +47,7 @@ var catalog = []FrameworkDef{
 	},
 	{
 		Name:               FrameworkTRPC,
-		SupportedLanguages: []string{LanguageCpp, LanguageGo, LanguagePython},
+		SupportedLanguages: []string{LanguageCpp, LanguageGo},
 		ConfigVersion:      FrameworkConfigVersionV1,
 	},
 }

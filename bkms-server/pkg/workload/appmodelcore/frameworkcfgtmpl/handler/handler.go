@@ -57,7 +57,7 @@ func New(registry *storereg.Registry) *Handler {
 //	@Security	BkUserCredential
 //	@Param		workspaceID	path		string	true	"工作空间 ID"
 //	@Param		framework	query		string	false	"框架：trpc、taf"
-//	@Param		language	query		string	false	"语言：go、cpp、python"
+//	@Param		language	query		string	false	"语言：go、cpp"
 //	@Success	200			{object}	serializer.ListTemplatesOutput
 //	@Failure	400			{object}	bkerrs.GinErrorOutput
 //	@Router		/workspaces/{workspaceID}/framework-config-templates [get]
