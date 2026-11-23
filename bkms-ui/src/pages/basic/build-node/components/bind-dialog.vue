@@ -34,6 +34,7 @@
     <Select
       v-model="selectedNodeHashId"
       :clearable="false"
+      :disabled="loadError"
       filterable
       :loading="isLoading"
       :placeholder="$t('请选择构建机，可按名称或 IP 搜索')"
@@ -70,7 +71,20 @@
       </Select.Option>
     </Select>
     <div
-      v-if="!isLoading && !candidates.length"
+      v-if="!isLoading && loadError"
+      class="mt-[8px] flex items-center gap-[8px] text-[12px] text-[#ea3636]"
+    >
+      <span>{{ $t('构建机列表加载失败') }}</span>
+      <Button
+        text
+        theme="primary"
+        @click="fetchCandidates"
+      >
+        {{ $t('重试') }}
+      </Button>
+    </div>
+    <div
+      v-else-if="!isLoading && !candidates.length"
       class="mt-[8px] text-[12px] text-[#979ba5]"
     >
       {{ $t('蓝盾项目 {0} 下还没有第三方构建机，请联系 SRE 导入', [projectCode]) }}
@@ -121,11 +135,14 @@
   const candidates = ref<BuildNodeCandidateOutput[]>([]);
   const selectedNodeHashId = ref('');
   const isLoading = ref(false);
+  const loadError = ref(false);
   const isSubmitting = ref(false);
 
   const onlineTextMap = computed(() => ({ online: t('在线'), offline: t('离线') }));
   // 没换机器时提交没有意义，后端也会当作无变更
-  const canSubmit = computed(() => !!selectedNodeHashId.value && selectedNodeHashId.value !== props.currentNodeHashId);
+  const canSubmit = computed(
+    () => !loadError.value && !!selectedNodeHashId.value && selectedNodeHashId.value !== props.currentNodeHashId,
+  );
 
   watch(isShow, show => {
     if (!show) return;
@@ -136,10 +153,12 @@
 
   async function fetchCandidates() {
     isLoading.value = true;
+    loadError.value = false;
     try {
       candidates.value = await BkintegrationsBkciService.listBkCIBuildNodes({ workspaceID: props.workspaceId });
     } catch {
       candidates.value = [];
+      loadError.value = true;
     } finally {
       isLoading.value = false;
     }

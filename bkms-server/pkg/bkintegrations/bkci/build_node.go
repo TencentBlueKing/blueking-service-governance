@@ -299,11 +299,14 @@ func (m *BuildNodeManager) checkSelectable(n bkci.AgentNode) UnselectableReason 
 
 // validateBindable 在候选条件之外，还要求有蓝盾使用权限并能拿到 agentHashId，否则后续下发流水线会失败
 func (m *BuildNodeManager) validateBindable(status *bkci.AgentNodeStatus) error {
-	switch m.checkSelectable(status.AgentNode) {
+	switch reason := m.checkSelectable(status.AgentNode); reason {
+	case "":
 	case UnselectableReasonOffline:
 		return ErrBuildNodeOffline
 	case UnselectableReasonOSUnsupported:
 		return ErrBuildNodeOSUnsupported
+	default:
+		return errors.Errorf("build node unselectable: %s", reason)
 	}
 	if !status.CanUse {
 		return ErrBuildNodeNoUsePerm

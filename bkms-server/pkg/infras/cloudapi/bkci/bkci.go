@@ -330,9 +330,6 @@ func (c *ApiClient) CreateAccessTokenCredential(
 }
 
 // DeleteCredential 删除蓝盾凭证；凭证不存在时返回 ObjectNotFound
-//
-// 对应网关 API：v4_user_credential_delete
-// DELETE .../v4/.../projects/{projectId}/credentials/credential?credentialId=
 func (c *ApiClient) DeleteCredential(ctx context.Context, projectCode, credentialID string) error {
 	apiOperation := c.NewOperation(
 		bkapi.OperationConfig{
@@ -354,9 +351,6 @@ func (c *ApiClient) DeleteCredential(ctx context.Context, projectCode, credentia
 // ------------------------------------------ 蓝盾第三方构建机 API ------------------------------------------
 
 // ListThirdPartyAgentNodes 获取项目下的第三方构建机节点列表
-//
-// 对应网关 API：v4_user_node_list
-// GET .../v4/apigw-user/projects/{projectId}/environment/third_part_agent_nodes
 func (c *ApiClient) ListThirdPartyAgentNodes(ctx context.Context, projectCode string) ([]AgentNode, error) {
 	apiOperation := c.NewOperation(
 		bkapi.OperationConfig{
@@ -386,9 +380,6 @@ func (c *ApiClient) ListThirdPartyAgentNodes(ctx context.Context, projectCode st
 }
 
 // GetThirdPartyAgentNodeStatus 获取第三方构建机节点状态；节点不存在时返回 ObjectNotFound
-//
-// 对应网关 API：v4_user_node_status
-// GET .../v4/apigw-user/projects/{projectId}/environment/third_part_agent_node_status?nodeHashId=
 func (c *ApiClient) GetThirdPartyAgentNodeStatus(
 	ctx context.Context, projectCode, nodeHashID string,
 ) (*AgentNodeStatus, error) {

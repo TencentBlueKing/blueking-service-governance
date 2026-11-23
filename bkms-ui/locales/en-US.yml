@@ -2321,4 +2321,6 @@ HostPort 目前仅对绑定联邦集群的环境生效: HostPort currently only 
 "解除后，空间下的内置构建流水线会回到公共构建机": "After disassociation, the built-in build pipelines in this workspace will go back to the public build node"
 "已解除关联": "Disassociated"
 "私有构建机": "Private build node"
+"私有构建机信息加载失败": "Failed to load private build node information"
+"构建机列表加载失败": "Failed to load build nodes"
 "私有构建机需由 SRE 导入蓝盾项目 {0}（需预装 Docker），并在此关联到蓝鲸服务治理，关联后内置构建流水线将使用该构建机。": "Private build nodes must be imported by SRE into BKCI project {0} (with Docker preinstalled) and associated with BlueKing Service Governance here. Once associated, built-in build pipelines use that build node."

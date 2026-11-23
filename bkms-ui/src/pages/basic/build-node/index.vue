@@ -19,8 +19,22 @@
 <template>
   <Loading :loading="isLoading">
     <div class="min-h-[200px]">
+      <Exception
+        v-if="!isLoading && loadError"
+        class="mt-[120px]"
+        scene="part"
+        :title="$t('私有构建机信息加载失败')"
+        type="500"
+      >
+        <Button
+          theme="primary"
+          @click="fetchBinding"
+        >
+          {{ $t('重试') }}
+        </Button>
+      </Exception>
       <Alert
-        v-if="!isLoading && !projectCode"
+        v-else-if="!isLoading && !projectCode"
         theme="warning"
         :title="$t('工作空间尚未初始化蓝盾项目，暂时无法关联构建机')"
       />
@@ -80,7 +94,7 @@
 <script setup lang="ts">
   import { computed, onMounted, ref } from 'vue';
 
-  import { Alert, Button, InfoBox, Loading, Message } from 'bkui-vue';
+  import { Alert, Button, Exception, InfoBox, Loading, Message } from 'bkui-vue';
   import { useI18n } from 'vue-i18n';
   import { BkintegrationsBkciService } from '~/api/modules/v1';
   import { useSpaceStore } from '~/stores/space';
@@ -95,6 +109,7 @@
 
   const state = ref<BuildNodeBindingStateOutput | null>(null);
   const isLoading = ref(false);
+  const loadError = ref(false);
   const isBindDialogShow = ref(false);
 
   const binding = computed(() => state.value?.binding ?? null);
@@ -106,8 +121,12 @@
 
   async function fetchBinding() {
     isLoading.value = true;
+    loadError.value = false;
     try {
       state.value = await BkintegrationsBkciService.getBuildNodeBinding({ workspaceID: spaceStore.currentSpace });
+    } catch {
+      state.value = null;
+      loadError.value = true;
     } finally {
       isLoading.value = false;
     }

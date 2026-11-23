@@ -97,7 +97,15 @@ func (h *Handler) GetBuildNodeBinding(c *gin.Context) {
 		return
 	}
 
-	h.respondBuildNodeBinding(c, uriInput.WorkspaceID)
+	state, err := bkciproject.NewBuildNodeManager(h.registry.DB, uriInput.WorkspaceID).Get(ctx)
+	if err != nil {
+		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get build node binding"))
+		return
+	}
+
+	ginutils.OK(c, slz.GetBuildNodeBindingOutput{
+		Data: slz.NewBuildNodeBindingStateOutput(state, h.canEditWorkspace(ctx, uriInput.WorkspaceID)),
+	})
 }
 
 // BindBuildNode 关联或更换工作空间的构建机
@@ -191,20 +199,6 @@ func (h *Handler) UnbindBuildNode(c *gin.Context) {
 	}
 
 	ginutils.OK(c, slz.EmptyOutput{})
-}
-
-// respondBuildNodeBinding 查询并返回工作空间的构建机关联现状
-func (h *Handler) respondBuildNodeBinding(c *gin.Context, workspaceID string) {
-	ctx := c.Request.Context()
-	state, err := bkciproject.NewBuildNodeManager(h.registry.DB, workspaceID).Get(ctx)
-	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get build node binding"))
-		return
-	}
-
-	ginutils.OK(c, slz.GetBuildNodeBindingOutput{
-		Data: slz.NewBuildNodeBindingStateOutput(state, h.canEditWorkspace(ctx, workspaceID)),
-	})
 }
 
 // canEditWorkspace 当前用户能否修改构建机关联（与写接口一样以 edit_workspace 为准，只授予空间管理员）。
