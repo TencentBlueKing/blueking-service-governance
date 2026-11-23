@@ -151,7 +151,7 @@ func Register(rg *gin.RouterGroup, h Handler) {
 	rg.GET("/bcs/token", h.GetBCSUserToken)
 
 	// --- KubeInsight 相关路由 ---
-	rg.GET("/kube-insight/reports", h.GetLatestEnvReport)
+	rg.GET("/kube-insight/reports", ginutils.RequireKubeInsight(), h.GetLatestEnvReport)
 
 	// --- BkMonitor 相关路由 ---
 	rg.GET("/apps/:appID/envs/:envName/bkmonitor/apm-service-name", h.GetApmServiceName)

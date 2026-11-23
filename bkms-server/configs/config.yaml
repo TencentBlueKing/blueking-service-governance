@@ -15,6 +15,10 @@ account:
   # authEnvName: prod
   # BackendType 是用户认证使用的后端类型，比如 bk_ticket 或 bk_token，默认值为 "bk_token"
   # backendType: bk_token
+  # SSMBaseURL 是蓝鲸 SSM 服务地址（只能直连，不能走网关）。backendType 为 bk_token 时，
+  # 配置后 usertoken 令牌相关功能改用 SSM；未配置时仍使用 authBaseURL。
+  # 注意：切换后之前签发的 access token / refresh token 全部失效，CLI 等调用方需重新获取
+  # ssmBaseURL: http://bkssm.example.com
 # 蓝鲸平台地址配置
 bkPlatUrls:
   # 蓝鲸网关 API 地址模板
@@ -36,6 +40,8 @@ featureIntegrations:
   # 关闭 BSCP 对接，未部署 BSCP 的环境设为 true
   # 关闭期间创建的工作空间没有 BSCP 绑定，重新启用后需逐个执行 bind-bscp-project 命令补绑
   disableBSCP: false
+  # 关闭 KubeInsight（集群诊断）对接
+  disableKubeInsight: false
 # 蓝鲸 API 环境配置
 bkApiStages:
   # BSCP
@@ -240,10 +246,6 @@ logging:
 encrypt:
   # 加密密钥（base64 编码）仅用于测试
   secret: masked
-# 网络配置
-network:
-  # 平台访问外部系统（如自建北极星）时的出口 IP，展示给用户在对方配置白名单
-  egressIPs: []
 # ------------------------------ 业务功能配置 ------------------------------
 # 集群插件（Addon）配置
 clusterAddons:

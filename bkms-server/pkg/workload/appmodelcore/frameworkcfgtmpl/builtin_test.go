@@ -63,6 +63,9 @@ var _ = Describe("Builtin templates", func() {
 		Expect(cppView.Content).To(Equal(goView.Content))
 		Expect(goView.FileName).To(Equal("trpc_go.yaml"))
 		Expect(cppView.FileName).To(Equal("trpc_cpp.yaml"))
+
+		_, ok = lookupBuiltin("builtin-trpc-python")
+		Expect(ok).To(BeFalse())
 	})
 
 	It("looks up builtin templates by ID as copies", func() {
@@ -79,7 +82,7 @@ var _ = Describe("Builtin templates", func() {
 		Expect(ok).To(BeTrue())
 		Expect(again.Content).NotTo(Equal("mutated"))
 
-		_, ok = lookupBuiltin("builtin-trpc-python")
+		_, ok = lookupBuiltin("builtin-trpc-nodejs")
 		Expect(ok).To(BeFalse())
 		_, ok = lookupBuiltin("builtin-taf-cpp")
 		Expect(ok).To(BeFalse())

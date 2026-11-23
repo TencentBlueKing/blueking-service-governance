@@ -26,8 +26,11 @@ import (
 	"github.com/gin-gonic/gin"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/stretchr/testify/mock"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/usertoken"
 )
 
 var _ = Describe("GetCurrentUser", func() {
@@ -36,7 +39,7 @@ var _ = Describe("GetCurrentUser", func() {
 	BeforeEach(func() {
 		gin.SetMode(gin.TestMode)
 		optionalAuth, err := auth.Optional(auth.Config{
-			BackendType:          auth.BackendBkToken,
+			BackendType:          config.AuthBackendBkToken,
 			LoginURL:             "http://login.example.com",
 			AllowSetUserInHeader: true,
 		}, nil)
@@ -71,5 +74,70 @@ var _ = Describe("GetCurrentUser", func() {
 
 		Expect(code).To(Equal(http.StatusOK))
 		Expect(body).To(Equal(map[string]any{"user_id": "alice", "tenant_id": ""}))
+	})
+})
+
+var _ = Describe("APIHandler.CreateToken", func() {
+	var tokenClient *usertoken.MockTokenClient
+
+	BeforeEach(func() {
+		gin.SetMode(gin.TestMode)
+		tokenClient = usertoken.NewMockTokenClient(GinkgoT())
+	})
+
+	doRequest := func(credentialName string, cookies ...*http.Cookie) *httptest.ResponseRecorder {
+		tokenClient.EXPECT().CredentialName().Return(credentialName)
+		tokenClient.EXPECT().RequiresUsername().Return(credentialName == usertoken.CredentialBkTicket).Maybe()
+		h := NewHandler(Config{AuthEnvName: "prod"}, tokenClient)
+		r := gin.New()
+		r.GET("/user_token/token", h.CreateToken)
+
+		req := httptest.NewRequest(http.MethodGet, "/user_token/token", nil)
+		for _, c := range cookies {
+			req.AddCookie(c)
+		}
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		return w
+	}
+
+	It("issues token with bk_token cookie and no username", func() {
+		tokenClient.EXPECT().
+			GetToken(mock.Anything, "", map[string]string{"bk_token": "token"}, "prod", false).
+			Return(&usertoken.AccessToken{AccessToken: "access", RefreshToken: "refresh", ExpiresIn: 100}, nil)
+
+		w := doRequest(usertoken.CredentialBkToken, &http.Cookie{Name: "bk_token", Value: "token"})
+
+		Expect(w.Code).To(Equal(http.StatusOK))
+		Expect(w.Body.String()).To(MatchJSON(`{"access_token":"access","refresh_token":"refresh","expires_in":100}`))
+	})
+
+	It("issues token with bk_ticket cookie and username", func() {
+		tokenClient.EXPECT().
+			GetToken(mock.Anything, "admin", map[string]string{"bk_ticket": "ticket"}, "prod", false).
+			Return(&usertoken.AccessToken{AccessToken: "access"}, nil)
+
+		w := doRequest(
+			usertoken.CredentialBkTicket,
+			&http.Cookie{Name: "bk_uid", Value: "admin"},
+			&http.Cookie{Name: "bk_ticket", Value: "ticket"},
+		)
+
+		Expect(w.Code).To(Equal(http.StatusOK))
+	})
+
+	It("rejects bk_ticket credential without username", func() {
+		w := doRequest(usertoken.CredentialBkTicket, &http.Cookie{Name: "bk_ticket", Value: "ticket"})
+
+		Expect(w.Code).To(Equal(http.StatusBadRequest))
+		Expect(w.Body.String()).To(MatchJSON(
+			`{"code":"1000","message":"no user credentials found in cookie, please login first."}`,
+		))
+	})
+
+	It("rejects request without the configured credential", func() {
+		w := doRequest(usertoken.CredentialBkToken, &http.Cookie{Name: "bk_ticket", Value: "ticket"})
+
+		Expect(w.Code).To(Equal(http.StatusBadRequest))
 	})
 })

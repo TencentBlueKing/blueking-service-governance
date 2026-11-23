@@ -150,7 +150,7 @@ var _ = Describe("Framework config template service", func() {
 				_, err := frameworkcfgtmpl.Get(ctx, db, workspaceID, id)
 				Expect(errors.Is(err, frameworkcfgtmpl.ErrTemplateNotFound)).To(BeTrue())
 			},
-			Entry("unknown builtin", "builtin-trpc-python"),
+			Entry("unknown builtin", "builtin-trpc-nodejs"),
 			Entry("TAF has no builtin", "builtin-taf-cpp"),
 			Entry("malformed ID", "not-an-object-id"),
 			Entry("missing custom", "000000000000000000000000"),

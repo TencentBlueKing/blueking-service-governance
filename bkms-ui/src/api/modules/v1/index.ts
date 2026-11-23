@@ -44,4 +44,5 @@ export * from './bkintegrations-bkci';
 export * from './cfgswitch';
 export * from './workspace-components';
 export * from './depservice-redis';
+export * from './framework-config-templates';
 export * from './release-strategies';

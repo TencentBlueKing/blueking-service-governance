@@ -101,7 +101,7 @@ func (c *Collector) Collect(
 
 		// 仅统计主部署（空泳道），与实例列表默认视图一致。
 		// 配置已记为部署、但主部署记录不存在时（环境已清理或记录缺失），该环境按 0 返回，
-		record, err := appmodeldeploy.GetLatest(ctx, c.db, appID, envName, "")
+		record, err := appmodeldeploy.GetLatestRecord(ctx, c.db, appID, envName, "")
 		if err != nil {
 			// immediate 模式下，如果用户绑定了未部署的环境，会导致配置标记为已部署，但实际没有主部署记录，
 			if errors.Is(err, appmodeldeploy.ErrDeployRecordNotFound) {

@@ -16,9 +16,9 @@
  */
 
 import { describe, expect, it } from 'vitest';
-
 import {
   resolveInstanceListHasDeployRecord,
+  shouldContinueDeployStatusPolling,
   shouldResetDeployStatusOnEnvChange,
 } from '~/pages/application/detail/deploy/deploy-status-rules';
 
@@ -72,8 +72,38 @@ describe('resolveInstanceListHasDeployRecord', () => {
   });
 });
 
+describe('shouldContinueDeployStatusPolling', () => {
+  it('已卸载（移除部署完成）后停止轮询，避免空态页空转 latest-status 与分批发布补查', () => {
+    expect(
+      shouldContinueDeployStatusPolling({
+        hasDeployRecord: true,
+        stage: 'deploy',
+        status: 'uninstalled',
+      }),
+    ).toBe(false);
+  });
+
+  it('卸载中仍需轮询，等待后端推进到 uninstalled', () => {
+    expect(shouldContinueDeployStatusPolling({ stage: 'deploy', status: 'uninstalling' })).toBe(true);
+  });
+
+  it('构建阶段即使状态为 uninstalled 也继续轮询（构建状态仍需跟踪）', () => {
+    expect(shouldContinueDeployStatusPolling({ stage: 'build', status: 'uninstalled' })).toBe(true);
+  });
+
+  it('部署中 / 已部署等常规状态继续轮询', () => {
+    expect(shouldContinueDeployStatusPolling({ stage: 'deploy', status: 'deploying' })).toBe(true);
+    expect(shouldContinueDeployStatusPolling({ stage: 'deploy', status: 'deployed' })).toBe(true);
+  });
+
+  it('状态尚未拉到（null/undefined）时保持轮询，首次加载不能被跳过', () => {
+    expect(shouldContinueDeployStatusPolling(null)).toBe(true);
+    expect(shouldContinueDeployStatusPolling(undefined)).toBe(true);
+  });
+});
+
 describe('shouldResetDeployStatusOnEnvChange', () => {
-  const env = (name: string) => ({ name }) as EnvOutput;
+  const env = (name: string): EnvOutput => ({ name });
 
   it('环境选择器 refresh 重抛当前环境（名称未变）时不重置部署状态', () => {
     expect(shouldResetDeployStatusOnEnvChange(env('schnee'), 'schnee')).toBe(false);

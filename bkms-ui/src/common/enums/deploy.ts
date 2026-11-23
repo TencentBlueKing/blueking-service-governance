@@ -32,6 +32,8 @@ export const APP_DEPLOY_STATUS = {
   DEPLOYING: 'deploying',
   /** 已部署 */
   DEPLOYED: 'deployed',
+  /** 已回滚（分批发布回滚完成，所有实例恢复旧版本；终态，归为非错误态） */
+  ROLLED_BACK: 'rolled-back',
   /** 卸载中 */
   UNINSTALLING: 'uninstalling',
   /** 已卸载 */
@@ -74,3 +76,50 @@ export const DEPLOY_FAILED_STATUSES = [
   APP_DEPLOY_STATUS.POLLING_TIMEOUT,
   APP_DEPLOY_STATUS.POLLING_BROKEN,
 ] as const;
+
+/**
+ * 发布方式（表单 releaseMode / 部署记录 releaseMode / latest-status inProgressReleaseMode）。
+ * canary 表示按发布策略分批更新，all 表示一次更新全部实例。
+ */
+export const RELEASE_MODE = {
+  ALL: 'all',
+  CANARY: 'canary',
+} as const;
+
+/** 分批发布的当前批次阶段（进度接口 batchPhase） */
+export const BATCH_PHASE = {
+  /** 本批更新中 */
+  UPDATING: 'updating',
+  /** 本批尚未开始 */
+  PENDING: 'pending',
+  /** 本批已完成，等策略配置的定时暂停到期 */
+  TIMED_PAUSED: 'timed-paused',
+  /** 本批已完成，等待人工继续（含策略配置的永久暂停） */
+  MANUAL_PAUSED: 'manual-paused',
+  /** 所有批次已走完，进入全量收尾 */
+  COMPLETED: 'completed',
+} as const;
+
+/** 分批发布的 Rollout 阶段（进度接口 rolloutPhase，与后端 batchrelease 状态对齐） */
+export const ROLLOUT_PHASE = {
+  /** 正在执行发布步骤：后端只在该阶段接受手动操作 */
+  RUNNING: 'Running',
+  /** 所有步骤已完成，正在全量更新剩余旧版本实例 */
+  UPDATING_PRIMARY: 'UpdatingPrimary',
+  /** 正在清理灰度资源（发布开始与结束时都会出现） */
+  CLEANING_CANARY: 'CleaningCanary',
+} as const;
+
+/** 批次完成后的暂停方式（策略配置 pauseMode） */
+export const BATCH_PAUSE_MODE = {
+  /** 不暂停，直接进入下一批 */
+  NONE: 'none',
+  /** 定时暂停，到期自动继续 */
+  DURATION: 'duration',
+  /** 永久暂停，等待人工继续 */
+  PERMANENT: 'permanent',
+} as const;
+
+export type BatchPauseMode = (typeof BATCH_PAUSE_MODE)[keyof typeof BATCH_PAUSE_MODE];
+
+export type ReleaseMode = (typeof RELEASE_MODE)[keyof typeof RELEASE_MODE];

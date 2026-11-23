@@ -220,7 +220,7 @@ func (s *Service) collectAppModelLaneUsageNames(
 	scope := fmt.Sprintf("app %s env %s lane %s", appID, envName, laneName)
 
 	// 1. 获取最新部署记录
-	record, err := appmodeldeploy.GetLatest(ctx, s.db, appID, envName, laneName)
+	record, err := appmodeldeploy.GetLatestRecord(ctx, s.db, appID, envName, laneName)
 	if err != nil {
 		if errors.Is(err, appmodeldeploy.ErrDeployRecordNotFound) {
 			return nil, nil
@@ -237,7 +237,7 @@ func (s *Service) collectAppModelLaneUsageNames(
 	}
 
 	// 4. 获取最近一次成功部署记录
-	lastSuccessfulRecord, err := appmodeldeploy.GetLatest(
+	lastSuccessfulRecord, err := appmodeldeploy.GetLatestRecord(
 		ctx,
 		s.db,
 		appID,

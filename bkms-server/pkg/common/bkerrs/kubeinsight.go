@@ -16,30 +16,18 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
-package installtask_test
+package bkerrs
 
-import (
-	"testing"
+const kubeInsightDisabledMsg = "kube-insight is disabled in current environment"
 
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
-
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
-)
-
-func TestInstallTask(t *testing.T) {
-	RegisterFailHandler(Fail)
-	RunSpecs(t, "Cluster Addon Install Task Suite")
+// NewKubeInsightDisabled 当前环境关闭了 KubeInsight（集群诊断）对接（featureIntegrations.disableKubeInsight）
+func NewKubeInsightDisabled() *Error {
+	return New(ErrCodeNotImplemented, kubeInsightDisabledMsg).SetDetails(
+		NewDetail(
+			ErrDetailCodeKubeInsightDisabled,
+			kubeInsightDisabledMsg,
+			WithSystem(SystemName),
+			WithModule("kubeinsight"),
+		),
+	)
 }
-
-var _ = BeforeSuite(func() {
-	if err := testutil.SetUpGlobalDatabase(); err != nil {
-		panic("failed to set up global database: " + err.Error())
-	}
-})
-
-var _ = AfterSuite(func() {
-	if err := testutil.TeardownGlobalDatabase(); err != nil {
-		panic("failed to teardown global database: " + err.Error())
-	}
-})

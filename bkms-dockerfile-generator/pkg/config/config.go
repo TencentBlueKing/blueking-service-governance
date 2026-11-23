@@ -24,6 +24,8 @@ import (
 	"strings"
 
 	"github.com/pkg/errors"
+
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-dockerfile-generator/pkg/dockerfile"
 )
 
 const (
@@ -108,11 +110,15 @@ func LoadFromEnviron(environ []string) (Config, error) {
 
 func validateBKMSGeneratedConfig(cfg Config) error {
 	requiredValues := map[string]string{
-		EnvDockerfileLanguage:     cfg.Language,
-		EnvDockerfilePath:         cfg.DockerfilePath,
-		EnvDockerfileBuilderImage: cfg.BuilderImage,
-		EnvDockerfileRunnerImage:  cfg.RunnerImage,
-		EnvImageName:              cfg.ImageName,
+		EnvDockerfileLanguage:    cfg.Language,
+		EnvDockerfilePath:        cfg.DockerfilePath,
+		EnvDockerfileRunnerImage: cfg.RunnerImage,
+		EnvImageName:             cfg.ImageName,
+	}
+	// go、cpp 要先在构建镜像里编译出二进制，再拷进运行镜像，所以构建镜像必填；
+	// python 不需要编译，源码直接拷进运行镜像、在里面装依赖即可，构建镜像可以不填
+	if dockerfile.RequiresBuilderImage(cfg.Language) {
+		requiredValues[EnvDockerfileBuilderImage] = cfg.BuilderImage
 	}
 	for name, value := range requiredValues {
 		if strings.TrimSpace(value) == "" {

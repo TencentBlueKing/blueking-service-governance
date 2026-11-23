@@ -34,16 +34,34 @@ type BkAppConfig struct {
 	Secret string
 }
 
+// AccountConfig.BackendType 的可选值
+const (
+	// AuthBackendBkTicket 使用 bk_ticket 完成用户认证
+	AuthBackendBkTicket = "bk_ticket"
+	// AuthBackendBkToken 使用 bk_token 完成用户认证
+	AuthBackendBkToken = "bk_token"
+)
+
 // AccountConfig 是和用户账号鉴权、用户 Token 获取相关的配置项集合
 type AccountConfig struct {
-	// AuthBaseURL 是 auth 服务的基础 URL，通常由蓝鲸网关服务提供，usertoken 令牌相关功能使用
-	AuthBaseURL string `validate:"required,url"`
+	// AuthBaseURL 是 auth 服务的基础 URL，通常由蓝鲸网关服务提供，usertoken 令牌相关功能使用。
+	// 使用 SSM（见 SSMBaseURL）时不再需要，其余情况必填
+	AuthBaseURL string `validate:"omitempty,url"`
 	// LoginURL 是登录页根地址，不含路径，用于拼接 /plain/ 跳转
 	LoginURL string `validate:"required,url"`
 	// AuthEnvName 是用户 token 使用的环境，不同环境的 token 互相隔离，默认值为 "prod"
 	AuthEnvName string
 	// BackendType 是用户认证使用的后端类型，比如 bk_ticket 或 bk_token，默认值为 "bk_token"
 	BackendType string `validate:"omitempty,oneof=bk_ticket bk_token"`
+	// SSMBaseURL 是蓝鲸 SSM 服务的基础 URL，只能直连、不能经过网关。BackendType 为 bk_token 时，
+	// 配置后 usertoken 令牌相关功能改用 SSM 签发和校验，未配置时仍使用 AuthBaseURL 指向的网关 token 服务。
+	// 两种服务签发的 token 互不认可，切换后之前签发的 access token / refresh token 全部失效，需重新获取
+	SSMBaseURL string `validate:"omitempty,url"`
+}
+
+// UseSSMTokenService 返回 usertoken 令牌相关功能是否使用 SSM，否则使用 AuthBaseURL 指向的网关 token 服务
+func (c AccountConfig) UseSSMTokenService() bool {
+	return c.BackendType == AuthBackendBkToken && c.SSMBaseURL != ""
 }
 
 // BkPlatUrlsConfig 蓝鲸平台地址配置
@@ -69,6 +87,8 @@ type FeatureIntegrationsConfig struct {
 	// 开启后创建工作空间不再绑定 BSCP 项目，BSCP 相关接口直接返回未启用错误。
 	// 关闭期间创建的工作空间没有 BSCP 绑定，重新启用 BSCP 后需逐个执行 bind-bscp-project 命令补绑。
 	DisableBSCP bool
+	// DisableKubeInsight 关闭 KubeInsight（集群诊断）对接，开启后集群诊断相关接口直接返回未启用错误。
+	DisableKubeInsight bool
 	// EnableIndependentBCSProject 控制 BCS 项目是否与蓝盾项目解耦。
 	// 为 true：蓝盾始终新建；新建容器则创建 BCS 项目，绑定已有容器则绑定已有 BCS 项目。
 	// 为 false：新建/绑定都按蓝盾项目处理，BCS ID/Code 复用蓝盾项目。
@@ -356,12 +376,6 @@ type EncryptConfig struct {
 	Secret string
 }
 
-// NetworkConfig 平台自身的网络配置
-type NetworkConfig struct {
-	// EgressIPs 平台访问外部系统（如自建北极星）时的出口 IP，供用户在对方配置白名单
-	EgressIPs []string
-}
-
 // --------------------------- 业务功能配置 ---------------------------
 
 // ClusterAddonConfig 集群插件（Addon）相关配置
@@ -494,8 +508,6 @@ type Config struct {
 	Logging LoggingConfig
 	// 加密配置
 	Encrypt EncryptConfig
-	// Network 平台自身的网络配置
-	Network NetworkConfig
 
 	// --------------------------- 业务功能配置 ---------------------------
 	// ClusterAddons 集群插件（Addons）配置

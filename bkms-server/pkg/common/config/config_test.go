@@ -248,10 +248,9 @@ asynq:
 			Expect(cfg.BKCI.PipelineTmpl.BuilderImageCode).To(BeEmpty())
 			Expect(cfg.BKCI.PipelineTmpl.BuilderImageVersion).To(BeEmpty())
 			Expect(cfg.Polaris.AllowWorkspaceAccessPoints).To(BeFalse())
-			Expect(cfg.Network.EgressIPs).To(BeEmpty())
 		})
 
-		It("should successfully load explicit polaris access point and network config values", func() {
+		It("should successfully load explicit polaris access point config values", func() {
 			configContent := `
 bkApp:
   code: test-app
@@ -262,10 +261,6 @@ account:
 polaris:
   address: 10.0.0.1:8091
   allowWorkspaceAccessPoints: true
-network:
-  egressIPs:
-    - 10.0.0.1
-    - 10.0.0.2
 metrics:
   port: 8081
 httpServer:
@@ -286,7 +281,6 @@ asynq:
 				Address:                    "10.0.0.1:8091",
 				AllowWorkspaceAccessPoints: true,
 			}))
-			Expect(cfg.Network.EgressIPs).To(Equal([]string{"10.0.0.1", "10.0.0.2"}))
 		})
 
 		It("should successfully load explicit tenant config values", func() {
@@ -356,6 +350,44 @@ asynq:
 				"featureIntegrations.enableBkUserTenantVerify is required when tenant.enableMultiTenantMode is enabled",
 			))
 		})
+
+		DescribeTable("requires authBaseURL only when the API gateway token service is used",
+			func(account, errMsg string) {
+				configContent := `
+bkApp:
+  code: test-app
+  secret: test-secret
+account:
+  loginURL: http://login.example.com
+` + account + `
+metrics:
+  port: 8081
+httpServer:
+  address: 127.0.0.1
+  port: 32303
+asynq:
+  redis:
+    host: localhost
+    port: 6380
+`
+				Expect(os.WriteFile(configFile, []byte(configContent), 0o644)).To(Succeed())
+
+				cfg, err := config.Load(ctx, configFile)
+
+				if errMsg == "" {
+					Expect(err).NotTo(HaveOccurred())
+					Expect(cfg.Account.UseSSMTokenService()).To(BeTrue())
+					return
+				}
+				Expect(err).To(MatchError(ContainSubstring(errMsg)))
+			},
+			Entry("bk_token with ssmBaseURL",
+				"  backendType: bk_token\n  ssmBaseURL: http://bkssm.example.com", ""),
+			Entry("bk_token without ssmBaseURL",
+				"  backendType: bk_token", "account.authBaseURL is required"),
+			Entry("bk_ticket ignores ssmBaseURL",
+				"  backendType: bk_ticket\n  ssmBaseURL: http://bkssm.example.com", "account.authBaseURL is required"),
+		)
 
 		It("should successfully load config without bkMonitor section", func() {
 			// bkMonitor 段完全缺省时，config 仍能成功加载，BkMonitor 字段应为零值

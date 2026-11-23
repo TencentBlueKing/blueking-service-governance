@@ -39,7 +39,7 @@
         v-if="!hasUsages"
         class="bg-[#F5F7FA] mb-[16px] py-[12px] px-[16px] text-[14px] text-[#4D4F56]"
       >
-        {{ t('应用最近的部署记录中未检测到该镜像 Tag 的使用，但是镜像 Tag 一旦删除后无法找回') }}
+        {{ t('当前各环境生效部署都没有使用该镜像 Tag。但删除后无法恢复，之后也不能再部署或回滚到这个 Tag。') }}
       </div>
       <div
         v-else

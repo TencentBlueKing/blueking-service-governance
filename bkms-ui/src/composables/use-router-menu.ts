@@ -54,11 +54,18 @@ export function getMenuList(type: AppNavigationType): NavigationItem[] {
 
   if (!spaceStore.currentSpace || !type) return [];
   const list = appNavigationConfig[type] || [];
-  if (!isAppModelAppType(type) || isRuntimeModSupported(useAppDetail().runtime, 'apmServiceName')) return list;
+  const hiddenMenus = new Set<string>();
+  if (isAppModelAppType(type) && !isRuntimeModSupported(useAppDetail().runtime, 'apmServiceName')) {
+    hiddenMenus.add('observation');
+  }
+  if (spaceStore.rainbowTConfStatus !== 'enabled') {
+    hiddenMenus.add('businessConfig');
+  }
+  if (!hiddenMenus.size) return list;
 
-  // 导航与页面解析共用过滤结果，能力未确认时不挂载观测页面。
+  // 导航与页面解析共用过滤结果，能力未确认时不挂载对应页面。
   return list.map(item =>
-    'children' in item ? { ...item, children: item.children.filter(child => child.key !== 'observation') } : item,
+    'children' in item ? { ...item, children: item.children.filter(child => !hiddenMenus.has(child.key)) } : item,
   );
 }
 

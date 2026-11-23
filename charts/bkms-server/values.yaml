@@ -202,6 +202,10 @@ svcConf:
     # authEnvName: prod
     # BackendType 是用户认证使用的后端类型，比如 bk_ticket 或 bk_token，默认值为 "bk_token"
     # backendType: bk_token
+    # SSMBaseURL 是蓝鲸 SSM 服务地址（只能直连，不能走网关）。backendType 为 bk_token 时，
+    # 配置后 usertoken 令牌相关功能改用 SSM，适用于多租户版和社区版；未配置时仍使用 authBaseURL。
+    # 注意：切换后之前签发的 access token / refresh token 全部失效，CLI 等调用方需重新获取
+    # ssmBaseURL: http://bkssm.example.com
   # 蓝鲸平台地址配置
   bkPlatUrls:
     # 蓝鲸网关 API 地址模板
@@ -219,6 +223,8 @@ svcConf:
     # 关闭 BSCP 对接，未部署 BSCP 的环境设为 true
     # 关闭期间创建的工作空间没有 BSCP 绑定，重新启用后需逐个执行 bind-bscp-project 命令补绑
     disableBSCP: false
+    # 关闭 KubeInsight（集群诊断）对接，不支持集群诊断的环境设为 true
+    disableKubeInsight: false
     # 是否让 BCS 项目与蓝盾项目解耦。
     # true：蓝盾始终新建；新建容器则创建 BCS 项目，绑定已有容器则绑定已有 BCS 项目
     #     （绑定已有项目时只会拉取 BCS 授权的项目）。

@@ -23,6 +23,7 @@ import (
 	"context"
 	"net/http"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth/backends"
 )
 
@@ -41,9 +42,9 @@ type AuthBackend interface {
 // getBackend 根据配置创建认证后端实例。
 func getBackend(cfg Config) (AuthBackend, string, error) {
 	switch cfg.BackendType {
-	case BackendBkTicket:
-		return backends.NewBkTicketAuthBackend(cfg.LoginURL), BackendBkTicket, nil
-	case BackendBkToken, "":
+	case config.AuthBackendBkTicket:
+		return backends.NewBkTicketAuthBackend(cfg.LoginURL), config.AuthBackendBkTicket, nil
+	case config.AuthBackendBkToken, "":
 		if cfg.EnableBkLoginUserinfoAuth {
 			backend, err := backends.NewBkTokenApigwAuthBackend(
 				cfg.BkApiUrlTmpl, cfg.BkLoginStage, cfg.BkAppCode, cfg.BkAppSecret, cfg.LoginURL,
@@ -51,10 +52,10 @@ func getBackend(cfg Config) (AuthBackend, string, error) {
 			if err != nil {
 				return nil, "", err
 			}
-			return backend, BackendBkToken, nil
+			return backend, config.AuthBackendBkToken, nil
 		}
-		return backends.NewBkTokenAuthBackend(cfg.LoginURL), BackendBkToken, nil
+		return backends.NewBkTokenAuthBackend(cfg.LoginURL), config.AuthBackendBkToken, nil
 	default:
-		return backends.NewBkTokenAuthBackend(cfg.LoginURL), BackendBkToken, nil
+		return backends.NewBkTokenAuthBackend(cfg.LoginURL), config.AuthBackendBkToken, nil
 	}
 }

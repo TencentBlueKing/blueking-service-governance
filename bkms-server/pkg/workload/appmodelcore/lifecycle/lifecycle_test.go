@@ -176,7 +176,13 @@ var _ = Describe("Lifecycle", func() {
 				app.Framework = appruntime.FrameworkTAF
 			}),
 			Entry("language only open to blank", func(app *bkmsapp.Application, _ *lifecycle.CreateParams) {
+				app.Language = appruntime.LanguageNodeJS
+			}),
+			Entry("python is not open to trpc", func(app *bkmsapp.Application, _ *lifecycle.CreateParams) {
 				app.Language = appruntime.LanguagePython
+			}),
+			Entry("unknown language", func(app *bkmsapp.Application, _ *lifecycle.CreateParams) {
+				app.Language = "java"
 			}),
 			Entry("missing language", func(app *bkmsapp.Application, _ *lifecycle.CreateParams) {
 				app.Language = ""

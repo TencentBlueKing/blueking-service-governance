@@ -22,7 +22,6 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/clusteraddon/installtask"
 )
 
 var (
@@ -58,8 +57,6 @@ type apiErrorRule struct {
 // 实现删除与换绑时参照 bkerrs.WrapEnvClusterNamespaceOccupied 单独包装，不再走这里的通用规则
 var apiErrorRules = []apiErrorRule{
 	{ErrAccessPointNotFound, bkerrs.ErrCodeNotFound, ""},
-	{installtask.ErrNotFound, bkerrs.ErrCodeNotFound, ""},
-	{installtask.ErrRunning, bkerrs.ErrCodeAborted, ""},
 	{ErrAccessPointNameExists, bkerrs.ErrCodeAlreadyExists, ""},
 	{ErrAccessPointInvalid, bkerrs.ErrCodeInvalidArgument, ""},
 	{ErrConnectivityFailed, bkerrs.ErrCodeInvalidRequest, ""},

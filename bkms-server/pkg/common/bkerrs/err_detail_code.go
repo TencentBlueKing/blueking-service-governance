@@ -53,6 +53,9 @@ const (
 	// ErrDetailCodeBSCPDisabled 当前环境关闭了 BSCP 对接
 	ErrDetailCodeBSCPDisabled ErrDetailCode = "BSCP_DISABLED"
 
+	// ErrDetailCodeKubeInsightDisabled 当前环境关闭了 KubeInsight（集群诊断）对接
+	ErrDetailCodeKubeInsightDisabled ErrDetailCode = "KUBE_INSIGHT_DISABLED"
+
 	// ErrDetailCodeComponentNotInstalled 环境所在集群未安装所需的组件（通过 module 区分具体组件）
 	ErrDetailCodeComponentNotInstalled ErrDetailCode = "COMPONENT_NOT_INSTALLED"
 

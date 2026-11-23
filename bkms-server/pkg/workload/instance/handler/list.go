@@ -85,7 +85,7 @@ func (h *Handler) validateAppAndGetDeployRecord(
 	}
 
 	// 按环境 + 泳道取最新部署记录；未命中与 List 一样 404，Watch 也建不成连接
-	record, err := appmodeldeploy.GetLatest(ctx, h.registry.DB, app.ID, uriInput.EnvName, trafficLaneName)
+	record, err := appmodeldeploy.GetLatestRecord(ctx, h.registry.DB, app.ID, uriInput.EnvName, trafficLaneName)
 	if err != nil {
 		return nil, nil, bkerrs.Wrap(err, bkerrs.ErrCodeNotFound, "deploy record not found")
 	}

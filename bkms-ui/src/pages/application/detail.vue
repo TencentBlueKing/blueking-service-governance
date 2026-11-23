@@ -22,7 +22,7 @@
     :list="menuList"
   >
     <div
-      v-bkloading="{ loading: detailLoading }"
+      v-bkloading="{ loading: detailLoading || businessConfigLoading }"
       class="h-full min-h-full"
     >
       <Alert
@@ -43,8 +43,25 @@
           </div>
         </template>
       </Alert>
+      <Alert
+        v-if="isBusinessConfigRoute && rainbowTConfStatus === 'error'"
+        class="mx-[24px] mt-[16px]"
+        theme="warning"
+      >
+        <template #title>
+          <div class="flex items-center gap-[12px]">
+            <span>{{ $t('七彩石开关加载失败') }}</span>
+            <Button
+              text
+              theme="primary"
+              @click="spaceStore.fetchRainbowTConf()"
+              >{{ $t('重试') }}</Button
+            >
+          </div>
+        </template>
+      </Alert>
       <RouterView
-        v-if="!detailLoading"
+        v-if="!detailLoading && (!isBusinessConfigRoute || canOpenBusinessConfig)"
         :key="routerViewKey"
         :class="routerViewClass"
       >
@@ -132,7 +149,7 @@
 </template>
 
 <script setup lang="ts">
-  import { computed, onMounted, ref, watch } from 'vue';
+  import { computed, onMounted, ref, watch, watchEffect } from 'vue';
 
   import { Alert, Button, Loading, Select } from 'bkui-vue';
   import { AngleDownFill, Plus } from 'bkui-vue/lib/icon';
@@ -212,6 +229,32 @@
     return (appType || routeType || '') as AppNavigationType;
   });
   const menuList = computed(() => getMenuList(type.value));
+  const routeWorkspaceID = computed(() => getRouteParam(route.params.space));
+  const isBusinessConfigRoute = computed(() => route.params.menuName === 'businessConfig');
+  const applicationListWorkspaceID = ref('');
+  const businessConfigApp = computed(() => {
+    if (
+      !routeWorkspaceID.value ||
+      routeWorkspaceID.value !== applicationListWorkspaceID.value ||
+      routeWorkspaceID.value !== spaceStore.currentSpace
+    ) {
+      return undefined;
+    }
+    return applicationList.value.find(item => item.name === route.params.name);
+  });
+  const rainbowTConfStatus = computed(() =>
+    routeWorkspaceID.value === spaceStore.currentSpace ? spaceStore.rainbowTConfStatus : 'idle',
+  );
+  const canOpenBusinessConfig = computed(
+    () =>
+      rainbowTConfStatus.value === 'enabled' &&
+      !!businessConfigApp.value?.id &&
+      businessConfigApp.value.id === appDetailStore.appID,
+  );
+  const businessConfigLoading = computed(
+    () =>
+      isBusinessConfigRoute.value && (rainbowTConfStatus.value === 'idle' || rainbowTConfStatus.value === 'loading'),
+  );
   const routerViewKey = computed(() => {
     const { menuName, name, space, type } = router.currentRoute.value.params;
     return `${menuName}-${name}-${space}-${type}`;
@@ -249,13 +292,23 @@
 
   // 获取应用列表
   async function handleGetAppList() {
-    if (!spaceStore.currentSpace) return;
+    const workspaceID = spaceStore.currentSpace;
+    if (!workspaceID) return;
     applicationListLoading.value = true;
     try {
-      applicationList.value = await AppService.listApps({
-        workspaceID: spaceStore.currentSpace,
-      }).catch(() => []);
-      if (!applicationList.value.some(item => item.name === currentApplicationName.value)) {
+      const apps = await AppService.listApps({ workspaceID }).catch(() => []);
+      if (
+        spaceStore.currentSpace !== workspaceID ||
+        (routeWorkspaceID.value && routeWorkspaceID.value !== workspaceID)
+      ) {
+        return;
+      }
+      applicationListWorkspaceID.value = workspaceID;
+      applicationList.value = apps;
+      if (
+        !isBusinessConfigRoute.value &&
+        !applicationList.value.some(item => item.name === currentApplicationName.value)
+      ) {
         currentApplicationName.value = applicationList.value[0]?.name || '';
       }
     } finally {
@@ -269,6 +322,28 @@
       activeKey.value = getRouteParam(newValue, 'info');
     },
   );
+
+  watch(
+    [routeWorkspaceID, () => spaceStore.currentSpace],
+    ([workspaceID, currentSpace]) => {
+      if (workspaceID && workspaceID === currentSpace) void spaceStore.fetchRainbowTConf();
+    },
+    { immediate: true },
+  );
+
+  // 业务配置的目标应用不可用时返回列表，防止把配置操作落到其他应用。
+  watchEffect(() => {
+    const workspaceID = routeWorkspaceID.value;
+    if (
+      isBusinessConfigRoute.value &&
+      workspaceID &&
+      workspaceID === applicationListWorkspaceID.value &&
+      workspaceID === spaceStore.currentSpace &&
+      !businessConfigApp.value?.id
+    ) {
+      void router.replace({ name: 'app', params: { space: workspaceID } }).catch(() => undefined);
+    }
+  });
 
   // 浏览器后退/前进或外链直达时，将 URL 中的应用名同步回 Select，避免 UI 与地址栏不一致
   watch(
@@ -307,7 +382,7 @@
   let appSwitchGeneration = 0;
 
   watch(
-    [activeKey, type, currentApplicationName, () => appDetailStore.runtime, currentApplication],
+    [activeKey, type, currentApplicationName, () => appDetailStore.runtime, currentApplication, rainbowTConfStatus],
     ([key, type, name], [oldKey, oldType, oldName]) => {
       if (name) {
         appDetailStore.updateAppName(name);
@@ -321,10 +396,14 @@
         key === 'observation' &&
         isAppModelAppType(type) &&
         (appDetailStore.appID !== currentApplication.value?.id || !appDetailStore.runtime);
+      // 开关查询失败时保留直达链接，供用户在当前页重试。
+      const awaitingBusinessConfigSwitch =
+        key === 'businessConfig' && (businessConfigLoading.value || rainbowTConfStatus.value === 'error');
       const hasMenu = menuList.value.some(item =>
         'children' in item ? item.children.some(child => child.key === key) : item.key === key,
       );
-      const shouldFallback = !!currentApplication.value && !waitingForObservationRuntime && !hasMenu;
+      const shouldFallback =
+        !!currentApplication.value && !waitingForObservationRuntime && !awaitingBusinessConfigSwitch && !hasMenu;
       const menuName = shouldFallback ? 'info' : key;
 
       // 仅能力变化时不重复导航，也不取消尚未完成的应用切换。

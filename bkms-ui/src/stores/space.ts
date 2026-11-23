@@ -16,10 +16,11 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
-import { ref, shallowRef } from 'vue';
+import { ref, shallowRef, watch } from 'vue';
 
 import { random } from 'bkui-vue/lib/shared';
 import { defineStore } from 'pinia';
+import { CfgswitchService } from '~/api/modules/v1/cfgswitch';
 import { WorkspaceService } from '~/api/modules/v1/workspace';
 import { i18n } from '~/modules/i18n';
 
@@ -31,6 +32,8 @@ import type {
   WorkspaceInfoOutputObj,
 } from '~/@types/v1/workspace';
 
+type RainbowTConfStatus = 'disabled' | 'enabled' | 'error' | 'idle' | 'loading';
+
 export const useSpaceStore = defineStore('space', () => {
   const list = ref<WorkspaceInfoOutputObj[]>([]);
   const currentSpace = ref<string>('');
@@ -39,6 +42,34 @@ export const useSpaceStore = defineStore('space', () => {
   const workspaceDetail = ref<null | WorkspaceInfoOutputObj>(null);
   const isBoundExistedBKCIProject = ref<boolean>(false);
   const isLoading = ref<boolean>(false);
+  const rainbowTConfStatus = ref<RainbowTConfStatus>('idle');
+  let workspaceRevision = 0;
+
+  watch(
+    currentSpace,
+    () => {
+      workspaceRevision += 1;
+      rainbowTConfStatus.value = 'idle';
+    },
+    { flush: 'sync' },
+  );
+
+  async function fetchRainbowTConf() {
+    const workspaceID = currentSpace.value;
+    if (!workspaceID || rainbowTConfStatus.value === 'loading') return;
+
+    const revision = workspaceRevision;
+    rainbowTConfStatus.value = 'loading';
+    try {
+      const switches = await CfgswitchService.getCfgSwitches({ workspaceID }, { interceptorErr: false });
+      if (revision !== workspaceRevision) return;
+      rainbowTConfStatus.value = switches?.rainbowTConf === true ? 'enabled' : 'disabled';
+    } catch {
+      if (revision === workspaceRevision) {
+        rainbowTConfStatus.value = 'error';
+      }
+    }
+  }
 
   // 空间状态
   enum spaceState {
@@ -144,6 +175,8 @@ export const useSpaceStore = defineStore('space', () => {
     workspaceDetail,
     isBoundExistedBKCIProject,
     isLoading,
+    rainbowTConfStatus,
+    fetchRainbowTConf,
     statusTab,
     spaceState,
     routeViewKey,

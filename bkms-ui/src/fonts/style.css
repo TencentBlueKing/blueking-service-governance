@@ -431,3 +431,9 @@ url("fonts/iconcool.eot?#iefix") format("embedded-opentype");
 .bkms-icon-user-fill:before {
 	content: "\e1cf";
 }
+.bkms-icon-pause:before {
+	content: "\e1d1";
+}
+.bkms-icon-success-2:before {
+	content: "\e1d2";
+}

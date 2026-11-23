@@ -192,7 +192,7 @@
             min-width="220"
           >
             <template #default="{ row }: { row: FeatureEnvRow }">
-              <div class="flex items-center gap-[12px]">
+              <div class="flex items-center gap-[16px]">
                 <Button
                   text
                   theme="primary"

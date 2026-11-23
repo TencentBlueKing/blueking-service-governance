@@ -30,21 +30,36 @@ import (
 type Props struct {
 	// DockerfileLanguage 传给流水线的 Dockerfile 生成语言。
 	DockerfileLanguage string
+	// RequiresBuilderImage 生成的 Dockerfile 是否有 builder 阶段、因而必须配置构建镜像。
+	// python 模板只有运行镜像一个阶段，构建镜像可以留空。
+	RequiresBuilderImage bool
 }
 
 // Public 无对外内容。
 func (p Props) Public() any { return nil }
 
-// Spec 平台构建：由平台生成 Dockerfile 并构建镜像。仅 tRPC + go 支持。
+// Spec 平台构建：由平台生成 Dockerfile 并构建镜像。
+// tRPC、blank 的 go，以及 blank 的 python 支持。tRPC 不开放 python。
 var Spec = runtimemod.Spec[Props]{
 	ID: runtimemod.ModPlatformBuild,
 	Resolve: func(framework, language string) runtimemod.Mod[Props] {
-		if framework != appruntime.FrameworkTRPC {
+		// Dockerfile 只按语言区分。taf 不开放
+		if framework != appruntime.FrameworkTRPC && framework != appruntime.FrameworkBlank {
 			return runtimemod.Unsupported[Props]()
 		}
 		switch language {
 		case appruntime.LanguageGo:
-			return runtimemod.Supported(Props{DockerfileLanguage: appruntime.LanguageGo})
+			return runtimemod.Supported(Props{DockerfileLanguage: appruntime.LanguageGo, RequiresBuilderImage: true})
+		case appruntime.LanguagePython:
+			// python 只作为通用应用开放，tRPC 不提供该语言的平台构建
+			if framework != appruntime.FrameworkBlank {
+				return runtimemod.Unsupported[Props]()
+			}
+
+			return runtimemod.Supported(Props{
+				DockerfileLanguage:   appruntime.LanguagePython,
+				RequiresBuilderImage: false,
+			})
 		case "":
 			return runtimemod.Incomplete[Props]()
 		default:
@@ -62,4 +77,15 @@ func DockerfileLanguage(mod runtimemod.Mod[Props]) (string, error) {
 		return "", errors.Wrap(err, "resolve dockerfile language")
 	}
 	return props.DockerfileLanguage, nil
+}
+
+// RequiresBuilderImage 返回保存或触发平台构建时是否必须校验构建镜像。
+//
+// 技术栈不支持或语言未补全时仍要求构建镜像，保持放开 python 之前的校验口径；
+// 是否支持平台构建由 DockerfileLanguage 单独拦截。
+func RequiresBuilderImage(mod runtimemod.Mod[Props]) bool {
+	if !mod.Supported {
+		return true
+	}
+	return mod.Props.RequiresBuilderImage
 }

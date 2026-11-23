@@ -139,6 +139,12 @@ var _ = Describe("Resolve", func() {
 			To(Equal(admincommand.ProtocolTAF))
 	})
 
+	It("requires builder image for trpc+go platformBuild", func() {
+		props, err := mustResolve(appruntime.FrameworkTRPC, appruntime.LanguageGo).PlatformBuild.Require()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(props.RequiresBuilderImage).To(BeTrue())
+	})
+
 	It("registers admin layouts for out-of-catalog languages while keeping them unreachable", func() {
 		Expect(admincommand.Spec.Resolve(appruntime.FrameworkTRPC, appruntime.LanguagePython).Props.ConfigLayout).
 			To(Equal(admincommand.TrpcLayoutNested))
@@ -147,24 +153,26 @@ var _ = Describe("Resolve", func() {
 		Expect(admincommand.Spec.Resolve(appruntime.FrameworkTRPC, appruntime.LanguageJava).Props.ConfigLayout).
 			To(Equal(admincommand.TrpcLayoutNestedPrefixed))
 
-		// java 不在语言目录中；nodejs / python 只对 blank 开放，tRPC 组合不合法
+		// java 不在语言目录中；nodejs、python 只对 blank 开放，tRPC 组合不合法
 		_, err := mods.Resolve(appruntime.Stack{
 			Type: appruntime.AppTypeBKMSApp, Framework: appruntime.FrameworkTRPC, Language: appruntime.LanguageJava,
 		})
 		Expect(errors.Is(err, appruntime.ErrUnknownLanguage)).To(BeTrue())
-		for _, language := range []string{appruntime.LanguageNodeJS, appruntime.LanguagePython} {
-			_, err = mods.Resolve(appruntime.Stack{
-				Type: appruntime.AppTypeBKMSApp, Framework: appruntime.FrameworkTRPC, Language: language,
-			})
-			Expect(errors.Is(err, appruntime.ErrInvalidCombination)).To(BeTrue(), language)
-		}
+		_, err = mods.Resolve(appruntime.Stack{
+			Type: appruntime.AppTypeBKMSApp, Framework: appruntime.FrameworkTRPC, Language: appruntime.LanguageNodeJS,
+		})
+		Expect(errors.Is(err, appruntime.ErrInvalidCombination)).To(BeTrue())
+		_, err = mods.Resolve(appruntime.Stack{
+			Type: appruntime.AppTypeBKMSApp, Framework: appruntime.FrameworkTRPC, Language: appruntime.LanguagePython,
+		})
+		Expect(errors.Is(err, appruntime.ErrInvalidCombination)).To(BeTrue())
 	})
 
 	DescribeTable("treats blank as a framework without framework capabilities",
 		func(language string) {
 			for id, mod := range mustResolve(appruntime.FrameworkBlank, language).Public().Mods {
-				if id == runtimemod.ModConfigFileMerge {
-					// 配置文件合并是基座功能，只是策略随框架变化
+				// 配置文件合并是基座功能，只是策略随框架变化；平台构建只看语言，单独断言
+				if id == runtimemod.ModConfigFileMerge || id == runtimemod.ModPlatformBuild {
 					continue
 				}
 				Expect(mod.Supported).To(BeFalse(), string(id))
@@ -174,6 +182,24 @@ var _ = Describe("Resolve", func() {
 		Entry("cpp", appruntime.LanguageCpp),
 		Entry("nodejs", appruntime.LanguageNodeJS),
 		Entry("python", appruntime.LanguagePython),
+	)
+
+	DescribeTable("resolves platformBuild for blank by language",
+		func(language string, supported, requiresBuilderImage bool) {
+			mod := mustResolve(appruntime.FrameworkBlank, language).PlatformBuild
+			Expect(mod.Supported).To(Equal(supported))
+			if !supported {
+				Expect(mod.ReasonCode).To(Equal(runtimemod.ReasonUnsupportedStack))
+				return
+			}
+
+			Expect(mod.Props.DockerfileLanguage).To(Equal(language))
+			Expect(mod.Props.RequiresBuilderImage).To(Equal(requiresBuilderImage))
+		},
+		Entry("go", appruntime.LanguageGo, true, true),
+		Entry("python", appruntime.LanguagePython, true, false),
+		Entry("cpp", appruntime.LanguageCpp, false, false),
+		Entry("nodejs", appruntime.LanguageNodeJS, false, false),
 	)
 
 	DescribeTable("selects the config merge strategy per framework",
@@ -268,7 +294,7 @@ var _ = Describe("Public", func() {
 			}`))
 	})
 
-	It("renders blank with only configFileMerge supported", func() {
+	It("renders blank+go with only platformBuild and configFileMerge supported", func() {
 		Expect(toJSON(mustResolve(appruntime.FrameworkBlank, appruntime.LanguageGo).Public())).
 			To(MatchJSON(`{
 				"schemaVersion": 1,
@@ -278,7 +304,7 @@ var _ = Describe("Public", func() {
 				"mods": {
 					"frameworkFile":         {"supported": false, "reasonCode": "unsupported_stack"},
 					"devMode":               {"supported": false, "reasonCode": "unsupported_stack"},
-					"platformBuild":         {"supported": false, "reasonCode": "unsupported_stack"},
+					"platformBuild":         {"supported": true},
 					"adminCommand":          {"supported": false, "reasonCode": "unsupported_stack"},
 					"apmServiceName":        {"supported": false, "reasonCode": "unsupported_stack"},
 					"polarisServiceCheck":   {"supported": false, "reasonCode": "unsupported_stack"},

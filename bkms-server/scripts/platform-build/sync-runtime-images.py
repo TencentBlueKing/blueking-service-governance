@@ -71,6 +71,9 @@ from enum import Enum
 # 避免同步 golang:1.24、golang:1.24-alpine 之类的滚动 tag 造成不确定性
 GOLANG_TAG_PATTERN = re.compile(r"^golang:\d+\.\d+\.\d+(?:-alpine\d+\.\d+)?$")
 
+# 校验 python 镜像 tag 必须是 X.Y.Z-slim 精确小版本，理由同上，避免 python:3.12-slim 之类的滚动 tag
+PYTHON_TAG_PATTERN = re.compile(r"^python:\d+\.\d+\.\d+-slim$")
+
 
 class SyncResult(Enum):
     """单个镜像同步结果，用于 main 中统一分类汇总。"""
@@ -116,11 +119,14 @@ def load_images(path: str) -> list[str]:
 def validate_image(image: str) -> None:
     """校验镜像配置，避免同步不符合平台规则的 tag。
 
-    目前只针对 golang 镜像做严格校验：必须是 X.Y.Z 或 X.Y.Z-alpineA.B 精确小版本。
+    golang 镜像必须是 X.Y.Z 或 X.Y.Z-alpineA.B 精确小版本，python 镜像必须是 X.Y.Z-slim 精确小版本。
     其他镜像不作限制，交由 docker 自身报错。
     """
     if image.startswith("golang:") and not GOLANG_TAG_PATTERN.match(image):
         raise ValueError(f"golang 镜像必须使用 X.Y.Z 或 X.Y.Z-alpineA.B 小版本: {image}")
+
+    if image.startswith("python:") and not PYTHON_TAG_PATTERN.match(image):
+        raise ValueError(f"python 镜像必须使用 X.Y.Z-slim 小版本: {image}")
 
 
 def run_command(cmd: list[str], *, dry_run: bool) -> None:

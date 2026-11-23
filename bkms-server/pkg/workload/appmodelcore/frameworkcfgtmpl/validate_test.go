@@ -47,7 +47,8 @@ var _ = Describe("Template validation", func() {
 			Expect(errors.Is(err, ErrInvalidTemplate)).To(BeTrue())
 		},
 		Entry("blank framework", "blank", "go"),
-		Entry("unsupported language", "trpc", "python"),
+		Entry("unsupported language", "trpc", "nodejs"),
+		Entry("trpc python", "trpc", "python"),
 		Entry("trpc without language", "trpc", ""),
 		Entry("taf without language", "taf", ""),
 		Entry("unknown framework", "unknown", "go"),

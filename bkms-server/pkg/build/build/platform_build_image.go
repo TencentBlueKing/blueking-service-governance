@@ -24,6 +24,8 @@ import (
 	"github.com/pkg/errors"
 
 	imagebuild "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime/capability/platformbuild"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime/runtimemod"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/customruntime"
 	workloadruntime "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/runtime"
 )
@@ -61,10 +63,14 @@ var (
 // builder / runner 各自独立判定：落在工作空间生效镜像源路径下走自定义存在性确认，
 // 否则维持官方 runtime_images + 快照口径。
 // customChecker 或 workspaceID 为空时全部按官方口径校验，便于无工作空间上下文时直接调用
+//
+// platformBuild 是应用技术栈解析出的平台构建能力：声明不需要构建镜像（如 python 单阶段模板）
+// 且 builderImage 留空时跳过 builder 校验；填了仍按同样口径校验，避免保存不存在的镜像
 func ValidatePlatformBuildImages(
 	ctx context.Context,
 	validator ImageReferenceValidator,
 	customChecker CustomImageChecker,
+	platformBuild runtimemod.Mod[platformbuild.Props],
 	cfg *imagebuild.Config,
 	workspaceID string,
 ) error {
@@ -82,19 +88,23 @@ func ValidatePlatformBuildImages(
 		return errors.New("platform build image validator is required")
 	}
 
-	// 校验 builder 镜像
-	if err := validatePlatformBuildImage(
-		ctx,
-		validator,
-		customChecker,
-		workspaceID,
-		platformBuilderImageField,
-		workloadruntime.ImageTypeBuilder,
-		platformCfg.BuilderImage,
-	); err != nil {
-		return errors.Wrap(err, "validate platform build builder image")
+	// 校验 builder 镜像；单阶段模板不需要构建镜像，留空时跳过
+	skipBuilder := !platformbuild.RequiresBuilderImage(platformBuild) && platformCfg.BuilderImage == ""
+	if !skipBuilder {
+		if err := validatePlatformBuildImage(
+			ctx,
+			validator,
+			customChecker,
+			workspaceID,
+			platformBuilderImageField,
+			workloadruntime.ImageTypeBuilder,
+			platformCfg.BuilderImage,
+		); err != nil {
+			return errors.Wrap(err, "validate platform build builder image")
+		}
 	}
-	// 校验 runner 镜像
+
+	// 校验 runner 镜像，任何语言都必填
 	if err := validatePlatformBuildImage(
 		ctx,
 		validator,

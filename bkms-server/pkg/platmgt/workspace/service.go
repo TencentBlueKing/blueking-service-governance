@@ -81,6 +81,7 @@ func (s *Service) List(ctx context.Context, opts WorkspaceListOptions) (*Workspa
 	for _, ws := range workspaces {
 		items = append(items, WorkspaceWithStats{
 			ID:          ws.ID,
+			TenantID:    ws.TenantID,
 			DisplayName: ws.DisplayName,
 			Description: ws.Description,
 			State:       string(ws.State),
@@ -110,6 +111,7 @@ func (s *Service) Get(ctx context.Context, workspaceID string) (*WorkspaceInfo, 
 
 	return &WorkspaceInfo{
 		ID:          ws.ID,
+		TenantID:    ws.TenantID,
 		DisplayName: ws.DisplayName,
 		Description: ws.Description,
 		State:       string(ws.State),

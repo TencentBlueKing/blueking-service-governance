@@ -30,6 +30,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/stretchr/testify/mock"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth/backends"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/usertoken"
 )
@@ -53,7 +54,7 @@ var _ = Describe("User authentication middleware", func() {
 				context.Background(),
 				request,
 				authBackend,
-				BackendBkTicket,
+				config.AuthBackendBkTicket,
 				usertoken.NewMockTokenClient(GinkgoT()),
 				false,
 			)
@@ -75,7 +76,7 @@ var _ = Describe("User authentication middleware", func() {
 				context.Background(),
 				request,
 				authBackend,
-				BackendBkTicket,
+				config.AuthBackendBkTicket,
 				usertoken.NewMockTokenClient(GinkgoT()),
 				false,
 			)
@@ -96,7 +97,7 @@ var _ = Describe("User authentication middleware", func() {
 				context.Background(),
 				request,
 				authBackend,
-				BackendBkTicket,
+				config.AuthBackendBkTicket,
 				usertoken.NewMockTokenClient(GinkgoT()),
 				false,
 			)
@@ -131,7 +132,9 @@ var _ = Describe("User authentication middleware", func() {
 			Expect(token).To(Equal("access-token"))
 		}).Return("blueking", nil)
 
-		result := authenticate(context.Background(), request, authBackend, BackendBkTicket, tokenClient, false)
+		result := authenticate(
+			context.Background(), request, authBackend, config.AuthBackendBkTicket, tokenClient, false,
+		)
 		user, ok := result.RequestUser.(User)
 		Expect(ok).To(BeTrue())
 
@@ -143,10 +146,10 @@ var _ = Describe("User authentication middleware", func() {
 		authBackend.EXPECT().GetUserCredential(mock.Anything).Return("").Twice()
 
 		optionalRecorder := serveWithMiddleware(
-			middleware(authBackend, BackendBkTicket, usertoken.NewMockTokenClient(GinkgoT()), false, false),
+			middleware(authBackend, config.AuthBackendBkTicket, usertoken.NewMockTokenClient(GinkgoT()), false, false),
 		)
 		requiredRecorder := serveWithMiddleware(
-			middleware(authBackend, BackendBkTicket, usertoken.NewMockTokenClient(GinkgoT()), false, true),
+			middleware(authBackend, config.AuthBackendBkTicket, usertoken.NewMockTokenClient(GinkgoT()), false, true),
 		)
 
 		Expect(optionalRecorder.Code).To(Equal(http.StatusNoContent))
@@ -164,7 +167,7 @@ var _ = Describe("User authentication middleware", func() {
 				context.Background(),
 				request,
 				authBackend,
-				BackendBkTicket,
+				config.AuthBackendBkTicket,
 				usertoken.NewMockTokenClient(GinkgoT()),
 				true,
 			)
@@ -182,7 +185,7 @@ var _ = Describe("User authentication middleware", func() {
 				context.Background(),
 				request,
 				authBackend,
-				BackendBkTicket,
+				config.AuthBackendBkTicket,
 				usertoken.NewMockTokenClient(GinkgoT()),
 				true,
 			)
@@ -201,7 +204,7 @@ var _ = Describe("User authentication middleware", func() {
 				context.Background(),
 				request,
 				authBackend,
-				BackendBkTicket,
+				config.AuthBackendBkTicket,
 				usertoken.NewMockTokenClient(GinkgoT()),
 				false,
 			)
@@ -217,7 +220,7 @@ var _ = Describe("User authentication middleware", func() {
 				context.Background(),
 				request,
 				authBackend,
-				BackendBkTicket,
+				config.AuthBackendBkTicket,
 				usertoken.NewMockTokenClient(GinkgoT()),
 				true,
 			)
@@ -242,41 +245,41 @@ var _ = Describe("User authentication middleware", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(backendType).To(Equal(expectedType))
 		},
-		Entry("bk_ticket", Config{BackendType: BackendBkTicket}, BackendBkTicket),
-		Entry("bk_token", Config{BackendType: BackendBkToken}, BackendBkToken),
-		Entry("defaults to bk_token", Config{}, BackendBkToken),
+		Entry("bk_ticket", Config{BackendType: config.AuthBackendBkTicket}, config.AuthBackendBkTicket),
+		Entry("bk_token", Config{BackendType: config.AuthBackendBkToken}, config.AuthBackendBkToken),
+		Entry("defaults to bk_token", Config{}, config.AuthBackendBkToken),
 		Entry(
 			"keeps bk_ticket when bk-login is enabled",
 			Config{
-				BackendType:               BackendBkTicket,
+				BackendType:               config.AuthBackendBkTicket,
 				EnableBkLoginUserinfoAuth: true,
 				BkApiUrlTmpl:              "https://{api_name}.example.com",
 			},
-			BackendBkTicket,
+			config.AuthBackendBkTicket,
 		),
 		Entry(
 			"uses bk-login apigw when backend is bk_token",
 			Config{
-				BackendType:               BackendBkToken,
+				BackendType:               config.AuthBackendBkToken,
 				EnableBkLoginUserinfoAuth: true,
 				BkApiUrlTmpl:              "https://{api_name}.example.com",
 				BkAppCode:                 "bkms",
 				BkAppSecret:               "secret",
 			},
-			BackendBkToken,
+			config.AuthBackendBkToken,
 		),
 	)
 
 	It("constructs the bk-login apigw backend when bk-login is enabled", func() {
 		backend, backendType, err := getBackend(Config{
-			BackendType:               BackendBkToken,
+			BackendType:               config.AuthBackendBkToken,
 			EnableBkLoginUserinfoAuth: true,
 			BkApiUrlTmpl:              "https://{api_name}.example.com",
 			BkAppCode:                 "bkms",
 			BkAppSecret:               "secret",
 		})
 		Expect(err).NotTo(HaveOccurred())
-		Expect(backendType).To(Equal(BackendBkToken))
+		Expect(backendType).To(Equal(config.AuthBackendBkToken))
 		_, ok := backend.(*backends.BkTokenApigwAuthBackend)
 		Expect(ok).To(BeTrue())
 	})

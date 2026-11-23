@@ -26,7 +26,6 @@ import (
 
 	"github.com/samber/lo"
 
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/clusteraddon/installtask"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris/accesspoint"
 )
 
@@ -42,12 +41,6 @@ type AccessPointURIInput struct {
 	WorkspaceID string `uri:"workspaceID" binding:"required,uri_slug"`
 	// 空间自建接入点 ID
 	AccessPointID string `uri:"accessPointID" binding:"required"`
-}
-
-// EnvURIInput 环境路径参数
-type EnvURIInput struct {
-	// 环境 ID
-	EnvID string `uri:"envID" binding:"required,mongodb"`
 }
 
 // AccessPointCreateInput 创建接入点的请求
@@ -90,12 +83,10 @@ type ConnectivityTestInput struct {
 	Token *string `json:"token"`
 }
 
-// OperatorInstallInput 在接入点绑定的集群上安装或更新 bcs-polaris-operator 的请求
-type OperatorInstallInput struct {
-	// 目标集群 ID，必须已绑定该接入点
-	ClusterIDs []string `json:"clusterIDs" binding:"required,min=1,dive,required"`
-	// chart 版本
-	ChartVersion string `json:"chartVersion" binding:"required"`
+// OperatorValuesQueryInput 组件期望 values 的查询参数
+type OperatorValuesQueryInput struct {
+	// 接入点 ID
+	AccessPointID string `form:"accessPointID"`
 }
 
 // ConnectivityResultOutput 最近一次连通测试结果
@@ -183,12 +174,6 @@ type ConnectivityTestOutput struct {
 	Namespaces []string `json:"namespaces"`
 }
 
-// NetworkInfoOutput 平台访问北极星的网络信息
-type NetworkInfoOutput struct {
-	// 平台访问北极星的出口 IP，需加入北极星白名单
-	EgressIPs []string `json:"egressIPs"`
-}
-
 // PolarisClusterEnvOutput 集群上的环境
 type PolarisClusterEnvOutput struct {
 	// 环境 ID
@@ -217,71 +202,24 @@ type PolarisClusterOutput struct {
 	InUse bool `json:"inUse"`
 }
 
-// OperatorTaskOutput 组件安装任务
-type OperatorTaskOutput struct {
-	// 任务 ID
-	ID string `json:"id"`
-	// 目标集群 ID
-	ClusterID string `json:"clusterID"`
-	// chart 版本
-	ChartVersion string `json:"chartVersion"`
-	// 任务状态
-	Status installtask.Status `json:"status" enums:"running,succeeded,failed"`
-	// 失败原因等补充信息
-	Message string `json:"message"`
-	// 发起人
-	Operator string `json:"operator"`
-	// 开始时间
-	StartedAt time.Time `json:"startedAt"`
-	// 结束时间，运行中为 null
-	FinishedAt *time.Time `json:"finishedAt"`
-}
-
-// NewOperatorTaskOutput 由组件安装任务构造输出，t 为 nil 时返回 nil
-func NewOperatorTaskOutput(t *installtask.InstallTask) *OperatorTaskOutput {
-	if t == nil {
-		return nil
-	}
-	return &OperatorTaskOutput{
-		ID:           t.ID.Hex(),
-		ClusterID:    t.ClusterID,
-		ChartVersion: t.ChartVersion,
-		Status:       t.Status,
-		Message:      t.Message,
-		Operator:     t.Operator,
-		StartedAt:    t.StartedAt,
-		FinishedAt:   lo.EmptyableToPtr(t.FinishedAt),
-	}
-}
-
-// PolarisOperatorOutput 集群上 bcs-polaris-operator 的组件状态
-type PolarisOperatorOutput struct {
+// PolarisOperatorValuesOutput 集群上 bcs-polaris-operator 应使用的北极星 values
+type PolarisOperatorValuesOutput struct {
 	// 集群 ID
 	ClusterID string `json:"clusterID"`
-	// 集群绑定的自建接入点 ID，未绑定为空
+	// 集群绑定的自建接入点 ID
 	AccessPointID string `json:"accessPointID"`
-	// 是否已安装
-	Installed bool `json:"installed"`
-	// helm release 名称，未安装为空
-	ReleaseName string `json:"releaseName"`
-	// helm release 所在命名空间，未安装为空
-	Namespace string `json:"namespace"`
-	// 已安装的 chart 版本，未安装为空
-	ChartVersion string `json:"chartVersion"`
-	// 组件状态
-	Status accesspoint.OperatorStatus `json:"status" enums:"ready,installing,failed,outdated,not_installed"`
-	// 与接入点期望值不一致的 values 键，仅 outdated 时非空
-	DriftFields []string `json:"driftFields"`
-	// 最近一次安装任务，没有任务时为 null
-	LastTask *OperatorTaskOutput `json:"lastTask"`
+	// 集群绑定的自建接入点名称
+	AccessPointName string `json:"accessPointName"`
+	// 由接入点推导出安装北极星组件的期望 values
+	Values map[string]any `json:"values"`
 }
 
-// PolarisOperatorListOutput 组件状态视图
-type PolarisOperatorListOutput struct {
-	// 候选集群的组件状态
-	Operators []PolarisOperatorOutput `json:"operators"`
-	// 可选的 chart 版本，从新到旧
-	ChartVersions []string `json:"chartVersions"`
+// PolarisOperatorValuesListOutput 已绑定接入点的集群上组件的期望 values
+type PolarisOperatorValuesListOutput struct {
+	// 组件对应的集群插件名称，安装与状态查询使用集群插件接口
+	AddonName string `json:"addonName"`
+	// 已绑定接入点的集群
+	Clusters []PolarisOperatorValuesOutput `json:"clusters"`
 }
 
 // AccessPointListResponse 接入点列表的响应
@@ -299,11 +237,6 @@ type ConnectivityTestResponse struct {
 	Data *ConnectivityTestOutput `json:"data"`
 }
 
-// NetworkInfoResponse 网络信息的响应
-type NetworkInfoResponse struct {
-	Data *NetworkInfoOutput `json:"data"`
-}
-
 // NamespacesResponse 命名空间列表的响应
 type NamespacesResponse struct {
 	Data []string `json:"data"`
@@ -314,19 +247,9 @@ type PolarisClusterListResponse struct {
 	Data []*PolarisClusterOutput `json:"data"`
 }
 
-// PolarisOperatorListResponse 组件状态视图的响应
-type PolarisOperatorListResponse struct {
-	Data *PolarisOperatorListOutput `json:"data"`
-}
-
-// OperatorTaskListResponse 组件安装任务列表的响应
-type OperatorTaskListResponse struct {
-	Data []*OperatorTaskOutput `json:"data"`
-}
-
-// PolarisOperatorResponse 单个集群组件状态的响应
-type PolarisOperatorResponse struct {
-	Data *PolarisOperatorOutput `json:"data"`
+// PolarisOperatorValuesListResponse 组件期望 values 的响应
+type PolarisOperatorValuesListResponse struct {
+	Data *PolarisOperatorValuesListOutput `json:"data"`
 }
 
 // EmptyResponse 无数据的响应

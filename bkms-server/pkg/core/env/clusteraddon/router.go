@@ -22,17 +22,25 @@ import "github.com/gin-gonic/gin"
 
 // ClusterAddonHandler contains views required by cluster-addon Gin routes.
 type ClusterAddonHandler interface {
+	ListEnvClusterAddons(c *gin.Context)
+	UpsertEnvClusterAddon(c *gin.Context)
+	DeleteEnvClusterAddon(c *gin.Context)
+
 	ListClusterAddons(c *gin.Context)
 	UpsertClusterAddon(c *gin.Context)
-	DeleteClusterAddon(c *gin.Context)
 }
 
 // Register registers Gin cluster-addon routes.
 func Register(rg *gin.RouterGroup, h ClusterAddonHandler) {
-	// 查询可安装的集群插件列表
-	rg.GET("/envs/:envID/cluster-addons", h.ListClusterAddons)
-	// 部署/更新集群插件
-	rg.POST("/envs/:envID/cluster-addons/:addonName", h.UpsertClusterAddon)
-	// 卸载集群插件
-	rg.DELETE("/envs/:envID/cluster-addons/:addonName", h.DeleteClusterAddon)
+	// 查询环境所在集群的集群插件列表
+	rg.GET("/envs/:envID/cluster-addons", h.ListEnvClusterAddons)
+	// 在环境所在集群上部署/更新集群插件
+	rg.POST("/envs/:envID/cluster-addons/:addonName", h.UpsertEnvClusterAddon)
+	// 卸载环境所在集群上的集群插件
+	rg.DELETE("/envs/:envID/cluster-addons/:addonName", h.DeleteEnvClusterAddon)
+
+	// 查询空间集群的集群插件及安装状态，集群可以没有环境
+	rg.GET("/workspaces/:workspaceID/clusters/:clusterID/cluster-addons", h.ListClusterAddons)
+	// 在空间集群上部署/更新集群插件
+	rg.POST("/workspaces/:workspaceID/clusters/:clusterID/cluster-addons/:addonName", h.UpsertClusterAddon)
 }

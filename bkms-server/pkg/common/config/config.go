@@ -105,10 +105,14 @@ func Load(ctx context.Context, cfgFile string) (*Config, error) {
 
 	// Set default values
 	cfg.Account.AuthEnvName = cmp.Or(cfg.Account.AuthEnvName, "prod")
-	cfg.Account.BackendType = cmp.Or(cfg.Account.BackendType, "bk_token")
+	cfg.Account.BackendType = cmp.Or(cfg.Account.BackendType, AuthBackendBkToken)
 
 	if err := validate.Struct(cfg.Account); err != nil {
 		return nil, errors.Wrap(err, "validate AccountConfig")
+	}
+
+	if !cfg.Account.UseSSMTokenService() && cfg.Account.AuthBaseURL == "" {
+		return nil, errors.New("account.authBaseURL is required unless backendType is bk_token and ssmBaseURL is set")
 	}
 
 	if err := validateBkLoginDependencies(&cfg); err != nil {
@@ -134,7 +138,7 @@ func setDefaultConfigValues(vp *viper.Viper) {
 }
 
 func validateBkLoginDependencies(cfg *Config) error {
-	if !cfg.FeatureIntegrations.EnableBkLoginUserinfoAuth || cfg.Account.BackendType != "bk_token" {
+	if !cfg.FeatureIntegrations.EnableBkLoginUserinfoAuth || cfg.Account.BackendType != AuthBackendBkToken {
 		return nil
 	}
 	if cfg.BkPlatUrls.BkApiUrlTmpl == "" {

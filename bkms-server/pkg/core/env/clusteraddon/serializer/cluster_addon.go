@@ -41,6 +41,24 @@ type EnvAddonURIInput struct {
 	AddonName string `uri:"addonName" binding:"required,min=1"`
 }
 
+// WorkspaceClusterURIInput is the path input for APIs scoped by workspace and cluster.
+type WorkspaceClusterURIInput struct {
+	// 工作空间 ID
+	WorkspaceID string `uri:"workspaceID" binding:"required,uri_slug"`
+	// BCS 集群 ID
+	ClusterID string `uri:"clusterID" binding:"required,min=1"`
+}
+
+// WorkspaceClusterAddonURIInput is the path input for APIs scoped by workspace, cluster and addon name.
+type WorkspaceClusterAddonURIInput struct {
+	// 工作空间 ID
+	WorkspaceID string `uri:"workspaceID" binding:"required,uri_slug"`
+	// BCS 集群 ID
+	ClusterID string `uri:"clusterID" binding:"required,min=1"`
+	// 插件名称
+	AddonName string `uri:"addonName" binding:"required,min=1"`
+}
+
 // -----------------------------------------------------------------------------
 // List cluster addons
 // -----------------------------------------------------------------------------
@@ -97,7 +115,7 @@ type ClusterInstallInfoOutput struct {
 	Message string `json:"message"`
 	// 当前已安装的 Chart 版本
 	CurrentChartVersion string `json:"currentChartVersion"`
-	// 当前已安装的 values 参数（JSON 字符串，未安装时为空）
+	// 当前已安装的 values 参数（YAML 字符串，未安装时为空）
 	CurrentValues string `json:"currentValues"`
 	// 插件安装的命名空间
 	Namespace string `json:"namespace"`

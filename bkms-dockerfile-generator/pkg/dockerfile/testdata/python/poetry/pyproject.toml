@@ -1,0 +1,13 @@
+[tool.poetry]
+name = "bkms-poetry-demo"
+version = "0.1.0"
+description = ""
+authors = ["bkms <bkms@example.com>"]
+package-mode = false
+
+[tool.poetry.dependencies]
+python = ">=3.9"
+six = "1.17.0"
+
+[tool.poetry.group.dev.dependencies]
+iniconfig = "2.0.0"
