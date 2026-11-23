@@ -131,6 +131,8 @@ var _ = Describe("Manager", func() {
 		polarisURL string
 		// deadURL 一个已关闭、不可达的地址
 		deadURL string
+		// dialCheckMocker 放行回环地址，让被测代码能访问本机的 fake
+		dialCheckMocker *mockey.Mocker
 	)
 
 	createParams := func(name string) accesspoint.CreateParams {
@@ -173,6 +175,7 @@ var _ = Describe("Manager", func() {
 		polarisURL, deadURL = srv.URL, dead.URL
 
 		mockey.Mock(accesspoint.OpenAPIBaseURL).To(func(string) string { return polarisURL }).Build()
+		dialCheckMocker = mockey.Mock(accesspoint.CheckDialAddress).Return(nil).Build()
 	})
 
 	AfterEach(func() {
@@ -226,6 +229,56 @@ var _ = Describe("Manager", func() {
 			Expect(report.Message).To(ContainSubstring(deadURL))
 			Expect(report.Message).NotTo(ContainSubstring(validToken))
 			Expect(report.Namespaces).To(BeEmpty())
+		})
+
+		It("should not follow redirects nor send the token to the redirected host", func() {
+			var redirected []string
+			target := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+				redirected = append(redirected, r.Header.Get("X-Polaris-Token"))
+			}))
+			DeferCleanup(target.Close)
+			redirector := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				http.Redirect(w, r, target.URL+r.URL.RequestURI(), http.StatusFound)
+			}))
+			DeferCleanup(redirector.Close)
+			polarisURL = redirector.URL
+
+			report := test(lo.ToPtr(validToken))
+
+			Expect(report.OK).To(BeFalse())
+			Expect(report.Reason).To(Equal(accesspoint.FailureNetworkUnreachable))
+			Expect(report.Message).To(ContainSubstring("status 302"))
+			Expect(redirected).To(BeEmpty())
+		})
+
+		DescribeTable("should not echo the body of a non polaris response",
+			func(body string) {
+				srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+					_, _ = w.Write([]byte(body))
+				}))
+				DeferCleanup(srv.Close)
+				polarisURL = srv.URL
+
+				report := test(nil)
+
+				Expect(report.Reason).To(Equal(accesspoint.FailureNetworkUnreachable))
+				Expect(report.Message).To(ContainSubstring("not a polaris response"))
+				Expect(report.Message).NotTo(ContainSubstring("internal-secret"))
+			},
+			Entry("plain text", "internal-secret"),
+			Entry("json without polaris code", `{"info":"internal-secret"}`),
+		)
+
+		It("should refuse to connect when the host resolves to a loopback address", func() {
+			dialCheckMocker.UnPatch()
+			polarisURL = strings.Replace(polarisURL, "127.0.0.1", "localhost", 1)
+
+			report := test(lo.ToPtr(validToken))
+
+			Expect(report.OK).To(BeFalse())
+			Expect(report.Reason).To(Equal(accesspoint.FailureNetworkUnreachable))
+			Expect(report.Message).To(ContainSubstring("addresses are not allowed"))
+			Expect(fake.receivedTokens()).To(BeEmpty())
 		})
 
 		It("should ignore client auth", func() {
@@ -421,6 +474,10 @@ var _ = Describe("Manager", func() {
 			}),
 			Entry("client host with scheme", func(p *accesspoint.CreateParams) {
 				p.ClientHosts = []string{"http://10.0.0.1"}
+			}),
+			Entry("loopback client host", func(p *accesspoint.CreateParams) { p.ClientHosts = []string{"127.0.0.1"} }),
+			Entry("cloud metadata client host", func(p *accesspoint.CreateParams) {
+				p.ClientHosts = []string{"169.254.169.254"}
 			}),
 			Entry("too many client hosts", func(p *accesspoint.CreateParams) {
 				p.ClientHosts = nil

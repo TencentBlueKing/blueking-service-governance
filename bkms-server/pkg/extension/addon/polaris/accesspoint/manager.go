@@ -358,15 +358,20 @@ func normalizeConsoleURL(raw string) (string, error) {
 	return s, nil
 }
 
-// normalizeClientHosts 客户端地址只能是 IP 或域名（不带端口与协议），去重后数量为 1 ~ MaxClientHosts
+// normalizeClientHosts 客户端地址只能是 IP 或域名（不带端口与协议），去重后数量为 1 ~ MaxClientHosts。
+// IP 不能是回环、链路本地等地址；域名解析后的地址在建立连接时检查，见 CheckDialAddress
 func normalizeClientHosts(raw []string) ([]string, error) {
 	hosts := lo.Uniq(lo.Compact(lo.Map(raw, func(h string, _ int) string { return strings.TrimSpace(h) })))
 	if len(hosts) == 0 || len(hosts) > MaxClientHosts {
 		return nil, errors.Wrapf(ErrAccessPointInvalid, "client hosts must be 1-%d addresses", MaxClientHosts)
 	}
 	for _, host := range hosts {
-		if net.ParseIP(host) == nil && hostValidator.Var(host, "hostname_rfc1123") != nil {
+		ip := net.ParseIP(host)
+		if ip == nil && hostValidator.Var(host, "hostname_rfc1123") != nil {
 			return nil, errors.Wrapf(ErrAccessPointInvalid, "client host %q must be an IP or a domain name", host)
+		}
+		if ip != nil && isForbiddenIP(ip) {
+			return nil, errors.Wrapf(ErrAccessPointInvalid, "client host %q: %s", host, errForbiddenAddress)
 		}
 	}
 	return hosts, nil

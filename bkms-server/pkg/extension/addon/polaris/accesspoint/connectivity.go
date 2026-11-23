@@ -22,8 +22,10 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/pkg/errors"
@@ -48,8 +50,11 @@ const (
 	polarisCodeSuccess = 200000
 
 	// tokenMissingWarning 未填写 Token 且北极星开启了控制台鉴权时的风险提示
-	tokenMissingWarning = "token is empty, services created by the platform can be modified by anyone" //nolint:gosec // G101: 提示文案，不是凭证
+	tokenMissingWarning = "token is empty, services created by the platform can be modified by anyone"
 )
+
+// errForbiddenAddress 北极星地址指向了不允许访问的地址，见 isForbiddenIP
+var errForbiddenAddress = errors.New("loopback, link-local and unspecified addresses are not allowed")
 
 // ConnectivityReport 一次连通测试的完整结果
 type ConnectivityReport struct {
@@ -139,8 +144,45 @@ func newOpenAPIClient(baseURL, token string) *openAPIClient {
 	return &openAPIClient{
 		baseURL: strings.TrimRight(baseURL, "/"),
 		token:   token,
-		httpCli: &http.Client{Transport: httpcli.NewTransport()},
+		httpCli: newUntrustedHTTPClient(),
 	}
+}
+
+// newUntrustedHTTPClient 访问用户填写地址的 HTTP 客户端。
+//
+// 不跟随重定向：重定向可以把请求引到任意主机、端口与路径，Go 还会把 Token 请求头带到重定向后的主机；
+// 北极星 OpenAPI 本身不会重定向，收到 3xx 按非预期响应处理。
+// 建立连接前按解析后的 IP 拒绝回环、链路本地（含云元数据地址）等地址，域名解析到这些地址同样拒绝；
+// 不拒绝内网私有地址，自建北极星通常就部署在内网
+func newUntrustedHTTPClient() *http.Client {
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	// 必须直连：经过代理时，CheckDialAddress 校验的是代理的地址
+	transport.Proxy = nil
+	transport.DialContext = (&net.Dialer{Control: CheckDialAddress}).DialContext
+	return &http.Client{
+		Transport: httpcli.NewTransportWith(transport),
+		CheckRedirect: func(*http.Request, []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+}
+
+// CheckDialAddress 在建立连接前检查解析后的目标 IP，address 形如 ip:port
+func CheckDialAddress(_, address string, _ syscall.RawConn) error {
+	host, _, err := net.SplitHostPort(address)
+	if err != nil {
+		return errors.Wrapf(err, "parse dial address %q", address)
+	}
+	if ip := net.ParseIP(host); ip == nil || isForbiddenIP(ip) {
+		return errForbiddenAddress
+	}
+	return nil
+}
+
+// isForbiddenIP 不允许访问的地址：回环、链路本地（169.254.0.0/16 含云元数据地址、fe80::/10）、未指定地址与组播地址
+func isForbiddenIP(ip net.IP) bool {
+	return ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() ||
+		ip.IsUnspecified() || ip.IsMulticast()
 }
 
 // listNamespaces 分页读取北极星上的全部命名空间，过滤掉系统命名空间
@@ -227,17 +269,21 @@ func (c *openAPIClient) get(ctx context.Context, path string) (int, []byte, erro
 	return resp.StatusCode, body, nil
 }
 
-// polarisResponseInfo 取北极星响应中的返回码与说明；不是北极星的 JSON 响应时截取响应体开头
+// polarisResponseInfo 取北极星响应中的返回码与说明。
+//
+// 地址是用户填写的，可能指向内网的其他服务，不是北极星的响应时不回显响应体，避免通过提示读取内网内容
 func polarisResponseInfo(body []byte) string {
-	if gjson.ValidBytes(body) {
-		if info := gjson.GetBytes(body, "info"); info.Exists() {
-			return fmt.Sprintf("code %d, info %s", gjson.GetBytes(body, "code").Int(), info.String())
-		}
+	if !gjson.ValidBytes(body) {
+		return "not a polaris response"
 	}
-	const maxLen = 200
-	text := []rune(strings.TrimSpace(string(body)))
-	if len(text) > maxLen {
-		return "body " + string(text[:maxLen]) + "..."
+	code := gjson.GetBytes(body, "code")
+	if code.Type != gjson.Number {
+		return "not a polaris response"
 	}
-	return "body " + string(text)
+	const maxInfoLen = 200
+	info := []rune(gjson.GetBytes(body, "info").String())
+	if len(info) > maxInfoLen {
+		info = append(info[:maxInfoLen], []rune("...")...)
+	}
+	return fmt.Sprintf("code %d, info %s", code.Int(), string(info))
 }
