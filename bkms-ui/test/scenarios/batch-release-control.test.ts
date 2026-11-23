@@ -691,8 +691,8 @@ describe('实例列表分批发布控制：横幅与操作', () => {
     expect(within(banner).getByRole('button', { name: '重试' })).toBeEnabled();
     expect(buttonLabelsOf(banner)).toEqual(['查看发布详情', '重试', '回退上一批', '回滚']);
     expect(within(banner).queryByRole('button', { name: '更多' })).toBeNull();
-    // 失败后仍需先收尾，顶部部署入口保持禁用
-    expect(screen.getByRole('button', { name: '部署' })).toBeDisabled();
+    // 失败态那次灰度已中止（inProgressReleaseMode 不再回填 canary），不占用环境、不阻塞新的部署入口
+    expect(screen.getByRole('button', { name: '部署' })).toBeEnabled();
 
     await userEvent.click(within(banner).getByRole('button', { name: '重试' }));
     await waitFor(() => expectOperateCalledWith('continue'));

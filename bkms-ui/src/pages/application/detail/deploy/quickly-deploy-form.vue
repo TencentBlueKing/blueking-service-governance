@@ -204,7 +204,9 @@
     undefinedVars,
   } = useDeployPrecheck();
 
-  const { workspaceId, repoAlias, prepareBranchAfterMount } = useAppRepoRefSelect(
+  // branchSelectRef 必须解构出来：模板里的 ref="branchSelectRef" 只在存在同名顶层绑定时才会写回，
+  // 否则 prepare / reset / dismissIfOutside 全部因 ?. 静默失效（默认分支预选、下拉清理都不生效）。
+  const { workspaceId, repoAlias, branchSelectRef, prepareBranchAfterMount } = useAppRepoRefSelect(
     () => appDetailStore.appDetail?.buildConfig?.repoBuildConfig?.repoAlias || '',
   );
 

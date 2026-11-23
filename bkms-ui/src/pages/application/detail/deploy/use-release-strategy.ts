@@ -286,7 +286,9 @@ export function useReleaseStrategy(options: UseReleaseStrategyOptions) {
   }
 
   // 资格异步返回导致已选分批模式失效时，重置为一次更新全部并提示，避免带着后端必拒的参数提交。
-  watch(canaryDisabledReason, reason => {
+  // 监听「原因」而非翻译后的文案：文案里含有插值（实例数），且与 key 字面量不可能相等，
+  // 下面的 replicasChanged 分支若用文案比较会永远不成立。
+  watch(canaryBlockReason, reason => {
     if (!reason || model.releaseMode !== RELEASE_MODE.CANARY) return;
     resetToAllInstances();
     // 实例数被改成与生效值不同属于用户可自行修正的临时状态，改回即可重选，不必提示「环境不支持」
