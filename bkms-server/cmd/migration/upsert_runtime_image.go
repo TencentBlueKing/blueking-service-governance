@@ -28,6 +28,7 @@ import (
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/taskq"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	workloadruntime "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/runtime"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/image/snapshot"
@@ -75,6 +76,8 @@ func NewUpsertRuntimeImageCmd() *cobra.Command {
 			}
 
 			database.InitClient(ctx, cfg.Mongo)
+			// 详情同步要入队，命令进程不初始化投递端时 client 为空
+			taskq.InitClient(ctx, cfg.Asynq)
 
 			images := store.Of(database.DB(), workloadruntime.Meta)
 			image.Type = workloadruntime.ImageType(imageType)
