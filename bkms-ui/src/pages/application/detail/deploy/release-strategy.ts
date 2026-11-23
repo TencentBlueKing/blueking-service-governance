@@ -35,7 +35,8 @@ export type CanaryBlockReason =
   | 'federationEnv'
   | 'firstDeploy'
   | 'inplaceRestart'
-  | 'notAppModelApp';
+  | 'notAppModelApp'
+  | 'replicasChanged';
 
 export interface CanaryEligibilityInput {
   /** 是否为应用模型应用（tRPC / TAF） */
@@ -49,6 +50,8 @@ export interface CanaryEligibilityInput {
   isInplaceRestart: boolean;
   /** 主工作负载类型；空串表示未知（不因此禁用，由后端兜底校验） */
   mainWorkloadKind: string;
+  /** 实例数是否已被改成与当前生效值不同（分批更新沿用现有实例数，不能同时扩缩容） */
+  replicasChanged: boolean;
   /** 分批发布资格检查（主工作负载 / 首次部署）是否进行中 */
   workloadKindLoading: boolean;
 }
@@ -123,5 +126,7 @@ export function resolveCanaryBlockReason(input: CanaryEligibilityInput): CanaryB
   if (input.mainWorkloadKind === 'Deployment') return 'deploymentWorkload';
   if (input.isInplaceRestart) return 'inplaceRestart';
   if (input.isBuildFromSource) return 'buildFromSource';
+  // 分批更新不能与修改实例数同时进行；改回当前生效实例数后即可再次选择分批，因此排在最后
+  if (input.replicasChanged) return 'replicasChanged';
   return '';
 }

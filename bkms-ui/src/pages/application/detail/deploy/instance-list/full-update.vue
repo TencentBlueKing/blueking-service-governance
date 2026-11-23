@@ -99,6 +99,7 @@
         >
           <Input
             v-model.number="formModel.replicas"
+            :disabled="replicasLocked"
             :min="1"
             :precision="0"
             type="number"
@@ -108,6 +109,13 @@
             class="mt-[4px] text-[12px] leading-[20px] text-[#979BA5]"
           >
             {{ $t('实例删除后副本数已变为 0，请填写期望实例数后重新部署') }}
+          </div>
+          <!-- 分批更新与修改实例数互斥：已选择分批时锁定实例数，并说明如何调整 -->
+          <div
+            v-if="replicasLockedHint"
+            class="mt-[4px] text-[12px] leading-[20px] text-[#979BA5]"
+          >
+            {{ replicasLockedHint }}
           </div>
         </Form.FormItem>
 
@@ -335,12 +343,15 @@
     releasePreview,
     // 查看抽屉里克隆为空间策略成功后刷新列表，成功提示由查看抽屉展示
     refresh: refreshReleaseStrategies,
+    replicasLocked,
+    replicasLockedHint,
     resetToAllInstances,
     selectedStrategy,
     strategyHintText,
     strategyLoading,
     strategyOptions,
   } = useReleaseStrategy({
+    currentReplicas: () => props.effectiveReplicas,
     envName: () => trpcDeployStore.curEnvItem?.name ?? '',
     isAppModelApp: () => isAppModelAppType(appDetailStore.appType),
     isFederationEnv,

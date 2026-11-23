@@ -49,7 +49,12 @@ const CANARY_BLOCK_MESSAGES: Record<Exclude<CanaryBlockReason, ''>, string> = {
   deploymentWorkload: '仅主工作负载为 GameDeployment 的应用支持分批发布',
   inplaceRestart: '原地重启暂不支持分批发布',
   buildFromSource: '构建部署暂不支持分批发布',
+  // 带上具体实例数，用户能直接照抄改回
+  replicasChanged: '分批更新时不能修改实例数，请将实例数先改回 {0}',
 };
+
+/** 分批更新期间实例数被锁定后的输入框说明 */
+const REPLICAS_LOCKED_HINT = '分批更新时不能修改实例数。如需调整，请选择「一次更新全部实例」，或发布完成后再扩缩容。';
 
 export interface ReleaseStrategyModel {
   releaseMode: ReleaseMode;
@@ -59,6 +64,8 @@ export interface ReleaseStrategyModel {
 }
 
 export interface UseReleaseStrategyOptions {
+  /** 当前生效实例数：分批更新期间实例数锁定为它，改过实例数则不允许选择分批 */
+  currentReplicas?: MaybeRefOrGetter<number | undefined>;
   /** 目标环境名；为空时跳过主工作负载资格检查 */
   envName: MaybeRefOrGetter<string>;
   /** 是否为应用模型应用（tRPC / TAF） */
@@ -102,6 +109,23 @@ export function useReleaseStrategy(options: UseReleaseStrategyOptions) {
   const releaseStrategies = ref<ReleaseStrategyOutputObj[]>([]);
   const strategyLoading = ref(false);
 
+  /** 当前生效实例数；未知（环境未部署 / 未取到期望副本数）时不参与判定 */
+  const currentReplicas = computed(() => toValue(options.currentReplicas ?? undefined));
+
+  /**
+   * 实例数是否已被改成与当前生效值不同。
+   * 分批更新按现有实例数灰度，与扩缩容互斥：改过实例数时不允许选择分批，改回后恢复可选。
+   */
+  const replicasChanged = computed(() => {
+    const current = currentReplicas.value;
+    if (!isValidReplicas(current)) return false;
+    return Number(model.replicas) !== Number(current);
+  });
+
+  /** 分批更新期间实例数锁定为当前生效值，本次发布内不允许扩缩容 */
+  const replicasLocked = computed(() => model.releaseMode === RELEASE_MODE.CANARY);
+  const replicasLockedHint = computed(() => (replicasLocked.value ? t(REPLICAS_LOCKED_HINT) : ''));
+
   const canaryBlockReason = computed(() =>
     resolveCanaryBlockReason({
       isAppModelApp: Boolean(toValue(options.isAppModelApp)),
@@ -110,6 +134,7 @@ export function useReleaseStrategy(options: UseReleaseStrategyOptions) {
       isBuildFromSource: Boolean(toValue(options.isBuildFromSource)),
       isFirstDeploy: isFirstDeploy.value,
       mainWorkloadKind: mainWorkloadKind.value,
+      replicasChanged: replicasChanged.value,
       // 两个资格检查任一未完成都视为「检查中」，避免先选分批再被回退
       workloadKindLoading: workloadKindLoading.value || deployStatusLoading.value,
     }),
@@ -118,7 +143,12 @@ export function useReleaseStrategy(options: UseReleaseStrategyOptions) {
   /** 分批发布不可用的原因；为空表示可用 */
   const canaryDisabledReason = computed(() => {
     const reason = canaryBlockReason.value;
-    return reason ? t(CANARY_BLOCK_MESSAGES[reason]) : '';
+    if (!reason) return '';
+    // 改实例数的提示要带出当前生效实例数，用户才能按提示改回
+    if (reason === 'replicasChanged') {
+      return t(CANARY_BLOCK_MESSAGES.replicasChanged, [String(currentReplicas.value ?? '')]);
+    }
+    return t(CANARY_BLOCK_MESSAGES[reason]);
   });
 
   const strategyOptions = computed<ReleaseStrategyOption[]>(() =>
@@ -259,7 +289,15 @@ export function useReleaseStrategy(options: UseReleaseStrategyOptions) {
   watch(canaryDisabledReason, reason => {
     if (!reason || model.releaseMode !== RELEASE_MODE.CANARY) return;
     resetToAllInstances();
+    // 实例数被改成与生效值不同属于用户可自行修正的临时状态，改回即可重选，不必提示「环境不支持」
+    if (reason === 'replicasChanged') return;
     Message({ theme: 'warning', message: t('当前环境不支持分批发布，已重置为一次更新全部实例') });
+  });
+
+  // 分批更新期间实例数固定为当前生效值：表单重置 / 环境切换留下的旧值不允许被一起提交。
+  watch([replicasLocked, currentReplicas], ([locked, current]) => {
+    if (!locked || !isValidReplicas(current)) return;
+    model.replicas = Number(current);
   });
 
   /** 两项准入资格检查：主工作负载类型 + 是否首次部署 */
@@ -284,10 +322,17 @@ export function useReleaseStrategy(options: UseReleaseStrategyOptions) {
     handleStrategyCreated,
     releasePreview,
     refresh,
+    replicasLocked,
+    replicasLockedHint,
     resetToAllInstances,
     selectedStrategy,
     strategyHintText,
     strategyLoading,
     strategyOptions,
   };
+}
+
+/** 实例数是否为有效正整数（与表单校验保持一致） */
+function isValidReplicas(value?: number) {
+  return Number.isInteger(Number(value)) && Number(value) >= 1;
 }

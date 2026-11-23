@@ -33,6 +33,7 @@ function eligible(overrides: Partial<CanaryEligibilityInput> = {}): CanaryEligib
     isFirstDeploy: false,
     isInplaceRestart: false,
     mainWorkloadKind: 'GameDeployment',
+    replicasChanged: false,
     workloadKindLoading: false,
     ...overrides,
   };
@@ -55,6 +56,7 @@ describe('分批发布准入规则', () => {
     ['主工作负载为 Deployment', { mainWorkloadKind: 'Deployment' }, 'deploymentWorkload'],
     ['原地重启（仅镜像）', { isInplaceRestart: true }, 'inplaceRestart'],
     ['从源码构建部署', { isBuildFromSource: true }, 'buildFromSource'],
+    ['实例数与当前生效值不同', { replicasChanged: true }, 'replicasChanged'],
   ])('%s 时被拦截', (_name, overrides, reason) => {
     expect(resolveCanaryBlockReason(eligible(overrides as Partial<CanaryEligibilityInput>))).toBe(reason);
   });
@@ -81,6 +83,10 @@ describe('分批发布准入规则', () => {
     // 原地重启先于构建部署（两者互斥，但优先级需稳定）
     expect(resolveCanaryBlockReason(eligible({ isInplaceRestart: true, isBuildFromSource: true }))).toBe(
       'inplaceRestart',
+    );
+    // 改实例数是用户可自行修正的临时状态，其他硬性不满足项优先展示
+    expect(resolveCanaryBlockReason(eligible({ replicasChanged: true, isBuildFromSource: true }))).toBe(
+      'buildFromSource',
     );
   });
 });

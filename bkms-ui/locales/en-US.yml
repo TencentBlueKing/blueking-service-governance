@@ -1481,6 +1481,8 @@ CLB 区域: CLB Region
 原地重启暂不支持分批发布: In-place restart does not support batch release yet
 正在检查分批发布资格，请稍候: Checking batch release eligibility, please wait
 当前环境不支持分批发布，已重置为一次更新全部实例: 'Batch release is not supported in the current environment, reset to updating all instances at once'
+'分批更新时不能修改实例数，请将实例数先改回 {0}': 'The instance count cannot be changed during batch release. Please restore it to {0} first.'
+'分批更新时不能修改实例数。如需调整，请选择「一次更新全部实例」，或发布完成后再扩缩容。': 'The instance count cannot be changed during batch release. To adjust it, choose "Update All Instances at Once" or scale after the release is finished.'
 发布预览: Release Preview
 灰度发布中: Grayscale releasing
 '灰度发布中 · 第 {0}/{1} 批': 'Grayscale releasing · batch {0}/{1}'
