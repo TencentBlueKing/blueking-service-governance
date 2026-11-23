@@ -1,0 +1,19 @@
+[
+  {
+    "createIndexes": "bkci_build_node_bindings",
+    "indexes": [
+      {
+        "key": {
+          "workspaceID": 1
+        },
+        "name": "workspaceID_1"
+      },
+      {
+        "key": {
+          "tenantID": 1
+        },
+        "name": "tenantID_1"
+      }
+    ]
+  }
+]

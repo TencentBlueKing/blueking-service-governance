@@ -35,6 +35,8 @@ var (
 	ErrPipelineNotFound = errors.New("pipeline not found")
 	// ErrRepositoryNotFound 代码仓库未找到
 	ErrRepositoryNotFound = errors.New("repository not found")
+	// ErrBuildNodeBindingNotFound 工作空间未关联构建机
+	ErrBuildNodeBindingNotFound = errors.New("build node binding not found")
 )
 
 type (
@@ -46,6 +48,8 @@ type (
 	PipelineStore = store.GenericStore[Pipeline]
 	// RepositoryStore 代码仓库存储
 	RepositoryStore = store.GenericStore[Repository]
+	// BuildNodeBindingStore 工作空间构建机绑定存储
+	BuildNodeBindingStore = store.GenericStore[BuildNodeBinding]
 )
 
 // ProjectMeta 蓝盾项目的存储元数据。
@@ -92,7 +96,18 @@ var RepositoryMeta = store.Meta[Repository]{
 	NotFound:     ErrRepositoryNotFound,
 }
 
-// ByWorkspace 按工作空间 ID 匹配，适用于 Project、Pipeline 与 Repository
+// BuildNodeBindingMeta 工作空间构建机绑定的存储元数据。
+//
+// 索引（由 golang-migrate 维护）：
+// - workspaceID（不做唯一约束：后续可能支持多台构建机，「一个工作空间一台」由 BuildNodeManager 保证）
+// - tenantID
+var BuildNodeBindingMeta = store.Meta[BuildNodeBinding]{
+	Collection:   "bkci_build_node_bindings",
+	TenantScoped: true,
+	NotFound:     ErrBuildNodeBindingNotFound,
+}
+
+// ByWorkspace 按工作空间 ID 匹配，适用于 Project、Pipeline、Repository 与 BuildNodeBinding
 func ByWorkspace(workspaceID string) store.Opt {
 	return store.Where("workspaceID", workspaceID)
 }
@@ -115,6 +130,11 @@ func ByWorkspaceAndType(workspaceID, pipelineType string) store.Opt {
 // ByWorkspaceAndAlias 按工作空间 ID 与仓库别名匹配 Repository
 func ByWorkspaceAndAlias(workspaceID, alias string) store.Opt {
 	return store.Combine(ByWorkspace(workspaceID), store.Where("alias", alias))
+}
+
+// ByWorkspaceAndNode 按工作空间 ID 与节点 HashId 匹配一条构建机关联
+func ByWorkspaceAndNode(workspaceID, nodeHashID string) store.Opt {
+	return store.Combine(ByWorkspace(workspaceID), store.Where("nodeHashID", nodeHashID))
 }
 
 // UpdateBuiltinTemplateVersion 更新内置流水线已应用的模板版本、名称与描述。

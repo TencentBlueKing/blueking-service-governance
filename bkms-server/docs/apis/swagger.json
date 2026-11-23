@@ -18147,6 +18147,49 @@
                 }
             }
         },
+        "/workspaces/{workspaceID}/bkci-build-nodes": {
+            "get": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "bkintegrations-bkci"
+                ],
+                "summary": "获取工作空间蓝盾项目下可关联的第三方构建机",
+                "operationId": "ListBkCIBuildNodes",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.ListBuildNodeCandidatesOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
         "/workspaces/{workspaceID}/bkci-git-projects": {
             "get": {
                 "security": [
@@ -18990,6 +19033,137 @@
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/serializer.CreateAppOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
+        "/workspaces/{workspaceID}/build-node-binding": {
+            "get": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "bkintegrations-bkci"
+                ],
+                "summary": "查询工作空间关联的构建机",
+                "operationId": "GetBuildNodeBinding",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.GetBuildNodeBindingOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "tags": [
+                    "bkintegrations-bkci"
+                ],
+                "summary": "关联或更换工作空间的构建机",
+                "operationId": "BindBuildNode",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "要关联的构建机",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/serializer.BindBuildNodeInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "bkintegrations-bkci"
+                ],
+                "summary": "解除工作空间的构建机关联",
+                "operationId": "UnbindBuildNode",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_bkintegrations_serializer.EmptyOutput"
                         }
                     },
                     "400": {
@@ -25759,6 +25933,18 @@
                 }
             }
         },
+        "serializer.BindBuildNodeInput": {
+            "type": "object",
+            "required": [
+                "nodeHashID"
+            ],
+            "properties": {
+                "nodeHashID": {
+                    "type": "string",
+                    "maxLength": 64
+                }
+            }
+        },
         "serializer.BindingOutput": {
             "type": "object",
             "properties": {
@@ -26165,6 +26351,93 @@
                         "imageRegistry",
                         "codeRepository",
                         "pipeline"
+                    ]
+                }
+            }
+        },
+        "serializer.BuildNodeBindingOutput": {
+            "type": "object",
+            "properties": {
+                "displayName": {
+                    "type": "string"
+                },
+                "ip": {
+                    "type": "string"
+                },
+                "nodeHashID": {
+                    "description": "蓝盾节点 HashId，用于更换时回显当前选项，页面不展示",
+                    "type": "string"
+                },
+                "osName": {
+                    "type": "string"
+                },
+                "state": {
+                    "description": "实时状态：online 在线；offline 离线；notFound 已从蓝盾删除；unknown 查询失败",
+                    "type": "string",
+                    "enum": [
+                        "online",
+                        "offline",
+                        "notFound",
+                        "unknown"
+                    ]
+                },
+                "updatedAt": {
+                    "type": "string"
+                },
+                "updater": {
+                    "type": "string"
+                }
+            }
+        },
+        "serializer.BuildNodeBindingStateOutput": {
+            "type": "object",
+            "properties": {
+                "binding": {
+                    "description": "当前关联的构建机，未关联时为 null，表示使用公共构建机",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/serializer.BuildNodeBindingOutput"
+                        }
+                    ]
+                },
+                "editable": {
+                    "description": "当前用户能否关联、更换或解除构建机",
+                    "type": "boolean"
+                },
+                "projectCode": {
+                    "description": "工作空间的蓝盾项目 Code，为空表示尚未初始化蓝盾项目",
+                    "type": "string"
+                }
+            }
+        },
+        "serializer.BuildNodeCandidateOutput": {
+            "type": "object",
+            "properties": {
+                "displayName": {
+                    "type": "string"
+                },
+                "ip": {
+                    "type": "string"
+                },
+                "nodeHashID": {
+                    "description": "蓝盾节点 HashId，只作为选项的值，页面不展示",
+                    "type": "string"
+                },
+                "online": {
+                    "type": "boolean"
+                },
+                "osName": {
+                    "type": "string"
+                },
+                "selectable": {
+                    "type": "boolean"
+                },
+                "unselectableReason": {
+                    "description": "不可关联的原因：offline 离线；osUnsupported 非 Linux",
+                    "type": "string",
+                    "enum": [
+                        "offline",
+                        "osUnsupported"
                     ]
                 }
             }
@@ -29949,6 +30222,14 @@
                 }
             }
         },
+        "serializer.GetBuildNodeBindingOutput": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/serializer.BuildNodeBindingStateOutput"
+                }
+            }
+        },
         "serializer.GetEnvApmOutput": {
             "type": "object",
             "properties": {
@@ -31621,6 +31902,17 @@
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/serializer.ZoneOutput"
+                    }
+                }
+            }
+        },
+        "serializer.ListBuildNodeCandidatesOutput": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/serializer.BuildNodeCandidateOutput"
                     }
                 }
             }

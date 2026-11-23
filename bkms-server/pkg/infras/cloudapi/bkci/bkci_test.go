@@ -360,4 +360,30 @@ var _ = Describe("ApiClient", func() {
 		Expect(proj.ID).To(Equal("pid"))
 		Expect(proj.Code).To(Equal("system.demo"))
 	})
+
+	It("parses agent node status with agentHashId distinct from nodeHashId", func() {
+		// 状态接口的 nodeStatus 是中文文案，在线只看 agentStatus
+		client := newClientWithServer(func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = w.Write([]byte(`{"status":0,"data":{"nodeHashId":"node-a","agentHashId":"agent-a",` +
+				`"displayName":"","name":"host-a","ip":"127.0.0.1","osName":"linux","nodeStatus":"正常",` +
+				`"agentStatus":true,"canUse":false}}`))
+		})
+
+		st, err := client.GetThirdPartyAgentNodeStatus(context.Background(), "demo", "node-a")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(st.NodeHashID).To(Equal("node-a"))
+		Expect(st.AgentHashID).To(Equal("agent-a"))
+		Expect(st.Hostname).To(Equal("host-a"))
+		Expect(st.AgentOnline).To(BeTrue())
+		Expect(st.CanUse).To(BeFalse())
+	})
+
+	It("treats empty agent node status data as not found", func() {
+		client := newClientWithServer(func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = w.Write([]byte(`{"status":0,"data":null}`))
+		})
+
+		_, err := client.GetThirdPartyAgentNodeStatus(context.Background(), "demo", "missing")
+		Expect(err).To(MatchError(ObjectNotFound))
+	})
 })

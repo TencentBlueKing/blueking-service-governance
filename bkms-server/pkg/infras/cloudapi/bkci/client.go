@@ -58,6 +58,13 @@ type Client interface {
 	// DeleteCredential 删除蓝盾凭证；凭证不存在时返回 ObjectNotFound
 	DeleteCredential(ctx context.Context, projectCode, credentialID string) error
 
+	// ------------------------------------------ 蓝盾第三方构建机 API ------------------------------------------
+
+	// ListThirdPartyAgentNodes 获取项目下的第三方构建机节点列表
+	ListThirdPartyAgentNodes(ctx context.Context, projectCode string) ([]AgentNode, error)
+	// GetThirdPartyAgentNodeStatus 获取第三方构建机节点状态；节点不存在时返回 ObjectNotFound
+	GetThirdPartyAgentNodeStatus(ctx context.Context, projectCode, nodeHashID string) (*AgentNodeStatus, error)
+
 	// ------------------------------------------ 蓝盾流水线 API ------------------------------------------
 
 	// ListPipelines 获取流水线列表

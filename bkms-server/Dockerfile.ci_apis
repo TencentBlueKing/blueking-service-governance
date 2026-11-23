@@ -1,6 +1,6 @@
 # 本 Dockerfile 用于构建在 CI 环境中执行 API 测试的项目镜像。说明：
 #
-# - 必须在 bkms-govern 根目录下执行 docker build 命令（因为依赖 libs/bkms-adapter）；
+# - 必须在 blueking-service-governance 根目录下执行 docker build 命令（因为依赖 libs/bkms-adapter）；
 #
 # 示例:
 #    docker build -f bkms-server/Dockerfile.ci_apis \
