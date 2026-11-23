@@ -76,3 +76,48 @@ var _ = Describe("RequireBSCP", func() {
 		Expect(out.Error.Details[0]["code"]).To(Equal(string(bkerrs.ErrDetailCodeBSCPDisabled)))
 	})
 })
+
+var _ = Describe("RequireKubeInsight", func() {
+	var (
+		originalCfg *config.Config
+		router      *gin.Engine
+	)
+
+	BeforeEach(func() {
+		gin.SetMode(gin.TestMode)
+		originalCfg = config.G
+		config.G = &config.Config{}
+
+		router = gin.New()
+		router.Use(bkerrs.ErrorHandler())
+		router.GET("/kube-insight", ginutils.RequireKubeInsight(), func(c *gin.Context) {
+			ginutils.OK(c, map[string]string{"status": "ok"})
+		})
+	})
+
+	AfterEach(func() {
+		config.G = originalCfg
+	})
+
+	It("should pass through when kube-insight is not disabled", func() {
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/kube-insight", nil))
+
+		Expect(rec.Code).To(Equal(http.StatusOK))
+		Expect(rec.Body.String()).To(MatchJSON(`{"status": "ok"}`))
+	})
+
+	It("should reject with KUBE_INSIGHT_DISABLED when kube-insight is disabled", func() {
+		config.G.FeatureIntegrations.DisableKubeInsight = true
+
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/kube-insight", nil))
+
+		Expect(rec.Code).To(Equal(http.StatusNotImplemented))
+		var out bkerrs.GinErrorOutput
+		Expect(json.Unmarshal(rec.Body.Bytes(), &out)).To(Succeed())
+		Expect(out.Error.Code).To(Equal(bkerrs.ErrCodeNotImplemented))
+		Expect(out.Error.Details).To(HaveLen(1))
+		Expect(out.Error.Details[0]["code"]).To(Equal(string(bkerrs.ErrDetailCodeKubeInsightDisabled)))
+	})
+})

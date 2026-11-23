@@ -40,6 +40,8 @@ featureIntegrations:
   # 关闭 BSCP 对接，未部署 BSCP 的环境设为 true
   # 关闭期间创建的工作空间没有 BSCP 绑定，重新启用后需逐个执行 bind-bscp-project 命令补绑
   disableBSCP: false
+  # 关闭 KubeInsight（集群诊断）对接
+  disableKubeInsight: false
 # 蓝鲸 API 环境配置
 bkApiStages:
   # BSCP
