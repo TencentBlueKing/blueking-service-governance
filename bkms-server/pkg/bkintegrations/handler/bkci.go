@@ -283,40 +283,10 @@ func (h *Handler) GetBkCIPipelineVariables(c *gin.Context) {
 //	@Failure	400			{object}	bkerrs.GinErrorOutput
 //	@Router		/workspaces/{workspaceID}/bkci-repositories/branches [get]
 func (h *Handler) ListBkCIRepositoryBranches(c *gin.Context) {
-	var uriInput slz.BkCIWorkspaceURIInput
-	var queryInput slz.BkCIRepositoryRefsQueryInput
-	if err := ginutils.BindURIQuery(c, &uriInput, &queryInput); err != nil {
-		bkerrs.AbortWithErr(c, err)
+	refs, ok := h.listBkCIRepositoryRefs(c, "list bkci repository branches", bkci.Client.ListRepositoryBranches)
+	if !ok {
 		return
 	}
-
-	ctx := c.Request.Context()
-	project, err := h.bkciProjects().Get(ctx, bkciproject.ByWorkspace(uriInput.WorkspaceID))
-	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get workspace project"))
-		return
-	}
-
-	client, err := bkci.New(auth.MustGetUser(ctx))
-	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "initial bkci client"))
-		return
-	}
-
-	refs, err := client.ListRepositoryBranches(
-		ctx,
-		project.Code,
-		queryInput.RepositoryID,
-		queryInput.RepositoryType,
-		queryInput.Search,
-		queryInput.Page,
-		queryInput.PageSize,
-	)
-	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list bkci repository branches"))
-		return
-	}
-
 	ginutils.OK(c, &slz.ListBkCIRepositoryBranchesOutput{Data: newBkCIRepositoryRefsOutput(refs)})
 }
 
@@ -338,40 +308,10 @@ func (h *Handler) ListBkCIRepositoryBranches(c *gin.Context) {
 //	@Failure	400			{object}	bkerrs.GinErrorOutput
 //	@Router		/workspaces/{workspaceID}/bkci-repositories/tags [get]
 func (h *Handler) ListBkCIRepositoryTags(c *gin.Context) {
-	var uriInput slz.BkCIWorkspaceURIInput
-	var queryInput slz.BkCIRepositoryRefsQueryInput
-	if err := ginutils.BindURIQuery(c, &uriInput, &queryInput); err != nil {
-		bkerrs.AbortWithErr(c, err)
+	refs, ok := h.listBkCIRepositoryRefs(c, "list bkci repository tags", bkci.Client.ListRepositoryTags)
+	if !ok {
 		return
 	}
-
-	ctx := c.Request.Context()
-	project, err := h.bkciProjects().Get(ctx, bkciproject.ByWorkspace(uriInput.WorkspaceID))
-	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get workspace project"))
-		return
-	}
-
-	client, err := bkci.New(auth.MustGetUser(ctx))
-	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "initial bkci client"))
-		return
-	}
-
-	refs, err := client.ListRepositoryTags(
-		ctx,
-		project.Code,
-		queryInput.RepositoryID,
-		queryInput.RepositoryType,
-		queryInput.Search,
-		queryInput.Page,
-		queryInput.PageSize,
-	)
-	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list bkci repository tags"))
-		return
-	}
-
 	ginutils.OK(c, &slz.ListBkCIRepositoryTagsOutput{Data: newBkCIRepositoryRefsOutput(refs)})
 }
 

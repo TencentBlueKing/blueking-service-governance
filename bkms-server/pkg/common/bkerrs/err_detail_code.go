@@ -72,4 +72,9 @@ const (
 	ErrDetailCodePolarisAccessPointInUse ErrDetailCode = "POLARIS_ACCESS_POINT_IN_USE"
 	// ErrDetailCodePolarisClusterInUse 集群上有环境被北极星配置使用，不能解绑或换绑
 	ErrDetailCodePolarisClusterInUse ErrDetailCode = "POLARIS_CLUSTER_IN_USE"
+
+	// ErrDetailCodeBkCIRepositoryNotBound 代码仓库未关联到蓝盾，且找不到可用于重新关联的仓库地址
+	ErrDetailCodeBkCIRepositoryNotBound ErrDetailCode = "BKCI_REPOSITORY_NOT_BOUND"
+	// ErrDetailCodeBkCIRepositoryPermissionDenied 蓝盾拒绝当前用户关联或访问代码仓库（未 OAuth 授权、无仓库或项目权限）
+	ErrDetailCodeBkCIRepositoryPermissionDenied ErrDetailCode = "BKCI_REPOSITORY_PERMISSION_DENIED"
 )
