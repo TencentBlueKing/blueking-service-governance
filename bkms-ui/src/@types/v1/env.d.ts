@@ -110,6 +110,12 @@ export interface CreateFeatureEnvInput {
    */
   displayName: string;
   /**
+   * 命名空间类型：independent 新建独立的命名空间；shared 复用来源环境的命名空间，
+   * 仅支持 AppModel 应用且不能使用组件，资源名会带上平台生成的 resPrefix 前缀。
+   * 不传时默认为 independent，兼容存量调用
+   */
+  nsType?: NsType;
+  /**
    * 来源标准环境 ID
    */
   sourceEnvID: string;
@@ -260,6 +266,10 @@ export interface EnvOutput {
    */
   name?: string;
   /**
+   * 命名空间共享信息，仅与其他环境共用命名空间时返回
+   */
+  nsSharing?: EnvNsSharingOutput;
+  /**
    * 特性环境所属应用 ID，仅特性环境返回
    */
   ownerAppID?: string;
@@ -302,6 +312,13 @@ export interface EnvClusterOutput {
    * 项目 code
    */
   projectCode?: string;
+}
+
+export interface EnvNsSharingOutput {
+  /**
+   * 资源名前缀，用于区分同一命名空间内不同环境的资源
+   */
+  resPrefix?: string;
 }
 
 export interface EnvIDOutput {
@@ -399,6 +416,8 @@ export interface EnvAppDeployStatusOutput {
    */
   trafficLaneName?: string;
 }
+
+export type NsType = "independent" | "shared";
 
 export interface FeatureEnvOutput {
   /**

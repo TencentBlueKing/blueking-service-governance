@@ -245,10 +245,6 @@ export interface PolarisClusterEnvOutput {
 
 export interface ConnectivityTestOutput {
   /**
-   * 是否开启客户端鉴权
-   */
-  clientAuth?: boolean;
-  /**
    * 是否开启控制台鉴权
    */
   consoleAuth?: boolean;
@@ -265,12 +261,12 @@ export interface ConnectivityTestOutput {
    */
   ok?: boolean;
   /**
-   * 失败的原因，通过时为空：networkUnreachable 网络不通 / clientAuthEnabled 开启了客户端鉴权 / tokenInvalid Token 无效
+   * 失败的原因，通过时为空：networkUnreachable 网络不通 / tokenInvalid Token 无效
    */
   reason?: FailureReason;
 }
 
-export type FailureReason = "networkUnreachable" | "clientAuthEnabled" | "tokenInvalid";
+export type FailureReason = "networkUnreachable" | "tokenInvalid";
 
 export interface AccessPointOutput {
   /**
@@ -317,10 +313,6 @@ export interface ConnectivityResultOutput {
    */
   checkedAt?: string;
   /**
-   * 是否开启客户端鉴权
-   */
-  clientAuth?: boolean;
-  /**
    * 是否开启控制台鉴权
    */
   consoleAuth?: boolean;
@@ -333,7 +325,7 @@ export interface ConnectivityResultOutput {
    */
   ok?: boolean;
   /**
-   * 失败的原因，通过时为空：networkUnreachable 网络不通 / clientAuthEnabled 开启了客户端鉴权 / tokenInvalid Token 无效
+   * 失败的原因，通过时为空：networkUnreachable 网络不通 / tokenInvalid Token 无效
    */
   reason?: FailureReason;
 }
