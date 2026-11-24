@@ -220,14 +220,14 @@ svcConf:
     enableBkUserTenantVerify: false
     # 制品库为独立部署：不接入权限中心，接口使用制品库账号 Basic 认证，制品库成员需在制品库侧自行管理
     enableIndependentBkRepo: false
+    # 启用 Go 模块代理（GOPROXY）构建参数指引，默认为 false（不展示）；
+    # 显式设为 true 后前端展示参数占位提示，若前端同时配置 BK_GOLANG_PROXY_URL 则展示代理指引卡片
+    enableGoProxy: false
     # 关闭 BSCP 对接，未部署 BSCP 的环境设为 true
     # 关闭期间创建的工作空间没有 BSCP 绑定，重新启用后需逐个执行 bind-bscp-project 命令补绑
     disableBSCP: false
     # 关闭 KubeInsight（集群诊断）对接，不支持集群诊断的环境设为 true
     disableKubeInsight: false
-    # 启用 Go 模块代理（GOPROXY）构建参数指引，默认为 false（不展示）；
-    # 显式设为 true 后前端展示参数占位提示，若前端同时配置 BK_GOLANG_PROXY_URL 则展示代理指引卡片
-    enableGoProxy: false
     # 是否让 BCS 项目与蓝盾项目解耦。
     # true：蓝盾始终新建；新建容器则创建 BCS 项目，绑定已有容器则绑定已有 BCS 项目
     #     （绑定已有项目时只会拉取 BCS 授权的项目）。
