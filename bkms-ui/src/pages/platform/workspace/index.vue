@@ -122,6 +122,18 @@
       </TableColumn>
 
       <TableColumn
+        v-if="frontendFeaturesStore.enableMultiTenantMode"
+        field="tenantID"
+        :label="t('租户 ID')"
+        :min-width="140"
+        show-overflow="tooltip"
+      >
+        <template #default="{ row }: { row: WorkspaceWithStatsOutput }">
+          {{ row.tenantID || '--' }}
+        </template>
+      </TableColumn>
+
+      <TableColumn
         field="appCount"
         :label="t('应用数量')"
         :width="90"
@@ -205,6 +217,7 @@
   import { PlatmgtService } from '~/api/modules/v1';
   import useTableEmpty from '~/composables/use-table-empty';
   import useTime from '~/composables/use-time';
+  import { useFrontendFeaturesStore } from '~/stores/frontend-features';
 
   import type { ISearchItem, ISearchValue } from 'bkui-vue/lib/search-select/utils';
   import type { ListPlatWorkspacesRequest, WorkspaceStatsOutput, WorkspaceWithStatsOutput } from '~/@types/v1/platmgt';
@@ -222,6 +235,7 @@
 
   const { t } = useI18n();
   const router = useRouter();
+  const frontendFeaturesStore = useFrontendFeaturesStore();
   const { formatDateString } = useTime();
 
   const workspaceList = ref<WorkspaceWithStatsOutput[]>([]);

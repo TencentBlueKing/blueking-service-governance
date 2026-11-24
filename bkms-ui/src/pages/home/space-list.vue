@@ -146,6 +146,17 @@
               </template>
             </TableColumn>
             <TableColumn
+              v-if="frontendFeaturesStore.enableMultiTenantMode"
+              field="tenantID"
+              :label="$t('租户 ID')"
+              :min-width="140"
+              show-overflow="tooltip"
+            >
+              <template #default="{ row }: { row: WorkspaceInfoOutputObj & { tenantID?: string } }">
+                {{ row.tenantID || '--' }}
+              </template>
+            </TableColumn>
+            <TableColumn
               field="app"
               :label="$t('应用')"
               show-overflow="tooltip"
@@ -277,6 +288,7 @@
   import { useSearchPlaceholder } from '~/composables/use-search-placeholder';
   import useTableEmpty from '~/composables/use-table-empty';
   import useDynamicsHeight from '~/composables/use-table-height';
+  import { useFrontendFeaturesStore } from '~/stores/frontend-features';
   import { useSpaceStore } from '~/stores/space';
 
   import TeamSpace from './team-space.vue';
@@ -290,6 +302,7 @@
   const { t } = useI18n();
   const { createPlaceholder } = useSearchPlaceholder();
   const router = useRouter();
+  const frontendFeaturesStore = useFrontendFeaturesStore();
   const spaceStore = useSpaceStore();
   const { maxHeight } = useDynamicsHeight(160, ['.bk-navigation-header', '.info-panel']);
 

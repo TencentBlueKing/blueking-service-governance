@@ -88,6 +88,7 @@
 空间仓库: Space warehouse
 关联项目: Associated Projects
 空间 ID: Space ID
+租户 ID: Tenant ID
 空间名称: Space Name
 管理员: Administrators
 开发成员: Development Members
@@ -795,6 +796,8 @@ K8s 版本: K8s Version
 集群 CIDR: Cluster CIDR
 搜索问题关键词: Search for problem keywords
 集群诊断: Cluster Diagnosis
+未发现异常: No issues found
+查看报告: View report
 '{count}天': '{count} day | {count} days '
 '{count}小时': '{count} hour | {count} hours '
 '{count}分钟': '{count} minute | {count} minutes '

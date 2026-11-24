@@ -19,35 +19,46 @@
 /**
  * 场景级测试：集群组件安装与配置（路径清单见 docs/vitest/guides/TEST_SCENARIOS_ROUTES.md S17）
  *
- * 覆盖三组用户可感知行为：
- *   空态（无组件） / 分组展开显示组件与安装入口 / 点击安装弹出侧滑 → V = 3
+ * 覆盖组件列表、分组与安装入口，以及列表/安装/卸载的环境维度请求路径。
  *
  * 列表为自定义 div 分组（非 vxe 表格），故无需 stub @blueking/table；
- * 安装侧滑内含动态表单 ComponentsConfig（按 addon schema 渲染，较重），stub 为仅按
- * `visible` 渲染标题的占位组件，以验证「点击安装 → 父组件 isShowInstallSideslider 置真
- * → 侧滑可见」这一用户可感知行为（侧滑内容的动态表单由 ComponentsConfig 单测负责）。
+ * 安装侧滑内含动态表单 ComponentsConfig（按 addon schema 渲染，较重），stub 保留
+ * `visible` 和 `confirm` 契约；请求路径断言经过真实 Service 和 Fetch 的参数替换。
  */
 import userEvent from '@testing-library/user-event';
 import { render, screen } from '@testing-library/vue';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { v1Fetch } from '~/api/clients';
 import ClusterComponents from '~/pages/env/cluster-components/cluster-components.vue';
 
 const mocks = vi.hoisted(() => ({
-  listClusterAddons: vi.fn(),
+  request: vi.fn(),
   listPortPools: vi.fn(),
+  infoBox: vi.fn<(options: { onConfirm: () => Promise<void> }) => void>(),
 }));
 
-vi.mock('~/api/modules/v1', () => ({
-  ClusterAddonService: { listClusterAddons: mocks.listClusterAddons },
+// 保留真实 Service 和 URL 参数替换，只隔离传输层，捕获实际发出的请求路径。
+vi.mock('~/api/interceptors', () => ({
+  fetch: mocks.request,
+  interceptors: { response: { use: vi.fn() } },
+}));
+vi.mock('~/api/modules/v1', async () => ({
+  ClusterAddonService: (await import('~/api/modules/v1/cluster-addon')).ClusterAddonService,
   PortPoolService: { listPortPools: mocks.listPortPools },
 }));
 
-// 安装侧滑（含动态表单 ComponentsConfig）较重，stub 为仅按 visible 渲染标题的占位。
+// 隔离侧滑中的动态表单，保留确认事件以验证父组件发出的安装请求。
 vi.mock('~/pages/env/cluster-components/install-sideslider.vue', () => ({
   default: {
     name: 'StubInstallSideslider',
     props: ['visible'],
-    template: '<div v-if="visible">安装组件侧滑</div>',
+    emits: ['confirm'],
+    template: `<div v-if="visible">
+      安装组件侧滑
+      <button @click="$emit('confirm', { namespace: 'bk-system', chartVersion: '1.0.0', values: {} })">
+        确认安装组件
+      </button>
+    </div>`,
   },
 }));
 
@@ -60,7 +71,7 @@ vi.mock('vue-i18n', async () => (await import('../helpers/mock-i18n')).i18nMockF
 vi.mock('bkui-vue', async importOriginal => ({
   ...(await importOriginal<object>()),
   Message: vi.fn(),
-  InfoBox: vi.fn(),
+  InfoBox: mocks.infoBox,
 }));
 
 vi.mock('vue-router', async () => {
@@ -81,7 +92,8 @@ const oneAddon = [
 ];
 
 function renderPage(addons: unknown[] = [], autoExpandAppType?: string) {
-  mocks.listClusterAddons.mockResolvedValue({ addons });
+  v1Fetch.config.prefix = '/api/bkms/v1/bkms-server';
+  mocks.request.mockResolvedValue({ addons });
   mocks.listPortPools.mockResolvedValue({ portPools: [] });
   return render(ClusterComponents, {
     props: { envId: 'env-1', hasClusterConfig: true, autoExpandAppType },
@@ -94,6 +106,44 @@ afterEach(() => {
 });
 
 describe('集群组件列表（S17）', () => {
+  it('使用环境组件接口，路径不遗留空间和集群占位符', async () => {
+    renderPage();
+    await screen.findByText('暂无组件');
+    expect(mocks.request).toHaveBeenCalledWith(
+      '/api/bkms/v1/bkms-server/envs/env-1/cluster-addons',
+      expect.objectContaining({ method: 'GET', needRes: true }),
+    );
+  });
+
+  it('确认安装时使用环境组件路径并将安装参数放入请求体', async () => {
+    renderPage(oneAddon);
+    await screen.findByText(/必选组件/);
+    await userEvent.click(screen.getByText(/必选组件/));
+    await userEvent.click(screen.getByText('安装'));
+    await userEvent.click(await screen.findByText('确认安装组件'));
+
+    expect(mocks.request).toHaveBeenCalledWith(
+      '/api/bkms/v1/bkms-server/envs/env-1/cluster-addons/monitor',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ namespace: 'bk-system', chartVersion: '1.0.0', values: {} }),
+      }),
+    );
+  });
+
+  it('确认卸载时使用环境组件路径', async () => {
+    renderPage([{ ...oneAddon[0], supportedActions: ['uninstall'], installInfo: { status: 'deployed' } }]);
+    await screen.findByText(/必选组件/);
+    await userEvent.click(screen.getByText(/必选组件/));
+    await userEvent.click(screen.getByText('卸载'));
+    await mocks.infoBox.mock.calls[0][0].onConfirm();
+
+    expect(mocks.request).toHaveBeenCalledWith(
+      '/api/bkms/v1/bkms-server/envs/env-1/cluster-addons/monitor',
+      expect.objectContaining({ method: 'DELETE' }),
+    );
+  });
+
   it('平台托管组件统一展示在 bkmsApp 分组，保留 Helm 和 Agones 分组', async () => {
     renderPage([
       { ...oneAddon[0], requiredForAppTypes: ['trpc', 'taf', 'bkmsApp'], optionalForAppTypes: ['helm', 'agones'] },

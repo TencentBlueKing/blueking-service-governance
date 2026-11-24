@@ -376,7 +376,7 @@
     if (!props.envId) return;
     isLoading.value = true;
     try {
-      const data: ListClusterAddonsOutput = await ClusterAddonService.listClusterAddons(
+      const data: ListClusterAddonsOutput = await ClusterAddonService.listEnvClusterAddons(
         { envID: props.envId },
         { needRes: true },
       );
@@ -459,7 +459,7 @@
 
     submittingComponentName.value = currentComponentName.value;
     try {
-      await ClusterAddonService.upsertClusterAddon({
+      await ClusterAddonService.upsertEnvClusterAddon({
         envID: props.envId,
         addonName: currentComponentName.value,
         namespace: data.namespace as string,
@@ -508,7 +508,7 @@
       contentAlign: 'center',
       footerAlign: 'center',
       onConfirm: async () => {
-        const result = await ClusterAddonService.deleteClusterAddon({
+        const result = await ClusterAddonService.deleteEnvClusterAddon({
           envID: props.envId,
           addonName: addon?.name || '',
         })

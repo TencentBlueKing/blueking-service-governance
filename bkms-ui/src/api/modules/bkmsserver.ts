@@ -271,15 +271,15 @@ export const ApiServerService = {
   /**
    * @deprecated 请改用 `~/api/modules/v1` 下对应 Service（本属性已绑定 v1 实现）。
    */
-  ListClusterAddons: ClusterAddonService.listClusterAddons,
+  ListClusterAddons: ClusterAddonService.listEnvClusterAddons,
   /**
    * @deprecated 请改用 `~/api/modules/v1` 下对应 Service（本属性已绑定 v1 实现）。
    */
-  UpsertClusterAddon: ClusterAddonService.upsertClusterAddon,
+  UpsertClusterAddon: ClusterAddonService.upsertEnvClusterAddon,
   /**
    * @deprecated 请改用 `~/api/modules/v1` 下对应 Service（本属性已绑定 v1 实现）。
    */
-  DeleteClusterAddon: ClusterAddonService.deleteClusterAddon,
+  DeleteClusterAddon: ClusterAddonService.deleteEnvClusterAddon,
 
   /**
    * @deprecated 请改用 `~/api/modules/v1` 下对应 Service（本属性已绑定 v1 实现）。
