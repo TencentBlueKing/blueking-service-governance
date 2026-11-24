@@ -1,7 +1,7 @@
 [
   {
     "dropIndexes": "environments",
-    "index": "cluster.clusterID_1_cluster.namespace_1_resourcePrefix_1"
+    "index": "cluster.clusterID_1_cluster.namespace_1_nsSharing.resPrefix_1"
   },
   {
     "createIndexes": "environments",

@@ -26,8 +26,9 @@ import (
 var _ = Describe("Environment", func() {
 	DescribeTable("SharesNamespace",
 		func(resourcePrefix string, want bool) {
-			env := Environment{ResourcePrefix: resourcePrefix}
+			env := Environment{NsSharing: NsSharing{ResPrefix: resourcePrefix}}
 			Expect(env.SharesNamespace()).To(Equal(want))
+			Expect(env.NsSharing.IsZero()).To(Equal(!want))
 		},
 		Entry("returns false without resource prefix", "", false),
 		Entry("returns true with resource prefix", "fab12", true),

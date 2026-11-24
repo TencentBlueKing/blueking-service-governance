@@ -166,7 +166,7 @@ func NewFeatureEnvService(
 //
 // Returns:
 //
-//	特性环境切片，map[envName]sourceEnv；由于来源环境可以独立删除，map 不保证包含每个特性环境。
+//	特性环境切片，map[envName]sourceEnv；存在特性环境时不允许删除来源环境，但为兼容历史/异常孤儿数据，map 仍不强假设包含每个特性环境。
 func ListAppFeatEnvs(
 	ctx context.Context,
 	db *mongo.Database,
@@ -289,16 +289,18 @@ func (s *FeatureEnvService) Create(ctx context.Context, input CreateFeatureEnvIn
 	return env, nil
 }
 
-// createEnv 校验 cluster+namespace+resourcePrefix 未被占用后落库特性环境记录。
+// createEnv 校验 cluster+namespace+nsSharing.resPrefix 未被占用后落库特性环境记录。
 func (s *FeatureEnvService) createEnv(ctx context.Context, env *model.Environment) error {
 	if conflictErr := findClusterNamespaceOccupant(
-		ctx, s.db, env.Cluster, env.ResourcePrefix, bson.NilObjectID,
+		ctx, s.db, env.Cluster, env.NsSharing.ResPrefix, bson.NilObjectID,
 	); conflictErr != nil {
 		return errors.Wrap(conflictErr, "check feature environment cluster namespace conflict")
 	}
 
 	if err := store.Of(s.db, model.EnvMeta).Create(ctx, env); err != nil {
-		err = rewriteWriteErrIfClusterOccupied(ctx, s.db, env.Cluster, env.ResourcePrefix, bson.NilObjectID, err)
+		err = rewriteWriteErrIfClusterOccupied(
+			ctx, s.db, env.Cluster, env.NsSharing.ResPrefix, bson.NilObjectID, err,
+		)
 		return errors.Wrap(err, "create feature environment")
 	}
 	return nil

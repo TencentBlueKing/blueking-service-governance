@@ -29247,6 +29247,15 @@ const docTemplate = `{
                 }
             }
         },
+        "serializer.EnvNsSharingOutput": {
+            "type": "object",
+            "properties": {
+                "resPrefix": {
+                    "description": "资源名前缀，用于区分同一命名空间内不同环境的资源",
+                    "type": "string"
+                }
+            }
+        },
         "serializer.EnvOutput": {
             "type": "object",
             "properties": {
@@ -29285,12 +29294,16 @@ const docTemplate = `{
                     "description": "环境名称",
                     "type": "string"
                 },
+                "nsSharing": {
+                    "description": "命名空间共享信息，仅与其他环境共用命名空间时返回",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/serializer.EnvNsSharingOutput"
+                        }
+                    ]
+                },
                 "ownerAppID": {
                     "description": "特性环境所属应用 ID，仅特性环境返回",
-                    "type": "string"
-                },
-                "resourcePrefix": {
-                    "description": "资源名前缀，仅复用来源环境命名空间的特性环境返回",
                     "type": "string"
                 },
                 "sourceEnvID": {

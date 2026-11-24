@@ -74,7 +74,7 @@ func ForEnv(ctx context.Context, db *mongo.Database, env *envmodel.Environment) 
 	}
 	// 对于标准命名空间，只有其下有共用命名空间的环境时才做校验
 	// 其他标准命名空间暂时认为不会有同资源冲突，避免在部署时引入太多额外查询
-	sharers, err := envmodel.ListNamespaceSharers(ctx, db, env.ID, env.Cluster.ClusterID, env.Cluster.Namespace)
+	sharers, err := envmodel.ListNamespaceSharers(ctx, db, env.Cluster.ClusterID, env.Cluster.Namespace)
 	if err != nil {
 		return Owner{}, errors.Wrapf(err, "resolve owner of env %s", env.Name)
 	}

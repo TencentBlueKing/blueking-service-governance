@@ -88,8 +88,8 @@ type EnvironmentStore = store.GenericStore[Environment]
 //
 // 索引（由 golang-migrate 维护）：
 //   - 唯一：workspaceID + name
-//   - 唯一（partial）：cluster.clusterID + cluster.namespace + resourcePrefix（集群与命名空间非空时生效；
-//     resourcePrefix 缺失按 null 参与比较，因此独占命名空间的环境之间仍互斥）
+//   - 唯一（partial）：cluster.clusterID + cluster.namespace + nsSharing.resPrefix（集群与命名空间非空时生效；
+//     nsSharing.resPrefix 缺失按 null 参与比较，因此独占命名空间的环境之间仍互斥）
 //   - 查询提速：ownerAppID
 var EnvMeta = store.Meta[Environment]{
 	Collection:   environmentCollectionName,
@@ -132,6 +132,11 @@ func StdEnvsIn(workspaceID string) store.Opt {
 // FeatEnvsOf 匹配应用拥有的特性环境
 func FeatEnvsOf(appID string) store.Opt {
 	return store.Combine(store.Where("kind", EnvironmentKindFeature), store.Where("ownerAppID", appID))
+}
+
+// FeatEnvsFromSource 匹配派生自指定来源环境的特性环境
+func FeatEnvsFromSource(sourceEnvID bson.ObjectID) store.Opt {
+	return store.Combine(store.Where("kind", EnvironmentKindFeature), store.Where("sourceEnvID", sourceEnvID))
 }
 
 // AvailableToApp 匹配应用可用的环境：全部标准环境，以及该应用拥有的特性环境。
@@ -235,28 +240,30 @@ func FindByClusterNamespace(
 	)
 }
 
-// ListNamespaceSharers 列出复用 sourceEnvID 环境命名空间（同 clusterID + namespace 且带 resourcePrefix）的特性环境。
+// ListNamespaceSharers 列出指定集群命名空间下带 resourcePrefix（即共用该命名空间）的环境。
+// 按实际物理 clusterID + namespace 查询，不依赖历史 sourceEnvID 关系。
 func ListNamespaceSharers(
 	ctx context.Context,
 	db *mongo.Database,
-	sourceEnvID bson.ObjectID,
 	clusterID, namespace string,
 ) ([]Environment, error) {
+	if clusterID == "" || namespace == "" {
+		return nil, nil
+	}
 	envs, err := store.Of(db, EnvMeta).List(ctx,
-		store.Where("sourceEnvID", sourceEnvID),
 		store.Where("cluster.clusterID", clusterID),
 		store.Where("cluster.namespace", namespace),
-		store.Where("resourcePrefix", bson.M{"$gt": ""}),
+		store.Where("nsSharing.resPrefix", bson.M{"$gt": ""}),
 	)
-	return envs, errors.Wrapf(err, "list feature environments sharing namespace of environment %s", sourceEnvID.Hex())
+	return envs, errors.Wrapf(err, "list environments sharing cluster %s namespace %s", clusterID, namespace)
 }
 
-// byResourcePrefix 按 resourcePrefix 匹配；为空时匹配字段缺失或为空的记录，与唯一索引中缺失字段按 null 处理的语义一致。
+// byResourcePrefix 按 nsSharing.resPrefix 匹配；为空时匹配字段缺失或为空的记录，与唯一索引中缺失字段按 null 处理的语义一致。
 func byResourcePrefix(resourcePrefix string) store.Opt {
 	if resourcePrefix == "" {
-		return store.Where("resourcePrefix", bson.M{"$in": bson.A{nil, ""}})
+		return store.Where("nsSharing.resPrefix", bson.M{"$in": bson.A{nil, ""}})
 	}
-	return store.Where("resourcePrefix", resourcePrefix)
+	return store.Where("nsSharing.resPrefix", resourcePrefix)
 }
 
 // GetAppEnvMap 查询应用可用的环境（全部标准环境与该应用的特性环境），返回 envName→Environment 映射。

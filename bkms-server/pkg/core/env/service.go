@@ -32,8 +32,12 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
 
-// ErrEnvHasNamespaceSharers 仍有特性环境共用该环境的命名空间，不能修改集群或命名空间
-var ErrEnvHasNamespaceSharers = errors.New("environment namespace is shared by feature environments")
+var (
+	// ErrEnvHasNamespaceSharers 仍有特性环境共用该环境的命名空间，不能修改集群或命名空间
+	ErrEnvHasNamespaceSharers = errors.New("environment namespace is shared by feature environments")
+	// ErrEnvHasFeatureEnvs 仍存在派生自该环境的特性环境，不能删除来源环境
+	ErrEnvHasFeatureEnvs = errors.New("environment has derived feature environments")
+)
 
 // EnvService 环境基础配置服务
 type EnvService struct {
@@ -58,14 +62,14 @@ type ImageRegistryInfoInput struct {
 // Create 创建环境数据，成功后 environment.ID 为新环境的 ID.
 func (s *EnvService) Create(ctx context.Context, environment *model.Environment) error {
 	if err := findClusterNamespaceOccupant(
-		ctx, s.db, environment.Cluster, environment.ResourcePrefix, bson.NilObjectID,
+		ctx, s.db, environment.Cluster, environment.NsSharing.ResPrefix, bson.NilObjectID,
 	); err != nil {
 		return errors.Wrap(err, "check environment cluster namespace conflict")
 	}
 
 	if err := store.Of(s.db, model.EnvMeta).Create(ctx, environment); err != nil {
 		err = rewriteWriteErrIfClusterOccupied(
-			ctx, s.db, environment.Cluster, environment.ResourcePrefix, bson.NilObjectID, err,
+			ctx, s.db, environment.Cluster, environment.NsSharing.ResPrefix, bson.NilObjectID, err,
 		)
 		return errors.Wrapf(err, "create environment %s", environment.Name)
 	}
@@ -102,14 +106,18 @@ func (s *EnvService) Update(
 		if err = s.checkNoNamespaceSharers(ctx, environment, finalCluster); err != nil {
 			return err
 		}
-		if err = findClusterNamespaceOccupant(ctx, s.db, finalCluster, environment.ResourcePrefix, envID); err != nil {
+		if err = findClusterNamespaceOccupant(
+			ctx, s.db, finalCluster, environment.NsSharing.ResPrefix, envID,
+		); err != nil {
 			return errors.Wrap(err, "check environment cluster namespace conflict")
 		}
 	}
 
 	if err = model.UpdateEnv(ctx, s.db, envID, updateData); err != nil {
 		if updateData.ClusterID != nil || updateData.Namespace != nil {
-			err = rewriteWriteErrIfClusterOccupied(ctx, s.db, finalCluster, environment.ResourcePrefix, envID, err)
+			err = rewriteWriteErrIfClusterOccupied(
+				ctx, s.db, finalCluster, environment.NsSharing.ResPrefix, envID, err,
+			)
 		}
 		return errors.Wrap(err, "update environment")
 	}
@@ -144,7 +152,7 @@ func (s *EnvService) checkNoNamespaceSharers(
 	if !namespaceChanged(current, finalCluster) {
 		return nil
 	}
-	sharers, err := model.ListNamespaceSharers(ctx, s.db, environment.ID, current.ClusterID, current.Namespace)
+	sharers, err := model.ListNamespaceSharers(ctx, s.db, current.ClusterID, current.Namespace)
 	if err != nil {
 		return errors.Wrap(err, "list feature environments sharing namespace")
 	}
@@ -191,6 +199,21 @@ func (s *EnvService) Delete(ctx context.Context, envID bson.ObjectID) error {
 	appCount := len(environment.AppIDs)
 	if appCount != 0 {
 		return errors.Errorf("environment has %d apps, cannot delete", appCount)
+	}
+
+	if !environment.IsFeatureEnv() {
+		featEnvs, listErr := store.Of(s.db, model.EnvMeta).List(ctx, model.FeatEnvsFromSource(envID))
+		if listErr != nil {
+			return errors.Wrap(listErr, "list feature environments derived from environment")
+		}
+		if len(featEnvs) > 0 {
+			names := lo.Map(featEnvs, func(e model.Environment, _ int) string { return e.Name })
+			return errors.Wrapf(
+				ErrEnvHasFeatureEnvs,
+				"environment %s has %d feature environments [%s], cannot delete",
+				environment.Name, len(featEnvs), strings.Join(names, ", "),
+			)
+		}
 	}
 
 	// 删除环境往往意味着下游模块中的环境级资源也必须一起清理。这里在物理删除环境记录前执行 Hook：

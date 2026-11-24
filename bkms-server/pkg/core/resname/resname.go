@@ -16,8 +16,9 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
-// Package resname 提供统一的环境/泳道作用域基础资源名生成与资源名合法性校验。
-// 调用方通过 Build 获取作用域化后的基础名称，自行决定直接作为工作负载/CR 名称使用，或继续拼接各模块自有的附属后缀。
+// Package resname 提供统一的环境/泳道作用域基础资源名构建、还原与资源名合法性校验。
+// 调用方通过 ForEnv 构造命名作用域 Scope，自行决定将 Build 结果直接作为工作负载/CR 名称使用，
+// 或继续拼接各模块自有的附属后缀；从集群回查资源时通过 Restore 还原原始配置名称。
 package resname
 
 import (
@@ -46,18 +47,61 @@ const (
 	longestFixedDerivedSuffix = "-devmode-scripts"
 )
 
-type buildOptions struct {
+// Scope 表示环境（及可选流量泳道）的资源命名作用域，负责集群资源基础名称的正向构建与反向还原。
+// 值类型、不可变且零值安全（零值表示不附加任何前缀）。
+type Scope struct {
+	envPrefix       string
 	trafficLaneName string
 }
 
-// Option 定义 Build 生成资源名时的可选作用域修饰项。
-type Option func(*buildOptions)
-
-// WithTrafficLane 指定流量泳道作用域；laneName 为空时不附加泳道前缀。
-func WithTrafficLane(laneName string) Option {
-	return func(o *buildOptions) {
-		o.trafficLaneName = laneName
+// ForEnv 返回指定环境的资源命名作用域；env 为 nil 时返回零值 Scope。
+func ForEnv(env *envmodel.Environment) Scope {
+	if env == nil {
+		return Scope{}
 	}
+	return Scope{envPrefix: env.NsSharing.ResPrefix}
+}
+
+// WithTrafficLane 返回附加了流量泳道前缀的新作用域，不修改原 Scope；laneName 为空时不附加泳道前缀。
+func (s Scope) WithTrafficLane(laneName string) Scope {
+	s.trafficLaneName = laneName
+	return s
+}
+
+// Build 生成 baseName 在当前作用域下的集群基础资源名。
+// 拼接顺序固定为：[<trafficLaneName>-][<resourcePrefix>-]<baseName>。
+// 上层调用方自行决定将该结果直接作为工作负载/CR 名称，或在此基础上继续拼接模块自有的附属资源后缀。
+func (s Scope) Build(baseName string) string {
+	if baseName == "" {
+		return ""
+	}
+	return s.prefix() + baseName
+}
+
+// Restore 剥离集群资源名上属于当前作用域的前缀（[<trafficLaneName>-][<resourcePrefix>-]），还原为原始名称。
+// 仅当完整匹配当前作用域前缀且剥离后非空时才执行剥离，否则原样返回。
+func (s Scope) Restore(clusterName string) string {
+	p := s.prefix()
+	if p == "" {
+		return clusterName
+	}
+	if rest, ok := strings.CutPrefix(clusterName, p); ok && rest != "" {
+		return rest
+	}
+	return clusterName
+}
+
+func (s Scope) prefix() string {
+	var b strings.Builder
+	if s.trafficLaneName != "" {
+		b.WriteString(s.trafficLaneName)
+		b.WriteString(nameSeparator)
+	}
+	if s.envPrefix != "" {
+		b.WriteString(s.envPrefix)
+		b.WriteString(nameSeparator)
+	}
+	return b.String()
 }
 
 // GenEnvPrefix 生成 "f" + 4 位 [a-z0-9] 的随机环境资源前缀。
@@ -70,38 +114,6 @@ func GenEnvPrefix() (string, error) {
 		buf[i] = envPrefixCharset[int(b)%len(envPrefixCharset)]
 	}
 	return envPrefixLead + string(buf), nil
-}
-
-// Build 生成 baseName 在目标环境（及可选流量泳道）作用域下的集群基础资源名。
-// 拼接顺序固定为：[<trafficLaneName>-][<resourcePrefix>-]<baseName>。
-// 上层调用方自行决定将该结果直接作为工作负载/CR 名称，或在此基础上继续拼接模块自有的附属资源后缀。
-func Build(env *envmodel.Environment, baseName string, opts ...Option) string {
-	if baseName == "" {
-		return ""
-	}
-	var options buildOptions
-	for _, opt := range opts {
-		if opt != nil {
-			opt(&options)
-		}
-	}
-
-	name := baseName
-	if env != nil && env.ResourcePrefix != "" {
-		name = env.ResourcePrefix + nameSeparator + name
-	}
-	if options.trafficLaneName != "" {
-		name = options.trafficLaneName + nameSeparator + name
-	}
-	return name
-}
-
-// TrimEnvPrefix 剥离集群资源名上的环境前缀，还原为原始配置名。
-func TrimEnvPrefix(env *envmodel.Environment, name string) string {
-	if env == nil || env.ResourcePrefix == "" {
-		return name
-	}
-	return strings.TrimPrefix(name, env.ResourcePrefix+nameSeparator)
 }
 
 // ValidateAppNameForSharedNS 校验应用在共享命名空间环境下派生的基础资源名是否满足集群资源命名长度上限。

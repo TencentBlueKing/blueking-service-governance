@@ -293,5 +293,5 @@ func (s *Service) resolveHelmWorkloads(ctx context.Context, appID, envName, traf
 
 // fallbackWorkloads 在无法解析真实 workload 时回退到与部署一致的命名规则。
 func fallbackWorkloads(env envmodel.Environment, appName, trafficLaneName string) []string {
-	return []string{resname.Build(&env, appName, resname.WithTrafficLane(trafficLaneName))}
+	return []string{resname.ForEnv(&env).WithTrafficLane(trafficLaneName).Build(appName)}
 }

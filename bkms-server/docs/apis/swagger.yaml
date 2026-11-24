@@ -5043,6 +5043,12 @@ definitions:
         description: 本环境被单独设置过权重的实例数，其实际权重可能与配置的单实例权重不一致
         type: integer
     type: object
+  serializer.EnvNsSharingOutput:
+    properties:
+      resPrefix:
+        description: 资源名前缀，用于区分同一命名空间内不同环境的资源
+        type: string
+    type: object
   serializer.EnvOutput:
     properties:
       appIDs:
@@ -5069,11 +5075,12 @@ definitions:
       name:
         description: 环境名称
         type: string
+      nsSharing:
+        allOf:
+        - $ref: '#/definitions/serializer.EnvNsSharingOutput'
+        description: 命名空间共享信息，仅与其他环境共用命名空间时返回
       ownerAppID:
         description: 特性环境所属应用 ID，仅特性环境返回
-        type: string
-      resourcePrefix:
-        description: 资源名前缀，仅复用来源环境命名空间的特性环境返回
         type: string
       sourceEnvID:
         description: 特性环境来源环境 ID，仅特性环境返回

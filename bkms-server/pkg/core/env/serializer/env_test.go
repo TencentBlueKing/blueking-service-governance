@@ -59,6 +59,7 @@ var _ = Describe("Env output serializers", func() {
 				Kind:        envmodel.EnvironmentKindFeature,
 				OwnerAppID:  "app-1",
 				SourceEnvID: newObjectID("507f1f77bcf86cd799439012"),
+				NsSharing:   envmodel.NsSharing{ResPrefix: "fab12"},
 				Cluster: envmodel.BizCluster{
 					ProjectCode: "proj-code",
 					ClusterID:   "cls-1",
@@ -92,6 +93,7 @@ var _ = Describe("Env output serializers", func() {
 			Expect(output.Kind).To(Equal("feature"))
 			Expect(output.OwnerAppID).To(Equal("app-1"))
 			Expect(output.SourceEnvID).To(Equal("507f1f77bcf86cd799439012"))
+			Expect(output.NsSharing).To(Equal(&serializer.EnvNsSharingOutput{ResPrefix: "fab12"}))
 		})
 
 		It("marshals to correct JSON", func() {

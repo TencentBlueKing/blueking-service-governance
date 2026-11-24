@@ -595,7 +595,7 @@ func (d *Deployer) setupAppModel(
 	trafficLaneName, imageTag, updateStrategy string,
 ) {
 	// 统一计算集群中的工作负载名称（含环境资源前缀与流量泳道前缀）
-	appModel.Workload.Name = resname.Build(env, d.app.Name, resname.WithTrafficLane(trafficLaneName))
+	appModel.Workload.Name = resname.ForEnv(env).WithTrafficLane(trafficLaneName).Build(d.app.Name)
 
 	// 根据目前用户选中的镜像仓库 + 镜像 tag 生成镜像地址
 	appModel.Workload.Image = fmt.Sprintf("%s/%s:%s", imageRegistry.Registry, d.app.Name, imageTag)

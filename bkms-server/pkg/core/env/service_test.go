@@ -165,12 +165,12 @@ var _ = Describe("Test EnvService", func() {
 		It("rejects moving a source env while feature envs share its namespace", func() {
 			envs := testutil.NewStore(GinkgoT(), model.EnvMeta)
 			Expect(envs.Create(ctx, &model.Environment{
-				Name:           "feat-" + stringx.Random(6),
-				WorkspaceID:    workspaceID,
-				Kind:           model.EnvironmentKindFeature,
-				SourceEnvID:    envID,
-				ResourcePrefix: "fab12",
-				Cluster:        Cluster,
+				Name:        "feat-" + stringx.Random(6),
+				WorkspaceID: workspaceID,
+				Kind:        model.EnvironmentKindFeature,
+				SourceEnvID: envID,
+				NsSharing:   model.NsSharing{ResPrefix: "fab12"},
+				Cluster:     Cluster,
 			})).To(Succeed())
 
 			newNamespace := stringx.Random(10)
@@ -216,12 +216,12 @@ var _ = Describe("Test EnvService", func() {
 			})).To(Succeed())
 
 			featEnv := &model.Environment{
-				Name:           "feat-" + stringx.Random(6),
-				WorkspaceID:    workspaceID,
-				Kind:           model.EnvironmentKindFeature,
-				SourceEnvID:    envID,
-				ResourcePrefix: "fab12",
-				Cluster:        Cluster,
+				Name:        "feat-" + stringx.Random(6),
+				WorkspaceID: workspaceID,
+				Kind:        model.EnvironmentKindFeature,
+				SourceEnvID: envID,
+				NsSharing:   model.NsSharing{ResPrefix: "fab12"},
+				Cluster:     Cluster,
 			}
 			Expect(envSvc.Create(ctx, featEnv)).To(Succeed())
 
@@ -284,5 +284,40 @@ var _ = Describe("Test EnvService", func() {
 			Expect(IsDeleteHookRegistered("test.delete_env")).To(BeFalse())
 			Expect(IsUpdateHookRegistered("test.update_env")).To(BeFalse())
 		})
+
+		DescribeTable("rejects deleting a source env while derived feature envs exist",
+			func(shareNamespace bool) {
+				envs := testutil.NewStore(GinkgoT(), model.EnvMeta)
+				featCluster := Cluster
+				resourcePrefix := "fab12"
+				if !shareNamespace {
+					featCluster.Namespace = "feat-ns-" + stringx.Random(6)
+					resourcePrefix = ""
+				}
+				featEnv := &model.Environment{
+					Name:        "feat-" + stringx.Random(6),
+					WorkspaceID: workspaceID,
+					Kind:        model.EnvironmentKindFeature,
+					SourceEnvID: envID,
+					NsSharing:   model.NsSharing{ResPrefix: resourcePrefix},
+					Cluster:     featCluster,
+				}
+				Expect(envs.Create(ctx, featEnv)).To(Succeed())
+
+				deleteErr := envSvc.Delete(ctx, envID)
+				Expect(errors.Is(deleteErr, ErrEnvHasFeatureEnvs)).To(BeTrue())
+				Expect(deleteErr).To(MatchError(ContainSubstring(featEnv.Name)))
+
+				// 来源环境在删除被拒后仍然存在
+				_, getErr := envs.GetByID(ctx, envID)
+				Expect(getErr).NotTo(HaveOccurred())
+
+				// 先删除特性环境后，来源环境即可正常删除
+				Expect(envSvc.Delete(ctx, featEnv.ID)).To(Succeed())
+				Expect(envSvc.Delete(ctx, envID)).To(Succeed())
+			},
+			Entry("dedicated-namespace feature env", false),
+			Entry("shared-namespace feature env", true),
+		)
 	})
 })

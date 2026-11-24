@@ -37,33 +37,54 @@ var _ = Describe("resname", func() {
 		})
 	})
 
-	Describe("Build and TrimEnvPrefix", func() {
-		It("handles nil environment safely", func() {
-			Expect(resname.Build(nil, "web")).To(Equal("web"))
-			Expect(resname.Build(nil, "web", resname.WithTrafficLane("gray"))).To(Equal("gray-web"))
-			Expect(resname.TrimEnvPrefix(nil, "fab12-web")).To(Equal("fab12-web"))
+	Describe("Scope", func() {
+		It("handles zero value and nil environment safely without mutating base scope", func() {
+			var zero resname.Scope
+			Expect(zero.Build("web")).To(Equal("web"))
+			Expect(zero.Restore("fab12-web")).To(Equal("fab12-web"))
+
+			base := resname.ForEnv(nil)
+			withLane := base.WithTrafficLane("gray")
+			Expect(base.Build("web")).To(Equal("web"))
+			Expect(withLane.Build("web")).To(Equal("gray-web"))
+			Expect(withLane.Restore("gray-web")).To(Equal("web"))
 		})
 
-		DescribeTable("builds scoped names across environments and traffic lanes",
+		DescribeTable("builds and restores scoped names symmetrically across environments and traffic lanes",
 			func(resourcePrefix, base, laneName, want string) {
-				env := &envmodel.Environment{ResourcePrefix: resourcePrefix}
-				Expect(resname.Build(env, base, resname.WithTrafficLane(laneName))).To(Equal(want))
+				env := &envmodel.Environment{NsSharing: envmodel.NsSharing{ResPrefix: resourcePrefix}}
+				scope := resname.ForEnv(env).WithTrafficLane(laneName)
+				Expect(scope.Build(base)).To(Equal(want))
+				if base != "" {
+					Expect(scope.Restore(want)).To(Equal(base))
+				}
 				if laneName == "" {
-					Expect(resname.Build(env, base)).To(Equal(want))
-					Expect(resname.TrimEnvPrefix(env, want)).To(Equal(base))
+					envScope := resname.ForEnv(env)
+					Expect(envScope.Build(base)).To(Equal(want))
+					if base != "" {
+						Expect(envScope.Restore(want)).To(Equal(base))
+					}
 				}
 			},
 			Entry("standard env without lane", "", "web", "", "web"),
 			Entry("standard env with lane", "", "web", "gray", "gray-web"),
 			Entry("shared-namespace env without lane", "fab12", "web", "", "fab12-web"),
 			Entry("shared-namespace env with lane", "fab12", "web", "gray", "gray-fab12-web"),
+			Entry("hyphenated app and lane names", "fab12", "my-order-svc", "lane-01", "lane-01-fab12-my-order-svc"),
 			Entry("empty base name stays empty", "fab12", "", "gray", ""),
 		)
 
-		It("leaves names without the exact prefix+separator unchanged when trimming", func() {
-			env := &envmodel.Environment{ResourcePrefix: "fab12"}
-			Expect(resname.TrimEnvPrefix(env, "web")).To(Equal("web"))
-			Expect(resname.TrimEnvPrefix(env, "fab12web")).To(Equal("fab12web"))
+		It("leaves names unchanged when restoring if the full scope prefix does not match", func() {
+			env := &envmodel.Environment{NsSharing: envmodel.NsSharing{ResPrefix: "fab12"}}
+			envScope := resname.ForEnv(env)
+			Expect(envScope.Restore("web")).To(Equal("web"))
+			Expect(envScope.Restore("fab12web")).To(Equal("fab12web"))
+			Expect(envScope.Restore("fab12-")).To(Equal("fab12-"))
+
+			// 带泳道的作用域必须完整匹配 <lane>-<prefix>-，不会误剥其他环境同泳道资源
+			laneScope := envScope.WithTrafficLane("gray")
+			Expect(laneScope.Restore("gray-web")).To(Equal("gray-web"))
+			Expect(laneScope.Restore("fab12-web")).To(Equal("fab12-web"))
 		})
 	})
 

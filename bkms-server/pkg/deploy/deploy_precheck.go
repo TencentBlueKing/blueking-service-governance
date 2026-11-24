@@ -74,7 +74,7 @@ func (c *DeployPreChecker) Check(
 	// Persisted models do not contain the deployment image. Use a copy with a placeholder
 	// so the full build can run without persisting it.
 	modelForBuild := *appModel
-	modelForBuild.Workload.Name = resname.Build(env, app.Name)
+	modelForBuild.Workload.Name = resname.ForEnv(env).Build(app.Name)
 	modelForBuild.Workload.Image = deployPreCheckImage
 	buildResult, err := workload.NewBuilder(c.builderService, app, &modelForBuild).Build(ctx, env)
 	if err != nil {

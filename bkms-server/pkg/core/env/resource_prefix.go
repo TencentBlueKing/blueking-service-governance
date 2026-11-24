@@ -69,7 +69,7 @@ func (s *FeatureEnvService) createEnvWithResourcePrefix(
 		if laneNames.Has(prefix) {
 			continue
 		}
-		env.ResourcePrefix = prefix
+		env.NsSharing.ResPrefix = prefix
 		err = s.createEnv(ctx, env)
 		// 命名重复时重试
 		if err == nil || !IsErrEnvClusterNamespaceOccupied(err) {

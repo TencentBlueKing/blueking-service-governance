@@ -496,7 +496,7 @@ var _ = Describe("FeatureEnvService", func() {
 		It("reuses the source namespace with a resource prefix and skips namespace initialization", func() {
 			featEnv, err := createShared()
 			Expect(err).NotTo(HaveOccurred())
-			Expect(featEnv.ResourcePrefix).To(MatchRegexp(`^f[a-z0-9]{4}$`))
+			Expect(featEnv.NsSharing.ResPrefix).To(MatchRegexp(`^f[a-z0-9]{4}$`))
 
 			expectedEnv := deriveFeatureEnv(sourceEnv, model.Environment{
 				ID:          featEnv.ID,
@@ -506,7 +506,7 @@ var _ = Describe("FeatureEnvService", func() {
 				Creator:     "alice",
 			})
 			expectedEnv.Cluster.Namespace = sourceEnv.Cluster.Namespace
-			expectedEnv.ResourcePrefix = featEnv.ResourcePrefix
+			expectedEnv.NsSharing = featEnv.NsSharing
 			storedEnv, err := envStore.GetByID(ctx, featEnv.ID)
 			Expect(err).NotTo(HaveOccurred())
 			expectEnvironmentsEqual(storedEnv, expectedEnv)
@@ -521,10 +521,10 @@ var _ = Describe("FeatureEnvService", func() {
 
 				first, err := createShared()
 				Expect(err).NotTo(HaveOccurred())
-				Expect(first.ResourcePrefix).To(Equal("fab12"))
+				Expect(first.NsSharing.ResPrefix).To(Equal("fab12"))
 				second, err := createShared()
 				Expect(err).NotTo(HaveOccurred())
-				Expect(second.ResourcePrefix).To(Equal("fcd34"))
+				Expect(second.NsSharing.ResPrefix).To(Equal("fcd34"))
 				Expect(second.Cluster.Namespace).To(Equal(first.Cluster.Namespace))
 			})
 		})
@@ -540,7 +540,7 @@ var _ = Describe("FeatureEnvService", func() {
 
 				featEnv, err := createShared()
 				Expect(err).NotTo(HaveOccurred())
-				Expect(featEnv.ResourcePrefix).To(Equal("fcd34"))
+				Expect(featEnv.NsSharing.ResPrefix).To(Equal("fcd34"))
 			})
 		})
 

@@ -66,7 +66,7 @@ func NewGPAService(db *mongo.Database) *GPAService {
 // GPACRName 返回 GPA 配置在环境集群中下发的 GeneralPodAutoscaler CR 名称；
 // 共用命名空间的环境中会自动附加 resourcePrefix 前缀。
 func GPACRName(env *bkmsenv.Environment, configName string) string {
-	return resname.Build(env, configName)
+	return resname.ForEnv(env).Build(configName)
 }
 
 // Apply 将 GPA 配置下发到目标集群（幂等 Upsert）。
@@ -146,8 +146,9 @@ func (s *GPAService) ListByEnv(ctx context.Context, env *bkmsenv.Environment) ([
 		return nil, err
 	}
 	// 环境共用命名空间时，会往下发的 CR 命名中添加 resourcePrefix 前缀，因此这里返回时需要把前缀去掉
+	scope := resname.ForEnv(env)
 	for _, status := range statuses {
-		status.Name = resname.TrimEnvPrefix(env, status.Name)
+		status.Name = scope.Restore(status.Name)
 	}
 	return statuses, nil
 }
@@ -219,7 +220,7 @@ func (s *GPAService) resolveScaleTargetName(
 	if err != nil {
 		return "", errors.Wrapf(err, "get app %s", appID)
 	}
-	return resname.Build(env, app.Name), nil
+	return resname.ForEnv(env).Build(app.Name), nil
 }
 
 // newK8sClient 创建 GeneralPodAutoscaler CR 的 K8s 客户端

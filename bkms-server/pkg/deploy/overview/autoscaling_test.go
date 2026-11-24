@@ -121,7 +121,7 @@ var _ = Describe("autoscaling helpers", func() {
 
 		It("prefixes GPA CR name when environment shares namespace", func() {
 			sharedEnv := newEnv("feat-1", "cls-1", "ns-dev")
-			sharedEnv.ResourcePrefix = "f1a2b"
+			sharedEnv.NsSharing.ResPrefix = "f1a2b"
 			envs := []envmodel.Environment{
 				newEnv("dev", "cls-1", "ns-dev"),
 				sharedEnv,

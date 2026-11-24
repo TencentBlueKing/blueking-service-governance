@@ -289,10 +289,10 @@ var _ = Describe("PreDeployChecker", func() {
 		BeforeEach(func() {
 			params.TrafficLaneName = ""
 			persistEnv(ctx, &envmodel.Environment{
-				Name:           envName,
-				WorkspaceID:    workspaceID,
-				Type:           "development",
-				ResourcePrefix: "fab12",
+				Name:        envName,
+				WorkspaceID: workspaceID,
+				Type:        "development",
+				NsSharing:   envmodel.NsSharing{ResPrefix: "fab12"},
 			})
 		})
 

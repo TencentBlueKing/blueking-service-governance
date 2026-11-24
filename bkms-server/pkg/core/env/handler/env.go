@@ -623,14 +623,18 @@ func (h *Handler) DeleteEnv(c *gin.Context) {
 	}
 	envID := env.ID
 
-	if err = bkmonitor.UnbindEnvFromAll(ctx, h.registry.DB, envID); err != nil {
-		log.Warnf(ctx, "remove env %s from all APMs failed: %v", envID.Hex(), err)
-	}
-
 	svc := bkmsenv.NewEnvService(h.registry.DB)
 	if err = svc.Delete(ctx, envID); err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "delete environment"))
+		code := bkerrs.ErrCodeInternalServerError
+		if errors.Is(err, bkmsenv.ErrEnvHasFeatureEnvs) {
+			code = bkerrs.ErrCodeInvalidRequest
+		}
+		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, code, "delete environment"))
 		return
+	}
+
+	if err = bkmonitor.UnbindEnvFromAll(ctx, h.registry.DB, envID); err != nil {
+		log.Warnf(ctx, "remove env %s from all APMs failed: %v", envID.Hex(), err)
 	}
 
 	go audit.AddOperationRecordAsync(

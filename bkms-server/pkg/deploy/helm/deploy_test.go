@@ -262,7 +262,7 @@ var _ = Describe("genHelmReleaseSpec", func() {
 
 		Context("when env shares namespace with a resource prefix", func() {
 			It("rejects helm release spec generation", func() {
-				env.ResourcePrefix = "fab12"
+				env.NsSharing.ResPrefix = "fab12"
 				spec, err := genHelmReleaseSpec(app, env, "", "my-chart")
 				Expect(errors.Is(err, bkmsenv.ErrSharedNamespaceUnsupported)).To(BeTrue())
 				Expect(spec).To(BeNil())

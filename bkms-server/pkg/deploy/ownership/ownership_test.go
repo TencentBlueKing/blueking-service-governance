@@ -26,6 +26,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/pkg/errors"
+	"go.mongodb.org/mongo-driver/v2/bson"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
@@ -69,7 +70,11 @@ var _ = Describe("Owner", func() {
 		ctx = testutil.NewDefaultTenantContext()
 		cluster := envmodel.BizCluster{ClusterID: "cluster-" + stringx.Random(6), Namespace: "ns-" + stringx.Random(6)}
 		standardEnv = &envmodel.Environment{Name: "dev", Cluster: cluster}
-		sharedEnv = &envmodel.Environment{Name: "feat-app-1-1", ResourcePrefix: "fab12", Cluster: cluster}
+		sharedEnv = &envmodel.Environment{
+			Name:      "feat-app-1-1",
+			NsSharing: envmodel.NsSharing{ResPrefix: "fab12"},
+			Cluster:   cluster,
+		}
 	})
 
 	Describe("Stamp", func() {
@@ -164,6 +169,29 @@ var _ = Describe("Owner", func() {
 			})
 
 			Expect(forApp(standardEnv, "app-1").NeedVerify()).To(BeTrue())
+		})
+
+		It("still verifies when a new standard env rebinds a namespace shared by an orphaned feature env", func() {
+			envs := testutil.NewStore(GinkgoT(), envmodel.EnvMeta)
+			wsID := "ws-" + stringx.Random(6)
+			sharedEnv.Name = "feat-" + stringx.Random(6)
+			sharedEnv.WorkspaceID = wsID
+			sharedEnv.Kind = envmodel.EnvironmentKindFeature
+			sharedEnv.SourceEnvID = bson.NewObjectID()
+			Expect(envs.Create(ctx, sharedEnv)).To(Succeed())
+
+			reboundEnv := &envmodel.Environment{
+				Name:        "dev-rebound-" + stringx.Random(6),
+				WorkspaceID: wsID,
+				Cluster:     sharedEnv.Cluster,
+			}
+			Expect(envs.Create(ctx, reboundEnv)).To(Succeed())
+			DeferCleanup(func() {
+				_, err := envs.DeleteMany(ctx, store.Where("workspaceID", wsID))
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			Expect(forApp(reboundEnv, "app-1").NeedVerify()).To(BeTrue())
 		})
 	})
 
