@@ -18,13 +18,15 @@
 
 import { defineComponent, ref } from 'vue';
 
-import { mount } from '@vue/test-utils';
+import { flushPromises, mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import GoBuildArgs from '~/pages/application/components/go-build-args.vue';
 import { useFrontendFeaturesStore } from '~/stores/frontend-features';
 
 import { i18nGlobalMocks } from './helpers/mock-i18n';
+
+import type { FrontendFeaturesOutput } from '~/@types/v1/frontend-features';
 
 const getFrontendFeatures = vi.hoisted(() => vi.fn());
 
@@ -43,13 +45,10 @@ describe('GoBuildArgs feature flag', () => {
     vi.unstubAllEnvs();
   });
 
-  async function mountGoBuildArgs(enableGoProxy: boolean, initialArgs: Record<string, string> = {}) {
+  function createHarness(language = 'go', initialArgs: Record<string, string> = {}) {
     const pinia = createPinia();
     setActivePinia(pinia);
-    getFrontendFeatures.mockResolvedValue({ enableGoProxy });
     const store = useFrontendFeaturesStore();
-    await store.getFrontendFeatures();
-
     const args = ref<Record<string, string>>({ ...initialArgs });
     const keyValueStub = defineComponent({
       name: 'KeyValue',
@@ -63,7 +62,7 @@ describe('GoBuildArgs feature flag', () => {
 
     const wrapper = mount(GoBuildArgs, {
       props: {
-        language: 'go',
+        language,
         modelValue: args.value,
         'onUpdate:modelValue': (val?: Record<string, string>) => {
           args.value = val ?? {};
@@ -82,19 +81,47 @@ describe('GoBuildArgs feature flag', () => {
       },
     });
 
-    return { wrapper, args, keyValueStub };
+    return { wrapper, store, args, keyValueStub };
   }
 
-  it('hides GoProxy guide and custom placeholders when enableGoProxy is false', async () => {
-    const { wrapper, keyValueStub } = await mountGoBuildArgs(false);
-
+  it('stays hidden by default, on request failure, when disabled, or for non-go languages', async () => {
+    const { wrapper, store, keyValueStub } = createHarness('go');
     expect(wrapper.find('a[href="https://goproxy.example.com"]').exists()).toBe(false);
-    expect(wrapper.text()).not.toContain('一键添加');
+    expect(wrapper.findComponent(keyValueStub).props('valuePlaceholder')).toBeUndefined();
+
+    getFrontendFeatures.mockRejectedValueOnce(new Error('network error'));
+    await store.getFrontendFeatures();
+    expect(wrapper.find('a[href="https://goproxy.example.com"]').exists()).toBe(false);
+
+    getFrontendFeatures.mockResolvedValueOnce({ enableGoProxy: false });
+    await store.getFrontendFeatures();
+    expect(wrapper.find('a[href="https://goproxy.example.com"]').exists()).toBe(false);
+
+    await wrapper.setProps({ language: 'python' });
+    getFrontendFeatures.mockResolvedValueOnce({ enableGoProxy: true });
+    await store.getFrontendFeatures();
+    expect(wrapper.find('a[href="https://goproxy.example.com"]').exists()).toBe(false);
     expect(wrapper.findComponent(keyValueStub).props('valuePlaceholder')).toBeUndefined();
   });
 
-  it('renders GoProxy guide, custom placeholders, and one-click add when enableGoProxy is true', async () => {
-    const { wrapper, args, keyValueStub } = await mountGoBuildArgs(true, { GOPROXY: 'https://custom.example.com' });
+  it('deduplicates concurrent fetches and renders GoProxy guide when explicitly enabled', async () => {
+    let resolveFeatures!: (val: FrontendFeaturesOutput) => void;
+    getFrontendFeatures.mockImplementationOnce(
+      () =>
+        new Promise<FrontendFeaturesOutput>(resolve => {
+          resolveFeatures = resolve;
+        }),
+    );
+
+    const { wrapper, store, args, keyValueStub } = createHarness('go', { GOPROXY: 'https://custom.example.com' });
+    const req1 = store.getFrontendFeatures();
+    const req2 = store.getFrontendFeatures();
+    expect(getFrontendFeatures).toHaveBeenCalledTimes(1);
+    expect(wrapper.find('a[href="https://goproxy.example.com"]').exists()).toBe(false);
+
+    resolveFeatures({ enableGoProxy: true });
+    await Promise.all([req1, req2]);
+    await flushPromises();
 
     expect(wrapper.find('a[href="https://goproxy.example.com"]').exists()).toBe(true);
     expect(wrapper.findComponent(keyValueStub).props('valuePlaceholder')).toMatchObject({

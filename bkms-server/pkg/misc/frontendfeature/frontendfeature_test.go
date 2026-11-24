@@ -60,11 +60,10 @@ var _ = Describe("GetFrontendFeatures", func() {
 		Expect(features.PolarisWorkspaceAccessPoint).To(BeFalse())
 	})
 
-	It("should enable BSCP, KubeInsight, and GoProxy by default with an empty config", func() {
+	It("should only enable BSCP and KubeInsight with an empty config", func() {
 		Expect(getFeatures(config.Config{})).To(Equal(&slz.FrontendFeaturesOutput{
 			EnableBSCP:        true,
 			EnableKubeInsight: true,
-			EnableGoProxy:     true,
 		}))
 	})
 
@@ -75,7 +74,7 @@ var _ = Describe("GetFrontendFeatures", func() {
 				EnableIndependentBkRepo: true,
 				DisableBSCP:             true,
 				DisableKubeInsight:      true,
-				DisableGoProxy:          true,
+				EnableGoProxy:           true,
 			},
 			BCS: config.BCSConfig{WeTermEnvID: "env-1"},
 		})
@@ -83,6 +82,7 @@ var _ = Describe("GetFrontendFeatures", func() {
 			EnableMultiTenantMode:   true,
 			EnableIndependentBkRepo: true,
 			EnableWeTerm:            true,
+			EnableGoProxy:           true,
 		}))
 	})
 })

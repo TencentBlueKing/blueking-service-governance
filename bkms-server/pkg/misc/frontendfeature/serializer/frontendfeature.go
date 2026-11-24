@@ -36,7 +36,7 @@ type FrontendFeaturesOutput struct {
 	EnableBSCP bool `json:"enableBSCP"`
 	// 是否启用 KubeInsight（集群诊断）对接，为 false 时前端隐藏集群诊断相关入口
 	EnableKubeInsight bool `json:"enableKubeInsight"`
-	// 是否启用 Go 模块代理（GOPROXY）构建参数指引，为 false 时前端隐藏相关提示与快捷添加入口
+	// 是否启用 Go 模块代理（GOPROXY）构建参数指引，默认为 false，显式开启后前端才展示相关提示与快捷添加入口
 	EnableGoProxy bool `json:"enableGoProxy"`
 }
 
@@ -49,7 +49,7 @@ func NewFrontendFeaturesOutput(cfg *config.Config) *FrontendFeaturesOutput {
 		EnableWeTerm:                cfg.BCS.WeTermEnvID != "",
 		EnableBSCP:                  !cfg.FeatureIntegrations.DisableBSCP,
 		EnableKubeInsight:           !cfg.FeatureIntegrations.DisableKubeInsight,
-		EnableGoProxy:               !cfg.FeatureIntegrations.DisableGoProxy,
+		EnableGoProxy:               cfg.FeatureIntegrations.EnableGoProxy,
 	}
 }
 

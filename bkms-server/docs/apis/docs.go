@@ -29797,7 +29797,7 @@ const docTemplate = `{
                     "type": "boolean"
                 },
                 "enableGoProxy": {
-                    "description": "是否启用 Go 模块代理（GOPROXY）构建参数指引，为 false 时前端隐藏相关提示与快捷添加入口",
+                    "description": "是否启用 Go 模块代理（GOPROXY）构建参数指引，默认为 false，显式开启后前端才展示相关提示与快捷添加入口",
                     "type": "boolean"
                 },
                 "enableIndependentBkRepo": {

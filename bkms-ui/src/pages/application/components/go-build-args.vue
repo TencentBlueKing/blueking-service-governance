@@ -49,10 +49,10 @@
   const modelValue = defineModel<Record<string, string>>();
   const { t } = useI18n();
   const frontendFeaturesStore = useFrontendFeaturesStore();
-  const golangProxyUrl = computed(() => import.meta.env.BK_GOLANG_PROXY_URL);
+  const golangProxyUrl = import.meta.env.BK_GOLANG_PROXY_URL;
   const goProxyArgKeys = ['GOPROXY', 'GOPRIVATE', 'GOSUMDB'];
   const isGoProxyEnabled = computed(() => props.language === 'go' && frontendFeaturesStore.enableGoProxy);
-  const showGoProxyGuide = computed(() => isGoProxyEnabled.value && Boolean(golangProxyUrl.value));
+  const showGoProxyGuide = computed(() => isGoProxyEnabled.value && Boolean(golangProxyUrl));
   const valuePlaceholders = computed(() =>
     isGoProxyEnabled.value
       ? {
