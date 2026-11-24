@@ -57,6 +57,9 @@ type Resolver interface {
 	// ResolveByCluster 解析集群使用的接入点：不允许空间自建接入点时所有集群使用平台托管接入点；
 	// 否则按集群绑定解析，未绑定时返回 ErrClusterNotBound
 	ResolveByCluster(ctx context.Context, workspaceID, clusterID string) (*AccessPoint, error)
+	// ResolveIDsByClusters 批量解析集群使用的接入点 ID，返回集群 ID 到接入点 ID 的映射，规则同 ResolveByCluster，
+	// 未绑定的集群不在结果中；只返回 ID，不组装接入点，也不校验接入点是否存在
+	ResolveIDsByClusters(ctx context.Context, workspaceID string, clusterIDs []string) (map[string]string, error)
 	// ResolveForPolarisConfig 解析北极星配置创建时固定的接入点：接入点 ID 为空（存量数据）时按平台托管处理，
 	// 其余按配置所属应用的空间调用 ResolveByID
 	ResolveForPolarisConfig(ctx context.Context, cfg PolarisConfigRef) (*AccessPoint, error)
@@ -115,11 +118,11 @@ func (r *resolver) ResolveByCluster(ctx context.Context, workspaceID, clusterID 
 	return ap, nil
 }
 
-// ClusterAccessPointIDs 批量解析空间内集群使用的接入点 ID，返回集群 ID 到接入点 ID 的映射，规则同 Resolver.ResolveByCluster：
-// 不允许空间自建接入点时全部为 PlatformID；否则为集群绑定的接入点 ID，未绑定的集群不在结果中。
+// ResolveIDsByClusters 批量解析空间内集群使用的接入点 ID：不允许空间自建接入点时全部为 PlatformID；
+// 否则为集群绑定的接入点 ID，未绑定的集群不在结果中。
 // 仅查询绑定表、不校验接入点是否存在：仍绑定集群的接入点不允许删除，因此绑定记录不会指向已删除的接入点
-func ClusterAccessPointIDs(
-	ctx context.Context, db *mongo.Database, workspaceID string, clusterIDs []string,
+func (r *resolver) ResolveIDsByClusters(
+	ctx context.Context, workspaceID string, clusterIDs []string,
 ) (map[string]string, error) {
 	clusterIDs = lo.Uniq(clusterIDs)
 	if !config.G.Polaris.AllowWorkspaceAccessPoints {
@@ -128,7 +131,7 @@ func ClusterAccessPointIDs(
 	if len(clusterIDs) == 0 {
 		return map[string]string{}, nil
 	}
-	bindings, err := store.Of(db, BindingMeta).List(ctx, ByClusters(workspaceID, clusterIDs))
+	bindings, err := store.Of(r.db, BindingMeta).List(ctx, ByClusters(workspaceID, clusterIDs))
 	if err != nil {
 		return nil, errors.Wrapf(err, "list polaris bindings of clusters %v in workspace %s", clusterIDs, workspaceID)
 	}

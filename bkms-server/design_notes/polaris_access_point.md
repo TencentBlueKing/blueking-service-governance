@@ -71,6 +71,7 @@ OpenAPI 只用第一个地址（`http://{clientHosts[0]}:8090`），SDK 使用�
 | --- | --- | --- |
 | `ResolveByID(ctx, ws, id)` | `platform` 返回平台托管接入点（不可用时 `ErrAccessPointNotFound`，见 4.1）；其余 ID 查库且必须属于该空间，否则 `ErrAccessPointNotFound` | 02、04 |
 | `ResolveByCluster(ctx, ws, clusterID)` | `allowWorkspaceAccessPoints=false` 返回平台托管；否则查集群绑定，未绑定返回 `ErrClusterNotBound`，不回退平台托管（见 4.2） | 03、04、05 |
+| `ResolveIDsByClusters(ctx, ws, clusterIDs)` | 规则同 `ResolveByCluster` 的批量版本，只返回集群 ID 到接入点 ID 的映射，未绑定的集群不在结果中；用于环境输出的 `polarisAccessPointID` | 03 |
 | `ResolveForPolarisConfig(ctx, cfg)` | `cfg.AccessPointID` 为空（内部版存量数据）或为 `platform` 按平台托管处理；其余按配置所属应用的空间调用 `ResolveByID` | 05、06 |
 
 - 解析结果里的 Token 是明文，只在服务端内部使用，不能出现在接口响应、日志与审计记录中。

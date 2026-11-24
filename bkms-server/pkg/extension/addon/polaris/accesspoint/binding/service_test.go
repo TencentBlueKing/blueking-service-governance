@@ -232,7 +232,7 @@ var _ = Describe("Service", func() {
 			Expect(after).To(Equal([]string{clusterA}))
 			Expect(boundClusters(first)).To(Equal([]string{clusterB}))
 			Expect(boundClusters(second)).To(Equal([]string{clusterA}))
-			ids, err := accesspoint.ClusterAccessPointIDs(ctx, db, ws.ID, []string{clusterA})
+			ids, err := accesspoint.NewResolver(db).ResolveIDsByClusters(ctx, ws.ID, []string{clusterA})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(ids).To(Equal(map[string]string{clusterA: second.ID.Hex()}))
 		})

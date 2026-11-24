@@ -737,12 +737,13 @@ func (h *Handler) ListEnvTrafficLanes(c *gin.Context) {
 	)
 }
 
-// polarisAccessPointIDs 返回各环境所在集群对应的北极星接入点 ID（clusterID -> accessPointID），见 accesspoint.ClusterAccessPointIDs
+// polarisAccessPointIDs 返回各环境所在集群对应的北极星接入点 ID（clusterID -> accessPointID），
+// 见 accesspoint.Resolver.ResolveIDsByClusters
 func (h *Handler) polarisAccessPointIDs(
 	ctx context.Context, workspaceID string, envs ...envmodel.Environment,
 ) (map[string]string, error) {
 	clusterIDs := lo.Map(envs, func(env envmodel.Environment, _ int) string { return env.Cluster.ClusterID })
-	return accesspoint.ClusterAccessPointIDs(ctx, h.registry.DB, workspaceID, clusterIDs)
+	return accesspoint.NewResolver(h.registry.DB).ResolveIDsByClusters(ctx, workspaceID, clusterIDs)
 }
 
 func abortIfEnvClusterNamespaceOccupied(c *gin.Context, err error) bool {

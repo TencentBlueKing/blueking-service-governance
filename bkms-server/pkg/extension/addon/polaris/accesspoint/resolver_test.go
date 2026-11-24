@@ -209,14 +209,12 @@ var _ = Describe("Resolver", func() {
 		})
 	})
 
-	Context("ClusterAccessPointIDs", func() {
+	Context("ResolveIDsByClusters", func() {
 		It("should map every cluster to the platform when workspace access points are disabled", func() {
 			p := dbfactory.PolarisAccessPoint(ctx, apStore, workspaceID)
 			dbfactory.PolarisClusterBinding(ctx, bindStore, workspaceID, "BCS-K8S-00001", p.ID.Hex())
 
-			ids, err := accesspoint.ClusterAccessPointIDs(
-				ctx, testutil.NewDB(GinkgoT()), workspaceID, []string{"BCS-K8S-00001", "BCS-K8S-00002"},
-			)
+			ids, err := resolver.ResolveIDsByClusters(ctx, workspaceID, []string{"BCS-K8S-00001", "BCS-K8S-00002"})
 
 			Expect(err).NotTo(HaveOccurred())
 			Expect(ids).To(Equal(map[string]string{
@@ -232,11 +230,8 @@ var _ = Describe("Resolver", func() {
 			other := dbfactory.PolarisAccessPoint(ctx, apStore, "ws-other-"+stringx.Random(6))
 			dbfactory.PolarisClusterBinding(ctx, bindStore, other.WorkspaceID, "BCS-K8S-00002", other.ID.Hex())
 
-			ids, err := accesspoint.ClusterAccessPointIDs(
-				ctx,
-				testutil.NewDB(GinkgoT()),
-				workspaceID,
-				[]string{"BCS-K8S-00001", "BCS-K8S-00002", "BCS-K8S-00001"},
+			ids, err := resolver.ResolveIDsByClusters(
+				ctx, workspaceID, []string{"BCS-K8S-00001", "BCS-K8S-00002", "BCS-K8S-00001"},
 			)
 
 			Expect(err).NotTo(HaveOccurred())
