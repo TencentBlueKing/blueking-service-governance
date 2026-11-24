@@ -42,6 +42,8 @@ featureIntegrations:
   disableBSCP: false
   # 关闭 KubeInsight（集群诊断）对接
   disableKubeInsight: false
+  # 关闭 Go 模块代理（GOPROXY）构建参数指引
+  disableGoProxy: false
 # 蓝鲸 API 环境配置
 bkApiStages:
   # BSCP

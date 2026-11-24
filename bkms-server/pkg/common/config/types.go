@@ -89,6 +89,8 @@ type FeatureIntegrationsConfig struct {
 	DisableBSCP bool
 	// DisableKubeInsight 关闭 KubeInsight（集群诊断）对接，开启后集群诊断相关接口直接返回未启用错误。
 	DisableKubeInsight bool
+	// DisableGoProxy 关闭 Go 模块代理（GOPROXY）构建参数指引，开启后前端隐藏相关提示与快捷添加入口
+	DisableGoProxy bool
 	// EnableIndependentBCSProject 控制 BCS 项目是否与蓝盾项目解耦。
 	// 为 true：蓝盾始终新建；新建容器则创建 BCS 项目，绑定已有容器则绑定已有 BCS 项目。
 	// 为 false：新建/绑定都按蓝盾项目处理，BCS ID/Code 复用蓝盾项目。

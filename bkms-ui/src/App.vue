@@ -127,6 +127,7 @@
   import ApplyPerm from '~/components/apply-perm.vue';
   import { useEventBus } from '~/composables/use-event-bus';
   import usePlatform from '~/composables/use-platform';
+  import { useFrontendFeaturesStore } from '~/stores/frontend-features';
   import { useUserStore } from '~/stores/user';
 
   import { getNavList } from './composables/use-menu';
@@ -151,6 +152,8 @@
   const userStore = useUserStore();
   // 空间相关全局store
   const spaceStore = useSpaceStore();
+  // 前端功能开关store
+  const frontendFeaturesStore = useFrontendFeaturesStore();
 
   // 通知组件apiUrl
   const bkNoticeApiUrl = computed(() => {
@@ -266,6 +269,7 @@
     spaceStore.handleGetWorkspaceList();
     getPlatformInfo();
     userStore.getRoleInfo();
+    frontendFeaturesStore.getFrontendFeatures();
   });
 </script>
 <style lang="postcss" scoped>
