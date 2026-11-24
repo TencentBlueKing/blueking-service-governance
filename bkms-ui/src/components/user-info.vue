@@ -60,6 +60,7 @@
   // 传给 login-userinfo 的用户信息（name 必填：头像首字母 + 兜底文案）
   const loginUserinfo = computed(() => ({
     name: userStore.currentUsername || '--',
+    timezone: userStore.userInfo.timeZone,
   }));
 
   const loginTenant = computed(() => {
@@ -85,6 +86,16 @@
         handle: handleGotoPlatform,
       });
     }
+    // 后端未配置用户管理地址时该字段为空，此时不展示入口。
+    const personalCenterURL = userStore.userInfo.personalCenterURL;
+    if (personalCenterURL) {
+      actions.unshift({
+        text: t('个人中心'),
+        icon: 'bkms-icon bkms-icon-user-line',
+        href: personalCenterURL,
+        target: '_blank',
+      });
+    }
     return actions;
   });
 
@@ -104,5 +115,13 @@
   /* 深色导航下激活态高亮（组件默认 #3a84ff 偏暗） */
   .bk-login-userinfo.is-active {
     color: #c2cee5;
+  }
+</style>
+
+<style lang="postcss">
+  /* 面板由 tippy 挂到 body，scoped 选不中。图标字体字形比 12px 文字低约 2px。 */
+  .bk-login-userinfo-action-item-icon .bkms-icon {
+    position: relative;
+    top: -2px;
   }
 </style>

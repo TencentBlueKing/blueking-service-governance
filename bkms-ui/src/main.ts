@@ -67,7 +67,7 @@ import '@blueking/table/vue3/vue3.css';
 import '@unocss/reset/tailwind.css';
 import 'uno.css';
 
-getUser({}, { needRes: true }).then(async res => {
+getUser().then(async res => {
   const app = createApp(App);
   // 安装modules下面所有模块
   Object.values(import.meta.glob<{ install: UserModule }>('./modules/*.ts', { eager: true })).forEach(i => {

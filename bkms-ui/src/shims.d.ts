@@ -25,6 +25,8 @@ interface Window {
   readonly BK_SHARED_RES_BASE_JS_URL: string;
   // eslint-disable-next-line @typescript-eslint/consistent-type-imports
   i18n: import('vue-i18n').I18nGlobal;
+  /** 蓝鲸图表组件使用的 IANA 时区，启动后由当前用户信息覆盖。 */
+  timezone?: string;
   MonacoEnvironment?: {
     getWorker(workerId: string, label: string): Worker;
   };
