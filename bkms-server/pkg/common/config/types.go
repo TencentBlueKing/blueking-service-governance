@@ -74,29 +74,6 @@ type BkPlatUrlsConfig struct {
 	CompApiBaseUrl string
 }
 
-// FeatureIntegrationsConfig 控制可选平台集成链路是否启用。
-type FeatureIntegrationsConfig struct {
-	// EnableBkLoginUserinfoAuth 控制 bk_token 认证是否通过 bk-login 网关 userinfo 链路完成。
-	EnableBkLoginUserinfoAuth bool
-	// EnableBkUserTenantVerify 控制是否通过 bk-user 校验用户所属租户和状态。
-	EnableBkUserTenantVerify bool
-	// EnableIndependentBkRepo 制品库为独立部署：不接入权限中心，
-	// 接口改用制品库账号的 Basic 认证，而非平台账号认证；制品库成员需在制品库侧自行管理。
-	EnableIndependentBkRepo bool
-	// EnableGoProxy 启用 Go 模块代理（GOPROXY）构建参数指引，缺省为 false，显式开启后前端才展示相关提示与快捷添加入口
-	EnableGoProxy bool
-	// DisableBSCP 关闭 BSCP（服务配置中心）对接，用于未部署 BSCP 的环境。
-	// 开启后创建工作空间不再绑定 BSCP 项目，BSCP 相关接口直接返回未启用错误。
-	// 关闭期间创建的工作空间没有 BSCP 绑定，重新启用 BSCP 后需逐个执行 bind-bscp-project 命令补绑。
-	DisableBSCP bool
-	// DisableKubeInsight 关闭 KubeInsight（集群诊断）对接，开启后集群诊断相关接口直接返回未启用错误。
-	DisableKubeInsight bool
-	// EnableIndependentBCSProject 控制 BCS 项目是否与蓝盾项目解耦。
-	// 为 true：蓝盾始终新建；新建容器则创建 BCS 项目，绑定已有容器则绑定已有 BCS 项目。
-	// 为 false：新建/绑定都按蓝盾项目处理，BCS ID/Code 复用蓝盾项目。
-	EnableIndependentBCSProject bool
-}
-
 // BkApiStagesConfig 蓝鲸 API 版本信息，不指定时均默认为 "prod"
 type BkApiStagesConfig struct {
 	BSCP        string
@@ -250,12 +227,6 @@ type PolarisConfig struct {
 	// AllowWorkspaceAccessPoints 是否允许空间登记自建北极星接入点并按集群绑定，缺省为 false。
 	// 为 false 时只有平台托管接入点，所有集群隐式绑定到它（内部版）；社区版需显式配置为 true
 	AllowWorkspaceAccessPoints bool
-}
-
-// TenantConfig 多租户相关配置。
-type TenantConfig struct {
-	// EnableMultiTenantMode 控制是否启用多租户模式。
-	EnableMultiTenantMode bool
 }
 
 // --------------------------- 基础设施依赖 ---------------------------
@@ -425,6 +396,35 @@ type TaskPollerConfig struct {
 	DeployStatus PollConfig
 }
 
+// TenantConfig 多租户相关配置。
+type TenantConfig struct {
+	// EnableMultiTenantMode 控制是否启用多租户模式。
+	EnableMultiTenantMode bool
+}
+
+// FeatureIntegrationsConfig 控制可选平台集成与功能特性开关。
+type FeatureIntegrationsConfig struct {
+	// EnableBkLoginUserinfoAuth 控制 bk_token 认证是否通过 bk-login 网关 userinfo 链路完成。
+	EnableBkLoginUserinfoAuth bool
+	// EnableBkUserTenantVerify 控制是否通过 bk-user 校验用户所属租户和状态。
+	EnableBkUserTenantVerify bool
+	// EnableIndependentBkRepo 制品库为独立部署：不接入权限中心，
+	// 接口改用制品库账号的 Basic 认证，而非平台账号认证；制品库成员需在制品库侧自行管理。
+	EnableIndependentBkRepo bool
+	// EnableIndependentBCSProject 控制 BCS 项目是否与蓝盾项目解耦。
+	// 为 true：蓝盾始终新建；新建容器则创建 BCS 项目，绑定已有容器则绑定已有 BCS 项目。
+	// 为 false：新建/绑定都按蓝盾项目处理，BCS ID/Code 复用蓝盾项目。
+	EnableIndependentBCSProject bool
+	// EnableGoProxy 启用 Go 模块代理（GOPROXY）构建参数指引，缺省为 false，显式开启后前端才展示相关提示与快捷添加入口
+	EnableGoProxy bool
+	// DisableBSCP 关闭 BSCP（服务配置中心）对接，用于未部署 BSCP 的环境。
+	// 开启后创建工作空间不再绑定 BSCP 项目，BSCP 相关接口直接返回未启用错误。
+	// 关闭期间创建的工作空间没有 BSCP 绑定，重新启用 BSCP 后需逐个执行 bind-bscp-project 命令补绑。
+	DisableBSCP bool
+	// DisableKubeInsight 关闭 KubeInsight（集群诊断）对接，开启后集群诊断相关接口直接返回未启用错误。
+	DisableKubeInsight bool
+}
+
 // --------------------------- 开发环境专用 ---------------------------
 
 // DevConfig 包含开发相关的配置项
@@ -470,8 +470,6 @@ type Config struct {
 	Account AccountConfig
 	// 蓝鲸平台地址配置
 	BkPlatUrls BkPlatUrlsConfig
-	// FeatureIntegrations 可选平台集成开关
-	FeatureIntegrations FeatureIntegrationsConfig
 	// 蓝鲸 API 版本信息
 	BkApiStages BkApiStagesConfig
 	// BkIAMSystemIDs 接入蓝鲸权限中心（IAM）时使用的各业务系统 ID
@@ -522,6 +520,8 @@ type Config struct {
 	TaskPoller TaskPollerConfig
 	// Tenant 多租户配置
 	Tenant TenantConfig
+	// FeatureIntegrations 可选平台集成与功能特性开关
+	FeatureIntegrations FeatureIntegrationsConfig
 
 	// --------------------------- 开发环境专用 ---------------------------
 	// Development 包含与项目开发相关的各种配置项，仅供开发时使用

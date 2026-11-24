@@ -18,14 +18,6 @@ bkPlatUrls:
   bkApiUrlTmpl: https://{api_name}.apigw.example.com
   # 组件 API 基础地址
   compApiBaseUrl: https://api.example.com
-# 可选平台集成开关
-featureIntegrations:
-  enableBkLoginUserinfoAuth: false   # bk_token 走 bk-login 网关 userinfo
-  enableBkUserTenantVerify: false    # 用 bk-user 校验用户所属租户/状态
-  enableIndependentBkRepo: false     # 制品库独立部署，不接入权限中心
-  # 测试配置显式关闭：创建空间时 BCS 复用蓝盾项目，不单独创建 BCS 项目。
-  enableIndependentBCSProject: false
-  disableBSCP: false                 # 关闭 BSCP 对接
 # 蓝鲸 API 环境配置
 bkApiStages:
   kubeinsight: prod
@@ -49,9 +41,6 @@ bkIAMSystemIDs:
   bkrepo: bkrepo
   bscp: bk_bscp
   bkcc: bkcc
-# 多租户配置
-tenant:
-  enableMultiTenantMode: false
 # ------------------------------ 外部依赖服务（蓝鲸 SaaS & 公司系统） ------------------------------
 # 蓝盾配置，用于项目初始化 & 流水线模板加载
 bkci:
@@ -192,6 +181,17 @@ taskPoller:
     timeout: 60
     # 轮询间隔（单位：秒）
     interval: 1
+# 多租户配置
+tenant:
+  enableMultiTenantMode: false
+# 可选平台集成与功能特性开关
+featureIntegrations:
+  enableBkLoginUserinfoAuth: false   # bk_token 走 bk-login 网关 userinfo
+  enableBkUserTenantVerify: false    # 用 bk-user 校验用户所属租户/状态
+  enableIndependentBkRepo: false     # 制品库独立部署，不接入权限中心
+  # 测试配置显式关闭：创建空间时 BCS 复用蓝盾项目，不单独创建 BCS 项目。
+  enableIndependentBCSProject: false
+  disableBSCP: false                 # 关闭 BSCP 对接
 # ------------------------------ 开发环境专用 ------------------------------
 # 重要：测试环境下不启用真实的外部依赖组件，使用 Stub 组件代替
 development:

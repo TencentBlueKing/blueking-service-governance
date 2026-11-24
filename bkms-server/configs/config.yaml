@@ -25,25 +25,6 @@ bkPlatUrls:
   bkApiUrlTmpl: https://{api_name}.apigw.example.com
   # 组件 API 基础地址
   compApiBaseUrl: https://api.example.com
-# 可选平台集成开关
-featureIntegrations:
-  # bk_token 走 bk-login 网关 userinfo
-  enableBkLoginUserinfoAuth: false
-  # 用 bk-user 校验用户所属租户/状态
-  enableBkUserTenantVerify: false
-  # 制品库为独立部署：不接入权限中心，接口使用制品库账号 Basic 认证，制品库成员需在制品库侧自行管理
-  enableIndependentBkRepo: false
-  # 是否让 BCS 项目与蓝盾项目解耦。
-  # true：蓝盾始终新建；新建容器则创建 BCS 项目，绑定已有容器则绑定已有 BCS 项目。
-  # false：新建/绑定都按蓝盾项目处理，BCS ID/Code 复用蓝盾项目。
-  enableIndependentBCSProject: false
-  # 启用 Go 模块代理（GOPROXY）构建参数指引，默认不展示，显式设为 true 时开启
-  enableGoProxy: false
-  # 关闭 BSCP 对接，未部署 BSCP 的环境设为 true
-  # 关闭期间创建的工作空间没有 BSCP 绑定，重新启用后需逐个执行 bind-bscp-project 命令补绑
-  disableBSCP: false
-  # 关闭 KubeInsight（集群诊断）对接
-  disableKubeInsight: false
 # 蓝鲸 API 环境配置
 bkApiStages:
   # BSCP
@@ -76,10 +57,6 @@ bkIAMSystemIDs:
   bkrepo: bkrepo
   bscp: bk_bscp
   bkcc: bkcc
-# 多租户配置
-tenant:
-  # 是否开启多租户模式；关闭时仅接受空 tenant 或 default
-  enableMultiTenantMode: false
 # ------------------------------ 外部依赖服务（蓝鲸 SaaS & 公司系统） ------------------------------
 # BCS 配置，由于管理 BCS 集群内的资源
 bcs:
@@ -278,6 +255,29 @@ taskPoller:
     timeout: 1200
     # 轮询间隔（单位：秒）
     interval: 15
+# 多租户配置
+tenant:
+  # 是否开启多租户模式；关闭时仅接受空 tenant 或 default
+  enableMultiTenantMode: false
+# 可选平台集成与功能特性开关
+featureIntegrations:
+  # bk_token 走 bk-login 网关 userinfo
+  enableBkLoginUserinfoAuth: false
+  # 用 bk-user 校验用户所属租户/状态
+  enableBkUserTenantVerify: false
+  # 制品库为独立部署：不接入权限中心，接口使用制品库账号 Basic 认证，制品库成员需在制品库侧自行管理
+  enableIndependentBkRepo: false
+  # 是否让 BCS 项目与蓝盾项目解耦。
+  # true：蓝盾始终新建；新建容器则创建 BCS 项目，绑定已有容器则绑定已有 BCS 项目。
+  # false：新建/绑定都按蓝盾项目处理，BCS ID/Code 复用蓝盾项目。
+  enableIndependentBCSProject: false
+  # 启用 Go 模块代理（GOPROXY）构建参数指引，默认不展示，显式设为 true 时开启
+  enableGoProxy: false
+  # 关闭 BSCP 对接，未部署 BSCP 的环境设为 true
+  # 关闭期间创建的工作空间没有 BSCP 绑定，重新启用后需逐个执行 bind-bscp-project 命令补绑
+  disableBSCP: false
+  # 关闭 KubeInsight（集群诊断）对接
+  disableKubeInsight: false
 # ------------------------------ 开发环境专用 ------------------------------
 # 开发环境专用配置
 development:
