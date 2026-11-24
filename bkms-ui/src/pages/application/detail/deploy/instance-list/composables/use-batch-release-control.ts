@@ -126,9 +126,6 @@ export function useBatchReleaseControl(options: UseBatchReleaseControlOptions) {
    */
   const isBusy = computed(() => options.isEnabled() && isBatchReleaseOccupied(options.getLatestStatus()));
 
-  /** 顶部「部署」按钮被禁用时的提示原因。 */
-  const busyReason = computed(() => (isBusy.value ? t('分批发布进行中，请先完成、跳过或回滚') : ''));
-
   /** 清空横幅：环境切换、多环境、非实例 Tab 或最新记录不是分批发布时调用。 */
   function reset() {
     requestToken += 1;
@@ -335,7 +332,6 @@ export function useBatchReleaseControl(options: UseBatchReleaseControlOptions) {
   }
 
   return {
-    busyReason,
     handleAction,
     handleClose,
     isBusy,

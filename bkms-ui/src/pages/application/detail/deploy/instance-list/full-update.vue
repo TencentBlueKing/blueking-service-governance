@@ -44,6 +44,15 @@
         form-type="vertical"
         :model="formModel"
       >
+        <!-- 灰度进行中：部署会结束本次灰度并按本次配置更新实例，提交前需二次确认 -->
+        <Alert
+          v-if="canaryInProgress"
+          class="!mb-[16px]"
+          theme="warning"
+        >
+          {{ $t('当前环境正在灰度发布，重新部署将结束本次灰度，并按本次配置更新实例') }}
+        </Alert>
+
         <Form.FormItem
           class="!mb-[14px]"
           :label="$t('更新内容')"
@@ -66,13 +75,13 @@
               >{{ $t('仅配置') }}</Radio
             >
             <Radio
-              :disabled="isFederationEnv"
+              :disabled="!!inplaceRestartDisabledReason"
               label="image"
             >
               <span
                 v-bk-tooltips="{
-                  content: $t('联邦集群不支持原地重启'),
-                  disabled: !isFederationEnv,
+                  content: inplaceRestartDisabledReason,
+                  disabled: !inplaceRestartDisabledReason,
                 }"
               >
                 {{ $t('仅镜像（原地重启）') }}
@@ -239,9 +248,9 @@
 </template>
 
 <script lang="ts" setup>
-  import { computed, reactive, ref, watch } from 'vue';
+  import { computed, h, reactive, ref, watch } from 'vue';
 
-  import { Alert, Button, Form, Input, Message, Radio, Sideslider } from 'bkui-vue';
+  import { Alert, Button, Form, InfoBox, Input, Message, Radio, Sideslider } from 'bkui-vue';
   import { useI18n } from 'vue-i18n';
   import { InstanceService } from '~/api/modules/v1';
   import { RELEASE_MODE } from '~/common/enums/deploy';
@@ -275,6 +284,8 @@
     viewReleaseDetail: [];
   }>();
   const props = defineProps<{
+    /** 当前环境是否正在灰度发布：提交会结束本次灰度，需提示 + 二次确认，且不支持原地重启 */
+    canaryInProgress?: boolean;
     effectiveReplicas?: number;
     isProdEnv?: boolean;
     latestBuildId?: string;
@@ -287,6 +298,12 @@
   const { checkDeployEnv, getEnvDeployDisabledReason } = useAppVisibleEnvs();
   const deployDisabledReason = computed(() => getEnvDeployDisabledReason(trpcDeployStore.curEnvItem));
   const isFederationEnv = useIsFederationEnv(() => trpcDeployStore.curEnvItem);
+  /** 「仅镜像（原地重启）」不可用的原因：联邦集群不支持该操作，灰度进行中原位重启会打断本次灰度。 */
+  const inplaceRestartDisabledReason = computed(() => {
+    if (isFederationEnv.value) return t('联邦集群不支持原地重启');
+    if (props.canaryInProgress) return t('灰度发布中不支持原地重启');
+    return '';
+  });
 
   const { workspaceId, repoAlias, branchSelectRef, prepareBranchAfterMount } = useAppRepoRefSelect(
     () => appDetailStore.appDetail?.buildConfig?.repoBuildConfig?.repoAlias || '',
@@ -412,6 +429,28 @@
     return replicas > 0 ? t('部署任务已提交，正在更新全部 {0} 个实例', [replicas]) : t('操作成功');
   }
 
+  /** 灰度进行中的提交确认：说明本次灰度将结束、实例按当前侧栏配置更新。 */
+  function confirmEndCanaryAndDeploy() {
+    InfoBox({
+      title: t('确认结束灰度并重新部署？'),
+      headerAlign: 'center',
+      footerAlign: 'center',
+      contentAlign: 'center',
+      content: h(
+        'div',
+        {
+          class: 'rounded-[2px] bg-[#F5F7FA] px-[12px] py-[16px] text-[14px] leading-[22px] text-[#4D4F56]',
+        },
+        t('本次灰度发布将结束，实例按本次配置更新'),
+      ),
+      confirmText: t('重新部署'),
+      cancelText: t('取消'),
+      onConfirm: () => {
+        void submitDeploy();
+      },
+    });
+  }
+
   // 通过接口获取当前镜像 Tag
   async function fetchCurrentImageTag() {
     const deployAPIs = useDeployAPIs(appDetailStore.appType as DeployableAppType);
@@ -520,6 +559,50 @@
       return;
     }
 
+    // 灰度进行中提交部署会结束本次灰度：先让用户确认，确认后才真正提交。
+    if (props.canaryInProgress) {
+      confirmEndCanaryAndDeploy();
+      return;
+    }
+
+    await submitDeploy();
+  }
+
+  /**
+   * 仅镜像
+   */
+  async function handleImage() {
+    if (isFederationEnv.value) return false;
+    try {
+      const params: UpdateAppInstancesRequest = {
+        appID: appDetailStore.appID,
+        envName: trpcDeployStore.curEnvItem?.name ?? '',
+        imageTag: formModel.imageTag,
+        updateStrategy: 'InplaceUpdate',
+        // 全量更新传空数组
+        instanceIDs: [],
+      };
+      await InstanceService.updateAppInstances(params);
+      return true;
+    } catch (error) {
+      console.warn(error);
+      return false;
+    }
+  }
+
+  /**
+   * 切换更新内容
+   * @param val 'both' | 'config' | 'image'
+   */
+  function handleUpdateContentChange(val: 'both' | 'config' | 'image') {
+    // 仅配置时,使用当前镜像 Tag;其他情况清空让用户选择
+    formModel.imageTag = val === 'config' ? curImageTag.value : '';
+    // 仅镜像（原地重启）不支持分批发布，切回时静默重置，避免触发禁用重置提示
+    if (val === 'image') resetToAllInstances();
+  }
+
+  /** 真正提交部署：灰度发布提交后进入发布详情，其它方式成功后按构建模式决定是否关闭侧栏。 */
+  async function submitDeploy() {
     // 灰度发布：提交请求结束后无论成败都进入发布详情，只有表单 / 资格校验不通过时留在侧栏。
     const isCanaryRelease = formModel.releaseMode === RELEASE_MODE.CANARY;
 
@@ -565,39 +648,6 @@
     } finally {
       loading.value = false;
     }
-  }
-
-  /**
-   * 仅镜像
-   */
-  async function handleImage() {
-    if (isFederationEnv.value) return false;
-    try {
-      const params: UpdateAppInstancesRequest = {
-        appID: appDetailStore.appID,
-        envName: trpcDeployStore.curEnvItem?.name ?? '',
-        imageTag: formModel.imageTag,
-        updateStrategy: 'InplaceUpdate',
-        // 全量更新传空数组
-        instanceIDs: [],
-      };
-      await InstanceService.updateAppInstances(params);
-      return true;
-    } catch (error) {
-      console.warn(error);
-      return false;
-    }
-  }
-
-  /**
-   * 切换更新内容
-   * @param val 'both' | 'config' | 'image'
-   */
-  function handleUpdateContentChange(val: 'both' | 'config' | 'image') {
-    // 仅配置时,使用当前镜像 Tag;其他情况清空让用户选择
-    formModel.imageTag = val === 'config' ? curImageTag.value : '';
-    // 仅镜像（原地重启）不支持分批发布，切回时静默重置，避免触发禁用重置提示
-    if (val === 'image') resetToAllInstances();
   }
 
   watch(isShow, async val => {

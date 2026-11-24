@@ -29,7 +29,7 @@
  *              序号未回填（pending / UpdatingPrimary 收尾 / CleaningCanary）时不展示任何按钮
  *           ⑦ 需二次确认的操作（回滚/回退/跳过）与直接执行的操作（暂停/继续）
  *           ⑧ 操作成功提示文案（继续发布带批次号、回滚带目标版本）
- *           ⑨ 进行中 / 失败禁用顶部「部署」入口，完成 / 已回滚不阻塞
+ *           ⑨ 顶部「部署」入口：灰度进行中仍可用（提交前由部署侧栏二次确认），完成 / 已回滚不阻塞
  *           ⑩ 操作在途时所有入口置灰，重复点击不重复发请求
  *           ⑪ 完成态关闭后按 deployID 记住
  *           ⑫ 点击横幅「查看发布详情」隐藏横幅并切换为灰度发布进度视图（独立组件，互斥渲染；
@@ -40,7 +40,7 @@
  *              关闭后的完成态横幅在轮询补查期间不得闪出骨架
  *           ⑯ 终态关闭记忆按「应用+环境+部署记录」多条累加：多环境各自关闭互不覆盖，
  *              且只落 sessionStorage（重开浏览器后横幅恢复、不长期隐藏）
- * 路径：① 更新中→横幅 + 部署禁用 ② 暂停 ③ 回滚确认/取消 ④ 暂停态回退 + 跳过
+ * 路径：① 更新中→横幅 + 部署仍可用 ② 暂停 ③ 回滚确认/取消 ④ 暂停态回退 + 跳过
  *       ⑤ 定时暂停继续发布且无「暂停」入口 ⑥ 批次序号未回填→无操作入口 ⑦ 已完成→成功 Alert + 关闭记忆
  *       ⑧ 失败→回退上一批 ⑨ 已回滚→提示 + 部署可用 ⑩ 非分批发布不请求 ⑪ 操作失败保留状态
  *       ⑫ 请求挂起→按钮置灰且不重发→返回后恢复 ⑬ 未部署环境不请求进度
@@ -355,7 +355,7 @@ beforeEach(() => {
 });
 
 describe('实例列表分批发布控制：横幅与操作', () => {
-  it('当分批发布进行中（updating）时，应展示发布中横幅并禁用顶部部署入口', async () => {
+  it('当分批发布进行中（updating）时，应展示发布中横幅且顶部部署入口仍可用', async () => {
     mountPage();
     const banner = await findBanner();
 
@@ -366,7 +366,7 @@ describe('实例列表分批发布控制：横幅与操作', () => {
     expect(within(banner).getByRole('button', { name: '暂停' })).toBeEnabled();
     expect(within(banner).getByRole('button', { name: '回滚' })).toBeEnabled();
     expect(within(banner).queryByRole('button', { name: '继续发布' })).toBeNull();
-    expect(screen.getByRole('button', { name: '部署' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '部署' })).toBeEnabled();
 
     // 更多里保留回退上一批与跳过剩余批次
     expect(within(banner).getByText('回退上一批')).toBeInTheDocument();
@@ -495,7 +495,7 @@ describe('实例列表分批发布控制：横幅与操作', () => {
     expect(within(banner).getByText(/正在全量更新剩余实例/)).toBeInTheDocument();
     expect(within(banner).queryByText(/第 \{index\} 批正在更新实例/)).toBeNull();
     expect(buttonLabelsOf(banner)).toEqual(['查看发布详情']);
-    expect(screen.getByRole('button', { name: '部署' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '部署' })).toBeEnabled();
   });
 
   it('当本批尚未开始且批次序号未回填（pending + 序号为空）时，不展示任何操作入口', async () => {
@@ -506,7 +506,7 @@ describe('实例列表分批发布控制：横幅与操作', () => {
     expect(banner).toHaveAttribute('data-kind', 'updating');
     expect(buttonLabelsOf(banner)).toEqual(['查看发布详情']);
     expect(within(banner).queryByRole('button', { name: '暂停' })).toBeNull();
-    expect(screen.getByRole('button', { name: '部署' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '部署' })).toBeEnabled();
   });
 
   it('当分批发布已完成时，应展示成功 Alert 且不阻塞部署入口，关闭后不再出现', async () => {
