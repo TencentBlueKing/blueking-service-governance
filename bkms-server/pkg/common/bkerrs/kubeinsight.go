@@ -18,14 +18,12 @@
 
 package bkerrs
 
-const kubeInsightDisabledMsg = "kube-insight is disabled in current environment"
-
 // NewKubeInsightDisabled 当前环境关闭了 KubeInsight（集群诊断）对接（featureIntegrations.disableKubeInsight）
 func NewKubeInsightDisabled() *Error {
-	return New(ErrCodeNotImplemented, kubeInsightDisabledMsg).SetDetails(
+	return New(ErrCodeNotImplemented, "kube-insight is disabled in current environment").SetDetails(
 		NewDetail(
 			ErrDetailCodeKubeInsightDisabled,
-			kubeInsightDisabledMsg,
+			"kube-insight is disabled in current environment",
 			WithSystem(SystemName),
 			WithModule("kubeinsight"),
 		),

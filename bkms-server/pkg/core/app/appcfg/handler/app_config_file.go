@@ -105,7 +105,10 @@ func (h *Handler) CreateAppConfigFile(c *gin.Context) {
 	sourceType := appcfg.ContentSourceType(input.ContentSourceType)
 	bscpCfg, err := h.validateBSCPConfig(ctx, sourceType, input.BscpConfig, fileFormat)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "validate BSCP config"))
+		bkerrs.AbortWithErr(c, bkerrs.Map(err,
+			ginutils.BSCPDisabledRule,
+			bkerrs.Otherwise(bkerrs.ErrCodeInvalidArgument, "validate BSCP config"),
+		))
 		return
 	}
 
@@ -211,7 +214,10 @@ func (h *Handler) UpdateAppConfigFile(c *gin.Context) {
 	if input.BscpConfig != nil {
 		bscpCfg, vErr := h.validateBSCPConfig(ctx, acf.ContentSourceType, input.BscpConfig, acf.GetConfigFormat())
 		if vErr != nil {
-			bkerrs.AbortWithErr(c, bkerrs.Wrap(vErr, bkerrs.ErrCodeInvalidArgument, "validate BSCP config"))
+			bkerrs.AbortWithErr(c, bkerrs.Map(vErr,
+				ginutils.BSCPDisabledRule,
+				bkerrs.Otherwise(bkerrs.ErrCodeInvalidArgument, "validate BSCP config"),
+			))
 			return
 		}
 		acf.BSCPConfig = bscpCfg
