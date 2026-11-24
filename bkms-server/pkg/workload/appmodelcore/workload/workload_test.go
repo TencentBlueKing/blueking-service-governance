@@ -20,6 +20,7 @@ package workload_test
 
 import (
 	"context"
+	"errors"
 	"strings"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -39,6 +40,7 @@ import (
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
+	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/secret"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris"
@@ -500,6 +502,68 @@ var _ = Describe("Builder Shared Tests", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(comps).To(HaveLen(1))
 			Expect(comps[0].Type).To(Equal(compDef.Name))
+		},
+		Entry("TRPC workload", workloadTestCases[0]),
+		Entry("TAF workload", workloadTestCases[1]),
+	)
+
+	DescribeTable("Build Components - rejects components in an env sharing namespace",
+		func(tc WorkloadTestCase) {
+			compDef := dbfactory.CompDef(ctx, stores.CompDefStore, &dbfactory.ComponentDefOpts{
+				Properties: []component.Property{
+					{Name: "replicas", Type: "INT", DefaultValue: int64(1)},
+				},
+				Patchers: []string{"spec:\n  replicas: {{ .replicas }}\n"},
+			})
+			app, appModel := createApplication(ctx, tc, stores, nil, []*component.Component{{
+				Name: "foobar",
+				ComponentInst: component.ComponentInst{
+					Type:       compDef.Name,
+					Version:    compDef.Version,
+					Properties: map[string]any{"replicas": int64(3)},
+				},
+			}})
+			testEnv := dbfactory.Env(ctx, envSvc, app.WorkspaceID)
+			testEnv.NsSharing.ResPrefix = "fab12"
+
+			_, err := workload.NewBuilder(builderSvc, app, appModel).Build(ctx, testEnv)
+			Expect(errors.Is(err, envmodel.ErrSharedNamespaceUnsupported)).To(BeTrue())
+			Expect(err).To(MatchError(ContainSubstring("foobar")))
+		},
+		Entry("TRPC workload", workloadTestCases[0]),
+		Entry("TAF workload", workloadTestCases[1]),
+	)
+
+	DescribeTable("Build Components - rejects referenced workspace components in an env sharing namespace",
+		func(tc WorkloadTestCase) {
+			compDef := dbfactory.CompDef(ctx, stores.CompDefStore, &dbfactory.ComponentDefOpts{
+				Properties: []component.Property{
+					{Name: "replicas", Type: "INT", DefaultValue: int64(1)},
+				},
+				Patchers: []string{"spec:\n  replicas: {{ .replicas }}\n"},
+			})
+			app, appModel := createApplication(ctx, tc, stores, nil, nil)
+			testEnv := dbfactory.Env(ctx, envSvc, app.WorkspaceID)
+			testEnv.NsSharing.ResPrefix = "fab12"
+
+			workspaceCompName := "workspace-replicas-shared"
+			Expect(workspace.AddComponents(ctx, stores.DB, &workspace.Component{
+				Name:        workspaceCompName,
+				WorkspaceID: testEnv.WorkspaceID,
+				ScopeType:   component.ScopeTypeGlobal,
+				ComponentInst: component.ComponentInst{
+					Type:       compDef.Name,
+					Version:    compDef.Version,
+					Properties: map[string]any{"replicas": int64(12)},
+				},
+			})).To(Succeed())
+			appModel.Components = []*component.Component{{
+				ComponentRef: component.ComponentRef{RefWorkspaceCompName: workspaceCompName},
+			}}
+
+			_, err := workload.NewBuilder(builderSvc, app, appModel).Build(ctx, testEnv)
+			Expect(errors.Is(err, envmodel.ErrSharedNamespaceUnsupported)).To(BeTrue())
+			Expect(err).To(MatchError(ContainSubstring(workspaceCompName)))
 		},
 		Entry("TRPC workload", workloadTestCases[0]),
 		Entry("TAF workload", workloadTestCases[1]),

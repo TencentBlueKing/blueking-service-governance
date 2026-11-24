@@ -393,6 +393,9 @@ func (b *Builder) applyPostProcessing(
 	if err != nil {
 		return gd, extraObjs, nil, errors.Wrap(err, "listing components")
 	}
+	if err = checkComponentsSupported(in.env, comps); err != nil {
+		return gd, extraObjs, nil, err
+	}
 	compApplier := component.CreateDefaultApplier()
 	evaluatedComps := make([]*component.EvaluatedComponent, 0, len(comps))
 	for _, comp := range comps {
@@ -425,6 +428,19 @@ func (b *Builder) applyPostProcessing(
 	}
 
 	return gd, extraObjs, hostPortAppliedPorts, nil
+}
+
+// checkComponentsSupported 校验环境能否使用组件（含已解析的空间组件引用）。
+// 组件会生成自定义名称的 Service 等资源，无法保证带 resourcePrefix 前缀，因此共用命名空间的环境不支持组件。
+func checkComponentsSupported(env *envmodel.Environment, comps []*component.Component) error {
+	if !env.SharesNamespace() || len(comps) == 0 {
+		return nil
+	}
+	names := lo.Map(comps, func(comp *component.Component, _ int) string { return comp.Name })
+	return errors.Wrapf(
+		envmodel.ErrSharedNamespaceUnsupported,
+		"components [%s] cannot be used in env %s", strings.Join(names, ", "), env.Name,
+	)
 }
 
 // validateAllMountPaths 校验所有容器的 MountPath 唯一性。

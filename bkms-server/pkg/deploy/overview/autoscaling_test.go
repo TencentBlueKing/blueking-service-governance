@@ -119,6 +119,25 @@ var _ = Describe("autoscaling helpers", func() {
 			))
 		})
 
+		It("prefixes GPA CR name when environment shares namespace", func() {
+			sharedEnv := newEnv("feat-1", "cls-1", "ns-dev")
+			sharedEnv.NsSharing.ResPrefix = "f1a2b"
+			envs := []envmodel.Environment{
+				newEnv("dev", "cls-1", "ns-dev"),
+				sharedEnv,
+			}
+			rows := []EnvRow{
+				newRow("dev", &AutoscalingInfo{Enabled: true, CRName: "gpa-app"}),
+				newRow("feat-1", &AutoscalingInfo{Enabled: true, CRName: "gpa-app"}),
+			}
+
+			byCluster := groupAutoscalingTargetsByCluster(envs, rows)
+			Expect(byCluster["cls-1"]).To(ConsistOf(
+				autoscalingTarget{envName: "dev", namespace: "ns-dev", crName: "gpa-app"},
+				autoscalingTarget{envName: "feat-1", namespace: "ns-dev", crName: "f1a2b-gpa-app"},
+			))
+		})
+
 		It("skips rows without an enabled gpa config", func() {
 			envs := []envmodel.Environment{
 				newEnv("no-config", "cls-1", "ns-1"),

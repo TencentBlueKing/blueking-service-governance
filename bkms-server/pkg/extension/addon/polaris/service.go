@@ -26,11 +26,13 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
+	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/resname"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appspec"
@@ -69,7 +71,7 @@ func NewPolarisConfigService(
 		db:                  db,
 		platformManager:     platformManager,
 		envStateManager:     envStateManager,
-		applier:             NewCRApplier(),
+		applier:             NewCRApplier(db),
 		envStore:            store.Of(db, bkmsenv.EnvMeta),
 		envVarsReader:       envVarsReader,
 		enqueueDynamicApply: enqueue,
@@ -83,6 +85,13 @@ func (s *PolarisConfigService) Create(
 	config *PolarisConfig,
 	createNewService bool,
 ) error {
+	// 提前生成配置名，以便在创建北极星服务前校验资源名长度
+	if config.Name == "" {
+		config.Name = config.GenerateName()
+	}
+	if err := s.checkResourceNamesInScope(ctx, app, config.Name, config.ScopeEnvNames); err != nil {
+		return err
+	}
 	if createNewService {
 		result, err := s.platformManager.CreateService(ctx, &CreatePolarisServiceParams{
 			PolarisName:        config.PolarisName,
@@ -177,6 +186,11 @@ func (s *PolarisConfigService) Update(
 	oldConfig *PolarisConfig,
 	updateData *ConfigUpdateData,
 ) (*PolarisConfig, error) {
+	if updateData.ScopeEnvNames != nil {
+		if err := s.checkResourceNamesInScope(ctx, app, oldConfig.Name, updateData.ScopeEnvNames); err != nil {
+			return nil, err
+		}
+	}
 	if err := s.syncPolarisService(ctx, oldConfig, updateData); err != nil {
 		return nil, err
 	}
@@ -251,6 +265,43 @@ func (s *PolarisConfigService) Delete(
 	}
 	if err := store.Of(s.db, ConfigMeta).Delete(ctx, ByName(app.ID, config.Name)); err != nil {
 		return errors.Wrap(err, "delete polaris config")
+	}
+	return nil
+}
+
+// checkResourceNamesInScope 校验配置在生效范围内各环境中的 CR 名与 Service 名不超长。
+// 共用命名空间的环境创建时只校验应用自身的资源名，北极星资源名带 resourcePrefix 前缀后更长，在加入生效范围时校验。
+func (s *PolarisConfigService) checkResourceNamesInScope(
+	ctx context.Context, app *bkmsapp.Application, configName string, envNames []string,
+) error {
+	if len(envNames) == 0 {
+		return nil
+	}
+	envs, err := s.envStore.List(ctx,
+		bkmsenv.InWorkspace(app.WorkspaceID),
+		bkmsenv.AvailableToApp(app.ID),
+		store.Where("name", bson.M{"$in": envNames}),
+	)
+	if err != nil {
+		return errors.Wrap(err, "list scope envs")
+	}
+	for i := range envs {
+		crName, serviceName := PolarisResourceNames(&envs[i], app.Name, configName)
+		if err = checkResourceNames(&envs[i], crName, serviceName); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// checkResourceNames 校验环境中生成的 PolarisConfig CR 名与配套 Service 名合法性。
+func checkResourceNames(env *bkmsenv.Environment, names ...string) error {
+	for _, name := range names {
+		if err := resname.Validate(name); err != nil {
+			return errors.Wrapf(
+				ErrInvalidResourceName, "resource name %s in env %s: %v", name, env.Name, err,
+			)
+		}
 	}
 	return nil
 }

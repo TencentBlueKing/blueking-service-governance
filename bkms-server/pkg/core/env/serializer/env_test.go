@@ -59,6 +59,7 @@ var _ = Describe("Env output serializers", func() {
 				Kind:        envmodel.EnvironmentKindFeature,
 				OwnerAppID:  "app-1",
 				SourceEnvID: newObjectID("507f1f77bcf86cd799439012"),
+				NsSharing:   envmodel.NsSharing{ResPrefix: "fab12"},
 				Cluster: envmodel.BizCluster{
 					ProjectCode: "proj-code",
 					ClusterID:   "cls-1",
@@ -92,6 +93,7 @@ var _ = Describe("Env output serializers", func() {
 			Expect(output.Kind).To(Equal("feature"))
 			Expect(output.OwnerAppID).To(Equal("app-1"))
 			Expect(output.SourceEnvID).To(Equal("507f1f77bcf86cd799439012"))
+			Expect(output.NsSharing).To(Equal(&serializer.EnvNsSharingOutput{ResPrefix: "fab12"}))
 		})
 
 		It("marshals to correct JSON", func() {
@@ -432,6 +434,28 @@ var _ = Describe("Env validation", func() {
 		},
 		Entry("accepts staging type", string(bkmsenv.TypeStaging), true),
 		Entry("rejects unknown type", "stage", false),
+	)
+
+	DescribeTable(
+		"CreateFeatureEnvInput nsType validation",
+		func(nsType bkmsenv.NsType, shouldPass bool) {
+			input := serializer.CreateFeatureEnvInput{
+				DisplayName: "登录联调",
+				SourceEnvID: "507f1f77bcf86cd799439011",
+				NsType:      nsType,
+			}
+
+			err := binding.Validator.ValidateStruct(input)
+			if shouldPass {
+				Expect(err).NotTo(HaveOccurred())
+			} else {
+				Expect(err).To(HaveOccurred())
+			}
+		},
+		Entry("accepts an omitted nsType for existing callers", bkmsenv.NsType(""), true),
+		Entry("accepts independent", bkmsenv.NsTypeIndependent, true),
+		Entry("accepts shared", bkmsenv.NsTypeShared, true),
+		Entry("rejects unknown nsType", bkmsenv.NsType("share"), false),
 	)
 
 	It("UpdateEnvBasicInfoInput accepts staging type", func() {

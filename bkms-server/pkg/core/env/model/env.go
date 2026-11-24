@@ -70,6 +70,9 @@ type Environment struct {
 	// SourceEnvID 特性环境来源环境 ID，仅特性环境使用
 	SourceEnvID bson.ObjectID `bson:"sourceEnvID,omitempty"`
 
+	// NsSharing 命名空间共享配置，与其他环境共用命名空间时有值（零值时由 bson.Zeroer 省略落库）
+	NsSharing NsSharing `bson:"nsSharing,omitempty"`
+
 	// Cluster 业务集群信息
 	Cluster BizCluster `bson:"cluster"`
 
@@ -98,6 +101,26 @@ func (e Environment) GetKind() EnvironmentKind {
 // IsFeatureEnv 判断是否为特性环境。
 func (e Environment) IsFeatureEnv() bool {
 	return e.GetKind() == EnvironmentKindFeature
+}
+
+// SharesNamespace 判断环境是否与其他环境共用命名空间（即资源名需要带 ResPrefix 前缀）。
+func (e Environment) SharesNamespace() bool {
+	return e.NsSharing.ResPrefix != ""
+}
+
+// NsSharing 环境命名空间共享配置。
+// 作为独立嵌套子文档（非 inline）存储于 nsSharing 字段，避免污染顶层文档并为后续扩展预留空间。
+type NsSharing struct {
+	// ResPrefix 资源名前缀，用于区分同一命名空间内不同环境的资源。
+	// 为空时资源名与独占命名空间时保持一致
+	ResPrefix string `bson:"resPrefix,omitempty"`
+}
+
+var _ bson.Zeroer = NsSharing{}
+
+// IsZero 实现 bson.Zeroer，为零值时配合 bson omitempty 不写入 nsSharing 子文档。
+func (n NsSharing) IsZero() bool {
+	return n == (NsSharing{})
 }
 
 // BizCluster 业务集群信息

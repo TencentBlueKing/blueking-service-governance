@@ -22969,6 +22969,17 @@ const docTemplate = `{
                 }
             }
         },
+        "env.NsType": {
+            "type": "string",
+            "enum": [
+                "independent",
+                "shared"
+            ],
+            "x-enum-varnames": [
+                "NsTypeIndependent",
+                "NsTypeShared"
+            ]
+        },
         "github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_bkintegrations_serializer.DashboardOutput": {
             "type": "object",
             "properties": {
@@ -27929,6 +27940,18 @@ const docTemplate = `{
                     "description": "特性环境展示名称",
                     "type": "string"
                 },
+                "nsType": {
+                    "description": "命名空间类型：independent 新建独立的命名空间；shared 复用来源环境的命名空间，\n仅支持 AppModel 应用且不能使用组件，资源名会带上平台生成的 resPrefix 前缀。\n不传时默认为 independent，兼容存量调用",
+                    "enum": [
+                        "independent",
+                        "shared"
+                    ],
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/env.NsType"
+                        }
+                    ]
+                },
                 "sourceEnvID": {
                     "description": "来源标准环境 ID",
                     "type": "string"
@@ -29243,6 +29266,15 @@ const docTemplate = `{
                 }
             }
         },
+        "serializer.EnvNsSharingOutput": {
+            "type": "object",
+            "properties": {
+                "resPrefix": {
+                    "description": "资源名前缀，用于区分同一命名空间内不同环境的资源",
+                    "type": "string"
+                }
+            }
+        },
         "serializer.EnvOutput": {
             "type": "object",
             "properties": {
@@ -29280,6 +29312,14 @@ const docTemplate = `{
                 "name": {
                     "description": "环境名称",
                     "type": "string"
+                },
+                "nsSharing": {
+                    "description": "命名空间共享信息，仅与其他环境共用命名空间时返回",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/serializer.EnvNsSharingOutput"
+                        }
+                    ]
                 },
                 "ownerAppID": {
                     "description": "特性环境所属应用 ID，仅特性环境返回",

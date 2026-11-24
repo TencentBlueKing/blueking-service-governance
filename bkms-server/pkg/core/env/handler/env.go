@@ -20,6 +20,8 @@
 package handler
 
 import (
+	"cmp"
+
 	"github.com/gin-gonic/gin"
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
@@ -232,6 +234,8 @@ func (h *Handler) CreateFeatureEnv(c *gin.Context) {
 		DisplayName: input.DisplayName,
 		Creator:     auth.MustGetUser(ctx).ID,
 		CopyEnvVars: input.CopyEnvVars,
+		// 兼容未传 nsType 的存量前端请求
+		NsType: cmp.Or(input.NsType, bkmsenv.NsTypeIndependent),
 	})
 	if err != nil {
 		if abortIfEnvClusterNamespaceOccupied(c, err) {
@@ -622,14 +626,18 @@ func (h *Handler) DeleteEnv(c *gin.Context) {
 	}
 	envID := env.ID
 
-	if err = bkmonitor.UnbindEnvFromAll(ctx, h.registry.DB, envID); err != nil {
-		log.Warnf(ctx, "remove env %s from all APMs failed: %v", envID.Hex(), err)
-	}
-
 	svc := bkmsenv.NewEnvService(h.registry.DB)
 	if err = svc.Delete(ctx, envID); err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "delete environment"))
+		code := bkerrs.ErrCodeInternalServerError
+		if errors.Is(err, bkmsenv.ErrEnvHasFeatureEnvs) {
+			code = bkerrs.ErrCodeInvalidRequest
+		}
+		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, code, "delete environment"))
 		return
+	}
+
+	if err = bkmonitor.UnbindEnvFromAll(ctx, h.registry.DB, envID); err != nil {
+		log.Warnf(ctx, "remove env %s from all APMs failed: %v", envID.Hex(), err)
 	}
 
 	go audit.AddOperationRecordAsync(

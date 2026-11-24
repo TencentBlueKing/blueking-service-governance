@@ -24,6 +24,7 @@ import (
 	"github.com/TencentBlueKing/gopkg/stringx"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
@@ -161,6 +162,82 @@ var _ = Describe("Test EnvService", func() {
 			Expect(occupiedErr.OccupiedByWorkspaceID).To(Equal(occupiedWorkspaceID))
 		})
 
+		It("rejects moving a source env while feature envs share its namespace", func() {
+			envs := testutil.NewStore(GinkgoT(), model.EnvMeta)
+			Expect(envs.Create(ctx, &model.Environment{
+				Name:        "feat-" + stringx.Random(6),
+				WorkspaceID: workspaceID,
+				Kind:        model.EnvironmentKindFeature,
+				SourceEnvID: envID,
+				NsSharing:   model.NsSharing{ResPrefix: "fab12"},
+				Cluster:     Cluster,
+			})).To(Succeed())
+
+			newNamespace := stringx.Random(10)
+			updateErr := envSvc.Update(ctx, envID, &model.EnvironmentUpdateData{Namespace: &newNamespace})
+			Expect(errors.Is(updateErr, ErrEnvHasNamespaceSharers)).To(BeTrue())
+
+			// 集群与命名空间未实际变化时不拦截
+			updateErr = envSvc.Update(ctx, envID, &model.EnvironmentUpdateData{
+				ClusterID: &Cluster.ClusterID, Namespace: &Cluster.Namespace,
+			})
+			Expect(updateErr).NotTo(HaveOccurred())
+		})
+
+		It("allows moving a source env whose feature envs use their own namespaces", func() {
+			envs := testutil.NewStore(GinkgoT(), model.EnvMeta)
+			ownCluster := Cluster
+			ownCluster.Namespace = stringx.Random(10)
+			Expect(envs.Create(ctx, &model.Environment{
+				Name:        "feat-" + stringx.Random(6),
+				WorkspaceID: workspaceID,
+				Kind:        model.EnvironmentKindFeature,
+				SourceEnvID: envID,
+				Cluster:     ownCluster,
+			})).To(Succeed())
+
+			newNamespace := stringx.Random(10)
+			updateErr := envSvc.Update(ctx, envID, &model.EnvironmentUpdateData{Namespace: &newNamespace})
+			Expect(updateErr).NotTo(HaveOccurred())
+		})
+
+		It("rejects moving an env sharing namespace into another namespace", func() {
+			otherCluster := model.BizCluster{
+				ClusterID:   "cluster-" + stringx.Random(6),
+				ClusterType: "single",
+				Namespace:   "ns-" + stringx.Random(6),
+			}
+			Expect(envSvc.Create(ctx, &model.Environment{
+				Name:        "other-" + stringx.Random(6),
+				DisplayName: "other",
+				Type:        "test",
+				WorkspaceID: "ws-" + stringx.Random(6),
+				Cluster:     otherCluster,
+			})).To(Succeed())
+
+			featEnv := &model.Environment{
+				Name:        "feat-" + stringx.Random(6),
+				WorkspaceID: workspaceID,
+				Kind:        model.EnvironmentKindFeature,
+				SourceEnvID: envID,
+				NsSharing:   model.NsSharing{ResPrefix: "fab12"},
+				Cluster:     Cluster,
+			}
+			Expect(envSvc.Create(ctx, featEnv)).To(Succeed())
+
+			updateErr := envSvc.Update(ctx, featEnv.ID, &model.EnvironmentUpdateData{
+				ClusterID: &otherCluster.ClusterID,
+				Namespace: &otherCluster.Namespace,
+			})
+			Expect(errors.Is(updateErr, model.ErrSharedNamespaceUnsupported)).To(BeTrue())
+
+			// 集群与命名空间未实际变化时不拦截
+			updateErr = envSvc.Update(ctx, featEnv.ID, &model.EnvironmentUpdateData{
+				ClusterID: &Cluster.ClusterID, Namespace: &Cluster.Namespace,
+			})
+			Expect(updateErr).NotTo(HaveOccurred())
+		})
+
 		It("runs update hooks with before and after env when type changes", func() {
 			beforeType := envType
 			afterType := "staging"
@@ -207,5 +284,40 @@ var _ = Describe("Test EnvService", func() {
 			Expect(IsDeleteHookRegistered("test.delete_env")).To(BeFalse())
 			Expect(IsUpdateHookRegistered("test.update_env")).To(BeFalse())
 		})
+
+		DescribeTable("rejects deleting a source env while derived feature envs exist",
+			func(shareNamespace bool) {
+				envs := testutil.NewStore(GinkgoT(), model.EnvMeta)
+				featCluster := Cluster
+				resourcePrefix := "fab12"
+				if !shareNamespace {
+					featCluster.Namespace = "feat-ns-" + stringx.Random(6)
+					resourcePrefix = ""
+				}
+				featEnv := &model.Environment{
+					Name:        "feat-" + stringx.Random(6),
+					WorkspaceID: workspaceID,
+					Kind:        model.EnvironmentKindFeature,
+					SourceEnvID: envID,
+					NsSharing:   model.NsSharing{ResPrefix: resourcePrefix},
+					Cluster:     featCluster,
+				}
+				Expect(envs.Create(ctx, featEnv)).To(Succeed())
+
+				deleteErr := envSvc.Delete(ctx, envID)
+				Expect(errors.Is(deleteErr, ErrEnvHasFeatureEnvs)).To(BeTrue())
+				Expect(deleteErr).To(MatchError(ContainSubstring(featEnv.Name)))
+
+				// 来源环境在删除被拒后仍然存在
+				_, getErr := envs.GetByID(ctx, envID)
+				Expect(getErr).NotTo(HaveOccurred())
+
+				// 先删除特性环境后，来源环境即可正常删除
+				Expect(envSvc.Delete(ctx, featEnv.ID)).To(Succeed())
+				Expect(envSvc.Delete(ctx, envID)).To(Succeed())
+			},
+			Entry("dedicated-namespace feature env", false),
+			Entry("shared-namespace feature env", true),
+		)
 	})
 })

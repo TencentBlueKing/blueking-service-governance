@@ -59,7 +59,7 @@ type GPATimeRange struct {
 // GPAConfig GPA 自动扩缩容配置实体，存储在独立的数据表中。
 // 每个应用 + 环境唯一一份配置。
 type GPAConfig struct {
-	// Name 配置名称，由 GenerateName 按 "gpa-{appID}" 规则生成，同时作为 GPA CR 的 metadata.name
+	// Name 配置名称，由 GenerateName 按 "gpa-{appID}" 规则生成；下发集群时经 GPACRName 计算最终 CR 的 metadata.name
 	Name string `bson:"name" validate:"required"`
 	// TenantID 所属租户，由 store 层自动写入
 	TenantID string `json:"-" bson:"tenantID"`
@@ -94,9 +94,8 @@ type GPAConfig struct {
 	UpdatedAt time.Time `bson:"updatedAt"`
 }
 
-// GenerateName 生成配置名称（同时作为 GPA CR 的 metadata.name）。
-// 固定为 "gpa-{appID}"：每应用 + 环境一份，CR 部署在各环境独立 namespace，跨环境同名不冲突。
-// appID 由 app_id validator 约束（小写字母开头、仅小写字母/数字/中划线、长度 1~63），
+// GenerateName 生成配置名称（独立命名空间下即 GPA CR 的 metadata.name，共用命名空间下由 GPACRName 附加环境前缀）。
+// 固定为 "gpa-{appID}"：appID 由 app_id validator 约束（小写字母开头、仅小写字母/数字/中划线、长度 1~63），
 // 故 "gpa-{appID}" 必然满足 K8s RFC 1123 命名要求。
 func (c *GPAConfig) GenerateName() string {
 	return "gpa-" + c.AppID

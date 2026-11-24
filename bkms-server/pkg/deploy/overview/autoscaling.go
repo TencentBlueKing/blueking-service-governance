@@ -130,7 +130,7 @@ func groupAutoscalingTargetsByCluster(
 		byCluster[env.Cluster.ClusterID] = append(byCluster[env.Cluster.ClusterID], autoscalingTarget{
 			envName:   rows[i].EnvName,
 			namespace: env.Cluster.Namespace,
-			crName:    info.CRName,
+			crName:    gpa.GPACRName(&env, info.CRName),
 		})
 	}
 	return byCluster

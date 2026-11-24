@@ -72,7 +72,7 @@ var _ = Describe("GPAService against a real cluster", Label("k8s"), func() {
 		// 跳过工作负载名解析，聚焦真实 K8s 下发链路
 		addMock(mockey.Mock((*GPAService).resolveScaleTargetName).Return("it-workload", nil).Build())
 
-		svc = &GPAService{}
+		svc = NewGPAService(testutil.NewDB(GinkgoT()))
 		ctx = testutil.NewDefaultTenantContext()
 		crName = "gpa-it-" + stringx.Random(6)
 		env = &bkmsenv.Environment{Name: "dev", WorkspaceID: "ws-it"}

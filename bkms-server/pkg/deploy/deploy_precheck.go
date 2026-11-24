@@ -27,6 +27,7 @@ import (
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/clusteraddon"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/resname"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/envvarrefs"
@@ -73,6 +74,7 @@ func (c *DeployPreChecker) Check(
 	// Persisted models do not contain the deployment image. Use a copy with a placeholder
 	// so the full build can run without persisting it.
 	modelForBuild := *appModel
+	modelForBuild.Workload.Name = resname.ForEnv(env).Build(app.Name)
 	modelForBuild.Workload.Image = deployPreCheckImage
 	buildResult, err := workload.NewBuilder(c.builderService, app, &modelForBuild).Build(ctx, env)
 	if err != nil {

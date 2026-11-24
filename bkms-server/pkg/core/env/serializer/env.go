@@ -135,6 +135,10 @@ type CreateFeatureEnvInput struct {
 	SourceEnvID string `json:"sourceEnvID" binding:"required,mongodb"`
 	// 是否复制来源环境的环境变量；未传时不复制
 	CopyEnvVars bool `json:"copyEnvVars"`
+	// 命名空间类型：independent 新建独立的命名空间；shared 复用来源环境的命名空间，
+	// 仅支持 AppModel 应用且不能使用组件，资源名会带上平台生成的 resPrefix 前缀。
+	// 不传时默认为 independent，兼容存量调用
+	NsType bkmsenv.NsType `json:"nsType" binding:"omitempty,oneof=independent shared" enums:"independent,shared"`
 }
 
 // CreateFeatureEnvOutput is the JSON response for creating a feature environment.
@@ -194,11 +198,25 @@ type EnvOutput struct {
 	OwnerAppID string `json:"ownerAppID,omitempty"`
 	// 特性环境来源环境 ID，仅特性环境返回
 	SourceEnvID string `json:"sourceEnvID,omitempty"`
+	// 命名空间共享信息，仅与其他环境共用命名空间时返回
+	NsSharing *EnvNsSharingOutput `json:"nsSharing,omitempty"`
+}
+
+// EnvNsSharingOutput is the JSON representation of an environment's namespace sharing configuration.
+type EnvNsSharingOutput struct {
+	// 资源名前缀，用于区分同一命名空间内不同环境的资源
+	ResPrefix string `json:"resPrefix"`
 }
 
 // FromModel fills output fields from an environment model.
 func (o *EnvOutput) FromModel(env envmodel.Environment) *EnvOutput {
 	sourceEnvID := lo.Ternary(env.SourceEnvID.IsZero(), "", env.SourceEnvID.Hex())
+	var nsSharing *EnvNsSharingOutput
+	if env.SharesNamespace() {
+		nsSharing = &EnvNsSharingOutput{
+			ResPrefix: env.NsSharing.ResPrefix,
+		}
+	}
 
 	*o = EnvOutput{
 		ID:          env.ID.Hex(),
@@ -221,6 +239,7 @@ func (o *EnvOutput) FromModel(env envmodel.Environment) *EnvOutput {
 		Kind:        string(env.GetKind()),
 		OwnerAppID:  env.OwnerAppID,
 		SourceEnvID: sourceEnvID,
+		NsSharing:   nsSharing,
 	}
 	return o
 }
@@ -234,8 +253,8 @@ type ListEnvsOutput struct {
 
 // FeatureEnvSourceOutput is the JSON representation of a feature env's source environment.
 //
-// The source environment may be deleted independently. In that case, ID remains
-// available for audit purposes while IsDeleted tells clients to render a clear fallback.
+// Deleting a source environment while feature environments exist is rejected by EnvService.Delete;
+// IsDeleted is kept as a defensive fallback for historic or orphaned records.
 type FeatureEnvSourceOutput struct {
 	// 来源环境 ID
 	ID string `json:"id"`

@@ -22,8 +22,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
+	"github.com/bytedance/mockey"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/samber/lo"
@@ -36,6 +38,8 @@ import (
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/resname"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/trafficmanager"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars"
 	envvarhooks "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/envvars/hooks"
@@ -128,6 +132,7 @@ var _ = Describe("FeatureEnvService", func() {
 			SourceEnv:   sourceEnv,
 			DisplayName: "  登录联调  ",
 			Creator:     "alice",
+			NsType:      bkmsenv.NsTypeIndependent,
 		})
 		Expect(err).NotTo(HaveOccurred())
 
@@ -163,6 +168,7 @@ var _ = Describe("FeatureEnvService", func() {
 			DisplayName: "第二个",
 			Creator:     "alice",
 			CopyEnvVars: false,
+			NsType:      bkmsenv.NsTypeIndependent,
 		})
 		Expect(err).NotTo(HaveOccurred())
 		secondVars, err := envvars.List(
@@ -214,6 +220,7 @@ var _ = Describe("FeatureEnvService", func() {
 
 		featureEnv, err := service.Create(ctx, bkmsenv.CreateFeatureEnvInput{
 			App: app, SourceEnv: sourceEnv, DisplayName: "copy variables", CopyEnvVars: true,
+			NsType: bkmsenv.NsTypeIndependent,
 		})
 		Expect(err).NotTo(HaveOccurred())
 		copied, err := envvars.List(
@@ -280,6 +287,7 @@ var _ = Describe("FeatureEnvService", func() {
 
 		_, err = service.Create(ctx, bkmsenv.CreateFeatureEnvInput{
 			App: app, SourceEnv: sourceEnv, DisplayName: "partial copy failure", CopyEnvVars: true,
+			NsType: bkmsenv.NsTypeIndependent,
 		})
 		Expect(err).To(MatchError(envvars.ErrScopedEnvVarKeyConflict))
 		_, err = envStore.Get(ctx, model.ByName(app.WorkspaceID, namespace))
@@ -325,6 +333,7 @@ var _ = Describe("FeatureEnvService", func() {
 
 		_, err = service.Create(ctx, bkmsenv.CreateFeatureEnvInput{
 			App: app, SourceEnv: sourceEnv, DisplayName: "cleanup failure", CopyEnvVars: true,
+			NsType: bkmsenv.NsTypeIndependent,
 		})
 		Expect(err).To(MatchError(ContainSubstring("cleanup failed")))
 		Expect(errors.Is(err, cleanupErr)).To(BeTrue())
@@ -366,6 +375,7 @@ var _ = Describe("FeatureEnvService", func() {
 			DisplayName: "登录联调",
 			Creator:     "alice",
 			CopyEnvVars: true,
+			NsType:      bkmsenv.NsTypeIndependent,
 		})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(featEnv.Name).To(Equal(namespace))
@@ -404,6 +414,7 @@ var _ = Describe("FeatureEnvService", func() {
 			SourceEnv:   sourceEnv,
 			DisplayName: "联调",
 			Creator:     "alice",
+			NsType:      bkmsenv.NsTypeIndependent,
 		})
 		Expect(bkmsenv.IsErrEnvClusterNamespaceOccupied(err)).To(BeTrue())
 
@@ -429,6 +440,7 @@ var _ = Describe("FeatureEnvService", func() {
 			App:         app,
 			SourceEnv:   sourceEnv,
 			DisplayName: "hidden source",
+			NsType:      bkmsenv.NsTypeIndependent,
 		})
 		Expect(errors.Is(err, bkmsenv.ErrInvalidFeatureEnvInput)).To(BeTrue())
 		Expect(err).To(MatchError(ContainSubstring(sourceEnv.Name)))
@@ -448,6 +460,7 @@ var _ = Describe("FeatureEnvService", func() {
 			App:         app,
 			SourceEnv:   sourceEnv,
 			DisplayName: "联调",
+			NsType:      bkmsenv.NsTypeIndependent,
 		})
 		Expect(err).To(MatchError(ContainSubstring("SourceEnv must be a standard environment")))
 	})
@@ -460,6 +473,7 @@ var _ = Describe("FeatureEnvService", func() {
 			App:         app,
 			SourceEnv:   sourceEnv,
 			DisplayName: "联调",
+			NsType:      bkmsenv.NsTypeIndependent,
 		})
 		Expect(err).To(MatchError(ContainSubstring("SourceEnv must belong to the same workspace as app")))
 
@@ -468,8 +482,96 @@ var _ = Describe("FeatureEnvService", func() {
 			App:         app,
 			SourceEnv:   sourceEnv,
 			DisplayName: "   ",
+			NsType:      bkmsenv.NsTypeIndependent,
 		})
 		Expect(err).To(MatchError(ContainSubstring("DisplayName must not be blank")))
+	})
+
+	Describe("sharing the source namespace", func() {
+		var (
+			app       *bkmsapp.Application
+			sourceEnv *model.Environment
+		)
+
+		BeforeEach(func() {
+			app = dbfactory.Application(ctx, appStore)
+			sourceEnv = dbfactory.Env(ctx, envSvc, app.WorkspaceID)
+		})
+
+		createShared := func() (*model.Environment, error) {
+			return service.Create(ctx, bkmsenv.CreateFeatureEnvInput{
+				App: app, SourceEnv: sourceEnv, DisplayName: "shared", Creator: "alice", NsType: bkmsenv.NsTypeShared,
+			})
+		}
+
+		It("reuses the source namespace with a resource prefix and skips namespace initialization", func() {
+			featEnv, err := createShared()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(featEnv.NsSharing.ResPrefix).To(MatchRegexp(`^f[a-z0-9]{4}$`))
+
+			expectedEnv := deriveFeatureEnv(sourceEnv, model.Environment{
+				ID:          featEnv.ID,
+				Name:        fmt.Sprintf("feat-%s-1", app.ID),
+				DisplayName: "shared",
+				OwnerAppID:  app.ID,
+				Creator:     "alice",
+			})
+			expectedEnv.Cluster.Namespace = sourceEnv.Cluster.Namespace
+			expectedEnv.NsSharing = featEnv.NsSharing
+			storedEnv, err := envStore.GetByID(ctx, featEnv.ID)
+			Expect(err).NotTo(HaveOccurred())
+			expectEnvironmentsEqual(storedEnv, expectedEnv)
+			// nsInitializer 没有设置期望，被调用时 mock 会直接失败
+		})
+
+		It("regenerates the resource prefix when it collides with another feature env", func() {
+			mockey.PatchConvey("resource-prefix-collision", GinkgoT(), func() {
+				mockey.Mock(resname.GenEnvPrefix).Return(
+					mockey.Sequence("fab12", nil).Times(2).Then("fcd34", nil),
+				).Build()
+
+				first, err := createShared()
+				Expect(err).NotTo(HaveOccurred())
+				Expect(first.NsSharing.ResPrefix).To(Equal("fab12"))
+				second, err := createShared()
+				Expect(err).NotTo(HaveOccurred())
+				Expect(second.NsSharing.ResPrefix).To(Equal("fcd34"))
+				Expect(second.Cluster.Namespace).To(Equal(first.Cluster.Namespace))
+			})
+		})
+
+		It("skips resource prefixes equal to a traffic lane name of the source env", func() {
+			mockey.PatchConvey("resource-prefix-lane-conflict", GinkgoT(), func() {
+				mockey.Mock((*trafficmanager.StubTrafficManager).ListTrafficLanes).Return(
+					[]*trafficmanager.TrafficLane{{LaneName: "fab12"}}, nil,
+				).Build()
+				mockey.Mock(resname.GenEnvPrefix).Return(
+					mockey.Sequence("fab12", nil).Then("fcd34", nil),
+				).Build()
+
+				featEnv, err := createShared()
+				Expect(err).NotTo(HaveOccurred())
+				Expect(featEnv.NsSharing.ResPrefix).To(Equal("fcd34"))
+			})
+		})
+
+		It("rejects an app name too long for prefixed resource names", func() {
+			app.Name = strings.Repeat("a", 42)
+			_, err := createShared()
+			Expect(errors.Is(err, bkmsenv.ErrInvalidFeatureEnvInput)).To(BeTrue())
+			Expect(err).To(MatchError(ContainSubstring("too long to share namespace")))
+
+			featureEnvs, err := envStore.List(ctx, model.FeatEnvsOf(app.ID))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(featureEnvs).To(BeEmpty())
+		})
+
+		It("rejects a source env without a namespace", func() {
+			sourceEnv.Cluster.Namespace = ""
+			_, err := createShared()
+			Expect(errors.Is(err, bkmsenv.ErrInvalidFeatureEnvInput)).To(BeTrue())
+			Expect(err).To(MatchError(ContainSubstring("has no cluster namespace to share")))
+		})
 	})
 
 	It("reports required fields using their input field names", func() {
@@ -478,7 +580,18 @@ var _ = Describe("FeatureEnvService", func() {
 		Expect(err).To(MatchError(And(
 			ContainSubstring("App is required"),
 			ContainSubstring("SourceEnv is required"),
+			ContainSubstring("NsType is required"),
 		)))
+	})
+
+	It("rejects an unsupported namespace type", func() {
+		app := dbfactory.Application(ctx, appStore)
+		sourceEnv := dbfactory.Env(ctx, envSvc, app.WorkspaceID)
+		_, err := service.Create(ctx, bkmsenv.CreateFeatureEnvInput{
+			App: app, SourceEnv: sourceEnv, DisplayName: "invalid", Creator: "alice", NsType: "unknown",
+		})
+		Expect(errors.Is(err, bkmsenv.ErrInvalidFeatureEnvInput)).To(BeTrue())
+		Expect(err).To(MatchError(ContainSubstring("NsType is not a supported value")))
 	})
 })
 

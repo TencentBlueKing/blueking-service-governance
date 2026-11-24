@@ -726,6 +726,14 @@ definitions:
         description: Type 类型，可选项 group、user
         type: string
     type: object
+  env.NsType:
+    enum:
+    - independent
+    - shared
+    type: string
+    x-enum-varnames:
+    - NsTypeIndependent
+    - NsTypeShared
   github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_bkintegrations_serializer.DashboardOutput:
     properties:
       id:
@@ -4115,6 +4123,16 @@ definitions:
       displayName:
         description: 特性环境展示名称
         type: string
+      nsType:
+        allOf:
+        - $ref: '#/definitions/env.NsType'
+        description: |-
+          命名空间类型：independent 新建独立的命名空间；shared 复用来源环境的命名空间，
+          仅支持 AppModel 应用且不能使用组件，资源名会带上平台生成的 resPrefix 前缀。
+          不传时默认为 independent，兼容存量调用
+        enum:
+        - independent
+        - shared
       sourceEnvID:
         description: 来源标准环境 ID
         type: string
@@ -5038,6 +5056,12 @@ definitions:
         description: 本环境被单独设置过权重的实例数，其实际权重可能与配置的单实例权重不一致
         type: integer
     type: object
+  serializer.EnvNsSharingOutput:
+    properties:
+      resPrefix:
+        description: 资源名前缀，用于区分同一命名空间内不同环境的资源
+        type: string
+    type: object
   serializer.EnvOutput:
     properties:
       appIDs:
@@ -5064,6 +5088,10 @@ definitions:
       name:
         description: 环境名称
         type: string
+      nsSharing:
+        allOf:
+        - $ref: '#/definitions/serializer.EnvNsSharingOutput'
+        description: 命名空间共享信息，仅与其他环境共用命名空间时返回
       ownerAppID:
         description: 特性环境所属应用 ID，仅特性环境返回
         type: string

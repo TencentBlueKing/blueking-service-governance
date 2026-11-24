@@ -1,0 +1,24 @@
+[
+  {
+    "dropIndexes": "environments",
+    "index": "cluster.clusterID_1_cluster.namespace_1"
+  },
+  {
+    "createIndexes": "environments",
+    "indexes": [
+      {
+        "key": {
+          "cluster.clusterID": 1,
+          "cluster.namespace": 1,
+          "nsSharing.resPrefix": 1
+        },
+        "name": "cluster.clusterID_1_cluster.namespace_1_nsSharing.resPrefix_1",
+        "unique": true,
+        "partialFilterExpression": {
+          "cluster.clusterID": { "$gt": "" },
+          "cluster.namespace": { "$gt": "" }
+        }
+      }
+    ]
+  }
+]

@@ -331,6 +331,7 @@ var _ = Describe("Environment store", func() {
 			db,
 			env1.Cluster.ClusterID,
 			env1.Cluster.Namespace,
+			"",
 			bson.ObjectID{},
 		)
 		Expect(err).NotTo(HaveOccurred())
@@ -338,9 +339,67 @@ var _ = Describe("Environment store", func() {
 		Expect(found.ID).To(Equal(env1.ID))
 
 		// 排除自身后，没有其他环境占用该命名空间
-		found, err = envmodel.FindByClusterNamespace(ctx, db, env1.Cluster.ClusterID, env1.Cluster.Namespace, env1.ID)
+		found, err = envmodel.FindByClusterNamespace(
+			ctx, db, env1.Cluster.ClusterID, env1.Cluster.Namespace, "", env1.ID,
+		)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(found).To(BeNil())
+	})
+
+	It("separates environments sharing a cluster namespace by resource prefix", func() {
+		app := newApp("sharer", workspaceID1)
+		sharer := &envmodel.Environment{
+			Name:        "feat-sharer-1",
+			WorkspaceID: workspaceID1,
+			Kind:        envmodel.EnvironmentKindFeature,
+			OwnerAppID:  app.ID,
+			SourceEnvID: env1.ID,
+			Cluster:     env1.Cluster,
+			NsSharing:   envmodel.NsSharing{ResPrefix: "fab12"},
+		}
+		// 与来源环境同集群同命名空间，仅 nsSharing.resPrefix 不同，唯一索引允许共存
+		Expect(envs.Create(ctx, sharer)).To(Succeed())
+
+		// 验证零值 NsSharing 不写入 nsSharing 子文档，非零值写入独立子文档
+		var rawStd, rawShared bson.M
+		Expect(envs.Collection().FindOne(ctx, bson.M{"_id": env1.ID}).Decode(&rawStd)).To(Succeed())
+		Expect(rawStd).NotTo(HaveKey("nsSharing"))
+		Expect(envs.Collection().FindOne(ctx, bson.M{"_id": sharer.ID}).Decode(&rawShared)).To(Succeed())
+		Expect(rawShared["nsSharing"]).To(Equal(bson.D{{Key: "resPrefix", Value: "fab12"}}))
+
+		found, err := envmodel.FindByClusterNamespace(
+			ctx, db, env1.Cluster.ClusterID, env1.Cluster.Namespace, "", bson.ObjectID{},
+		)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(found.ID).To(Equal(env1.ID))
+
+		found, err = envmodel.FindByClusterNamespace(
+			ctx, db, env1.Cluster.ClusterID, env1.Cluster.Namespace, "fab12", bson.ObjectID{},
+		)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(found.ID).To(Equal(sharer.ID))
+
+		// 同一 resourcePrefix 再次绑定同一命名空间会被唯一索引拦截
+		duplicated := *sharer
+		duplicated.ID = bson.NilObjectID
+		duplicated.Name = "feat-sharer-2"
+		Expect(envs.Create(ctx, &duplicated)).To(MatchError(envmodel.ErrEnvAlreadyExists))
+
+		// 独占命名空间的环境之间仍然互斥
+		standard := &envmodel.Environment{Name: "another-std", WorkspaceID: workspaceID1, Cluster: env1.Cluster}
+		Expect(envs.Create(ctx, standard)).To(MatchError(envmodel.ErrEnvAlreadyExists))
+
+		sharers, err := envmodel.ListNamespaceSharers(
+			ctx, db, env1.Cluster.ClusterID, env1.Cluster.Namespace,
+		)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(sharers).To(HaveLen(1))
+		Expect(sharers[0].ID).To(Equal(sharer.ID))
+
+		derived, err := envs.List(ctx, envmodel.FeatEnvsFromSource(env1.ID))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(derived).To(HaveLen(1))
+		Expect(derived[0].ID).To(Equal(sharer.ID))
 	})
 
 	Context("UpdateEnv", func() {
