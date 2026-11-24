@@ -239,8 +239,24 @@ describe('灰度发布中的重新部署', () => {
 
     await waitFor(() => expect(mocks.infoBox).toHaveBeenCalledTimes(1));
     const confirmConfig = mocks.infoBox.mock.calls[0][0];
-    expect(confirmConfig.title).toBe('确认结束灰度并重新部署？');
     expect(confirmConfig.confirmText).toBe('重新部署');
+    // 弹窗形态对齐设计稿：42px 警示图标 + 居中标题 + 自带浅色块的说明文字
+    expect(confirmConfig.extCls).toBe('canary-redeploy-infobox');
+    expect(confirmConfig.width).toBe(480);
+    expect(confirmConfig.showContentBgColor).toBe(true);
+    expect(confirmConfig.content).toBe('本次灰度发布将结束，实例按本次配置更新');
+    expect(confirmConfig.headerAlign).toBe('center');
+    expect(confirmConfig.footerAlign).toBe('center');
+    const titleVNode = confirmConfig.title as {
+      children: { children: unknown; props: Record<string, unknown> }[];
+      props: { class: string };
+    };
+    expect(titleVNode.props.class).toBe('canary-redeploy-warning-title');
+    const [iconVNode, titleTextVNode] = titleVNode.children;
+    expect(iconVNode.props.icon).toBe('bkms-icon-tishi');
+    expect(iconVNode.props.width).toBe(42);
+    expect(iconVNode.props.height).toBe(42);
+    expect(titleTextVNode.children).toBe('确认结束灰度并重新部署？');
     // 未确认前不发起部署
     expect(mocks.create).not.toHaveBeenCalled();
 

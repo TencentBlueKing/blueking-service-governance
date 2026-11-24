@@ -255,6 +255,7 @@
   import { InstanceService } from '~/api/modules/v1';
   import { RELEASE_MODE } from '~/common/enums/deploy';
   import { type RevisionType, revisionRequestFields } from '~/components/code-revision/revision';
+  import SvgIcon from '~/components/svg-icon.vue';
   import { isAppModelAppType } from '~/composables/app-type';
   import { useAppRepoRefSelect } from '~/composables/use-app-repo-ref-select';
   import { useAppVisibleEnvs } from '~/composables/use-app-visible-envs';
@@ -416,6 +417,14 @@
     revision: '',
     status: 'running',
   });
+  /** 确认框标题：42px 警示图标 + 居中标题，与北极星删除确认弹窗保持一致。 */
+  function buildCanaryDeployWarningTitle(title: string) {
+    return h('div', { class: 'canary-redeploy-warning-title' }, [
+      h(SvgIcon, { class: 'canary-redeploy-warning-svg', height: 42, icon: 'bkms-icon-tishi', width: 42 }),
+      h('div', { class: 'canary-redeploy-warning-title-text' }, title),
+    ]);
+  }
+
   /**
    * 部署提交成功的顶部提示文案：
    * - 一次更新全部：正在更新全部 N 个实例（实例数缺失时退回通用文案）；
@@ -432,17 +441,15 @@
   /** 灰度进行中的提交确认：说明本次灰度将结束、实例按当前侧栏配置更新。 */
   function confirmEndCanaryAndDeploy() {
     InfoBox({
-      title: t('确认结束灰度并重新部署？'),
+      width: 480,
+      extCls: 'canary-redeploy-infobox',
+      title: buildCanaryDeployWarningTitle(t('确认结束灰度并重新部署？')),
+      content: t('本次灰度发布将结束，实例按本次配置更新'),
+      // 说明文字由弹窗自带浅色块承载，与设计稿一致
+      showContentBgColor: true,
       headerAlign: 'center',
       footerAlign: 'center',
       contentAlign: 'center',
-      content: h(
-        'div',
-        {
-          class: 'rounded-[2px] bg-[#F5F7FA] px-[12px] py-[16px] text-[14px] leading-[22px] text-[#4D4F56]',
-        },
-        t('本次灰度发布将结束，实例按本次配置更新'),
-      ),
       confirmText: t('重新部署'),
       cancelText: t('取消'),
       onConfirm: () => {
@@ -711,6 +718,32 @@
       .bk-sideslider-content {
         height: 100%;
       }
+    }
+  }
+</style>
+
+<style lang="postcss">
+  /* 结束灰度确认弹窗挂在 body 上，scoped 样式不生效，故单独声明；类名带业务前缀避免污染全局 */
+  .canary-redeploy-infobox {
+    .bk-infobox-title {
+      margin-top: 0;
+    }
+
+    .canary-redeploy-warning-title {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .canary-redeploy-warning-svg {
+      margin-top: 24px;
+    }
+
+    .canary-redeploy-warning-title-text {
+      margin-top: 22px;
+      font-size: 20px;
+      line-height: 32px;
+      color: #313238;
     }
   }
 </style>
