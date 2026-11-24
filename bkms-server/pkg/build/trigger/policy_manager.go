@@ -143,6 +143,15 @@ func NewPolicyManagerForDB(db *mongo.Database, pipelineOps PipelineOps) (*Policy
 	), nil
 }
 
+// Get 按应用与策略 ID 读取策略，不存在时返回 ErrPolicyNotFound
+func (m *PolicyManager) Get(ctx context.Context, appID, policyID string) (*Policy, error) {
+	policy, err := m.policies.Get(ctx, appID, policyID)
+	if err != nil {
+		return nil, errors.Wrapf(err, "get trigger policy %s of app %s", policyID, appID)
+	}
+	return policy, nil
+}
+
 // List 返回应用下全部策略，按创建时间升序
 func (m *PolicyManager) List(ctx context.Context, appID string) ([]Policy, error) {
 	policies, err := m.policies.List(ctx, appID)
@@ -153,6 +162,7 @@ func (m *PolicyManager) List(ctx context.Context, appID string) ([]Policy, error
 }
 
 // Create 创建触发策略；首条创建前 Ensure 流水线，失败不落库
+// 首条 Ensure 成功但落库失败时补偿 Cleanup，避免蓝盾侧残留无主流水线
 // 本期不同步工蜂触发器，triggerID 留空
 func (m *PolicyManager) Create(
 	ctx context.Context,
@@ -198,7 +208,10 @@ func (m *PolicyManager) Create(
 		Creator:          creator,
 	}
 	if err = m.policies.Create(ctx, policy); err != nil {
-		return nil, err
+		if len(existing) == 0 {
+			return nil, m.rollbackFirstEnsure(ctx, app.WorkspaceID, app.ID, err)
+		}
+		return nil, errors.Wrapf(err, "create trigger policy of app %s", app.ID)
 	}
 	// FIXME: 同步工蜂触发器
 	return policy, nil
@@ -255,10 +268,10 @@ func (m *PolicyManager) PatchStatus(
 	return m.policies.Get(ctx, appID, policyID)
 }
 
-// Delete 删除策略；末条须先 Cleanup，失败则策略仍在
+// Delete 删除策略；末条须先 Cleanup，失败则策略仍在，调用方可重试删除
 func (m *PolicyManager) Delete(ctx context.Context, workspaceID, appID, policyID string) error {
 	if _, err := m.policies.Get(ctx, appID, policyID); err != nil {
-		return err
+		return errors.Wrapf(err, "get trigger policy %s of app %s", policyID, appID)
 	}
 	existing, err := m.policies.List(ctx, appID)
 	if err != nil {
@@ -270,7 +283,15 @@ func (m *PolicyManager) Delete(ctx context.Context, workspaceID, appID, policyID
 		}
 	}
 	if err = m.policies.Delete(ctx, appID, policyID); err != nil {
-		return err
+		if len(existing) == 1 {
+			// Cleanup 已成功，策略仍在；Cleanup 幂等，调用方按提示重试即可
+			return errors.Wrapf(
+				err,
+				"cleanup trigger pipeline already done but delete policy %s failed, retry delete",
+				policyID,
+			)
+		}
+		return errors.Wrapf(err, "delete trigger policy %s of app %s", policyID, appID)
 	}
 	// FIXME: 同步工蜂触发器
 	return nil
@@ -295,7 +316,7 @@ func (m *PolicyManager) CheckConflict(
 	return hits, nil
 }
 
-// GuardBuildConfigUpdate 存在任意策略时拦截改 repoAlias、sourceType、关闭自动生成 tag
+// GuardBuildConfigUpdate 存在任意策略时拦截改 repoAlias、仓库类型、sourceType、关闭自动生成 tag
 func (m *PolicyManager) GuardBuildConfigUpdate(
 	ctx context.Context,
 	appID string,
@@ -314,6 +335,9 @@ func (m *PolicyManager) GuardBuildConfigUpdate(
 	if repoAliasOf(before) != repoAliasOf(after) {
 		return ErrBuildConfigLocked
 	}
+	if repoTypeOf(before) != repoTypeOf(after) {
+		return ErrBuildConfigLocked
+	}
 	if before.TagConfig.IsAutoGenerateEnabled() && !after.TagConfig.IsAutoGenerateEnabled() {
 		return ErrBuildConfigLocked
 	}
@@ -326,6 +350,34 @@ func repoAliasOf(cfg *imagebuild.Config) string {
 		return ""
 	}
 	return cfg.CodeRepo.RepoAlias
+}
+
+// repoTypeOf 取出构建配置上的仓库类型，未配置代码库时视为空串以便与更新后对比
+func repoTypeOf(cfg *imagebuild.Config) imagebuild.RepositoryType {
+	if cfg == nil || cfg.CodeRepo == nil {
+		return ""
+	}
+	return cfg.CodeRepo.Type
+}
+
+// rollbackFirstEnsure 首条策略落库失败时补偿 Cleanup，避免蓝盾侧残留无主流水线
+func (m *PolicyManager) rollbackFirstEnsure(
+	ctx context.Context,
+	workspaceID, appID string,
+	persistErr error,
+) error {
+	if cleanupErr := m.pipelines.Cleanup(ctx, workspaceID, appID); cleanupErr != nil {
+		return errors.Wrapf(
+			persistErr,
+			"create first trigger policy of app %s failed after ensure, cleanup trigger pipeline: %v",
+			appID, cleanupErr,
+		)
+	}
+	return errors.Wrapf(
+		persistErr,
+		"create first trigger policy of app %s failed after ensure, trigger pipeline cleaned up",
+		appID,
+	)
 }
 
 // validateForm 规范化表单并做跨字段校验：all 时匹配值必须为空，eq/prefix 时匹配值必填
@@ -374,7 +426,7 @@ func (m *PolicyManager) ensureAppEligible(ctx context.Context, appID string) err
 	return nil
 }
 
-// ensureAutoTagEnabled 更新准入：只复核自动生成 tag，仓库类型改动由 GuardBuildConfigUpdate 拦住
+// ensureAutoTagEnabled 更新准入：只复核自动生成 tag，仓库类型与绑定改动由 GuardBuildConfigUpdate 拦住
 func (m *PolicyManager) ensureAutoTagEnabled(ctx context.Context, appID string) error {
 	cfg, err := m.loadBuildConfig(ctx, appID)
 	if err != nil {

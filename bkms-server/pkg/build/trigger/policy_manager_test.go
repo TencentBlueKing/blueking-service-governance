@@ -229,6 +229,20 @@ var _ = Describe("PolicyManager", func() {
 		mockey.UnPatchAll()
 	})
 
+	It("cleans up the pipeline when first policy persist fails after Ensure", func() {
+		mockey.Mock((*memoryPolicyStore).Create).Return(errors.New("persist failed")).Build()
+
+		_, err := manager.Create(ctx, app, "alice", eqPolicyForm("p1", "master"))
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("trigger pipeline cleaned up"))
+		Expect(pipelines.ensureCalls).To(Equal(1))
+		Expect(pipelines.cleanupCalls).To(Equal(1))
+
+		listed, listErr := policies.List(ctx, app.ID)
+		Expect(listErr).NotTo(HaveOccurred())
+		Expect(listed).To(BeEmpty())
+	})
+
 	It("does not persist when first Ensure fails", func() {
 		mockey.Mock((*stubPipelineOps).Ensure).Return(nil, errors.New("ensure failed")).Build()
 
@@ -239,6 +253,20 @@ var _ = Describe("PolicyManager", func() {
 		listed, listErr := policies.List(ctx, app.ID)
 		Expect(listErr).NotTo(HaveOccurred())
 		Expect(listed).To(BeEmpty())
+	})
+
+	It("keeps the last policy and reports cleanup already done when delete after cleanup fails", func() {
+		created, err := manager.Create(ctx, app, "alice", eqPolicyForm("p1", "master"))
+		Expect(err).NotTo(HaveOccurred())
+		mockey.Mock((*memoryPolicyStore).Delete).Return(errors.New("delete failed")).Build()
+
+		err = manager.Delete(ctx, app.WorkspaceID, app.ID, created.ID)
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("cleanup trigger pipeline already done"))
+		Expect(pipelines.cleanupCalls).To(Equal(1))
+
+		_, getErr := policies.Get(ctx, app.ID, created.ID)
+		Expect(getErr).NotTo(HaveOccurred())
 	})
 
 	It("does not delete the last policy when Cleanup fails", func() {
@@ -327,6 +355,11 @@ var _ = Describe("PolicyManager", func() {
 			repo := *before.CodeRepo
 			copied.CodeRepo = &repo
 			after = &copied
+		})
+
+		It("rejects changing code repo type", func() {
+			after.CodeRepo.Type = imagebuild.RepositoryTypeGitHub
+			Expect(manager.GuardBuildConfigUpdate(ctx, app.ID, before, after)).To(MatchError(ErrBuildConfigLocked))
 		})
 
 		It("rejects changing repoAlias", func() {

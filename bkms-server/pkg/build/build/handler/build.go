@@ -229,7 +229,7 @@ func (h *Handler) scheduleBuildConfigUpdateFollowUps(
 	)
 }
 
-// guardTriggerPolicyLock 在应用存在自动触发策略时，拦截对 repoAlias、sourceType 与自动生成 tag 的改动。
+// guardTriggerPolicyLock 在应用存在自动触发策略时，拦截对 repoAlias、仓库类型、sourceType 与自动生成 tag 的改动。
 // 已按 ErrCode 包装好，调用方直接 AbortWithErr 即可
 func (h *Handler) guardTriggerPolicyLock(
 	ctx context.Context,

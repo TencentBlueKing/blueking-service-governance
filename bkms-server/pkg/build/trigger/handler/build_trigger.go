@@ -357,6 +357,7 @@ func (h *Handler) CheckBuildTriggerPolicyConflict(c *gin.Context) {
 //	@Param			pageSize	query		int		true	"分页参数：每页数量，支持 5/10/20/50/100"
 //	@Success		200			{object}	triggerserializer.ListTriggerRecordsOutput
 //	@Failure		400			{object}	bkerrs.GinErrorOutput
+//	@Failure		403			{object}	bkerrs.GinErrorOutput
 //	@Failure		404			{object}	bkerrs.GinErrorOutput
 //	@Router			/apps/{appID}/build-trigger-policies/{policyID}/records [get]
 func (h *Handler) ListBuildTriggerPolicyRecords(c *gin.Context) {
@@ -367,6 +368,17 @@ func (h *Handler) ListBuildTriggerPolicyRecords(c *gin.Context) {
 		return
 	}
 
+	ctx := c.Request.Context()
+	if _, err := perm.ValidateAppByID(ctx, h.registry, uriInput.AppID, perm.TypeView); err != nil {
+		bkerrs.AbortWithErr(c, err)
+		return
+	}
+	if _, err := h.policyManager.Get(ctx, uriInput.AppID, uriInput.PolicyID); err != nil {
+		bkerrs.AbortWithErr(c, mapPolicyErr(err))
+		return
+	}
+
+	// 触发记录查询仍为空实现，权限与策略存在性已先校验，避免无权限也返回 200 空列表
 	ginutils.OK(c, triggerserializer.ListTriggerRecordsOutput{
 		Data: &triggerserializer.PaginatedTriggerRecordOutputObjs{
 			Count:   0,

@@ -1,146 +1,99 @@
 # 自动触发镜像构建：接口契约与数据模型
 
-## 设计背景与目标
+跨子需求的唯一契约事实源。数据模型、Store、Serializer、索引与接口字段以本文为准。
 
-父需求「自动触发镜像构建」跨 bkms-server 与 bkms-ui 两端，涉及触发策略管理、触发专用流水线下发、回调处理、触发记录四条链路。若各子需求各自定义数据结构，联调时必然出现字段对不上的返工。
+| 接口                  | 归属                   | 状态  |
+|---------------------|----------------------|-----|
+| 策略 CRUD / 启停 / 冲突预检 | 触发策略后端管理与冲突检测        | 已落地 |
+| 触发记录查询              | 自动触发记录存储与查询          | 空实现 |
+| 构建回调                | 构建回调处理、版本号生成、凭证鉴权与限流 | 空实现 |
 
-本文档是该需求的**唯一契约事实源**：把跨子需求的数据模型与接口契约一次性定死，使各子需求从「依赖别人的实现」降级为「依赖同一份契约」，从而并行开工。
-
-契约已定死数据模型、Store 接口、Serializer 与索引迁移。触发策略 CRUD / 启停 / 硬冲突预检与提交复检、首条
-`Ensure` / 末条 `Cleanup`、以及存在策略时对构建配置的拦截均已落地。触发记录查询与构建回调仍为空实现。
-
-### 接口实现归属与收敛
-
-| 接口                              | 实现归属子需求                  | 状态     |
-|---------------------------------|--------------------------|--------|
-| 策略列表 / 创建 / 更新 / 启停 / 删除 / 冲突预检 | 触发策略后端管理与冲突检测            | 已落地 |
-| 触发记录查询                          | 自动触发记录存储与查询              | 空实现    |
-| 构建回调                            | 构建回调处理与版本号生成、构建回调凭证鉴权与限流 | 空实现    |
+策略 CRUD、硬冲突预检与提交复检、首条 `Ensure` / 末条 `Cleanup`、存在策略时拦截构建配置，均已落地。
 
 ## 数据模型
 
-### 触发策略 `build_trigger_policies`
+### 触发策略 `build_trigger_policies`（`pkg/build/trigger.Policy`）
 
-对应 Go 结构体 `pkg/build/trigger.Policy`。
+| 字段                                    | 类型     | 约束                                  |
+|---------------------------------------|--------|-------------------------------------|
+| `id`                                  | string | 全局唯一，`btp-` + 随机串                   |
+| `appID`                               | string | 所属应用                                |
+| `name`                                | string | 应用内唯一，1–32，汉字 / 字母 / 数字 / `-` / `_` |
+| `event`                               | enum   | 本期仅 `push`                          |
+| `branchMatchMode`                     | enum   | `eq` / `prefix` / `all`             |
+| `branchMatchValue`                    | string | 英文逗号分隔多值；`all` 时为空                  |
+| `pathFilter`                          | string | 留空 = 全匹配                            |
+| `status`                              | enum   | `enabled` / `disabled`              |
+| `pipelineID`                          | string | 蓝盾触发专用流水线 ID                        |
+| `triggerID`                           | string | 蓝盾触发器元素标识；本期留空                      |
+| `creator` / `createdAt` / `updatedAt` | —      | 审计字段                                |
 
-| 字段                        | 类型     | 约束与说明                                      |
-|---------------------------|--------|--------------------------------------------|
-| `id`                      | string | 策略 ID，全局唯一，格式 `btp-` + 随机串                 |
-| `appID`                   | string | 所属应用                                       |
-| `name`                    | string | 策略名称，应用内唯一，长度 1–32，由汉字、大小写字母、数字、`-`、`_` 组成 |
-| `event`                   | enum   | 触发事件，本期唯一取值 `push`                         |
-| `branchMatchMode`         | enum   | `eq` / `prefix` / `all`                    |
-| `branchMatchValue`        | string | 分支匹配值，多值以英文逗号分隔；`all` 时为空                  |
-| `pathFilter`              | string | 文件路径条件，留空表示全匹配                             |
-| `status`                  | enum   | `enabled` / `disabled`                     |
-| `pipelineID`              | string | 关联的蓝盾触发专用流水线 ID                            |
-| `triggerID`               | string | 关联的蓝盾触发器元素标识，供触发器同步增删改时定位                  |
-| `creator`                 | string | 创建人                                        |
-| `createdAt` / `updatedAt` | time   | 审计字段                                       |
+镜像 tag **不落在策略上**，一律读应用 `buildConfig.tagConfig`。创建 / 更新须 `tagConfig.IsAutoGenerateEnabled()`（`semver`或
+`custom`），否则 `INVALID_ARGUMENT`。
 
-镜像 tag 规则**不落在策略上**，统一使用应用 `buildConfig.tagConfig`（与手动构建推荐版本号同源）。创建 / 更新策略时须校验
-`tagConfig.IsAutoGenerateEnabled()`（`type` 为 `semver` 或 `custom`）；未开启则拒绝，错误码 `INVALID_ARGUMENT`
-。自动触发回调生成版本号时同样读取该配置。
+索引：唯一 `appID + name`；普通 `appID`。单应用上限 5 条（含已停用），由业务层校验。
 
-索引：唯一 `appID + name`；普通 `appID`。
+### 触发记录 `build_trigger_records`（`pkg/build/trigger.Record`）
 
-数量约束：单应用策略上限 5 条，生效中与已停用合并计数。该约束由业务层校验，不由索引保证。
+| 字段                                     | 类型     | 约束                             |
+|----------------------------------------|--------|--------------------------------|
+| `policyID` / `appID`                   | string | 归属                             |
+| `triggeredAt`                          | time   | 触发时间                           |
+| `event`                                | enum   | 与策略同枚举                         |
+| `branch` / `commitID` / `commitAuthor` | string | 事件信息                           |
+| `result`                               | enum   | `built` / `skipped` / `failed` |
+| `buildID`                              | string | 仅 `built` 非空                   |
+| `reason`                               | string | 仅 `skipped` / `failed` 非空      |
+| `createdAt`                            | time   | 创建时间                           |
 
-### 触发记录 `build_trigger_records`
+索引：普通 `policyID + triggeredAt`、`policyID + commitID`。**后者不能唯一**：去重口径是「同策略同 commit 已 `built` 则跳过」，
+`skipped` / `failed` 仍可多次写入。全量长期保留，无条数上限与归档。
 
-对应 Go 结构体 `pkg/build/trigger.Record`。
+### 构建记录扩展（`build_records`）
 
-| 字段             | 类型     | 约束与说明                          |
-|----------------|--------|--------------------------------|
-| `policyID`     | string | 归属策略                           |
-| `appID`        | string | 归属应用                           |
-| `triggeredAt`  | time   | 触发时间                           |
-| `event`        | enum   | 事件类型，与策略同枚举                    |
-| `branch`       | string | 分支名                            |
-| `commitID`     | string | commit 哈希                      |
-| `commitAuthor` | string | commit 作者                      |
-| `result`       | enum   | `built` / `skipped` / `failed` |
-| `buildID`      | string | 结果为 `built` 时关联的构建号，其余为空       |
-| `reason`       | string | 跳过或失败原因，`built` 时为空            |
-| `createdAt`    | time   | 创建时间                           |
+| 字段                | 类型     | 说明                |
+|-------------------|--------|-------------------|
+| `triggerType`     | enum   | `manual` / `auto` |
+| `triggerPolicyID` | string | 自动触发时的策略 ID，手动为空  |
 
-索引：普通 `policyID + triggeredAt`；普通 `policyID + commitID`。
+### 触发专用流水线
 
-`policyID + commitID` **不能设唯一约束**。去重规则是「同一策略下同一 commit 已成功构建过则跳过」，同一 commit 完全可能先产生若干条
-`skipped` 或 `failed` 记录，唯一约束会让这些记录写不进去。去重必须由业务层按 `result == built` 查询判定。
+流水线本身只含「工蜂 Git 触发器 + 回调脚本」，不执行构建。`bkci_pipelines` 唯一索引仍是 `workspaceID + type`，应用级唯一靠把
+appID 编进 `type`：
 
-触发记录本期全量落库长期保留，不做条数上限、过期清理与归档。
+| 流水线   | `type`                          | 唯一性    |
+|-------|---------------------------------|--------|
+| 共享构建  | `dockerfile` / `helm-git-build` | 工作空间   |
+| 用户自定义 | 流水线 ID（`p-[a-z0-9]{32}`）        | 工作空间   |
+| 触发专用  | `build-trigger-{appID}`         | **应用** |
 
-### 构建记录扩展
+内部 API：`NewTriggerPipelineManager(workspaceID).Ensure/Cleanup(ctx, appID)`。
 
-在现有 `pkg/build/image.Record`（集合 `build_records`）上追加两个字段：
+- 模板：`assets/pipeline_templates/build_trigger.json`（trigger `elements: []`；Git 触发器由后续同步填充）
+- 回调 URL：`{httpServer.publicBaseURL}/bkms/v1/bkms-server/apps/{appID}/build-trigger-policies/callback`
+- 回调凭证：蓝盾 `ACCESSTOKEN`，每应用一条；本地只存 `callbackCredentialID`，明文不回显
+- `Ensure` 对已有实例 create-if-missing / 原样返回，**不做整模板 `UpdatePipeline`**（会冲掉显示名、回调脚本与已同步触发器）
+- `Initialize(build-trigger-*)`：已存在则原样返回；不存在则拒绝创建，必须走 `Ensure`
 
-| 字段                | 类型     | 说明                   |
-|-------------------|--------|----------------------|
-| `triggerType`     | enum   | `manual` / `auto`    |
-| `triggerPolicyID` | string | 自动触发时关联的策略 ID，手动触发为空 |
+## 接口
 
-### 触发专用流水线的存储口径
+前缀 `/bkms/v1/bkms-server`，下表省略。响应外层包 `data`；策略列表不分页（`count` + `results`），触发记录分页。
 
-本需求新增一类**触发专用流水线**，内容仅为「工蜂 Git 事件触发器 + 回调 bkms 的脚本步骤」，自身不执行构建。它与现有共享构建流水线并存，两者唯一性口径不同：
+| 接口   | 方法与路径                                                          | 鉴权         | 出参               |
+|------|----------------------------------------------------------------|------------|------------------|
+| 策略列表 | GET `/apps/{appID}/build-trigger-policies`                     | 用户票据 + 查看  | 全部策略 + 总数        |
+| 创建   | POST `/apps/{appID}/build-trigger-policies`                    | 用户票据 + 构建  | 策略实体             |
+| 更新   | PUT `/apps/{appID}/build-trigger-policies/{policyID}`          | 用户票据 + 构建  | 策略实体             |
+| 启停   | PATCH `/apps/{appID}/build-trigger-policies/{policyID}/status` | 用户票据 + 构建  | 策略实体             |
+| 删除   | DELETE `/apps/{appID}/build-trigger-policies/{policyID}`       | 用户票据 + 构建  | 204              |
+| 冲突预检 | POST `/apps/{appID}/build-trigger-policies/conflict-check`     | 用户票据 + 查看  | level + 策略名 + 原因 |
+| 触发记录 | GET `/apps/{appID}/build-trigger-policies/{policyID}/records`  | 用户票据 + 查看  | 记录列表 + 总数        |
+| 构建回调 | POST `/apps/{appID}/build-trigger-policies/callback`           | **应用独享凭证** | 三态结果             |
 
-| 流水线      | `type` 取值                       | 唯一性       |
-|----------|---------------------------------|-----------|
-| 共享构建流水线  | `dockerfile` / `helm-git-build` | 工作空间级唯一   |
-| 用户自定义流水线 | 流水线 ID（`p-[a-z0-9]{32}`）        | 工作空间级唯一   |
-| 触发专用流水线  | `build-trigger-{appID}`         | **应用级唯一** |
+除回调外均走 `auth.Required` + `perm.ValidateAppByID`。回调挂在无用户鉴权路由组。`conflict-check` / `callback` 与
+`{policyID}` 可共存（gin 1.12）。
 
-`bkci_pipelines` 的唯一索引保持 `workspaceID + type` 不变，不做任何索引变更。应用级唯一是通过**把 appID 编码进 `type`**
-达成的：`workspaceID + build-trigger-{appID}` 天然等价于 `workspaceID + appID + 触发专用类型`。
-
-这个做法沿用了 `type` 字段已有的语义——它本来就不是纯枚举，用户自定义流水线的 `type` 直接就是 pipelineID。编码与解析函数见
-`pkg/bkintegrations/bkci`。
-
-**已落地**：
-
-- `ResolveBuiltinTemplateType`：共享类型精确匹配；触发专用复合 type 前缀匹配后解析为模板类型 `build-trigger`。`Initialize` 对已存在的触发流水线原样返回，缺失时拒绝创建，必须走 `Ensure`
-- 模板资产：`assets/pipeline_templates/build_trigger.json`（trigger stage 的 `elements: []` + 回调脚本；Git 触发器由同步下发填充）
-- 模板渲染：与构建镜像相同走 `[[ ]]` / `renderPipelineTemplate`；Reload 落地 `builderImageCode`；
-  实例期字段（`appID` / `callbackURL` / `credentialID`）在资产中自逃逸，Reload 后保留占位，
-  `TriggerPipelineManager.Ensure` 二次渲染显示名、回调脚本等
-- 内部 API（无新 REST）：`NewTriggerPipelineManager(workspaceID).Ensure/Cleanup(ctx, appID)`
-  （`pkg/bkintegrations/bkci`）
-- 蓝盾侧显示名 / 描述：来自模板 `name` / `description`（name 含 `[[ .appID ]]`）
-- 回调地址：`{httpServer.publicBaseURL}/bkms/v1/bkms-server/apps/{appID}/build-trigger-policies/callback`
-- 回调凭证：蓝盾 `ACCESSTOKEN` 类型，每应用一条；本地 `bkci_pipelines.callbackCredentialID` 记录凭证 ID；凭证明文不回显
-- **不做模板 semver 自动升级**：`Ensure` 对已存在实例 create-if-missing / 原样返回。共享流水线的整模板
-  `UpdatePipeline` 会冲掉带 appID 的显示名、已注入的回调脚本，以及触发器同步写入的 Git 条件；若需滚动模板，应另做保留上述字段的合并式
-  Sync
-
-## 接口契约
-
-全部接口挂在服务公共前缀 `/bkms/v1/bkms-server` 下。下表路径省略该前缀。
-
-### 接口签名
-
-| 接口     | 方法与路径                                                          | 鉴权                | 出参                    |
-|--------|----------------------------------------------------------------|-------------------|-----------------------|
-| 策略列表   | GET `/apps/{appID}/build-trigger-policies`                     | 用户票据 + 查看权限       | 全部策略 + 总数（不分页，上限 5）   |
-| 创建策略   | POST `/apps/{appID}/build-trigger-policies`                    | 用户票据 + 构建权限       | 策略实体                  |
-| 更新策略   | PUT `/apps/{appID}/build-trigger-policies/{policyID}`          | 用户票据 + 构建权限       | 策略实体                  |
-| 启停策略   | PATCH `/apps/{appID}/build-trigger-policies/{policyID}/status` | 用户票据 + 构建权限       | 策略实体                  |
-| 删除策略   | DELETE `/apps/{appID}/build-trigger-policies/{policyID}`       | 用户票据 + 构建权限       | 204 无内容               |
-| 冲突预检   | POST `/apps/{appID}/build-trigger-policies/conflict-check`     | 用户票据 + 查看权限       | 冲突级别 + 冲突策略名 + 冲突原因列表 |
-| 触发记录查询 | GET `/apps/{appID}/build-trigger-policies/{policyID}/records`  | 用户票据 + 查看权限       | 记录列表 + 总数             |
-| 构建回调   | POST `/apps/{appID}/build-trigger-policies/callback`           | **应用独享凭证**，不走用户票据 | 三态处理结果                |
-
-回调接口是本项目第一个面向外部系统的路由，它注册在不带 `auth.Required` 的路由组上。除它以外，其余 7 个接口均走现有用户票据鉴权，并在
-handler 内用 `perm.ValidateAppByID` 做应用级权限校验。
-
-`conflict-check` 与 `callback` 这两个静态路径段和同级的 `{policyID}` 路径参数共存。gin 1.12 支持这种混用，现有
-`/apps/auto-id-suffix` 与 `/apps/{appID}` 即为先例。
-
-### 请求与响应结构
-
-响应统一外层包 `data`。策略列表一次返回全部（上限 5 条，不分页），仍用 `count` + `results`；触发记录等可能无限增长的列表才做分页，分页字段统一用
-`count` + `results`。
-
-策略表单（创建、更新、冲突预检共用）：
+策略表单（创建 / 更新 / 预检共用）：
 
 ```json
 {
@@ -152,7 +105,7 @@ handler 内用 `perm.ValidateAppByID` 做应用级权限校验。
 }
 ```
 
-冲突预检额外接受 `excludeTriggerID`（JSON 字段名；**值为策略 ID**，不是蓝盾 `triggerID`），用于编辑场景排除自身。其响应：
+预检额外接受 `excludeTriggerID`（**值为策略 ID**，不是蓝盾 `triggerID`）。响应：
 
 ```json
 {
@@ -172,26 +125,14 @@ handler 内用 `perm.ValidateAppByID` 做应用级权限校验。
 }
 ```
 
-`level` 取值 `none` / `error`。无冲突为 `none`，`conflictPolicyNames` 与 `conflictReasons` 均为空数组；硬冲突为 `error`
-，前端必须禁止保存。本期**不返回 `warn`**：镜像 tag 规则已上收到应用 `buildConfig.tagConfig`
-，范围重叠即会产出同名镜像并互相覆盖，不再存在「范围重叠但版本规则不同」的软冲突。Serializer 仍保留 `ConflictLevelWarn`
-枚举，仅作前向兼容，业务层不会写入。
+- `level`：`none`（两列表为空数组）/ `error`（前端禁止保存）。本期不返回 `warn`（`ConflictLevelWarn` 仅前向兼容）
+- `overlapType`：`all`（任一方 `all`）/ `eq_eq`（等于值相交）/ `prefix_prefix`（前缀互相包含）/ `eq_hits_prefix`（等于值命中前缀）
+- 只比相同 `event`；`pathFilter` 不参与；匹配值按逗号拆分、去空白、忽略空段、大小写敏感；已停用策略仍占冲突空间
+- 预检始终 200；创建 / 更新再检，硬冲突 400 `INVALID_ARGUMENT`，文案含策略名与原因
 
-`overlapType` 取值：
+触发记录：`result`（`built` / `skipped` / `failed`，留空不筛）+ `page` / `pageSize`。
 
-| 值                | 含义                             |
-|------------------|--------------------------------|
-| `all`            | 任一方匹配方式为 `all`                 |
-| `eq_eq`          | 双方均为 `eq`，且匹配值集合相交             |
-| `prefix_prefix`  | 双方均为 `prefix`，且前缀互相包含          |
-| `eq_hits_prefix` | 一方 `eq`、一方 `prefix`，且等于值以某前缀开头 |
-
-冲突判定只比较相同 `event`；`pathFilter` 不参与。匹配值按英文逗号拆分、去空白、忽略空段，大小写敏感。已停用策略仍占冲突空间。预检始终
-HTTP 200，用 `level` 区分；创建 / 更新提交时再检，硬冲突 400 `INVALID_ARGUMENT`，错误文案含策略名与原因。
-
-触发记录查询支持 `result` 筛选（`built` / `skipped` / `failed`，留空为不筛选）与 `page` / `pageSize` 分页。
-
-回调请求体与响应：
+回调请求 / 响应：
 
 ```json
 {
@@ -214,124 +155,65 @@ HTTP 200，用 `level` 区分；创建 / 更新提交时再检，硬冲突 400 `
 }
 ```
 
-三态均以 HTTP 200 返回，由 `result` 字段区分，使流水线侧脚本能从响应体判断处理结果并留痕。`built` 时 `buildID` 非空、
-`reason` 为空；`skipped` 与 `failed` 时 `buildID` 为空、`reason` 说明原因。
+三态均 HTTP 200，靠 `result` 区分。`built` 时 `buildID` 非空、`reason` 空；`skipped` / `failed` 相反。
 
-### 回调字段与蓝盾流水线变量映射
+### 回调字段 ↔ 蓝盾变量
 
-触发专用流水线中的 bash 脚本从蓝盾变量取值后拼装请求体。字段名与变量的对应关系在此固化，避免两侧对不上：
+| 请求体字段          | 来源                                           | 说明                       |
+|----------------|----------------------------------------------|--------------------------|
+| `appID`        | 路径                                           | Ensure 写入 URL，不进 body    |
+| `policyID`     | 触发器 `customVariables.BKMS_TRIGGER_POLICY_ID` | 每策略一个触发器；**不用** `stepId` |
+| `event`        | `BKMS_TRIGGER_EVENT`，缺省 `push`               |                          |
+| `branch`       | `BK_CI_REPO_GIT_WEBHOOK_BRANCH`              |                          |
+| `commitID`     | `BK_CI_REPO_GIT_WEBHOOK_PUSH_HEAD_COMMIT_ID` |                          |
+| `commitAuthor` | `BK_CI_REPO_GIT_WEBHOOK_PUSH_USERNAME`       |                          |
+| `eventTime`    | `BK_CI_REPO_GIT_WEBHOOK_EVENT_TIME`          | 空则脚本省略该字段                |
 
-| 请求体字段          | 来源                                                                   | 说明                                     |
-|----------------|----------------------------------------------------------------------|----------------------------------------|
-| `appID`        | 路径参数                                                                 | Ensure 写入回调 URL，不进 request body        |
-| `policyID`     | 命中触发器 `additionalOptions.customVariables` 的 `BKMS_TRIGGER_POLICY_ID` | 每策略一个触发器元素；由触发器同步写入，**不用** `stepId` 承载 |
-| `event`        | 同上路径的 `BKMS_TRIGGER_EVENT`，缺省 `push`                                 | 预留扩展其它触发事件                             |
-| `branch`       | `BK_CI_REPO_GIT_WEBHOOK_BRANCH`                                      | 推送的分支名                                 |
-| `commitID`     | `BK_CI_REPO_GIT_WEBHOOK_PUSH_HEAD_COMMIT_ID`                         | 本次推送的 HEAD commit                      |
-| `commitAuthor` | `BK_CI_REPO_GIT_WEBHOOK_PUSH_USERNAME`                               | 推送人                                    |
-| `eventTime`    | `BK_CI_REPO_GIT_WEBHOOK_EVENT_TIME`                                  | 事件时间；空则脚本省略该字段，避免 Go `time.Time` 解空串失败 |
-
-`additionalOptions.customVariables` 是蓝盾插件通用的流程控制字段（非 Git 触发器专属业务表单项），触发命中后注入构建环境，供回调脚本读取。
-`stepId` 留空，由蓝盾创建时自动生成。
-
-上表 webhook 变量名以蓝盾工蜂 Git 事件触发器的实际输出为准，落地时需实测校正。
+`stepId` 留空由蓝盾生成。webhook 变量名落地时按工蜂触发器实测校正。
 
 ### 触发器同步写入格式（待实现）
 
-本期**无代码实现**触发器同步；以下格式供后续子需求按策略对 trigger stage 内 `codeGitWebHookTrigger` 做合并式增删改时对齐。禁止整模板
-`UpdatePipeline` 覆盖（会冲掉 Ensure 注入的显示名、回调脚本与已同步的触发器）。
+本期无代码。后续按策略对 trigger stage 的 `codeGitWebHookTrigger` **合并式**增删改，禁止整模板 `UpdatePipeline`。Ensure 模板
+`elements` 为空，不放占位触发器。一策略对应一元素：
 
-Ensure 下发的模板中 trigger `elements` 为空数组；首条及后续策略创建 / 更新 / 删除时，由同步向该数组增删改真实触发器，*
-*不在模板里放未配置完的占位触发器**。
-
-约定：**每个触发策略对应一个** `codeGitWebHookTrigger` 元素。关键字段（仓库 / 分支 / 路径等由同步填充）：
-
-| 字段                                                 | 约定                                                                                      |
-|----------------------------------------------------|-----------------------------------------------------------------------------------------|
-| `eventType`                                        | 本期 `PUSH`                                                                               |
-| `version`                                          | `2.*`（与现网插件一致）                                                                          |
-| `repositoryType` / `repositoryHashId`              | 按应用构建配置的代码库填充；推荐 `ID` + hashId                                                          |
-| `branchName` / `excludeBranchName`                 | 由策略 `branchMatchMode` / `branchMatchValue` 映射                                           |
-| `includePaths` / `excludePaths` / `pathFilterType` | 由策略 `pathFilter` 映射；前缀用 `NamePrefixFilter`，通配用 `RegexBasedFilter`                       |
-| `includePushAction`                                | 如 `["push-file", "new-branch"]`                                                         |
-| `additionalOptions.customVariables`                | 至少 `{ "key": "BKMS_TRIGGER_POLICY_ID", "value": "<policyID>" }`；可选 `BKMS_TRIGGER_EVENT` |
-| `stepId`                                           | 留空或由蓝盾生成，**不得**写入 policyID                                                              |
-| `name`                                             | 可读名称，便于在蓝盾 UI 区分策略                                                                      |
-
-参考元素形状（值仅为示意）：
-
-```json
-{
-  "@type": "codeGitWebHookTrigger",
-  "atomCode": "codeGitWebHookTrigger",
-  "classType": "codeGitWebHookTrigger",
-  "version": "2.*",
-  "name": "bkms/repo trigger for policy",
-  "eventType": "PUSH",
-  "repositoryType": "ID",
-  "repositoryHashId": "<repoHashId>",
-  "branchName": "main,release",
-  "excludeBranchName": "develop,test",
-  "includePaths": "/pkg",
-  "excludePaths": "/log",
-  "pathFilterType": "NamePrefixFilter",
-  "includePushAction": [
-    "push-file",
-    "new-branch"
-  ],
-  "stepId": "",
-  "additionalOptions": {
-    "enable": true,
-    "enableCustomEnv": true,
-    "customVariables": [
-      {
-        "key": "BKMS_TRIGGER_POLICY_ID",
-        "value": "btp-xxx"
-      },
-      {
-        "key": "BKMS_TRIGGER_EVENT",
-        "value": "push"
-      }
-    ]
-  }
-}
-```
+| 字段                                                 | 约定                                                             |
+|----------------------------------------------------|----------------------------------------------------------------|
+| `eventType` / `version`                            | `PUSH` / `2.*`                                                 |
+| `repositoryType` / `repositoryHashId`              | 按应用代码库；推荐 `ID` + hashId                                        |
+| `branchName` / `excludeBranchName`                 | 由 `branchMatchMode` / `branchMatchValue` 映射                    |
+| `includePaths` / `excludePaths` / `pathFilterType` | 由 `pathFilter` 映射；前缀 `NamePrefixFilter`，通配 `RegexBasedFilter`  |
+| `includePushAction`                                | 如 `["push-file", "new-branch"]`                                |
+| `customVariables`                                  | 至少 `BKMS_TRIGGER_POLICY_ID=<policyID>`；可选 `BKMS_TRIGGER_EVENT` |
+| `stepId`                                           | 留空，**不得**写入 policyID                                           |
+| `name`                                             | 可读，便于蓝盾 UI 区分策略                                                |
 
 ### 错误码
 
-沿用 `pkg/common/bkerrs` 的 `ErrCode` 枚举，响应体为 `bkerrs.GinErrorOutput`。
+`bkerrs.GinErrorOutput`。本地 `binding` → `INVALID_REQUEST`；查库 / 跨字段 → `INVALID_ARGUMENT`。
 
-| HTTP | ErrCode                 | 触发场景                                                                                                                                      |
-|------|-------------------------|-------------------------------------------------------------------------------------------------------------------------------------------|
-| 400  | `INVALID_REQUEST`       | 参数格式不合法：名称长度越界、匹配方式非法（gin binding）                                                                                                        |
-| 400  | `INVALID_ARGUMENT`      | 参数格式合法但不满足业务规则：名称重复、超出策略数量上限、硬冲突、未开启自动生成 tag、非源码仓库或非工蜂、`all` 时匹配值非空 / `eq` `prefix` 时匹配值必填、存在策略时关闭自动生成 tag 或修改 `repoAlias` / `sourceType` |
-| 401  | `UNAUTHENTICATED`       | 回调未携带凭证、凭证错误，或凭证与 appID 不匹配                                                                                                               |
-| 403  | `NO_PERMISSION`         | 写操作不具备该应用的构建权限，或列表 / 预检不具备查看权限                                                                                                            |
-| 404  | `NOT_FOUND`             | 策略 ID 无效或已被删除                                                                                                                             |
-| 429  | `RATE_LIMIT_EXCEEDED`   | 单应用回调超过 60 次/分钟                                                                                                                           |
-| 500  | `INTERNAL_SERVER_ERROR` | 发起构建失败：构建配置失效、蓝盾接口报错                                                                                                                      |
+| HTTP | ErrCode                 | 场景                                                                                                      |
+|------|-------------------------|---------------------------------------------------------------------------------------------------------|
+| 400  | `INVALID_REQUEST`       | 名称长度、匹配方式等 gin binding                                                                                  |
+| 400  | `INVALID_ARGUMENT`      | 重名、超 5 条、硬冲突、未开自动 tag、非源码/非工蜂、匹配值与 mode 不符、存在策略时改 `repoAlias` / `CodeRepo.Type` / `sourceType` 或关自动 tag |
+| 401  | `UNAUTHENTICATED`       | 回调凭证缺失、错误或与 appID 不匹配                                                                                   |
+| 403  | `NO_PERMISSION`         | 写无构建权限，或列表 / 预检无查看权限                                                                                    |
+| 404  | `NOT_FOUND`             | 策略不存在                                                                                                   |
+| 429  | `RATE_LIMIT_EXCEEDED`   | 单应用回调 > 60 次/分钟                                                                                         |
+| 500  | `INTERNAL_SERVER_ERROR` | 构建配置失效或蓝盾报错                                                                                             |
 
-名称长度这类字段本地校验由 gin validator 的 `binding` tag 完成，因此统一落在 `INVALID_REQUEST`；需要查库或跨字段判断的校验落在
-`INVALID_ARGUMENT`。
+## 安全与生命周期
 
-## 安全约定
+- 回调凭证明文不出现在任何响应（含 `details`）
+- 回调只用应用独享凭证，不再校验用户权限；权限卡在策略写操作
+- 自动构建由 bkms 公共账号执行，构建记录触发人展示 `--`
 
-- **凭证不回显**：回调凭证不出现在任何接口的响应体字段中，包括策略实体、策略列表与错误响应的 `details`。凭证由蓝盾凭证管理持有，bkms
-  侧只做校验不做展示。
-- **回调不做用户级鉴权**：回调接口用应用独享凭证鉴权，触发构建时不再校验用户权限。权限校验发生在策略的创建、编辑、启停环节。
-- **执行身份**：自动触发的构建由 bkms 公共账号执行，构建记录的触发人对自动构建展示 `--`。
+| 能力        | 时机                                  | 失败                                  |
+|-----------|-------------------------------------|-------------------------------------|
+| `Ensure`  | 首条策略创建前（`PolicyManager` 调用）         | 策略不落库；已建凭证回收，远程流水线若已创建也删掉           |
+| `Cleanup` | 末条删除前（`List` 长度为 1 时先 Cleanup 再删策略） | 策略仍在。删流水线失败则保留本地并报错；凭证回收失败则告警并继续清本地 |
 
-## 触发专用流水线生命周期
+第 2 条起不重复 `Ensure`，复用已有 `pipelineID`。本期不同步工蜂触发器（调用点留 `FIXME`），`triggerID` 留空。`Cleanup` 不查
+`PolicyStore`，是否末条由 `PolicyManager` 判定。
 
-| 能力                               | 调用时机                                                       | 成功语义                            | 失败语义                                              |
-|----------------------------------|------------------------------------------------------------|---------------------------------|---------------------------------------------------|
-| `TriggerPipelineManager.Ensure`  | 应用首条触发策略创建前（由 `pkg/build/trigger.TriggerPolicyManager` 调用） | 返回已存在或新建的流水线，策略写入其 `pipelineID` | 返回错误；策略不得落库；失败时回收已建凭证，且若蓝盾流水线已创建但本地落库失败则一并删除远程流水线 |
-| `TriggerPipelineManager.Cleanup` | 应用末条触发策略删除**前**（`List` 长度为 1 时先 Cleanup，成功后再删策略）           | 蓝盾流水线与本地记录清理完成                  | Cleanup 失败则策略仍在；删流水线失败则保留本地并报错；凭证回收失败则告警并继续清本地    |
-
-第 2 条及以后创建不重复 `Ensure`，复用已有策略的 `pipelineID`。本期不向流水线同步工蜂触发器（调用点留 `FIXME: 同步工蜂触发器`），
-`triggerID` 留空。
-
-Cleanup **不查询** `PolicyStore`；是否为末条由 `TriggerPolicyManager` 在调用前判定。
-
-存在任意策略时，`UpdateBuildConfig` 拒绝修改 `repoAlias`、修改 `sourceType`、把 `tagConfig.type` 改为空；`repoURL` /
-默认分支 / `semver`↔`custom` 放行。提示：「存在自动触发策略时不可修改，请先删除全部策略」。
+存在任意策略时，`UpdateBuildConfig` 拒绝改 `repoAlias`、`CodeRepo.Type`、`sourceType`、关闭自动 tag；`repoURL` / 默认分支 /
+`semver`↔`custom` 放行。提示：「存在自动触发策略时不可修改，请先删除全部策略」。
