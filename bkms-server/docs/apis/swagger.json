@@ -29833,6 +29833,10 @@
                     "description": "是否启用 BSCP（服务配置中心）对接，为 false 时前端隐藏 BSCP 配置相关入口",
                     "type": "boolean"
                 },
+                "enableGoProxy": {
+                    "description": "是否启用 Go 模块代理（GOPROXY）构建参数指引，默认为 false，显式开启后前端才展示相关提示与快捷添加入口",
+                    "type": "boolean"
+                },
                 "enableIndependentBkRepo": {
                     "description": "制品库是否为独立部署（不接入权限中心，改用制品库账号认证）",
                     "type": "boolean"

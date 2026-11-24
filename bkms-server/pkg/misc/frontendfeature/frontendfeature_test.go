@@ -72,6 +72,7 @@ var _ = Describe("GetFrontendFeatures", func() {
 			Tenant: config.TenantConfig{EnableMultiTenantMode: true},
 			FeatureIntegrations: config.FeatureIntegrationsConfig{
 				EnableIndependentBkRepo: true,
+				EnableGoProxy:           true,
 				DisableBSCP:             true,
 				DisableKubeInsight:      true,
 			},
@@ -81,6 +82,7 @@ var _ = Describe("GetFrontendFeatures", func() {
 			EnableMultiTenantMode:   true,
 			EnableIndependentBkRepo: true,
 			EnableWeTerm:            true,
+			EnableGoProxy:           true,
 		}))
 	})
 })

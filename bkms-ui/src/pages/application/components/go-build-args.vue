@@ -1,10 +1,10 @@
 <template>
   <KeyValue
     v-model="argsModel"
-    :value-placeholder="goProxyValuePlaceholders"
+    :value-placeholder="valuePlaceholders"
   />
   <div
-    v-if="language === 'go' && golangProxyUrl"
+    v-if="showGoProxyGuide"
     class="flex items-center justify-between gap-[24px] bg-[#f5f7fa] mt-[16px] p-[16px]"
   >
     <div class="flex flex-wrap gap-x-[4px] text-[13px] leading-[22px]">
@@ -12,7 +12,6 @@
         <span class="font-mono font-bold">GOPROXY、GOPRIVATE、GOSUMDB</span>
       </i18n-t>
       <a
-        v-if="golangProxyUrl"
         class="text-[#3a84ff]"
         :href="golangProxyUrl"
         rel="noopener noreferrer"
@@ -41,20 +40,28 @@
   import { Share } from 'bkui-vue/lib/icon';
   import { useI18n } from 'vue-i18n';
   import KeyValue from '~/components/key-value.vue';
+  import { useFrontendFeaturesStore } from '~/stores/frontend-features';
 
-  defineProps<{
+  const props = defineProps<{
     language?: string;
   }>();
 
   const modelValue = defineModel<Record<string, string>>();
   const { t } = useI18n();
+  const frontendFeaturesStore = useFrontendFeaturesStore();
   const golangProxyUrl = import.meta.env.BK_GOLANG_PROXY_URL;
   const goProxyArgKeys = ['GOPROXY', 'GOPRIVATE', 'GOSUMDB'];
-  const goProxyValuePlaceholders = computed(() => ({
-    GOPROXY: '如 https://<用户名>:<凭证>@<代理地址>,direct',
-    GOPRIVATE: t('一般可留空'),
-    GOSUMDB: '如 <校验库地址>+<公钥>',
-  }));
+  const isGoProxyEnabled = computed(() => props.language === 'go' && frontendFeaturesStore.enableGoProxy);
+  const showGoProxyGuide = computed(() => isGoProxyEnabled.value && Boolean(golangProxyUrl));
+  const valuePlaceholders = computed(() =>
+    isGoProxyEnabled.value
+      ? {
+          GOPROXY: '如 https://<用户名>:<凭证>@<代理地址>,direct',
+          GOPRIVATE: t('一般可留空'),
+          GOSUMDB: '如 <校验库地址>+<公钥>',
+        }
+      : undefined,
+  );
   const argsModel = computed({
     get: () => modelValue.value ?? {},
     set: value => {
