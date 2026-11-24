@@ -26,7 +26,9 @@ import (
 
 	"github.com/samber/lo"
 
+	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris/accesspoint"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris/accesspoint/binding"
 )
 
 // WorkspaceURIInput 空间路径参数
@@ -53,8 +55,6 @@ type AccessPointCreateInput struct {
 	ClientHosts []string `json:"clientHosts" binding:"required"`
 	// 北极星鉴权 Token，选填
 	Token string `json:"token"`
-	// 绑定到该接入点的集群 ID；缺省表示不绑定集群
-	ClusterIDs []string `json:"clusterIDs"`
 }
 
 // AccessPointUpdateInput 更新接入点的请求，字段缺省表示不修改
@@ -67,8 +67,26 @@ type AccessPointUpdateInput struct {
 	ClientHosts *[]string `json:"clientHosts"`
 	// 北极星鉴权 Token；显式传空字符串表示清除
 	Token *string `json:"token"`
-	// 绑定到该接入点的集群 ID，全量替换；显式传空数组表示解除全部绑定
-	ClusterIDs *[]string `json:"clusterIDs"`
+}
+
+// PolarisClusterURIInput 候选集群路径参数
+type PolarisClusterURIInput struct {
+	// 工作空间 ID
+	WorkspaceID string `uri:"workspaceID" binding:"required,uri_slug"`
+	// 集群 ID
+	ClusterID string `uri:"clusterID" binding:"required"`
+}
+
+// PolarisClusterBindInput 绑定单个集群的请求
+type PolarisClusterBindInput struct {
+	// 集群绑定的自建接入点 ID，已绑定其他接入点时换绑；必须传入，传空字符串表示解绑
+	AccessPointID *string `json:"accessPointID" binding:"required"`
+}
+
+// AccessPointClustersInput 全量替换接入点绑定集群的请求
+type AccessPointClustersInput struct {
+	// 绑定到该接入点的集群 ID，须为空间 BCS 项目下的非共享集群；传空数组表示解除全部绑定
+	ClusterIDs []string `json:"clusterIDs" binding:"required"`
 }
 
 // ConnectivityTestInput 连通测试的请求
@@ -155,6 +173,20 @@ func NewAccessPointOutput(p *accesspoint.PolarisAccessPoint, boundClusterCount i
 	}
 }
 
+// AccessPointClustersOutput 接入点绑定的集群
+type AccessPointClustersOutput struct {
+	// 绑定到该接入点的集群 ID，按集群 ID 排序
+	ClusterIDs []string `json:"clusterIDs"`
+}
+
+// PolarisClusterBindOutput 单个集群绑定的接入点
+type PolarisClusterBindOutput struct {
+	// 集群 ID
+	ClusterID string `json:"clusterID"`
+	// 集群绑定的自建接入点 ID，解绑后为空
+	AccessPointID string `json:"accessPointID"`
+}
+
 // ConnectivityTestOutput 连通测试结果
 type ConnectivityTestOutput struct {
 	// 是否通过
@@ -208,6 +240,24 @@ type PolarisClusterOutput struct {
 	InUse bool `json:"inUse"`
 }
 
+// NewPolarisClusterOutput 由集群绑定视图构造输出
+func NewPolarisClusterOutput(v *binding.ClusterView) *PolarisClusterOutput {
+	out := &PolarisClusterOutput{
+		ClusterID:     v.Cluster.ID,
+		ClusterName:   v.Cluster.Name,
+		ClusterStatus: v.Cluster.Status,
+		Envs: lo.Map(v.Envs, func(e envmodel.Environment, _ int) PolarisClusterEnvOutput {
+			return PolarisClusterEnvOutput{ID: e.ID.Hex(), Name: e.Name, IsFeature: e.IsFeatureEnv()}
+		}),
+		InUse: v.InUse,
+	}
+	if v.AccessPoint != nil {
+		out.AccessPointID = v.AccessPoint.ID.Hex()
+		out.AccessPointName = v.AccessPoint.Name
+	}
+	return out
+}
+
 // PolarisOperatorValuesOutput 集群上 bcs-polaris-operator 应使用的北极星 values
 type PolarisOperatorValuesOutput struct {
 	// 集群 ID
@@ -236,6 +286,16 @@ type AccessPointListResponse struct {
 // AccessPointResponse 单个接入点的响应
 type AccessPointResponse struct {
 	Data *AccessPointOutput `json:"data"`
+}
+
+// AccessPointClustersResponse 接入点绑定集群的响应
+type AccessPointClustersResponse struct {
+	Data *AccessPointClustersOutput `json:"data"`
+}
+
+// PolarisClusterBindResponse 绑定单个集群的响应
+type PolarisClusterBindResponse struct {
+	Data *PolarisClusterBindOutput `json:"data"`
 }
 
 // ConnectivityTestResponse 连通测试的响应

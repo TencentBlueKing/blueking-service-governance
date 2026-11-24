@@ -77,6 +77,11 @@ func ByCluster(workspaceID, clusterID string) store.Opt {
 	return store.Combine(InWorkspace(workspaceID), store.Where("clusterID", clusterID))
 }
 
+// ByClusters 匹配空间内多个集群的绑定
+func ByClusters(workspaceID string, clusterIDs []string) store.Opt {
+	return store.Combine(InWorkspace(workspaceID), store.Where("clusterID", bson.M{"$in": clusterIDs}))
+}
+
 // ByAccessPoint 匹配空间内指定接入点的绑定
 func ByAccessPoint(workspaceID, accessPointID string) store.Opt {
 	return store.Combine(InWorkspace(workspaceID), store.Where("accessPointID", accessPointID))

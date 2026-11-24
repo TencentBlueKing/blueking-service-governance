@@ -25,6 +25,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris/accesspoint"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris/accesspoint/binding"
 	slz "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris/accesspoint/serializer"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/misc/audit"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
@@ -46,6 +47,10 @@ func New(registry *storereg.Registry) *Handler {
 
 func (h *Handler) manager() *accesspoint.Manager {
 	return accesspoint.NewManager(h.registry.DB)
+}
+
+func (h *Handler) bindings() *binding.Service {
+	return binding.NewService(h.registry.DB)
 }
 
 // ListAccessPoints 获取空间可用的北极星接入点。
@@ -91,7 +96,6 @@ func (h *Handler) ListAccessPoints(c *gin.Context) {
 //	@ID				CreatePolarisAccessPoint
 //	@Summary		创建北极星接入点
 //	@Description	保存前服务端重新执行连通测试，失败时拒绝；Token 选填，加密存储。
-//	@Description	传入 clusterIDs 时同时把这些集群绑定到该接入点
 //	@Tags			polaris-access-points
 //	@Accept			json
 //	@Produce		json
@@ -112,11 +116,6 @@ func (h *Handler) CreateAccessPoint(c *gin.Context) {
 	ctx := c.Request.Context()
 	if _, err := perm.ValidateWorkspaceByID(ctx, h.registry, uri.WorkspaceID, perm.TypeEdit); err != nil {
 		bkerrs.AbortWithErr(c, err)
-		return
-	}
-	// TODO(集群绑定子需求): 创建成功后把 clusterIDs 交给绑定服务
-	if len(input.ClusterIDs) > 0 {
-		abortNotImplemented(c, "binding clusters when creating polaris access point")
 		return
 	}
 
@@ -146,7 +145,7 @@ func (h *Handler) CreateAccessPoint(c *gin.Context) {
 //	@Summary		更新北极星接入点
 //	@Description	字段缺省表示不修改；客户端地址或 Token 变化时重新执行连通测试，失败时拒绝保存。
 //	@Description	接入点被北极星配置使用时仍允许修改地址，集群组件会显示为需要更新。
-//	@Description	传入 clusterIDs 时全量替换该接入点绑定的集群
+//	@Description	不修改绑定的集群，绑定集群使用 PUT .../polaris-access-points/{accessPointID}/clusters
 //	@Tags			polaris-access-points
 //	@Accept			json
 //	@Produce		json
@@ -168,11 +167,6 @@ func (h *Handler) UpdateAccessPoint(c *gin.Context) {
 	ctx := c.Request.Context()
 	if _, err := perm.ValidateWorkspaceByID(ctx, h.registry, uri.WorkspaceID, perm.TypeEdit); err != nil {
 		bkerrs.AbortWithErr(c, err)
-		return
-	}
-	// TODO(集群绑定子需求): 更新成功后用 clusterIDs 全量替换绑定，并返回替换后的绑定集群数
-	if input.ClusterIDs != nil {
-		abortNotImplemented(c, "binding clusters when updating polaris access point")
 		return
 	}
 
@@ -319,11 +313,59 @@ func (h *Handler) ListNamespaces(c *gin.Context) {
 	ginutils.OK(c, slz.NamespacesResponse{Data: namespaces})
 }
 
+// ReplaceClusters 全量替换北极星接入点绑定的集群。
+//
+//	@ID				ReplacePolarisAccessPointClusters
+//	@Summary		替换北极星接入点绑定的集群
+//	@Description	全量替换接入点绑定的集群，传空数组表示解除全部绑定；集群须为空间 BCS 项目下的非共享集群，已绑定其他接入点的集群会被换绑。
+//	@Description	待解绑或换绑的集群上有环境正被北极星配置使用时拒绝修改（详情码 POLARIS_CLUSTER_IN_USE），全部校验通过后才写入
+//	@Tags			polaris-access-points
+//	@Accept			json
+//	@Produce		json
+//	@Security		BkUserInfo
+//	@Security		BkUserCredential
+//	@Param			workspaceID		path		string							true	"工作空间 ID"
+//	@Param			accessPointID	path		string							true	"接入点 ID"
+//	@Param			body			body		slz.AccessPointClustersInput	true	"绑定的集群"
+//	@Success		200				{object}	slz.AccessPointClustersResponse
+//	@Failure		400				{object}	bkerrs.GinErrorOutput
+//	@Router			/workspaces/{workspaceID}/polaris-access-points/{accessPointID}/clusters [put]
+func (h *Handler) ReplaceClusters(c *gin.Context) {
+	var uri slz.AccessPointURIInput
+	var input slz.AccessPointClustersInput
+	if err := ginutils.BindURIJSON(c, &uri, &input); err != nil {
+		bkerrs.AbortWithErr(c, err)
+		return
+	}
+	ctx := c.Request.Context()
+	ws, err := perm.ValidateWorkspaceByID(ctx, h.registry, uri.WorkspaceID, perm.TypeEdit)
+	if err != nil {
+		bkerrs.AbortWithErr(c, err)
+		return
+	}
+
+	before, after, err := h.bindings().ReplaceClusters(ctx, ws, uri.AccessPointID, input.ClusterIDs)
+	if err != nil {
+		bkerrs.AbortWithErr(c, accesspoint.APIError(err, "bind clusters to polaris access point"))
+		return
+	}
+
+	go audit.AddOperationRecordAsync(
+		ctx, audit.OperationTypeUpdate, audit.ResourceTypeWorkspace, uri.WorkspaceID,
+		audit.WithAttribute(audit.AttributePolarisAccessPoint),
+		audit.WithDataBefore(map[string]any{"accessPointID": uri.AccessPointID, "clusterIDs": before}),
+		audit.WithDataAfter(map[string]any{"accessPointID": uri.AccessPointID, "clusterIDs": after}),
+		audit.WithWorkspaceID(uri.WorkspaceID),
+	)
+	ginutils.OK(c, slz.AccessPointClustersResponse{Data: &slz.AccessPointClustersOutput{ClusterIDs: after}})
+}
+
 // ListClusters 获取空间候选集群的北极星接入点绑定情况。
 //
 //	@ID				ListPolarisClusters
 //	@Summary		获取北极星集群绑定视图
-//	@Description	候选集群为空间 BCS 项目下的全部非共享集群，含没有环境的集群；先列出有环境的集群，同类按集群 ID 排序。
+//	@Description	候选集群为空间 BCS 项目下的全部非共享集群，含没有环境的集群；有环境的集群排在前面，每组内按集群 ID 排序。
+//	@Description	envs 含特性环境；inUse 为 true 表示集群上有环境被北极星配置使用，不能解绑或换绑
 //	@Tags			polaris-access-points
 //	@Produce		json
 //	@Security		BkUserInfo
@@ -338,11 +380,72 @@ func (h *Handler) ListClusters(c *gin.Context) {
 		bkerrs.AbortWithErr(c, err)
 		return
 	}
-	if _, err := perm.ValidateWorkspaceByID(c.Request.Context(), h.registry, uri.WorkspaceID, perm.TypeView); err != nil {
+	ctx := c.Request.Context()
+	ws, err := perm.ValidateWorkspaceByID(ctx, h.registry, uri.WorkspaceID, perm.TypeView)
+	if err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return
 	}
-	abortNotImplemented(c, "list polaris clusters")
+
+	views, err := h.bindings().ListClusters(ctx, ws)
+	if err != nil {
+		bkerrs.AbortWithErr(c, accesspoint.APIError(err, "list polaris clusters"))
+		return
+	}
+	outputs := make([]*slz.PolarisClusterOutput, 0, len(views))
+	for i := range views {
+		outputs = append(outputs, slz.NewPolarisClusterOutput(&views[i]))
+	}
+	ginutils.OK(c, slz.PolarisClusterListResponse{Data: outputs})
+}
+
+// BindCluster 将单个集群绑定到北极星接入点。
+//
+//	@ID				BindPolarisCluster
+//	@Summary		绑定集群的北极星接入点
+//	@Description	集群须为空间 BCS 项目下的非共享集群；已绑定其他接入点时换绑，accessPointID 传空字符串表示解绑。
+//	@Description	换绑或解绑时，集群上有环境正被北极星配置使用则拒绝（详情码 POLARIS_CLUSTER_IN_USE）；返回变更后集群绑定的接入点 ID
+//	@Tags			polaris-access-points
+//	@Accept			json
+//	@Produce		json
+//	@Security		BkUserInfo
+//	@Security		BkUserCredential
+//	@Param			workspaceID	path		string						true	"工作空间 ID"
+//	@Param			clusterID	path		string						true	"集群 ID"
+//	@Param			body		body		slz.PolarisClusterBindInput	true	"绑定的接入点"
+//	@Success		200			{object}	slz.PolarisClusterBindResponse
+//	@Failure		400			{object}	bkerrs.GinErrorOutput
+//	@Router			/workspaces/{workspaceID}/polaris-clusters/{clusterID} [put]
+func (h *Handler) BindCluster(c *gin.Context) {
+	var uri slz.PolarisClusterURIInput
+	var input slz.PolarisClusterBindInput
+	if err := ginutils.BindURIJSON(c, &uri, &input); err != nil {
+		bkerrs.AbortWithErr(c, err)
+		return
+	}
+	ctx := c.Request.Context()
+	ws, err := perm.ValidateWorkspaceByID(ctx, h.registry, uri.WorkspaceID, perm.TypeEdit)
+	if err != nil {
+		bkerrs.AbortWithErr(c, err)
+		return
+	}
+
+	before, after, err := h.bindings().BindCluster(ctx, ws, uri.ClusterID, *input.AccessPointID)
+	if err != nil {
+		bkerrs.AbortWithErr(c, accesspoint.APIError(err, "bind cluster to polaris access point"))
+		return
+	}
+
+	go audit.AddOperationRecordAsync(
+		ctx, audit.OperationTypeUpdate, audit.ResourceTypeWorkspace, uri.WorkspaceID,
+		audit.WithAttribute(audit.AttributePolarisAccessPoint),
+		audit.WithDataBefore(map[string]any{"clusterID": uri.ClusterID, "accessPointID": before}),
+		audit.WithDataAfter(map[string]any{"clusterID": uri.ClusterID, "accessPointID": after}),
+		audit.WithWorkspaceID(uri.WorkspaceID),
+	)
+	ginutils.OK(c, slz.PolarisClusterBindResponse{
+		Data: &slz.PolarisClusterBindOutput{ClusterID: uri.ClusterID, AccessPointID: after},
+	})
 }
 
 // ListOperatorValues 获取已绑定接入点的集群上 bcs-polaris-operator 应使用的北极星 values。

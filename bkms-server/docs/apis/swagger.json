@@ -14874,6 +14874,7 @@
                         "BkUserCredential": []
                     }
                 ],
+                "description": "环境被北极星配置使用时，新集群须绑定与配置相同的北极星接入点，否则拒绝修改",
                 "consumes": [
                     "application/json"
                 ],
@@ -20698,7 +20699,7 @@
                         "BkUserCredential": []
                     }
                 ],
-                "description": "保存前服务端重新执行连通测试，失败时拒绝；Token 选填，加密存储。\n传入 clusterIDs 时同时把这些集群绑定到该接入点",
+                "description": "保存前服务端重新执行连通测试，失败时拒绝；Token 选填，加密存储。",
                 "consumes": [
                     "application/json"
                 ],
@@ -20859,7 +20860,7 @@
                         "BkUserCredential": []
                     }
                 ],
-                "description": "字段缺省表示不修改；客户端地址或 Token 变化时重新执行连通测试，失败时拒绝保存。\n接入点被北极星配置使用时仍允许修改地址，集群组件会显示为需要更新。\n传入 clusterIDs 时全量替换该接入点绑定的集群",
+                "description": "字段缺省表示不修改；客户端地址或 Token 变化时重新执行连通测试，失败时拒绝保存。\n接入点被北极星配置使用时仍允许修改地址，集群组件会显示为需要更新。\n不修改绑定的集群，绑定集群使用 PUT .../polaris-access-points/{accessPointID}/clusters",
                 "consumes": [
                     "application/json"
                 ],
@@ -20901,6 +20902,69 @@
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/serializer.AccessPointResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
+        "/workspaces/{workspaceID}/polaris-access-points/{accessPointID}/clusters": {
+            "put": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "description": "全量替换接入点绑定的集群，传空数组表示解除全部绑定；集群须为空间 BCS 项目下的非共享集群，已绑定其他接入点的集群会被换绑。\n待解绑或换绑的集群上有环境正被北极星配置使用时拒绝修改（详情码 POLARIS_CLUSTER_IN_USE），全部校验通过后才写入",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "polaris-access-points"
+                ],
+                "summary": "替换北极星接入点绑定的集群",
+                "operationId": "ReplacePolarisAccessPointClusters",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "接入点 ID",
+                        "name": "accessPointID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "绑定的集群",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/serializer.AccessPointClustersInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.AccessPointClustersResponse"
                         }
                     },
                     "400": {
@@ -20973,7 +21037,7 @@
                         "BkUserCredential": []
                     }
                 ],
-                "description": "候选集群为空间 BCS 项目下的全部非共享集群，含没有环境的集群；先列出有环境的集群，同类按集群 ID 排序。",
+                "description": "候选集群为空间 BCS 项目下的全部非共享集群，含没有环境的集群；有环境的集群排在前面，每组内按集群 ID 排序。\nenvs 含特性环境；inUse 为 true 表示集群上有环境被北极星配置使用，不能解绑或换绑",
                 "produces": [
                     "application/json"
                 ],
@@ -20996,6 +21060,69 @@
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/serializer.PolarisClusterListResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
+        "/workspaces/{workspaceID}/polaris-clusters/{clusterID}": {
+            "put": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "description": "集群须为空间 BCS 项目下的非共享集群；已绑定其他接入点时换绑，accessPointID 传空字符串表示解绑。\n换绑或解绑时，集群上有环境正被北极星配置使用则拒绝（详情码 POLARIS_CLUSTER_IN_USE）；返回变更后集群绑定的接入点 ID",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "polaris-access-points"
+                ],
+                "summary": "绑定集群的北极星接入点",
+                "operationId": "BindPolarisCluster",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "集群 ID",
+                        "name": "clusterID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "绑定的接入点",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/serializer.PolarisClusterBindInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.PolarisClusterBindResponse"
                         }
                     },
                     "400": {
@@ -23889,6 +24016,41 @@
                 "ReasonIncompleteLanguage"
             ]
         },
+        "serializer.AccessPointClustersInput": {
+            "type": "object",
+            "required": [
+                "clusterIDs"
+            ],
+            "properties": {
+                "clusterIDs": {
+                    "description": "绑定到该接入点的集群 ID，须为空间 BCS 项目下的非共享集群；传空数组表示解除全部绑定",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "serializer.AccessPointClustersOutput": {
+            "type": "object",
+            "properties": {
+                "clusterIDs": {
+                    "description": "绑定到该接入点的集群 ID，按集群 ID 排序",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "serializer.AccessPointClustersResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/serializer.AccessPointClustersOutput"
+                }
+            }
+        },
         "serializer.AccessPointCreateInput": {
             "type": "object",
             "required": [
@@ -23899,13 +24061,6 @@
             "properties": {
                 "clientHosts": {
                     "description": "客户端地址，IP 或域名，1 ~ 10 个；OpenAPI 端口固定为 8090，SDK 端口固定为 8091",
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "clusterIDs": {
-                    "description": "绑定到该接入点的集群 ID；缺省表示不绑定集群",
                     "type": "array",
                     "items": {
                         "type": "string"
@@ -23997,13 +24152,6 @@
             "properties": {
                 "clientHosts": {
                     "description": "客户端地址",
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "clusterIDs": {
-                    "description": "绑定到该接入点的集群 ID，全量替换；显式传空数组表示解除全部绑定",
                     "type": "array",
                     "items": {
                         "type": "string"
@@ -29215,6 +29363,10 @@
                     "description": "环境名称",
                     "type": "string"
                 },
+                "polarisAccessPointID": {
+                    "description": "环境所在集群使用的北极星接入点 ID：未开启空间自建接入点时固定为 platform；开启后为集群绑定的接入点 ID，未绑定则为空",
+                    "type": "string"
+                },
                 "status": {
                     "description": "环境状态, 取值: Ready(就绪), NotReady(未就绪)",
                     "type": "string"
@@ -29320,6 +29472,10 @@
                 },
                 "ownerAppID": {
                     "description": "特性环境所属应用 ID，仅特性环境返回",
+                    "type": "string"
+                },
+                "polarisAccessPointID": {
+                    "description": "环境所在集群使用的北极星接入点 ID：未开启空间自建接入点时固定为 platform；开启后为集群绑定的接入点 ID，未绑定则为空",
                     "type": "string"
                 },
                 "sourceEnvID": {
@@ -33435,6 +33591,39 @@
             "properties": {
                 "data": {
                     "$ref": "#/definitions/serializer.PlatCfgSwitchOutput"
+                }
+            }
+        },
+        "serializer.PolarisClusterBindInput": {
+            "type": "object",
+            "required": [
+                "accessPointID"
+            ],
+            "properties": {
+                "accessPointID": {
+                    "description": "集群绑定的自建接入点 ID，已绑定其他接入点时换绑；必须传入，传空字符串表示解绑",
+                    "type": "string"
+                }
+            }
+        },
+        "serializer.PolarisClusterBindOutput": {
+            "type": "object",
+            "properties": {
+                "accessPointID": {
+                    "description": "集群绑定的自建接入点 ID，解绑后为空",
+                    "type": "string"
+                },
+                "clusterID": {
+                    "description": "集群 ID",
+                    "type": "string"
+                }
+            }
+        },
+        "serializer.PolarisClusterBindResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/serializer.PolarisClusterBindOutput"
                 }
             }
         },

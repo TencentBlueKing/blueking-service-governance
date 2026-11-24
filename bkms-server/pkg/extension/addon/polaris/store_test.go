@@ -29,6 +29,8 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil/dbfactory"
+	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris/accesspoint"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
@@ -585,5 +587,46 @@ var _ = Describe("ListConfigUsagesByAccessPoint", func() {
 		usages, err := polaris.ListConfigUsagesByAccessPoint(ctx, db, "ap-"+stringx.Random(8))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(usages).To(BeEmpty())
+	})
+})
+
+var _ = Describe("ListByScopeEnvs", func() {
+	var (
+		ctx         context.Context
+		db          *mongo.Database
+		configStore *polaris.ConfigStore
+		workspaceID string
+		app         *bkmsapp.Application
+		otherApp    *bkmsapp.Application
+	)
+
+	BeforeEach(func() {
+		ctx = testutil.NewDefaultTenantContext()
+		db = testutil.NewDB(GinkgoT())
+		configStore = store.Of(db, polaris.ConfigMeta)
+		appStore := store.Of(db, bkmsapp.AppMeta)
+		workspaceID = "ws-" + stringx.Random(8)
+		app = dbfactory.ApplicationWithOpts(ctx, appStore, &dbfactory.ApplicationOpts{WorkspaceID: workspaceID})
+		// 其他空间的同名环境不应被计入
+		otherApp = dbfactory.ApplicationWithOpts(ctx, appStore, &dbfactory.ApplicationOpts{})
+		DeferCleanup(func() {
+			for _, appID := range []string{app.ID, otherApp.ID} {
+				_, _ = configStore.DeleteMany(ctx, polaris.ByApp(appID))
+				_, _ = appStore.DeleteMany(ctx, bkmsapp.ByID(appID))
+			}
+		})
+	})
+
+	It("should list configs of workspace apps whose scope includes any of the envs", func() {
+		Expect(configStore.Create(ctx, newTestConfig(app.ID, "b-dev", []string{"dev"}, nil))).To(Succeed())
+		Expect(configStore.Create(ctx, newTestConfig(app.ID, "a-prod", []string{"stag", "prod"}, nil))).To(Succeed())
+		Expect(configStore.Create(ctx, newTestConfig(app.ID, "test-only", []string{"test"}, nil))).To(Succeed())
+		Expect(configStore.Create(ctx, newTestConfig(otherApp.ID, "other-ws", []string{"dev"}, nil))).To(Succeed())
+
+		configs, err := polaris.ListByScopeEnvs(ctx, db, workspaceID, []string{"dev", "prod"})
+
+		Expect(err).NotTo(HaveOccurred())
+		Expect(lo.Map(configs, func(c polaris.PolarisConfig, _ int) string { return c.Name })).
+			To(Equal([]string{"a-prod", "b-dev"}))
 	})
 })

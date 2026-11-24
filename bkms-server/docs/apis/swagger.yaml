@@ -1369,15 +1369,33 @@ definitions:
     - ReasonUnsupportedStack
     - ReasonInvalidStack
     - ReasonIncompleteLanguage
+  serializer.AccessPointClustersInput:
+    properties:
+      clusterIDs:
+        description: 绑定到该接入点的集群 ID，须为空间 BCS 项目下的非共享集群；传空数组表示解除全部绑定
+        items:
+          type: string
+        type: array
+    required:
+    - clusterIDs
+    type: object
+  serializer.AccessPointClustersOutput:
+    properties:
+      clusterIDs:
+        description: 绑定到该接入点的集群 ID，按集群 ID 排序
+        items:
+          type: string
+        type: array
+    type: object
+  serializer.AccessPointClustersResponse:
+    properties:
+      data:
+        $ref: '#/definitions/serializer.AccessPointClustersOutput'
+    type: object
   serializer.AccessPointCreateInput:
     properties:
       clientHosts:
         description: 客户端地址，IP 或域名，1 ~ 10 个；OpenAPI 端口固定为 8090，SDK 端口固定为 8091
-        items:
-          type: string
-        type: array
-      clusterIDs:
-        description: 绑定到该接入点的集群 ID；缺省表示不绑定集群
         items:
           type: string
         type: array
@@ -1444,11 +1462,6 @@ definitions:
     properties:
       clientHosts:
         description: 客户端地址
-        items:
-          type: string
-        type: array
-      clusterIDs:
-        description: 绑定到该接入点的集群 ID，全量替换；显式传空数组表示解除全部绑定
         items:
           type: string
         type: array
@@ -5022,6 +5035,9 @@ definitions:
       name:
         description: 环境名称
         type: string
+      polarisAccessPointID:
+        description: 环境所在集群使用的北极星接入点 ID：未开启空间自建接入点时固定为 platform；开启后为集群绑定的接入点 ID，未绑定则为空
+        type: string
       status:
         description: '环境状态, 取值: Ready(就绪), NotReady(未就绪)'
         type: string
@@ -5094,6 +5110,9 @@ definitions:
         description: 命名空间共享信息，仅与其他环境共用命名空间时返回
       ownerAppID:
         description: 特性环境所属应用 ID，仅特性环境返回
+        type: string
+      polarisAccessPointID:
+        description: 环境所在集群使用的北极星接入点 ID：未开启空间自建接入点时固定为 platform；开启后为集群绑定的接入点 ID，未绑定则为空
         type: string
       sourceEnvID:
         description: 特性环境来源环境 ID，仅特性环境返回
@@ -7876,6 +7895,28 @@ definitions:
     properties:
       data:
         $ref: '#/definitions/serializer.PlatCfgSwitchOutput'
+    type: object
+  serializer.PolarisClusterBindInput:
+    properties:
+      accessPointID:
+        description: 集群绑定的自建接入点 ID，已绑定其他接入点时换绑；必须传入，传空字符串表示解绑
+        type: string
+    required:
+    - accessPointID
+    type: object
+  serializer.PolarisClusterBindOutput:
+    properties:
+      accessPointID:
+        description: 集群绑定的自建接入点 ID，解绑后为空
+        type: string
+      clusterID:
+        description: 集群 ID
+        type: string
+    type: object
+  serializer.PolarisClusterBindResponse:
+    properties:
+      data:
+        $ref: '#/definitions/serializer.PolarisClusterBindOutput'
     type: object
   serializer.PolarisClusterEnvOutput:
     properties:
@@ -20535,6 +20576,7 @@ paths:
     put:
       consumes:
       - application/json
+      description: 环境被北极星配置使用时，新集群须绑定与配置相同的北极星接入点，否则拒绝修改
       operationId: UpdateEnvCluster
       parameters:
       - description: 环境 ID
@@ -24187,9 +24229,7 @@ paths:
     post:
       consumes:
       - application/json
-      description: |-
-        保存前服务端重新执行连通测试，失败时拒绝；Token 选填，加密存储。
-        传入 clusterIDs 时同时把这些集群绑定到该接入点
+      description: 保存前服务端重新执行连通测试，失败时拒绝；Token 选填，加密存储。
       operationId: CreatePolarisAccessPoint
       parameters:
       - description: 工作空间 ID
@@ -24258,7 +24298,7 @@ paths:
       description: |-
         字段缺省表示不修改；客户端地址或 Token 变化时重新执行连通测试，失败时拒绝保存。
         接入点被北极星配置使用时仍允许修改地址，集群组件会显示为需要更新。
-        传入 clusterIDs 时全量替换该接入点绑定的集群
+        不修改绑定的集群，绑定集群使用 PUT .../polaris-access-points/{accessPointID}/clusters
       operationId: UpdatePolarisAccessPoint
       parameters:
       - description: 工作空间 ID
@@ -24292,6 +24332,48 @@ paths:
       - BkUserInfo: []
       - BkUserCredential: []
       summary: 更新北极星接入点
+      tags:
+      - polaris-access-points
+  /workspaces/{workspaceID}/polaris-access-points/{accessPointID}/clusters:
+    put:
+      consumes:
+      - application/json
+      description: |-
+        全量替换接入点绑定的集群，传空数组表示解除全部绑定；集群须为空间 BCS 项目下的非共享集群，已绑定其他接入点的集群会被换绑。
+        待解绑或换绑的集群上有环境正被北极星配置使用时拒绝修改（详情码 POLARIS_CLUSTER_IN_USE），全部校验通过后才写入
+      operationId: ReplacePolarisAccessPointClusters
+      parameters:
+      - description: 工作空间 ID
+        in: path
+        name: workspaceID
+        required: true
+        type: string
+      - description: 接入点 ID
+        in: path
+        name: accessPointID
+        required: true
+        type: string
+      - description: 绑定的集群
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/serializer.AccessPointClustersInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.AccessPointClustersResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 替换北极星接入点绑定的集群
       tags:
       - polaris-access-points
   /workspaces/{workspaceID}/polaris-access-points/{accessPointID}/namespaces:
@@ -24365,7 +24447,9 @@ paths:
       - polaris-access-points
   /workspaces/{workspaceID}/polaris-clusters:
     get:
-      description: 候选集群为空间 BCS 项目下的全部非共享集群，含没有环境的集群；先列出有环境的集群，同类按集群 ID 排序。
+      description: |-
+        候选集群为空间 BCS 项目下的全部非共享集群，含没有环境的集群；有环境的集群排在前面，每组内按集群 ID 排序。
+        envs 含特性环境；inUse 为 true 表示集群上有环境被北极星配置使用，不能解绑或换绑
       operationId: ListPolarisClusters
       parameters:
       - description: 工作空间 ID
@@ -24388,6 +24472,48 @@ paths:
       - BkUserInfo: []
       - BkUserCredential: []
       summary: 获取北极星集群绑定视图
+      tags:
+      - polaris-access-points
+  /workspaces/{workspaceID}/polaris-clusters/{clusterID}:
+    put:
+      consumes:
+      - application/json
+      description: |-
+        集群须为空间 BCS 项目下的非共享集群；已绑定其他接入点时换绑，accessPointID 传空字符串表示解绑。
+        换绑或解绑时，集群上有环境正被北极星配置使用则拒绝（详情码 POLARIS_CLUSTER_IN_USE）；返回变更后集群绑定的接入点 ID
+      operationId: BindPolarisCluster
+      parameters:
+      - description: 工作空间 ID
+        in: path
+        name: workspaceID
+        required: true
+        type: string
+      - description: 集群 ID
+        in: path
+        name: clusterID
+        required: true
+        type: string
+      - description: 绑定的接入点
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/serializer.PolarisClusterBindInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.PolarisClusterBindResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 绑定集群的北极星接入点
       tags:
       - polaris-access-points
   /workspaces/{workspaceID}/polaris-operator-values:

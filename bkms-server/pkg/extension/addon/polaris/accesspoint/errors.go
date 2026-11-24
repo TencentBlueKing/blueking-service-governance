@@ -23,6 +23,7 @@ import (
 	"fmt"
 
 	"github.com/pkg/errors"
+	"github.com/samber/lo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 )
@@ -51,6 +52,10 @@ var (
 	ErrAccessPointConflict = errors.New("polaris access point was modified concurrently, please reload and retry")
 	// ErrClusterNotBound 集群未绑定自建接入点
 	ErrClusterNotBound = errors.New("cluster is not bound to any polaris access point")
+	// ErrAccessPointMismatch 修改环境所属集群时，新集群对应的接入点与北极星配置锁定的接入点不一致
+	ErrAccessPointMismatch = errors.New(
+		"cluster resolves to a polaris access point different from the polaris configs",
+	)
 )
 
 // apiErrorRule 一类领域错误对应的 API 错误码与详情码，详情码为空表示不附带详情。
@@ -88,6 +93,46 @@ func (e *AccessPointInUseError) Extras() map[string]string {
 	}
 }
 
+// ClusterUsage 单条集群占用记录：集群上的某个环境正被某份北极星配置使用
+type ClusterUsage struct {
+	// ClusterID 集群 ID
+	ClusterID string `json:"clusterID"`
+	// EnvName 被使用的环境名称
+	EnvName string `json:"envName"`
+	// AppID 配置所属应用 ID
+	AppID string `json:"appID"`
+	// ConfigName 配置名称
+	ConfigName string `json:"configName"`
+}
+
+// ClusterInUseError 解绑或换绑的集群上有环境被北极星配置使用；errors.Is 可匹配 ErrClusterInUse
+type ClusterInUseError struct {
+	// Usages 占用情况，按集群、环境、应用、配置排序
+	Usages []ClusterUsage
+}
+
+func (e *ClusterInUseError) Error() string {
+	return fmt.Sprintf("%s: clusters %v", ErrClusterInUse, e.ClusterIDs())
+}
+
+func (e *ClusterInUseError) Unwrap() error {
+	return ErrClusterInUse
+}
+
+// ClusterIDs 返回去重后的被占用集群 ID（顺序与 Usages 一致）
+func (e *ClusterInUseError) ClusterIDs() []string {
+	return lo.Uniq(lo.Map(e.Usages, func(u ClusterUsage, _ int) string { return u.ClusterID }))
+}
+
+// Extras 作为错误详情的 extras 返回给前端：clusterIDs 为集群 ID 的 JSON 数组，
+// configs 为 [{"clusterID": ..., "envName": ..., "appID": ..., "configName": ...}] 形式的 JSON 数组
+func (e *ClusterInUseError) Extras() map[string]string {
+	return map[string]string{
+		"clusterIDs": jsonArray(e.ClusterIDs()),
+		"configs":    jsonArray(e.Usages),
+	}
+}
+
 func jsonArray[T any](items []T) string {
 	if items == nil {
 		items = []T{}
@@ -104,8 +149,6 @@ type extrasCarrier interface {
 	Extras() map[string]string
 }
 
-// TODO(集群绑定子需求): POLARIS_CLUSTER_IN_USE 需要在 extras 中列出占用的应用与配置，
-// 换绑时参照 AccessPointInUseError 返回实现了 extrasCarrier 的错误
 var apiErrorRules = []apiErrorRule{
 	{ErrAccessPointNotFound, bkerrs.ErrCodeNotFound, ""},
 	{ErrAccessPointNameExists, bkerrs.ErrCodeAlreadyExists, ""},
@@ -114,6 +157,7 @@ var apiErrorRules = []apiErrorRule{
 	{ErrConnectivityFailed, bkerrs.ErrCodeInvalidRequest, ""},
 	{ErrAccessPointUnreachable, bkerrs.ErrCodeInvalidRequest, ""},
 	{ErrClusterNotBound, bkerrs.ErrCodeInvalidRequest, ""},
+	{ErrAccessPointMismatch, bkerrs.ErrCodeInvalidRequest, ""},
 	{ErrAccessPointInUse, bkerrs.ErrCodeInvalidRequest, bkerrs.ErrDetailCodePolarisAccessPointInUse},
 	{ErrClusterInUse, bkerrs.ErrCodeInvalidRequest, bkerrs.ErrDetailCodePolarisClusterInUse},
 }

@@ -21,6 +21,7 @@ package handler
 
 import (
 	"cmp"
+	"context"
 
 	"github.com/gin-gonic/gin"
 	"github.com/pkg/errors"
@@ -33,6 +34,8 @@ import (
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/serializer"
 	deploystatus "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/status"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris/accesspoint"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris/accesspoint/binding"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/perm"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/trafficmanager"
@@ -260,8 +263,16 @@ func (h *Handler) CreateFeatureEnv(c *gin.Context) {
 		audit.WithAppID(app.ID),
 	)
 
+	// 接入点按集群绑定，新建的环境也可能有北极星接入点
+	polarisAccessPointIDs, err := h.polarisAccessPointIDs(ctx, app.WorkspaceID, *featureEnv)
+	if err != nil {
+		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "resolve polaris access point"))
+		return
+	}
 	ginutils.OK(c, serializer.CreateFeatureEnvOutput{
-		Data: new(serializer.EnvOutput).FromModel(*featureEnv),
+		Data: new(serializer.EnvOutput).FromModel(
+			*featureEnv, polarisAccessPointIDs[featureEnv.Cluster.ClusterID],
+		),
 	})
 }
 
@@ -299,10 +310,15 @@ func (h *Handler) ListEnvs(c *gin.Context) {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, "list envs"))
 		return
 	}
+	polarisAccessPointIDs, err := h.polarisAccessPointIDs(ctx, uriInput.WorkspaceID, envs...)
+	if err != nil {
+		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "resolve polaris access points"))
+		return
+	}
 
 	ginutils.OK(c, serializer.ListEnvsOutput{
 		Data: lo.Map(envs, func(env envmodel.Environment, _ int) *serializer.EnvOutput {
-			return new(serializer.EnvOutput).FromModel(env)
+			return new(serializer.EnvOutput).FromModel(env, polarisAccessPointIDs[env.Cluster.ClusterID])
 		}),
 	})
 }
@@ -339,10 +355,15 @@ func (h *Handler) ListAppEnvs(c *gin.Context) {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, "list app envs"))
 		return
 	}
+	polarisAccessPointIDs, err := h.polarisAccessPointIDs(ctx, app.WorkspaceID, envs...)
+	if err != nil {
+		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "resolve polaris access points"))
+		return
+	}
 
 	ginutils.OK(c, serializer.ListEnvsOutput{
 		Data: lo.Map(envs, func(env envmodel.Environment, _ int) *serializer.EnvOutput {
-			return new(serializer.EnvOutput).FromModel(env)
+			return new(serializer.EnvOutput).FromModel(env, polarisAccessPointIDs[env.Cluster.ClusterID])
 		}),
 	})
 }
@@ -434,9 +455,16 @@ func (h *Handler) GetEnv(c *gin.Context) {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalError, "list for environment"))
 		return
 	}
+	polarisAccessPointIDs, err := h.polarisAccessPointIDs(ctx, env.WorkspaceID, *env)
+	if err != nil {
+		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "resolve polaris access point"))
+		return
+	}
 
 	ginutils.OK(c, serializer.GetEnvOutput{
-		Data: new(serializer.EnvDetailOutput).FromModel(*env, deployStatuses),
+		Data: new(serializer.EnvDetailOutput).FromModel(
+			*env, deployStatuses, polarisAccessPointIDs[env.Cluster.ClusterID],
+		),
 	})
 }
 
@@ -471,9 +499,14 @@ func (h *Handler) GetEnvByName(c *gin.Context) {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, "get env by workspace and name"))
 		return
 	}
+	polarisAccessPointIDs, err := h.polarisAccessPointIDs(ctx, env.WorkspaceID, *env)
+	if err != nil {
+		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "resolve polaris access point"))
+		return
+	}
 
 	ginutils.OK(c, serializer.GetEnvByNameOutput{
-		Data: new(serializer.EnvOutput).FromModel(*env),
+		Data: new(serializer.EnvOutput).FromModel(*env, polarisAccessPointIDs[env.Cluster.ClusterID]),
 	})
 }
 
@@ -539,6 +572,7 @@ func (h *Handler) UpdateEnvBasicInfo(c *gin.Context) {
 //
 //	@ID				UpdateEnvCluster
 //	@Summary		更新部署环境集群配置
+//	@Description	环境被北极星配置使用时，新集群须绑定与配置相同的北极星接入点，否则拒绝修改
 //	@Tags			env
 //	@Accept			json
 //	@Produce		json
@@ -573,6 +607,11 @@ func (h *Handler) UpdateEnvCluster(c *gin.Context) {
 	}
 	if input.Namespace != "" {
 		updateData.Namespace = &input.Namespace
+	}
+	err = binding.NewService(h.registry.DB).ValidateEnvClusterChange(ctx, *env, input.ClusterID)
+	if err != nil {
+		bkerrs.AbortWithErr(c, accesspoint.APIError(err, "validate polaris access point of the new cluster"))
+		return
 	}
 
 	svc := bkmsenv.NewEnvService(h.registry.DB)
@@ -696,6 +735,14 @@ func (h *Handler) ListEnvTrafficLanes(c *gin.Context) {
 		}),
 	},
 	)
+}
+
+// polarisAccessPointIDs 返回各环境所在集群对应的北极星接入点 ID（clusterID -> accessPointID），见 accesspoint.ClusterAccessPointIDs
+func (h *Handler) polarisAccessPointIDs(
+	ctx context.Context, workspaceID string, envs ...envmodel.Environment,
+) (map[string]string, error) {
+	clusterIDs := lo.Map(envs, func(env envmodel.Environment, _ int) string { return env.Cluster.ClusterID })
+	return accesspoint.ClusterAccessPointIDs(ctx, h.registry.DB, workspaceID, clusterIDs)
 }
 
 func abortIfEnvClusterNamespaceOccupied(c *gin.Context, err error) bool {
