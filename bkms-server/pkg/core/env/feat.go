@@ -49,6 +49,16 @@ const featureEnvNamePrefix = "feat"
 // ErrInvalidFeatureEnvInput 表示创建特性环境的入参不符合业务约束。
 var ErrInvalidFeatureEnvInput = errors.New("invalid feature environment input")
 
+// NsType 特性环境的命名空间类型，决定创建时新建独立命名空间还是复用来源环境的命名空间。
+type NsType string
+
+const (
+	// NsTypeIndependent 新建独立的命名空间
+	NsTypeIndependent NsType = "independent"
+	// NsTypeShared 复用来源环境的命名空间，资源名带平台生成的 resPrefix 前缀
+	NsTypeShared NsType = "shared"
+)
+
 // featureEnvCleanupTimeout 限制创建失败后的清理耗时，清理运行在与请求解绑的 context 上。
 const featureEnvCleanupTimeout = 10 * time.Second
 
@@ -142,9 +152,9 @@ type CreateFeatureEnvInput struct {
 	Creator string
 	// CopyEnvVars 决定是否在创建时复制来源环境的自定义变量；默认不复制
 	CopyEnvVars bool
-	// ShareSourceNamespace 决定是否复用来源环境的命名空间；为 true 时不新建命名空间，
-	// 而是生成 resourcePrefix 作为资源名前缀，与来源环境共存于同一命名空间
-	ShareSourceNamespace bool
+	// NsType 命名空间类型，必须显式指定。为 NsTypeShared 时不新建命名空间，
+	// 而是生成 resPrefix 作为资源名前缀，与来源环境共存于同一命名空间
+	NsType NsType `validate:"required,oneof=independent shared"`
 }
 
 // NewFeatureEnvService 创建特性环境服务。
@@ -205,7 +215,7 @@ func ListAppFeatEnvs(
 // - sourceEnv 必须是应用可见的标准环境，且与应用属于同一个 workspace；
 // - name / namespace 由平台按 feat-<appID>-<index> 自动生成，调用方不能指定；
 // - 集群的 namespace 也是自动生成，将由后台自动完成初始化；
-// - ShareSourceNamespace 时改为复用来源环境的 namespace，不创建 namespace，并生成 resourcePrefix 区分资源；
+// - NsType 为 NsTypeShared 时改为复用来源环境的 namespace，不创建 namespace，并生成 resPrefix 区分资源；
 // - 按需复制来源环境的自定义变量；之后双方独立修改，不持续同步；
 func (s *FeatureEnvService) Create(ctx context.Context, input CreateFeatureEnvInput) (*model.Environment, error) {
 	if err := validate.Struct(input); err != nil {
@@ -217,7 +227,7 @@ func (s *FeatureEnvService) Create(ctx context.Context, input CreateFeatureEnvIn
 	if err := input.App.CheckVisibleEnv(input.SourceEnv); err != nil {
 		return nil, errors.Wrapf(ErrInvalidFeatureEnvInput, "validate source environment visibility: %v", err)
 	}
-	if input.ShareSourceNamespace {
+	if input.NsType == NsTypeShared {
 		if err := validateShareSourceNamespace(input); err != nil {
 			return nil, err
 		}
@@ -247,7 +257,7 @@ func (s *FeatureEnvService) Create(ctx context.Context, input CreateFeatureEnvIn
 		Creator: input.Creator,
 	}
 
-	if input.ShareSourceNamespace {
+	if input.NsType == NsTypeShared {
 		env.Cluster.Namespace = input.SourceEnv.Cluster.Namespace
 		err = s.createEnvWithResourcePrefix(ctx, env, input.SourceEnv)
 	} else {

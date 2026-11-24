@@ -20,6 +20,8 @@
 package handler
 
 import (
+	"cmp"
+
 	"github.com/gin-gonic/gin"
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
@@ -227,12 +229,13 @@ func (h *Handler) CreateFeatureEnv(c *gin.Context) {
 		bkmsenv.NewFeatureEnvNamespaceInitializer(),
 	)
 	featureEnv, err := svc.Create(ctx, bkmsenv.CreateFeatureEnvInput{
-		App:                  app,
-		SourceEnv:            sourceEnv,
-		DisplayName:          input.DisplayName,
-		Creator:              auth.MustGetUser(ctx).ID,
-		CopyEnvVars:          input.CopyEnvVars,
-		ShareSourceNamespace: input.ShareSourceNamespace,
+		App:         app,
+		SourceEnv:   sourceEnv,
+		DisplayName: input.DisplayName,
+		Creator:     auth.MustGetUser(ctx).ID,
+		CopyEnvVars: input.CopyEnvVars,
+		// 兼容未传 nsType 的存量前端请求
+		NsType: cmp.Or(input.NsType, bkmsenv.NsTypeIndependent),
 	})
 	if err != nil {
 		if abortIfEnvClusterNamespaceOccupied(c, err) {

@@ -28,6 +28,7 @@ import (
 
 var validationErrorMessages = map[string]string{
 	"required":       "is required",
+	"oneof":          "is not a supported value",
 	"trim_not_blank": "must not be blank",
 	"standard_env":   "must be a standard environment",
 	"same_workspace": "must belong to the same workspace as app",

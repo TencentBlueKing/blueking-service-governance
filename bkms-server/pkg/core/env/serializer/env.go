@@ -135,9 +135,10 @@ type CreateFeatureEnvInput struct {
 	SourceEnvID string `json:"sourceEnvID" binding:"required,mongodb"`
 	// 是否复制来源环境的环境变量；未传时不复制
 	CopyEnvVars bool `json:"copyEnvVars"`
-	// 是否复用来源环境的命名空间；未传时新建独立的命名空间。
-	// 复用时仅支持 AppModel 应用且不能使用组件，资源名会带上平台生成的 resourcePrefix 前缀
-	ShareSourceNamespace bool `json:"shareSourceNamespace"`
+	// 命名空间类型：independent 新建独立的命名空间；shared 复用来源环境的命名空间，
+	// 仅支持 AppModel 应用且不能使用组件，资源名会带上平台生成的 resPrefix 前缀。
+	// 不传时默认为 independent，兼容存量调用
+	NsType bkmsenv.NsType `json:"nsType" binding:"omitempty,oneof=independent shared" enums:"independent,shared"`
 }
 
 // CreateFeatureEnvOutput is the JSON response for creating a feature environment.

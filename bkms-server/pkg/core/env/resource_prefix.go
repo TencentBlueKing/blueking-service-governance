@@ -31,8 +31,8 @@ import (
 // resourcePrefixMaxAttempts 是共用命名空间特性环境分配 resourcePrefix 冲突时的最大重试次数。
 const resourcePrefixMaxAttempts = 5
 
-// validateShareSourceNamespace 校验复用来源环境 namespace 的前置条件：来源环境已绑定集群命名空间，
-// 且带 resourcePrefix 前缀后，应用自身的资源名（主工作负载及其固定派生资源）不超过 K8s 长度上限。
+// validateShareSourceNamespace 校验 NsTypeShared 的前置条件：来源环境已绑定集群命名空间，
+// 且带 resPrefix 前缀后，应用自身的资源名（主工作负载及其固定派生资源）不超过 K8s 长度上限。
 func validateShareSourceNamespace(input CreateFeatureEnvInput) error {
 	if input.SourceEnv.Cluster.ClusterID == "" || input.SourceEnv.Cluster.Namespace == "" {
 		return errors.Wrapf(
