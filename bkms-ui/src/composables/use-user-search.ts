@@ -19,7 +19,7 @@
 import { computed, onUnmounted } from 'vue';
 
 import { debounce } from 'lodash-es';
-import { isMultiTenant as checkMultiTenant, getBkUserApiUrl } from '~/common/bk-user-api';
+import { isMultiTenant as checkMultiTenant, requestBkUser } from '~/common/bk-user-api';
 import { useUserStore } from '~/stores/user';
 
 import type { ICommonItem, ISearchItem } from 'bkui-vue/lib/search-select/utils';
@@ -32,13 +32,6 @@ interface BkUserSearchItem {
   login_name: string;
   owner_tenant_id: string;
   status: string;
-}
-
-/** search 接口响应（部分环境无 code 字段，解析需兼容） */
-interface BkUserSearchResponse {
-  code?: number;
-  data?: BkUserSearchItem[];
-  message?: string;
 }
 
 /**
@@ -59,36 +52,17 @@ export default function useUserSearch(fieldId = 'username') {
   let requestSeq = 0;
 
   async function fetchUsers(keyword: string): Promise<BkUserSearchItem[]> {
-    const apiBaseUrl = getBkUserApiUrl();
-    const tenantId = userStore.tenantId;
-    const response = await fetch(
-      `${apiBaseUrl}/api/v3/open-web/tenant/users/-/search/?keyword=${encodeURIComponent(keyword)}`,
-      {
-        credentials: 'include',
-        headers: { 'X-Bk-Tenant-Id': tenantId },
-      },
-    );
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
-    }
-    const res: BkUserSearchResponse = await response.json();
-    if (res?.code !== undefined && res.code !== 0) {
-      throw new Error(res.message || `code ${res.code}`);
-    }
-    if (!Array.isArray(res?.data)) {
-      return [];
-    }
-    return res.data;
+    const data = await requestBkUser<BkUserSearchItem[]>('search/', { keyword });
+    return Array.isArray(data) ? data : [];
   }
 
   /**
    * 执行搜索并通过 resolve 返回候选列表。
-   * 过期响应（requestSeq 已被更新请求或清空输入递增）静默丢弃、不 resolve：
-   * 组件内每次 setMenuList 调用独立管理 loading，loading 由最新一次调用复位，
-   * 过期请求若 resolve 反而会把已更新的菜单列表覆写为空/旧结果
+   * seq 在输入进入 handleGetMenuList 时确定，防抖等待期间的新输入会使旧序号失效。
+   * 过期响应静默丢弃、不 resolve：组件内每次 setMenuList 独立管理 loading，
+   * 过期请求若 resolve 会把已更新的菜单列表覆写为空或旧结果。
    */
-  async function searchUsers(keyword: string, resolve: (value: ICommonItem[]) => void): Promise<void> {
-    const seq = ++requestSeq;
+  async function searchUsers(keyword: string, resolve: (value: ICommonItem[]) => void, seq: number): Promise<void> {
     try {
       const users = await fetchUsers(keyword);
       if (seq !== requestSeq) return;
@@ -101,9 +75,10 @@ export default function useUserSearch(fieldId = 'username') {
   }
 
   // 防抖包装：延迟期内调用返回 undefined，而 SearchSelect 内部会对返回值直接 .catch()，
-  // 因此通过 resolve 回调 + Promise 包装保证每次调用都同步返回 Promise
-  const debouncedSearch = debounce((keyword: string, resolve: (value: ICommonItem[]) => void) => {
-    searchUsers(keyword, resolve);
+  // 因此通过 resolve 回调 + Promise 包装保证每次调用都同步返回 Promise。
+  // 序号随最后一次输入传入，避免防抖窗口内的旧响应通过校验。
+  const debouncedSearch = debounce((keyword: string, resolve: (value: ICommonItem[]) => void, seq: number) => {
+    searchUsers(keyword, resolve, seq);
   }, 300);
 
   /** 对接 SearchSelect :get-menu-list（由 searchSelectBind 注入，仅多租户时生效） */
@@ -118,7 +93,9 @@ export default function useUserSearch(fieldId = 'username') {
         resolve([]);
         return;
       }
-      debouncedSearch(keyword, resolve);
+      // 输入到达时立刻作废更早的关键词，不等防抖结束才递增序号
+      const seq = ++requestSeq;
+      debouncedSearch(keyword, resolve, seq);
     });
   }
 

@@ -18,6 +18,13 @@
 
 import { getActivePinia } from 'pinia';
 import { useFrontendFeaturesStore } from '~/stores/frontend-features';
+import { useUserStore } from '~/stores/user';
+
+interface BkUserEnvelope<T> {
+  code?: number;
+  data?: T;
+  message?: string;
+}
 
 export function getBkUserApiUrl() {
   const template = import.meta.env.BK_API_URL_TMPL?.trim().replace(/\/+$/, '');
@@ -37,6 +44,38 @@ export function getUserDisplayConfig(tenantId?: string) {
  */
 export function isMultiTenant(tenantId?: string): tenantId is string {
   return isMultiTenantModeEnabled() && !!getBkUserApiUrl() && !!tenantId;
+}
+
+/**
+ * 请求 bk-user 开放接口。path 相对 /api/v3/open-web/tenant/users/-/。
+ * 字符串参数整体编码；字符串数组逐项编码后用逗号拼接，保持 display_info 的 bk_usernames 格式。
+ * 只校验 HTTP 状态和 code。data 是否为数组由调用方判断。
+ */
+export async function requestBkUser<T>(path: string, query: Record<string, string | string[]>): Promise<T | undefined> {
+  const search = Object.entries(query)
+    .map(([key, value]) => {
+      const encoded = Array.isArray(value)
+        ? value.map(item => encodeURIComponent(item)).join(',')
+        : encodeURIComponent(value);
+      return `${encodeURIComponent(key)}=${encoded}`;
+    })
+    .join('&');
+  const suffix = path.replace(/^\/+/, '');
+  const response = await fetch(
+    `${getBkUserApiUrl()}/api/v3/open-web/tenant/users/-/${suffix}${search ? `?${search}` : ''}`,
+    {
+      credentials: 'include',
+      headers: { 'X-Bk-Tenant-Id': useUserStore().tenantId },
+    },
+  );
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`);
+  }
+  const res: BkUserEnvelope<T> | null = await response.json();
+  if (res?.code !== undefined && res.code !== 0) {
+    throw new Error(res.message || `code ${res.code}`);
+  }
+  return res?.data;
 }
 
 function isMultiTenantModeEnabled() {

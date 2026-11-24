@@ -44,8 +44,11 @@ export default function usePlatform() {
     const data: PlatformConfigState = import.meta.env.BK_SHARED_RES_BASE_JS_URL
       ? await getPlatformConfig(import.meta.env.BK_SHARED_RES_BASE_JS_URL, defaults)
       : await getPlatformConfig(defaults);
-    // 多租户「技术支持 | 社区论坛 | 产品官网」。
-    // 非多租户改成联系 BK 助手 / 蓝鲸桌面，避免被同一份默认值盖住。
+    // footer 按部署模式固定，有意不用 bk-shared-res 下发的 footer。
+    // 远程地址整站只有一份，无法同时表达两种文案：
+    // 多租户用平台库默认「技术支持 | 社区论坛 | 产品官网」；
+    // 非多租户用「联系 BK 助手 | 蓝鲸桌面」。
+    // 这次 getPlatformConfig 只把 markdown 转成 HTML，不会再请求远程脚本。
     const footerSource = useFrontendFeaturesStore().enableMultiTenantMode
       ? await getPlatformConfig(defaults)
       : await getPlatformConfig({

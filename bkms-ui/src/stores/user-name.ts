@@ -19,19 +19,13 @@
 import { ref } from 'vue';
 
 import { defineStore } from 'pinia';
-import { getBkUserApiUrl, isMultiTenant } from '~/common/bk-user-api';
+import { isMultiTenant, requestBkUser } from '~/common/bk-user-api';
 import { useUserStore } from '~/stores/user';
 
 /** bk-user display_info 接口返回的用户结构 */
 interface BkUserInfo {
   bk_username: string;
   display_name: string;
-}
-
-interface DisplayInfoResponse {
-  code?: number;
-  data?: BkUserInfo[];
-  message?: string;
 }
 
 /** 缓存有效期（毫秒），与 @blueking/bk-user-display-name 组件保持一致 */
@@ -67,25 +61,12 @@ export const useUserNameStore = defineStore('user-name', () => {
   }
 
   async function fetchBatch(ids: string[]) {
-    const apiBaseUrl = getBkUserApiUrl();
-    const tenantId = useUserStore().tenantId;
-    const query = ids.map(encodeURIComponent).join(',');
-    const response = await fetch(`${apiBaseUrl}/api/v3/open-web/tenant/users/-/display_info/?bk_usernames=${query}`, {
-      credentials: 'include',
-      headers: { 'X-Bk-Tenant-Id': tenantId },
-    });
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
-    }
-    const res: DisplayInfoResponse = await response.json();
-    if (res?.code !== undefined && res.code !== 0) {
-      throw new Error(res.message || `code ${res.code}`);
-    }
-    if (!Array.isArray(res?.data)) {
+    const data = await requestBkUser<BkUserInfo[]>('display_info/', { bk_usernames: ids });
+    if (!Array.isArray(data)) {
       throw new Error('Invalid user display info response');
     }
 
-    const displayNames = new Map(res.data.map(user => [user.bk_username, user.display_name]));
+    const displayNames = new Map(data.map(user => [user.bk_username, user.display_name]));
     const now = Date.now();
     for (const id of ids) {
       const displayName = displayNames.get(id);
