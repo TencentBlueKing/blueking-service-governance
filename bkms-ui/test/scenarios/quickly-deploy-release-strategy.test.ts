@@ -18,7 +18,7 @@
 /**
  * 场景级测试：部署表单发布策略选择（ROUTES 未收录，本头即场景说明）
  *
- * 覆盖十七条用户可感知路径 → V = 17：
+ * 覆盖十八条用户可感知路径 → V = 18：
  *   1. 默认「一次更新全部」提交：部署参数不带 releaseStrategyID
  *   2. 切「按策略分批更新」：展开策略下拉，下拉底部有「新建策略」、右侧有「查看」
  *   3. 分批发布未选策略提交：表单校验拦截，不发起部署
@@ -36,15 +36,18 @@
  *   15. 两批策略（25% → 100%）：提示保留首批灰度阶段，不误判为单批全量
  *   16. 主工作负载资格检查完成前：分批发布禁用；返回 Deployment 后仍禁用
  *   17. 首次部署（无记录 / 只有构建记录 / 已下线）：分批发布禁用，仍可一次更新全部
+ *   18. 切「从源码构建」：默认分支回填到修订选择器（验证模板 ref 真实挂载，prepare 不被静默跳过）
  *
  * stub/mock：
  *   - bkui-vue 真实渲染（Form/Button/Select/Input/Tag）；嵌套的新建策略抽屉同样真实渲染
  *   - ReleaseStrategiesService.listReleaseStrategies → harness 假数据（4 批：1 个 → 25% 暂停 600s → 50% 永久暂停 → 100%）
  *   - ReleaseStrategiesService.createReleaseStrategy → harness 返回新建结果（含 id，供「自动选中」断言）
  *   - use-deploy 的 useDeployAPIs → harness.createDeployDirectly / buildAndCreateDeploy / listDeployRecords（断言部署参数与主工作负载）/ listLatestDeployRecords（首次部署判定）
- *   - use-deploy-precheck / use-app-repo-ref-select / use-recommend-tag / use-app-visible-envs / use-leave-confirm / stores → 契约 stub
+ *   - use-app-repo-ref-select 保持真实实现（仅 stores 打桩）：ref 挂载契约本身是 ⑱ 的验证目标，不能整体 stub
+ *   - use-deploy-precheck / use-recommend-tag / use-app-visible-envs / use-leave-confirm / stores → 契约 stub
  *   - vue-router → mock-router 工厂（业务已不直接跳页，保留路由依赖兜底）
- *   - ImageSelect → 可填值 stub（真实组件依赖镜像列表接口）；CodeRevisionField 为全局组件 → 注册空 stub
+ *   - ImageSelect → 可填值 stub（真实组件依赖镜像列表接口）；CodeRevisionField 按模块 mock 为记录型 stub（暴露 RepoRefHandle，
+ *     它由 unplugin-vue-components 编译期自动引入，global.components 覆盖不到）
  *
  * backlog（不确定项，待业务确认）：
  *   - 「构建部署/联邦集群暂不支持分批发布」tooltip 文案经 bkui tooltips 渲染 jsdom 不可达，仅断言 disabled 属性
@@ -193,18 +196,6 @@ vi.mock('~/pages/application/detail/deploy/use-deploy-precheck', async () => {
   };
 });
 
-vi.mock('~/composables/use-app-repo-ref-select', async () => {
-  const { ref: createRef } = await import('vue');
-  return {
-    useAppRepoRefSelect: () => ({
-      workspaceId: createRef('ws-1'),
-      repoAlias: createRef('repo-x'),
-      branchSelectRef: createRef(),
-      prepareBranchAfterMount: vi.fn().mockResolvedValue(undefined),
-    }),
-  };
-});
-
 vi.mock('~/composables/use-app-visible-envs', () => ({
   useAppVisibleEnvs: () => ({ checkDeployEnv: harness.checkDeployEnv }),
 }));
@@ -247,10 +238,35 @@ vi.mock('~/pages/application/components/image-select.vue', async () => {
   };
 });
 
-/** 源码模式下渲染的全局组件，注册空 stub 避免依赖真实组件 */
-const CodeRevisionFieldStub = defineComponent({
-  name: 'CodeRevisionFieldStub',
-  template: '<div data-testid="code-revision-field-stub"></div>',
+/**
+ * 修订选择器桩：暴露与真实 CodeRevisionField 一致的操作（RepoRefHandle），
+ * 用于验证 use-app-repo-ref-select 的 ref 是否真的挂到了组件实例上
+ * （模板 ref 缺少同名顶层绑定时不会写回，prepare 会静默空转）。
+ *
+ * 该组件由 unplugin-vue-components 在编译期自动引入，global.components 覆盖不到，只能按模块 mock。
+ */
+const codeRevisionCalls = vi.hoisted(() => ({
+  hidePopover: vi.fn(),
+  prepare: vi.fn((preferred?: string) => preferred ?? ''),
+  reset: vi.fn(),
+}));
+
+vi.mock('~/components/code-revision/code-revision-field.vue', async () => {
+  const { defineComponent: createComponent, h: createElement } = await import('vue');
+  return {
+    default: createComponent({
+      name: 'CodeRevisionFieldStub',
+      setup(_, { expose }) {
+        expose({
+          dismissIfOutside: () => undefined,
+          hidePopover: () => codeRevisionCalls.hidePopover(),
+          prepare: (preferred?: string) => codeRevisionCalls.prepare(preferred),
+          reset: () => codeRevisionCalls.reset(),
+        });
+        return () => createElement('div', { 'data-testid': 'code-revision-field-stub' });
+      },
+    }),
+  };
 });
 
 /** 递归收集插槽子节点纯文本（批次实例数值），供 i18n-t stub 拼接插值。 */
@@ -344,7 +360,7 @@ async function renderForm(isFederationEnv = false) {
   return render(Harness, {
     props: { isFederationEnv },
     global: {
-      components: { CodeRevisionField: CodeRevisionFieldStub, 'i18n-t': I18nTWithSlots },
+      components: { 'i18n-t': I18nTWithSlots },
       // 与 src/modules/global.ts 对齐：注册 v-bk-tooltips 指令
       directives: { 'bk-tooltips': bkTooltips },
       mocks: { $t: translate },
@@ -553,6 +569,16 @@ describe('部署表单：发布策略选择', () => {
     // 回落：预览收起，分批按钮进入禁用态
     await waitFor(() => expect(screen.queryByText('发布预览')).not.toBeInTheDocument());
     expect(screen.getByRole('button', { name: '按策略分批更新' })).toBeDisabled();
+  });
+
+  it('当用户切换到从源码构建时，应把默认分支回填给修订选择器', async () => {
+    await renderForm();
+    // 切到源码模式后修订选择器才通过 v-if 挂载：必须等下一轮 tick 再 prepare，
+    // 且模板 ref 只有存在同名顶层绑定时才会写回（缺解构时 prepare 会静默空转）。
+    await userEvent.click(screen.getByRole('button', { name: '从源码构建' }));
+
+    expect(await screen.findByTestId('code-revision-field-stub')).toBeInTheDocument();
+    await waitFor(() => expect(codeRevisionCalls.prepare).toHaveBeenCalledWith('master'));
   });
 
   it('当应用为 Helm 应用时，应禁用「按策略分批更新」按钮（仅应用模型应用支持）', async () => {

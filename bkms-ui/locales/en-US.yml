@@ -821,6 +821,7 @@ K8s 版本: K8s Version
 当前镜像 Tag: Current Image Tag
 更新内容: Update Content
 联邦集群不支持原地重启: Federated clusters do not support in-place restart.
+灰度发布中不支持原地重启: In-place restart is not supported during a grayscale release.
 请选择镜像 Tag: Please select an image tag
 本次更新仅变更应用的配置信息（包括环境变量等），镜像 Tag 保持不变: This update only changes the application
   configuration (including environment variables, etc.), the image tag remains
@@ -1481,6 +1482,8 @@ CLB 区域: CLB Region
 原地重启暂不支持分批发布: In-place restart does not support batch release yet
 正在检查分批发布资格，请稍候: Checking batch release eligibility, please wait
 当前环境不支持分批发布，已重置为一次更新全部实例: 'Batch release is not supported in the current environment, reset to updating all instances at once'
+'分批更新时不能修改实例数，请将实例数先改回 {0}': 'The instance count cannot be changed during batch release. Please restore it to {0} first.'
+'分批更新时不能修改实例数。如需调整，请选择「一次更新全部实例」，或发布完成后再扩缩容。': 'The instance count cannot be changed during batch release. To adjust it, choose "Update All Instances at Once" or scale after the release is finished.'
 发布预览: Release Preview
 灰度发布中: Grayscale releasing
 '灰度发布中 · 第 {0}/{1} 批': 'Grayscale releasing · batch {0}/{1}'
@@ -1539,11 +1542,14 @@ CLB 区域: CLB Region
 已跳过剩余批次，正在全量更新剩余实例: 'Remaining batches skipped, updating all remaining instances'
 已暂停分批发布: Batch release paused
 操作失败，请稍后重试: 'Operation failed, please try again later'
-分批发布进行中，请先完成、跳过或回滚: 'A batch release is in progress. Please finish, skip or roll it back first'
 '已克隆为空间策略「{0}」': 'Cloned as workspace strategy "{0}"'
 查看发布详情: View Release Details
 返回实例列表: 'Back to Instance List'
 灰度发布进度: 'Grayscale Release Progress'
+当前环境正在灰度发布，重新部署将结束本次灰度，并按本次配置更新实例: 'This environment is undergoing a grayscale release. Redeploying will end the release and update instances with the current configuration.'
+确认结束灰度并重新部署？: 'End the grayscale release and redeploy?'
+本次灰度发布将结束，实例按本次配置更新: 'The grayscale release will end, and instances will be updated with the current configuration.'
+重新部署: Redeploy
 '环境：': 'Environment: '
 已完成: Completed
 正在更新: Updating

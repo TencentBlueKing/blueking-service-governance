@@ -454,12 +454,16 @@ export function isBatchReleaseBannerDismissed(
 }
 
 /**
- * 分批发布是否仍在占用当前环境。
- * 完成 / 已回滚属于无待处理动作的终态，不阻塞新的部署入口；
- * 失败态仍阻塞，因为需要用户先重试或回滚把这次灰度收尾。
+ * 分批发布是否仍在占用当前环境（决定是否拒绝新的部署入口）。
+ *
+ * 唯一依据是 latest-status 的 `inProgressReleaseMode`：后端按「是否存在进行中的渐进式发布」回填，
+ * 未完成的构建记录、已失败或已结束的部署记录都不会带上该标记。
+ *
+ * 不能用「最新记录 releaseMode=canary 且 status 为 deploying/failed」判断：分批发布失败后
+ * 那次灰度已中止，若仍被判为占用，环境将无法重新部署，只能等人工干预。
  */
-export function isBatchReleaseBusy(view: BatchReleaseBannerView | null): boolean {
-  return !!view && !DISMISSIBLE_KINDS.has(view.kind);
+export function isBatchReleaseOccupied(latest: LatestDeployStatus | null | undefined): boolean {
+  return latest?.inProgressReleaseMode === RELEASE_MODE.CANARY;
 }
 
 /** 进度是否已进入终态（用于判断横幅是否还需要继续轮询刷新）。 */

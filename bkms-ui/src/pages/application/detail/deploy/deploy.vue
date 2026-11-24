@@ -390,6 +390,7 @@
     <!--全量更新-->
     <FullUpdate
       v-model:is-show="showFullUpdateDialog"
+      :canary-in-progress="isCanaryInProgress"
       :effective-replicas="effectiveDeploySpec?.replicas"
       :is-prod-env="isProdEnv"
       :latest-build-id="buildLogInfo.buildID"
@@ -464,6 +465,7 @@
   } from './deploy-status-rules';
   import EnvVarPrecheckDialog from './env-var-precheck-dialog.vue';
   import FeatureEnv from './feature-env.vue';
+  import { isBatchReleaseOccupied } from './instance-list/batch-release';
   import BatchReleaseBanner from './instance-list/components/batch-release-banner.vue';
   import BatchReleaseProgressPanel from './instance-list/components/batch-release-progress-panel.vue';
   import { useBatchReleaseControl } from './instance-list/composables/use-batch-release-control';
@@ -498,14 +500,18 @@
   const { getEnvDeployDisabledReason, isEnvVisible } = useAppVisibleEnvs();
   const currentEnvDeployDisabledReason = computed(() => getEnvDeployDisabledReason(trpcDeployStore.curEnvItem));
   const isFederationEnv = useIsFederationEnv(() => trpcDeployStore.curEnvItem);
-  // 普通集群的隐藏环境仍可进入仅镜像维护；联邦集群不支持该操作。
-  // 分批发布进行中时禁止并发部署，提示先完成或回滚。
-  const fullUpdateDisabledReason = computed(() => {
-    if (isFederationEnv.value) return currentEnvDeployDisabledReason.value;
-    return batchReleaseBusyReason.value;
-  });
   const { getAppDeployStatusInfo } = useDeployStatusMap();
   const { t } = useI18n();
+  /** 当前环境是否正在灰度发布：以 latest-status 的 inProgressReleaseMode 为准（失败态灰度已中止）。 */
+  const isCanaryInProgress = computed(() => isBatchReleaseOccupied(latestDeployStatus.value));
+  // 灰度进行中「部署」保持可用：提交前由部署侧栏二次确认，确认后结束本次灰度并按新配置更新实例。
+  // 普通集群的隐藏环境仍可进入仅镜像维护，联邦集群不支持该操作；
+  // 但灰度进行中只剩「仅镜像（原地重启）」这一条可用路径，而原地重启不支持灰度环境，因此入口保持禁用。
+  const fullUpdateDisabledReason = computed(() => {
+    if (isFederationEnv.value) return currentEnvDeployDisabledReason.value;
+    if (currentEnvDeployDisabledReason.value && isCanaryInProgress.value) return t('灰度发布中不支持原地重启');
+    return '';
+  });
   const {
     cancelDeploy,
     continueDeploy,
@@ -686,7 +692,6 @@
   /** 单环境实例列表：分批发布控制横幅的数据与操作。 */
   const instanceListRef = ref<InstanceType<typeof InstanceList> | null>(null);
   const {
-    busyReason: batchReleaseBusyReason,
     handleAction: handleBatchReleaseAction,
     handleClose: handleBatchReleaseClose,
     reset: resetBatchRelease,
@@ -699,6 +704,8 @@
   } = useBatchReleaseControl({
     getAppID: () => appDetailStore.appID || '',
     getEnvName: () => trpcDeployStore.curEnvItem?.name || '',
+    // 占用判定以 latest-status 的 inProgressReleaseMode 为准（分批发布失败后不再占用环境）
+    getLatestStatus: () => latestDeployStatus.value,
     // 仅单环境实例列表展示：多环境表格、联邦集群与其它 Tab 都不涉及分批发布控制。
     isEnabled: () =>
       activeTab.value === TAB_NAMES.instance &&

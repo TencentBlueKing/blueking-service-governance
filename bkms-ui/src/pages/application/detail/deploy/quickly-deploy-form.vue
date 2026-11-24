@@ -29,10 +29,18 @@
     >
       <Input
         v-model.number="formModel.replicas"
+        :disabled="replicasLocked"
         :min="1"
         :precision="0"
         type="number"
       />
+      <!-- 分批更新与修改实例数互斥：已选择分批时锁定实例数，并说明如何调整 -->
+      <div
+        v-if="replicasLockedHint"
+        class="mt-[4px] text-[12px] leading-[20px] text-[#979BA5]"
+      >
+        {{ replicasLockedHint }}
+      </div>
     </Form.FormItem>
 
     <Form.FormItem
@@ -196,6 +204,8 @@
     undefinedVars,
   } = useDeployPrecheck();
 
+  // branchSelectRef 必须解构出来：模板里的 ref="branchSelectRef" 只在存在同名顶层绑定时才会写回，
+  // 否则 prepare / reset / dismissIfOutside 全部因 ?. 静默失效（默认分支预选、下拉清理都不生效）。
   const { workspaceId, repoAlias, branchSelectRef, prepareBranchAfterMount } = useAppRepoRefSelect(
     () => appDetailStore.appDetail?.buildConfig?.repoBuildConfig?.repoAlias || '',
   );
@@ -261,12 +271,15 @@
     releasePreview,
     // 查看抽屉里克隆为空间策略成功后刷新列表，成功提示由查看抽屉展示
     refresh: refreshReleaseStrategies,
+    replicasLocked,
+    replicasLockedHint,
     resetToAllInstances,
     selectedStrategy,
     strategyHintText,
     strategyLoading,
     strategyOptions,
   } = useReleaseStrategy({
+    currentReplicas: () => props.effectiveReplicas,
     envName,
     isAppModelApp: () => isAppModelAppType(appDetailStore.appType),
     isFederationEnv: () => Boolean(props.isFederationEnv),

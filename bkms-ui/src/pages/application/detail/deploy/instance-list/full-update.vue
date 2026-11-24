@@ -44,6 +44,15 @@
         form-type="vertical"
         :model="formModel"
       >
+        <!-- 灰度进行中：部署会结束本次灰度并按本次配置更新实例，提交前需二次确认 -->
+        <Alert
+          v-if="canaryInProgress"
+          class="!mb-[16px]"
+          theme="warning"
+        >
+          {{ $t('当前环境正在灰度发布，重新部署将结束本次灰度，并按本次配置更新实例') }}
+        </Alert>
+
         <Form.FormItem
           class="!mb-[14px]"
           :label="$t('更新内容')"
@@ -66,13 +75,13 @@
               >{{ $t('仅配置') }}</Radio
             >
             <Radio
-              :disabled="isFederationEnv"
+              :disabled="!!inplaceRestartDisabledReason"
               label="image"
             >
               <span
                 v-bk-tooltips="{
-                  content: $t('联邦集群不支持原地重启'),
-                  disabled: !isFederationEnv,
+                  content: inplaceRestartDisabledReason,
+                  disabled: !inplaceRestartDisabledReason,
                 }"
               >
                 {{ $t('仅镜像（原地重启）') }}
@@ -99,6 +108,7 @@
         >
           <Input
             v-model.number="formModel.replicas"
+            :disabled="replicasLocked"
             :min="1"
             :precision="0"
             type="number"
@@ -108,6 +118,13 @@
             class="mt-[4px] text-[12px] leading-[20px] text-[#979BA5]"
           >
             {{ $t('实例删除后副本数已变为 0，请填写期望实例数后重新部署') }}
+          </div>
+          <!-- 分批更新与修改实例数互斥：已选择分批时锁定实例数，并说明如何调整 -->
+          <div
+            v-if="replicasLockedHint"
+            class="mt-[4px] text-[12px] leading-[20px] text-[#979BA5]"
+          >
+            {{ replicasLockedHint }}
           </div>
         </Form.FormItem>
 
@@ -231,13 +248,14 @@
 </template>
 
 <script lang="ts" setup>
-  import { computed, reactive, ref, watch } from 'vue';
+  import { computed, h, reactive, ref, watch } from 'vue';
 
-  import { Alert, Button, Form, Input, Message, Radio, Sideslider } from 'bkui-vue';
+  import { Alert, Button, Form, InfoBox, Input, Message, Radio, Sideslider } from 'bkui-vue';
   import { useI18n } from 'vue-i18n';
   import { InstanceService } from '~/api/modules/v1';
   import { RELEASE_MODE } from '~/common/enums/deploy';
   import { type RevisionType, revisionRequestFields } from '~/components/code-revision/revision';
+  import SvgIcon from '~/components/svg-icon.vue';
   import { isAppModelAppType } from '~/composables/app-type';
   import { useAppRepoRefSelect } from '~/composables/use-app-repo-ref-select';
   import { useAppVisibleEnvs } from '~/composables/use-app-visible-envs';
@@ -267,6 +285,8 @@
     viewReleaseDetail: [];
   }>();
   const props = defineProps<{
+    /** 当前环境是否正在灰度发布：提交会结束本次灰度，需提示 + 二次确认，且不支持原地重启 */
+    canaryInProgress?: boolean;
     effectiveReplicas?: number;
     isProdEnv?: boolean;
     latestBuildId?: string;
@@ -279,6 +299,12 @@
   const { checkDeployEnv, getEnvDeployDisabledReason } = useAppVisibleEnvs();
   const deployDisabledReason = computed(() => getEnvDeployDisabledReason(trpcDeployStore.curEnvItem));
   const isFederationEnv = useIsFederationEnv(() => trpcDeployStore.curEnvItem);
+  /** 「仅镜像（原地重启）」不可用的原因：联邦集群不支持该操作，灰度进行中原位重启会打断本次灰度。 */
+  const inplaceRestartDisabledReason = computed(() => {
+    if (isFederationEnv.value) return t('联邦集群不支持原地重启');
+    if (props.canaryInProgress) return t('灰度发布中不支持原地重启');
+    return '';
+  });
 
   const { workspaceId, repoAlias, branchSelectRef, prepareBranchAfterMount } = useAppRepoRefSelect(
     () => appDetailStore.appDetail?.buildConfig?.repoBuildConfig?.repoAlias || '',
@@ -335,12 +361,15 @@
     releasePreview,
     // 查看抽屉里克隆为空间策略成功后刷新列表，成功提示由查看抽屉展示
     refresh: refreshReleaseStrategies,
+    replicasLocked,
+    replicasLockedHint,
     resetToAllInstances,
     selectedStrategy,
     strategyHintText,
     strategyLoading,
     strategyOptions,
   } = useReleaseStrategy({
+    currentReplicas: () => props.effectiveReplicas,
     envName: () => trpcDeployStore.curEnvItem?.name ?? '',
     isAppModelApp: () => isAppModelAppType(appDetailStore.appType),
     isFederationEnv,
@@ -388,6 +417,14 @@
     revision: '',
     status: 'running',
   });
+  /** 确认框标题：42px 警示图标 + 居中标题，与北极星删除确认弹窗保持一致。 */
+  function buildCanaryDeployWarningTitle(title: string) {
+    return h('div', { class: 'canary-redeploy-warning-title' }, [
+      h(SvgIcon, { class: 'canary-redeploy-warning-svg', height: 42, icon: 'bkms-icon-tishi', width: 42 }),
+      h('div', { class: 'canary-redeploy-warning-title-text' }, title),
+    ]);
+  }
+
   /**
    * 部署提交成功的顶部提示文案：
    * - 一次更新全部：正在更新全部 N 个实例（实例数缺失时退回通用文案）；
@@ -399,6 +436,26 @@
     }
     const replicas = Number(formModel.replicas) || props.effectiveReplicas || 0;
     return replicas > 0 ? t('部署任务已提交，正在更新全部 {0} 个实例', [replicas]) : t('操作成功');
+  }
+
+  /** 灰度进行中的提交确认：说明本次灰度将结束、实例按当前侧栏配置更新。 */
+  function confirmEndCanaryAndDeploy() {
+    InfoBox({
+      width: 480,
+      extCls: 'canary-redeploy-infobox',
+      title: buildCanaryDeployWarningTitle(t('确认结束灰度并重新部署？')),
+      content: t('本次灰度发布将结束，实例按本次配置更新'),
+      // 说明文字由弹窗自带浅色块承载，与设计稿一致
+      showContentBgColor: true,
+      headerAlign: 'center',
+      footerAlign: 'center',
+      contentAlign: 'center',
+      confirmText: t('重新部署'),
+      cancelText: t('取消'),
+      onConfirm: () => {
+        void submitDeploy();
+      },
+    });
   }
 
   // 通过接口获取当前镜像 Tag
@@ -509,6 +566,50 @@
       return;
     }
 
+    // 灰度进行中提交部署会结束本次灰度：先让用户确认，确认后才真正提交。
+    if (props.canaryInProgress) {
+      confirmEndCanaryAndDeploy();
+      return;
+    }
+
+    await submitDeploy();
+  }
+
+  /**
+   * 仅镜像
+   */
+  async function handleImage() {
+    if (isFederationEnv.value) return false;
+    try {
+      const params: UpdateAppInstancesRequest = {
+        appID: appDetailStore.appID,
+        envName: trpcDeployStore.curEnvItem?.name ?? '',
+        imageTag: formModel.imageTag,
+        updateStrategy: 'InplaceUpdate',
+        // 全量更新传空数组
+        instanceIDs: [],
+      };
+      await InstanceService.updateAppInstances(params);
+      return true;
+    } catch (error) {
+      console.warn(error);
+      return false;
+    }
+  }
+
+  /**
+   * 切换更新内容
+   * @param val 'both' | 'config' | 'image'
+   */
+  function handleUpdateContentChange(val: 'both' | 'config' | 'image') {
+    // 仅配置时,使用当前镜像 Tag;其他情况清空让用户选择
+    formModel.imageTag = val === 'config' ? curImageTag.value : '';
+    // 仅镜像（原地重启）不支持分批发布，切回时静默重置，避免触发禁用重置提示
+    if (val === 'image') resetToAllInstances();
+  }
+
+  /** 真正提交部署：灰度发布提交后进入发布详情，其它方式成功后按构建模式决定是否关闭侧栏。 */
+  async function submitDeploy() {
     // 灰度发布：提交请求结束后无论成败都进入发布详情，只有表单 / 资格校验不通过时留在侧栏。
     const isCanaryRelease = formModel.releaseMode === RELEASE_MODE.CANARY;
 
@@ -554,39 +655,6 @@
     } finally {
       loading.value = false;
     }
-  }
-
-  /**
-   * 仅镜像
-   */
-  async function handleImage() {
-    if (isFederationEnv.value) return false;
-    try {
-      const params: UpdateAppInstancesRequest = {
-        appID: appDetailStore.appID,
-        envName: trpcDeployStore.curEnvItem?.name ?? '',
-        imageTag: formModel.imageTag,
-        updateStrategy: 'InplaceUpdate',
-        // 全量更新传空数组
-        instanceIDs: [],
-      };
-      await InstanceService.updateAppInstances(params);
-      return true;
-    } catch (error) {
-      console.warn(error);
-      return false;
-    }
-  }
-
-  /**
-   * 切换更新内容
-   * @param val 'both' | 'config' | 'image'
-   */
-  function handleUpdateContentChange(val: 'both' | 'config' | 'image') {
-    // 仅配置时,使用当前镜像 Tag;其他情况清空让用户选择
-    formModel.imageTag = val === 'config' ? curImageTag.value : '';
-    // 仅镜像（原地重启）不支持分批发布，切回时静默重置，避免触发禁用重置提示
-    if (val === 'image') resetToAllInstances();
   }
 
   watch(isShow, async val => {
@@ -650,6 +718,32 @@
       .bk-sideslider-content {
         height: 100%;
       }
+    }
+  }
+</style>
+
+<style lang="postcss">
+  /* 结束灰度确认弹窗挂在 body 上，scoped 样式不生效，故单独声明；类名带业务前缀避免污染全局 */
+  .canary-redeploy-infobox {
+    .bk-infobox-title {
+      margin-top: 0;
+    }
+
+    .canary-redeploy-warning-title {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .canary-redeploy-warning-svg {
+      margin-top: 24px;
+    }
+
+    .canary-redeploy-warning-title-text {
+      margin-top: 22px;
+      font-size: 20px;
+      line-height: 32px;
+      color: #313238;
     }
   }
 </style>

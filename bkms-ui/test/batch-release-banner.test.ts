@@ -26,6 +26,7 @@
  *   5. 灰度发布进度视图的批次步骤视图模型（buildBatchReleaseSteps）
  *   6. 实例灰度归属判定（resolveInstanceCanaryState，与进度视图灰度列表筛选同口径）
  *   7. 终态关闭记忆是「多条记录」：多个环境各自关闭互不覆盖，追加时去重并限制条数
+ *   8. 占用判定只看 latest-status 的 inProgressReleaseMode：分批发布失败后不得继续占用环境
  */
 import dayjs from 'dayjs';
 import { describe, expect, it } from 'vitest';
@@ -38,7 +39,7 @@ import {
   formatBatchReleaseStartedAt,
   hasCanaryDeployRecord,
   isBatchReleaseBannerDismissed,
-  isBatchReleaseBusy,
+  isBatchReleaseOccupied,
   resolveBatchReleaseBanner,
   resolveBatchReleaseDurationSeconds,
   resolveBatchReleaseSuccessMessage,
@@ -338,19 +339,27 @@ describe('resolveBatchReleaseBanner：按 batchPhase 决定按钮', () => {
   });
 });
 
-describe('isBatchReleaseBusy', () => {
-  it('部署中 / 暂停 / 回滚中 / 失败都阻塞部署入口', () => {
-    expect(isBatchReleaseBusy(resolveBatchReleaseBanner(buildProgress()))).toBe(true);
-    expect(isBatchReleaseBusy(resolveBatchReleaseBanner(buildProgress({ batchPhase: 'manual-paused' })))).toBe(true);
-    expect(isBatchReleaseBusy(resolveBatchReleaseBanner(buildProgress({ currentBatchIndex: -1 })))).toBe(true);
-    // 失败后必须先重试或回滚收尾，此时不允许并发发起新部署
-    expect(isBatchReleaseBusy(resolveBatchReleaseBanner(buildProgress({ status: 'failed' })))).toBe(true);
+describe('isBatchReleaseOccupied', () => {
+  it('后端标记 inProgressReleaseMode=canary：占用环境，拒绝新的部署入口', () => {
+    expect(isBatchReleaseOccupied(buildLatest())).toBe(true);
+    // 后端仍认为有进行中发布时，部署中 / 失败态都继续占用
+    expect(isBatchReleaseOccupied(buildLatest({ status: 'failed' }))).toBe(true);
   });
 
-  it('完成 / 已回滚与无横幅都不阻塞', () => {
-    expect(isBatchReleaseBusy(null)).toBe(false);
-    expect(isBatchReleaseBusy(resolveBatchReleaseBanner(buildProgress({ status: 'deployed' })))).toBe(false);
-    expect(isBatchReleaseBusy(resolveBatchReleaseBanner(buildProgress({ status: 'rolled-back' })))).toBe(false);
+  it('分批发布失败后后端已清空进行中标记：不再占用，允许重新部署', () => {
+    expect(isBatchReleaseOccupied(buildLatest({ inProgressReleaseMode: '', status: 'failed' }))).toBe(false);
+    expect(isBatchReleaseOccupied(buildLatest({ inProgressReleaseMode: undefined, status: 'failed' }))).toBe(false);
+    expect(isBatchReleaseOccupied(buildLatest({ inProgressReleaseMode: 'all', status: 'failed' }))).toBe(false);
+  });
+
+  it('最新记录是 canary 但已无进行中发布（完成 / 回滚）：不占用', () => {
+    expect(isBatchReleaseOccupied(buildLatest({ inProgressReleaseMode: '', status: 'deployed' }))).toBe(false);
+    expect(isBatchReleaseOccupied(buildLatest({ inProgressReleaseMode: '', status: 'rolled-back' }))).toBe(false);
+  });
+
+  it('最新部署状态未加载（null / undefined）不占用', () => {
+    expect(isBatchReleaseOccupied(null)).toBe(false);
+    expect(isBatchReleaseOccupied(undefined)).toBe(false);
   });
 });
 

@@ -266,11 +266,21 @@
 
 - 状态：`✅ 入选` ｜ 评分：8 ｜ 来源：`src/pages/application/detail/deploy/`（deploy.vue + instance-list/batch-release.ts + instance-list/components/batch-release-banner.vue + batch-release-progress-panel.vue + canary-instance-table.vue + instance-list/composables/use-batch-release-control.ts）
 - 用户目标：分批发布过程中在实例列表页看到当前批次状态，并继续 / 暂停 / 回退上一批 / 跳过剩余批次 / 回滚；点击「查看发布详情」隐藏横幅并切换为独立灰度发布进度视图（返回栏 + 语义色大横幅平铺按钮 + Steps 批次步骤条 + 灰度实例列表），点「返回实例列表」复原
-- V = 14：deploying 展示控制横幅并禁用部署入口 / updating 态暂停直接执行 / 回滚二次确认与取消 / manual-paused 态回退与跳过剩余批次二次确认 / timed-paused 继续发布提前进入下一批 / 批次序号未回填仍给出按钮 / 已完成展示成功 Alert 且可关闭 / 失败展示原因 + 重试 / 已回滚展示提示且不阻塞部署 / 非分批发布不请求进度 / 操作失败保留状态 / 操作在途时所有入口置灰且不重复发请求 / 查看发布详情→横幅隐藏 + 进度视图互斥切换 + 平铺按钮复用确认链路 / 暂停态进度视图暂停小标与继续发布主操作
+- V = 14：deploying 展示控制横幅且部署入口仍可用（重新部署走 S22 的二次确认）/ updating 态暂停直接执行 / 回滚二次确认与取消 / manual-paused 态回退与跳过剩余批次二次确认 / timed-paused 继续发布提前进入下一批 / 批次序号未回填仍给出按钮 / 已完成展示成功 Alert 且可关闭 / 失败展示原因 + 重试 / 已回滚展示提示且不阻塞部署 / 非分批发布不请求进度 / 操作失败保留状态 / 操作在途时所有入口置灰且不重复发请求 / 查看发布详情→横幅隐藏 + 进度视图互斥切换 + 平铺按钮复用确认链路 / 暂停态进度视图暂停小标与继续发布主操作
 - 用例：`test/scenarios/batch-release-control.test.ts`（含「查看发布详情」事件、互斥切换与复原、进度视图平铺按钮顺序断言、操作在途忙态断言与未部署环境不补查断言）+ `test/batch-release-banner.test.ts`（纯函数：六态映射（完成/失败/暂停/回滚中/已回滚/更新中）/ 批次阶段 → 按钮集合 / 更多菜单项 / 终态关闭记忆 / 进度补查门控（含未部署、build 阶段例外、空结果记忆）/ 成功提示文案 / buildBatchReleaseSteps 批次步骤映射（loading/暂停/失败/终态/自动全量批/标题与副文本口径）/ resolveInstanceCanaryState 灰度归属判定）
-- 验收：两文件连跑 61/61 全绿；变异验证捕获（暂停态映射改坏 → 暂停步骤用例失败）
+- 验收：两文件连跑 106/106 全绿；变异验证捕获（暂停态映射改坏 → 暂停步骤用例失败）
 - backlog：失败原因文案依赖后端 `message` 字段（当前仅兜底）；「重试」复用 `action=continue`，后端新增 retry 动作后只需改映射；灰度实例列表筛选计数依赖 `canary-instance-table.vue` 挂载（场景测试中 stub，口径由 `resolveInstanceCanaryState` 纯函数单测覆盖）；定时暂停剩余秒换算依赖 `pauseStartTime`，无持续倒计时
 - 打法：PLAYBOOK「Proxy service / pinia / vxe」+ bkui 命令式 API partial mock（Message/InfoBox stub，Dropdown 只渲染插槽，其余真实渲染；CanaryInstanceTable stub 仅验证面板接线）
+
+#### S22 灰度发布中重新部署
+
+- 状态：`✅ 入选` ｜ 评分：9 ｜ 来源：`src/pages/application/detail/deploy/`（deploy.vue + instance-list/full-update.vue + instance-list/batch-release.ts）
+- 用户目标：灰度进行中仍可点「部署」重新部署——侧栏提示本次灰度将结束、`仅镜像（原地重启）`不可用、提交前二次确认；隐藏环境在灰度中只剩原地重启，入口保持禁用
+- V = 5：灰度中顶部「部署」可点击 + 侧栏提示 / 原地重启在灰度中禁用（联邦集群同样禁用）/ 灰度中提交先弹确认框且确认后才提交 / 确认框取消不提交 / 非灰度直接提交（回归保护）/ 隐藏环境灰度中入口禁用
+- 用例：`test/scenarios/canary-redeploy.test.ts`（5 全绿）
+- 验收：连跑稳定；判定口径 `isBatchReleaseOccupied`（只看 `inProgressReleaseMode`，失败态不占用）由 S21 纯函数单测兜底
+- backlog：确认框取消后侧栏保持打开（框内取消）在 jsdom 已覆盖「不提交」，实际弹层视觉待人工确认；灰度中重新部署后横幅是否复用同一 deployID 由后端决定
+- 打法：PLAYBOOK「Proxy service / pinia / vxe」+ bkui 命令式 API partial mock（InfoBox/Message stub，其余真实渲染）+ 真实 FullUpdate 侧栏
 
 ## 3. 覆盖模型检查
 
