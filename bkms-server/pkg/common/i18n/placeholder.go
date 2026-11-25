@@ -44,10 +44,19 @@ func checkPlaceholders(msgid, msgstr string) error {
 	return nil
 }
 
-// placeholders 解析 printf 格式串，返回参数下标（从 1 开始）到动词的映射；宽度与精度中的 * 记为动词 '*'
+// placeholders 解析 printf 格式串，返回参数下标（从 1 开始）到动词的映射；宽度与精度中的 * 记为动词 '*'。
+// 同一参数可以重复引用，但必须使用相同的动词，否则运行时格式化会出错
 func placeholders(format string) (map[int]rune, error) {
 	res := map[int]rune{}
 	arg := 1
+	use := func(verb rune) error {
+		if prev, ok := res[arg]; ok && prev != verb {
+			return errors.Errorf("argument %d is referenced by both %%%c and %%%c", arg, prev, verb)
+		}
+		res[arg] = verb
+		arg++
+		return nil
+	}
 	for i := 0; i < len(format); i++ {
 		if format[i] != '%' {
 			continue
@@ -83,10 +92,8 @@ func placeholders(format string) (map[int]rune, error) {
 				return err
 			}
 			if i < len(format) && format[i] == '*' {
-				res[arg] = '*'
-				arg++
 				i++
-				return nil
+				return use('*')
 			}
 			for i < len(format) && format[i] >= '0' && format[i] <= '9' {
 				i++
@@ -110,8 +117,9 @@ func placeholders(format string) (map[int]rune, error) {
 			return nil, errors.New("missing verb at end of format")
 		}
 		verb, size := utf8.DecodeRuneInString(format[i:])
-		res[arg] = verb
-		arg++
+		if err := use(verb); err != nil {
+			return nil, err
+		}
 		i += size - 1
 	}
 	return res, nil

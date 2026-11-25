@@ -27,6 +27,8 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/kubeinsight"
 )
 
+const bscpDisabledMsg = i18n.Msg("bscp is disabled in current environment")
+
 // BSCPDisabledRule 把错误链上的 bscp.ErrDisabled 映射为 BSCP 未启用的 API 错误，
 // 供未挂 RequireBSCP、但会间接调用 BSCP 的接口（如配置文件校验）在 bkerrs.Map 中使用
 var BSCPDisabledRule = bkerrs.OnFunc(bscp.ErrDisabled, WrapBSCPDisabled)
@@ -55,14 +57,12 @@ func RequireKubeInsight() gin.HandlerFunc {
 
 // WrapBSCPDisabled 包装为当前环境关闭了 BSCP 对接的错误
 func WrapBSCPDisabled(err error) *bkerrs.Error {
-	return bkerrs.Wrap(
-		err, bkerrs.ErrCodeNotImplemented, i18n.Msg("bscp is disabled in current environment"),
-	).SetDetails(
+	return bkerrs.Wrap(err, bkerrs.ErrCodeNotImplemented, bscpDisabledMsg).SetDetails(
 		bkerrs.NewDetail(
 			bkerrs.ErrDetailCodeBSCPDisabled,
-			"bscp is disabled in current environment",
+			bscpDisabledMsg,
 			bkerrs.WithSystem(bkerrs.SystemName),
-			bkerrs.WithModule("bscp"),
+			bkerrs.WithModule(bscp.ModuleName),
 		),
 	)
 }

@@ -37,8 +37,13 @@ var localesFS embed.FS
 // SourceLang 源码中文案使用的语言，原文即该语言的文案，没有翻译文件
 const SourceLang = LangEN
 
-// catalog 语言 -> 原文 -> 译文
-type catalog map[Lang]map[string]string
+// catalog 翻译文件加载后的内容
+type catalog struct {
+	// entries 语言 -> 原文 -> 译文，只含已翻译的条目
+	entries map[Lang]map[string]string
+	// msgids 翻译文件中出现过的全部原文（含未翻译、fuzzy），即面向用户的文案
+	msgids map[string]bool
+}
 
 // messages 在启动时加载，翻译文件有误时直接启动失败
 var messages = mustLoad(localesFS)
@@ -52,10 +57,10 @@ func mustLoad(fsys fs.FS) catalog {
 }
 
 // load 加载除源语言外每种支持语言的 locales/<lang>.po。
-// 未翻译（msgstr 为空）或标记为 fuzzy 的条目跳过，运行时回退到原文；
+// 未翻译（msgstr 为空）或标记为 fuzzy 的条目不作为译文，运行时回退到原文，但仍记为面向用户的文案；
 // 原文重复、译文与原文的 printf 参数不一致时返回错误
 func load(fsys fs.FS) (catalog, error) {
-	c := catalog{}
+	c := catalog{entries: map[Lang]map[string]string{}, msgids: map[string]bool{}}
 	for _, lang := range supportedLangs {
 		if lang == SourceLang {
 			continue
@@ -63,49 +68,44 @@ func load(fsys fs.FS) (catalog, error) {
 		path := "locales/" + string(lang) + ".po"
 		data, err := fs.ReadFile(fsys, path)
 		if err != nil {
-			return nil, errors.Wrapf(err, "read locale file %s", path)
+			return catalog{}, errors.Wrapf(err, "read locale file %s", path)
 		}
 		file, err := po.Load(data)
 		if err != nil {
-			return nil, errors.Wrapf(err, "parse locale file %s", path)
+			return catalog{}, errors.Wrapf(err, "parse locale file %s", path)
 		}
 
 		entries := make(map[string]string, len(file.Messages))
 		seen := make(map[string]bool, len(file.Messages))
 		for _, msg := range file.Messages {
 			if seen[msg.MsgId] {
-				return nil, errors.Errorf("msgid %q is duplicated in %s", msg.MsgId, path)
+				return catalog{}, errors.Errorf("msgid %q is duplicated in %s", msg.MsgId, path)
 			}
 			seen[msg.MsgId] = true
+			if msg.MsgId != "" {
+				c.msgids[msg.MsgId] = true
+			}
 			if msg.MsgStr == "" || slices.Contains(msg.Flags, "fuzzy") {
 				continue
 			}
 			if err = checkPlaceholders(msg.MsgId, msg.MsgStr); err != nil {
-				return nil, errors.Wrapf(err, "msgid %q in %s", msg.MsgId, path)
+				return catalog{}, errors.Wrapf(err, "msgid %q in %s", msg.MsgId, path)
 			}
 			entries[msg.MsgId] = msg.MsgStr
 		}
-		c[lang] = entries
+		c.entries[lang] = entries
 	}
 	return c, nil
 }
 
+// translate 源语言下原文即译文，只要原文出现在翻译文件中（无论是否已翻译）即视为面向用户的文案，
+// 这样补充其他语言的译文不会改变源语言下的响应
 func (c catalog) translate(lang Lang, msgid string) (string, bool) {
 	if lang == SourceLang {
-		return msgid, c.has(msgid)
+		return msgid, c.msgids[msgid]
 	}
-	msgstr, ok := c[lang][msgid]
+	msgstr, ok := c.entries[lang][msgid]
 	return msgstr, ok
-}
-
-// has 判断原文是否在任一语言中有译文，源语言据此判断原文是否属于需要翻译的文案
-func (c catalog) has(msgid string) bool {
-	for _, entries := range c {
-		if _, ok := entries[msgid]; ok {
-			return true
-		}
-	}
-	return false
 }
 
 // T 按 ctx 中的语言翻译原文 format 并以 args 格式化，没有译文时使用原文；用于后端直接生成的非错误文案。
@@ -118,7 +118,7 @@ func T(ctx context.Context, format string, args ...any) string {
 	return fmt.Sprintf(msg, args...)
 }
 
-// Translate 返回原文 msgid 在 ctx 语言下的译文（未格式化）；原文没有任何译文时返回原文与 false，
+// Translate 返回原文 msgid 在 ctx 语言下的译文（未格式化）；没有译文时返回原文与 false，
 // 由调用方决定是否兜底（如错误出口对未翻译的存量文案沿用完整的错误信息）
 func Translate(ctx context.Context, msgid string) (string, bool) {
 	msgstr, ok := messages.translate(LangFromContext(ctx), msgid)

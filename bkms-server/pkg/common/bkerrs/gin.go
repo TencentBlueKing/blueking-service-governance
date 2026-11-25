@@ -121,11 +121,11 @@ func WriteError(c *gin.Context, err error) {
 	}
 
 	code := ErrCodeInternalError
-	bkErr := classify(err)
+	bkErr, categorized := classify(err)
 	if bkErr != nil {
 		code = bkErr.Code()
 	}
-	logError(c, code, err)
+	logError(c, code, categorized, err)
 
 	message, details := userMessage(c.Request.Context(), bkErr, code, err)
 	c.JSON(code.AsHTTPStatusCode(), GinErrorOutput{
@@ -139,21 +139,20 @@ func WriteError(c *gin.Context, err error) {
 	})
 }
 
-// classify 返回出口用于定码与翻译的错误：优先取错误链上最外层的 *Error，其次按通用组件声明的错误类别转换，
-// 均不满足时返回 nil
-func classify(err error) *Error {
-	var bkErr *Error
+// classify 返回出口用于定码与翻译的错误：优先取错误链上最外层的 *Error，其次按通用组件声明的错误类别转换
+// （categorized 为 true），均不满足时返回 nil
+func classify(err error) (bkErr *Error, categorized bool) {
 	if errors.As(err, &bkErr) {
-		return bkErr
+		return bkErr, false
 	}
 
 	switch {
 	case declares(err, notFoundError.IsNotFound):
-		return categoryError(err, ErrCodeNotFound, codeMessages[ErrCodeNotFound])
+		return categoryError(err, ErrCodeNotFound, codeMessages[ErrCodeNotFound]), true
 	case declares(err, alreadyExistsError.IsAlreadyExists):
-		return categoryError(err, ErrCodeAlreadyExists, codeMessages[ErrCodeAlreadyExists])
+		return categoryError(err, ErrCodeAlreadyExists, codeMessages[ErrCodeAlreadyExists]), true
 	}
-	return nil
+	return nil, false
 }
 
 // declares 判断错误链上存在 T 类型的错误，且 is 对其返回 true
@@ -220,8 +219,9 @@ func (e *Error) translate(ctx context.Context) (string, bool) {
 	return fmt.Sprintf(msg, e.args...), true
 }
 
-// logError 记录需要排查的错误：内部错误可能是服务端故障或遗漏了映射，404 可能是内部查询未改判
-func logError(c *gin.Context, code ErrCode, err error) {
+// logError 记录需要排查的错误：内部错误可能是服务端故障或遗漏了映射；
+// 按存储类别自动转换的 404 可能是内部查询未改判，handler 显式映射的 404 属于正常响应，不记录
+func logError(c *gin.Context, code ErrCode, categorized bool, err error) {
 	route := c.FullPath()
 	if route == "" {
 		route = c.Request.URL.Path
@@ -231,7 +231,7 @@ func logError(c *gin.Context, code ErrCode, err error) {
 	switch {
 	case code.isInternal():
 		log.Errorf(ctx, "%s %s responded %s: %+v", c.Request.Method, route, code, err)
-	case code.AsHTTPStatusCode() == http.StatusNotFound:
+	case categorized && code.AsHTTPStatusCode() == http.StatusNotFound:
 		log.Warnf(ctx, "%s %s responded %s: %v", c.Request.Method, route, code, err)
 	}
 }

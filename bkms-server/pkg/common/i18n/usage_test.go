@@ -36,11 +36,9 @@ var _ = Describe("Translations in locale files", func() {
 		for _, m := range msgs {
 			referenced[m.ID] = true
 		}
-		for lang, entries := range messages {
-			for msgid := range entries {
-				Expect(referenced).To(HaveKey(msgid),
-					"msgid %q in %s.po is no longer referenced in source, remove it or run `make i18n`", msgid, lang)
-			}
+		for msgid := range messages.msgids {
+			Expect(referenced).To(HaveKey(msgid),
+				"msgid %q in locale files is no longer referenced in source, remove it or run `make i18n`", msgid)
 		}
 	})
 })

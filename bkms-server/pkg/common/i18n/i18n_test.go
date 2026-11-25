@@ -109,16 +109,27 @@ var _ = Describe("load", func() {
 		return fstest.MapFS{"locales/zh.po": {Data: []byte("msgid \"\"\nmsgstr \"\"\n\n" + body)}}
 	}
 
-	It("should skip untranslated and fuzzy entries", func() {
-		c, err := load(
-			po("msgid \"a\"\nmsgstr \"\"\n\n#, fuzzy\nmsgid \"b\"\nmsgstr \"乙\"\n\nmsgid \"c\"\nmsgstr \"丙\"\n"),
-		)
-		Expect(err).NotTo(HaveOccurred())
-		Expect(c[LangZH]).To(Equal(map[string]string{"c": "丙"}))
-	})
+	It("should skip untranslated and fuzzy entries but still treat them as user-facing in the source language",
+		func() {
+			c, err := load(
+				po("msgid \"a\"\nmsgstr \"\"\n\n#, fuzzy\nmsgid \"b\"\nmsgstr \"乙\"\n\nmsgid \"c\"\nmsgstr \"丙\"\n"),
+			)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(c.entries[LangZH]).To(Equal(map[string]string{"c": "丙"}))
 
-	It("should accept reordered explicit argument indexes", func() {
-		_, err := load(po("msgid \"app %s in env %s\"\nmsgstr \"环境 %[2]s 中的应用 %[1]s\"\n"))
+			for _, msgid := range []string{"a", "b", "c"} {
+				msg, ok := c.translate(LangEN, msgid)
+				Expect(ok).To(BeTrue(), msgid)
+				Expect(msg).To(Equal(msgid))
+			}
+			_, ok := c.translate(LangZH, "a")
+			Expect(ok).To(BeFalse())
+			_, ok = c.translate(LangEN, "not in po")
+			Expect(ok).To(BeFalse())
+		})
+
+	It("should accept reordered and repeated explicit argument indexes", func() {
+		_, err := load(po("msgid \"app %s in env %s\"\nmsgstr \"环境 %[2]s 中的应用 %[1]s（%[1]s）\"\n"))
 		Expect(err).NotTo(HaveOccurred())
 	})
 
@@ -131,6 +142,8 @@ var _ = Describe("load", func() {
 		Entry("placeholder mismatch", po("msgid \"%d apps\"\nmsgstr \"%s 个应用\"\n"), "do not match"),
 		Entry("missing placeholder", po("msgid \"app %s\"\nmsgstr \"应用\"\n"), "do not match"),
 		Entry("duplicated msgid", po("msgid \"a\"\nmsgstr \"甲\"\n\nmsgid \"a\"\nmsgstr \"乙\"\n"), "duplicated"),
+		Entry("same argument with conflicting verbs",
+			po("msgid \"name %s\"\nmsgstr \"编号 %[1]d，名称 %[1]s\"\n"), "referenced by both"),
 	)
 })
 
@@ -144,5 +157,16 @@ var _ = Describe("placeholders", func() {
 		Entry("flags width precision", "%-8s %+.2f", map[int]rune{1: 's', 2: 'f'}),
 		Entry("explicit indexes", "%[2]s then %[1]q", map[int]rune{2: 's', 1: 'q'}),
 		Entry("star width", "%*d", map[int]rune{1: '*', 2: 'd'}),
+		Entry("repeated index with the same verb", "%[1]s or %[1]s", map[int]rune{1: 's'}),
+	)
+
+	DescribeTable("should reject an argument referenced by different verbs",
+		func(format string) {
+			_, err := placeholders(format)
+			Expect(err).To(MatchError(ContainSubstring("referenced by both")))
+		},
+		Entry("verb then verb", "%[1]d %[1]s"),
+		Entry("verb order reversed", "%[1]s %[1]d"),
+		Entry("star width and verb", "%[1]*[1]d"),
 	)
 })

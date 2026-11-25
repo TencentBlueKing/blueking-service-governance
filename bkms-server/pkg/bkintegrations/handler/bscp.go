@@ -261,7 +261,7 @@ func wrapBSCPNoPermission(err error) *bkerrs.Error {
 			bkerrs.ErrDetailCodeBSCPNoPermission,
 			"bscp service permission denied",
 			bkerrs.WithSystem(bkerrs.SystemName),
-			bkerrs.WithModule("bscp"),
+			bkerrs.WithModule(bscp.ModuleName),
 		),
 	)
 }
@@ -274,7 +274,7 @@ func newBSCPNotFullyReleasedError(bizID, serviceID string) *bkerrs.Error {
 			bkerrs.ErrDetailCodeNotFullyReleased,
 			fmt.Sprintf("bscp service %s has no fully released version in biz %s", serviceID, bizID),
 			bkerrs.WithSystem(bkerrs.SystemName),
-			bkerrs.WithModule("bscp"),
+			bkerrs.WithModule(bscp.ModuleName),
 		),
 	)
 }

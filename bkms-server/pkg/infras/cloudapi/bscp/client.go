@@ -64,6 +64,9 @@ type ApiClient struct {
 	user auth.User
 }
 
+// ModuleName 错误详情中标识 BSCP 的模块名
+const ModuleName = "bscp"
+
 // ErrDisabled 当前环境关闭了 BSCP 对接（featureIntegrations.disableBSCP）
 var ErrDisabled = errors.New("bscp integration is disabled by featureIntegrations.disableBSCP")
 

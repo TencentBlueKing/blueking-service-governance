@@ -34,10 +34,8 @@ type Rule func(err error) *Error
 //	bkerrs.AbortWithErr(c, bkerrs.Map(err,
 //	    bkerrs.On(model.ErrUnknownSwitch, bkerrs.ErrCodeInvalidArgument, i18n.Msg("unknown cfg switch key")),
 //	    bkerrs.OnAs(func(err error, e *bkmsenv.EnvHasAppsError) *bkerrs.Error {
-//	        return bkerrs.Wrapf(err, bkerrs.ErrCodeInvalidRequest, "environment has %d deployed apps, cannot delete",
-//
-// e.AppCount)
-//
+//	        return bkerrs.Wrapf(err, bkerrs.ErrCodeInvalidRequest,
+//	            i18n.Msg("environment has %d deployed apps, cannot delete"), e.AppCount)
 //	    }),
 //	))
 func Map(err error, rules ...Rule) error {

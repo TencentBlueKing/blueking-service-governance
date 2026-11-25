@@ -56,9 +56,9 @@ bkerrs.AbortWithErr(c, bkerrs.Map(errors.Wrap(err, "update cfg switch"),
     - 其他错误翻译最外层 `bkerrs.Error` 的原文（`New` / `Wrap` 的 `msg`，`Errorf` / `Wrapf` 的 `format`），再用原参数格式化；
       内层错误面向开发者，不参与翻译
     - 原文没有译文时，非源语言（中文）使用错误码的默认文案（`codeMessages`）；源语言（英文）或错误码没有默认文案时
-      沿用完整的错误信息，与引入 i18n 前一致
+      沿用完整的错误信息，与引入 i18n 前一致。英文下只要原文出现在 `.po` 中（无论是否已翻译）就视为有译文
 3. **详情**：文案被翻译或使用默认文案时，完整的错误信息作为一条详情追加到末尾（详情码同错误码），已有详情保持在前
-4. **日志**：内部错误记录 Error 日志，404 记录 Warn 日志
+4. **日志**：内部错误记录 Error 日志；按存储类别自动转换的 404 记录 Warn 日志，便于发现漏映射的内部查询
 
 翻译的维护方式见 [`pkg/common/i18n/README.md`](../i18n/README.md)。面向用户的原文需用 `i18n.Msg("...")` 显式标记，
 `make i18n` 才会提取；未标记或动态拼接（如 `WrapIAMNoPermission`）的原文按未翻译处理（中文下使用错误码的默认文案）。
