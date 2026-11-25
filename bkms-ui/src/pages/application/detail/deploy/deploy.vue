@@ -1276,7 +1276,9 @@
       if (!precheckPassed) return;
 
       if (isFeatureEnvPage.value) await leaveFeatureEnvPage();
-      envSelectRefreshKey.value += 1;
+      // 先写入目标环境再重建选择器，打开部署侧栏时选中刚创建的特性环境。
+      isMultiEnvMode.value = false;
+      curEnvs.value = [env.name];
       envStore.updateCurrentEnv(env.name);
       trpcDeployStore.updateCurEnvItem(env);
       activeTab.value = TAB_NAMES.instance;
@@ -1284,6 +1286,7 @@
       effectiveDeploySpec.value = undefined;
       initLoading.value = true;
       overviewDeployTargets.value = undefined;
+      envSelectRefreshKey.value += 1;
       isShowQuicklyDeploy.value = true;
     } catch (error) {
       console.warn(error);

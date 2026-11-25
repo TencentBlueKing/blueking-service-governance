@@ -59,8 +59,8 @@ export default function useLeaveConfirm<T extends Record<string, any> = any>(for
   // 标记表单是否被用户触发过
   const isDirty = ref(false);
 
-  // 标记是否正在初始化（用于跳过初始化时的 watch 触发）
-  const initializing = ref(false);
+  // 多次初始化可能共处一次更新，所有暂停窗口结束后再恢复监听。
+  let initializingCount = 0;
 
   if (formModel) {
     // 获取表单值
@@ -70,7 +70,7 @@ export default function useLeaveConfirm<T extends Record<string, any> = any>(for
       () => getFormValue(),
       () => {
         // 初始化期间不设置 dirty
-        if (initializing.value) {
+        if (initializingCount > 0) {
           return;
         }
         isDirty.value = true;
@@ -85,10 +85,10 @@ export default function useLeaveConfirm<T extends Record<string, any> = any>(for
    * @description 推荐场景：组件内初始化，需要精确控制哪些赋值不触发 watch
    */
   function withPausedWatch(callback: () => void) {
-    initializing.value = true;
+    initializingCount += 1;
     callback();
     nextTick(() => {
-      initializing.value = false;
+      initializingCount -= 1;
     });
   }
 

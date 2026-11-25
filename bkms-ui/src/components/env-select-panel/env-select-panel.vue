@@ -348,7 +348,7 @@
 </template>
 
 <script lang="ts" setup>
-  import { computed, ref, watch } from 'vue';
+  import { computed, onScopeDispose, ref, watch } from 'vue';
 
   import { Button, Checkbox, Input, Message, Popover, Select, Tag } from 'bkui-vue';
   import { Done } from 'bkui-vue/lib/icon';
@@ -493,6 +493,10 @@
   let deployStatusesRequest = 0;
   /** 被刷新顶替的编辑/保存校验等待此结果，避免使用旧状态或静默中断。 */
   let latestDeployStatusesPromise: Promise<boolean>;
+  // 选择器被重建后，旧环境列表不能再初始化选中项。部署状态请求仍按原序号收口，避免作废后等待自身。
+  onScopeDispose(() => {
+    envListRequest += 1;
+  });
   /** 搜索关键词 */
   const searchKeyword = ref('');
   /** 是否仅显示已部署环境 */
