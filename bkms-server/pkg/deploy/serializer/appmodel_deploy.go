@@ -47,6 +47,8 @@ type DeployPreCheckOutput struct {
 	UndefinedVars []UndefinedEnvVarOutput `json:"undefinedVars"`
 	// 缺失的必选集群组件标识及展示名
 	MissingRequiredClusterAddons []ClusterAddonReferenceOutput `json:"missingRequiredClusterAddons"`
+	// 环境与其他环境共用命名空间时不支持使用组件，列出应用在该环境下生效的组件名；非空时不能部署
+	UnsupportedComponents []string `json:"unsupportedComponents"`
 }
 
 // ClusterAddonReferenceOutput 包含用于关联组件的稳定标识和展示名。
@@ -93,6 +95,7 @@ func (o *DeployPreCheckOutput) FromModel(result *deploypkg.DeployPreCheckResult)
 				return ClusterAddonReferenceOutput{Name: addon.Name, DisplayName: addon.DisplayName}
 			},
 		),
+		UnsupportedComponents: lo.CoalesceSliceOrEmpty(result.UnsupportedComponents),
 	}
 	return o
 }

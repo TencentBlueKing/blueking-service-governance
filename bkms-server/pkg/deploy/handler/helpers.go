@@ -24,6 +24,7 @@ import (
 	"fmt"
 
 	"github.com/gin-gonic/gin"
+	"github.com/pkg/errors"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
@@ -98,4 +99,17 @@ func genDeployInfo(workspaceID, appID, envName, trafficLaneName string) string {
 		info += fmt.Sprintf(", lane: %s", trafficLaneName)
 	}
 	return info + ">"
+}
+
+// wrapDeployErr 将部署相关步骤的错误包装为 API 错误：共用命名空间的环境不支持当前部署（Helm 应用、使用组件）时
+// 返回带 SHARED_NAMESPACE_UNSUPPORTED 详情码的 400，供前端展示对应提示；其余错误按服务端错误处理。
+func wrapDeployErr(err error, msg string) error {
+	if !errors.Is(err, bkmsenv.ErrSharedNamespaceUnsupported) {
+		return bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, msg)
+	}
+	return bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, msg).SetDetails(bkerrs.NewDetail(
+		bkerrs.ErrDetailCodeSharedNamespaceUnsupported,
+		"environment shares namespace with other environments, helm apps and components are not supported",
+		bkerrs.WithSystem(bkerrs.SystemName),
+	))
 }

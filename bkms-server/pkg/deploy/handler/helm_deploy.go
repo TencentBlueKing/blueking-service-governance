@@ -228,7 +228,7 @@ func (h *Handler) CreateHelmDeploy(c *gin.Context) {
 	)
 	if err != nil {
 		deployLock.Release(ctx)
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "execute deploy steps"))
+		bkerrs.AbortWithErr(c, wrapDeployErr(err, "execute deploy steps"))
 		return
 	}
 
@@ -362,7 +362,7 @@ func (h *Handler) RollbackHelmDeploy(c *gin.Context) {
 	deployID, err := h.execHelmAppRollbackSteps(ctx, record)
 	if err != nil {
 		deployLock.Release(ctx)
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "execute rollback steps"))
+		bkerrs.AbortWithErr(c, wrapDeployErr(err, "execute rollback steps"))
 		return
 	}
 
