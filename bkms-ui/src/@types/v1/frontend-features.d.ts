@@ -16,9 +16,9 @@ export interface FrontendFeaturesOutput {
    */
   enableBSCP?: boolean;
   /**
-   * 是否启用 Go 模块代理（GOPROXY）构建参数指引，默认为 false，显式开启后前端才展示相关提示与快捷添加入口
+   * 是否启用 Go 模块代理（GOPROXY）构建参数提示，默认为 false，显式开启后前端才展示相关提示与快捷添加入口
    */
-  enableGoProxy?: boolean;
+  enableGoProxyBuildArgsTips?: boolean;
   /**
    * 制品库是否为独立部署（不接入权限中心，改用制品库账号认证）
    */

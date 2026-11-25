@@ -93,12 +93,12 @@ describe('GoBuildArgs feature flag', () => {
     await store.getFrontendFeatures();
     expect(wrapper.find('a[href="https://goproxy.example.com"]').exists()).toBe(false);
 
-    getFrontendFeatures.mockResolvedValueOnce({ enableGoProxy: false });
+    getFrontendFeatures.mockResolvedValueOnce({ enableGoProxyBuildArgsTips: false });
     await store.getFrontendFeatures();
     expect(wrapper.find('a[href="https://goproxy.example.com"]').exists()).toBe(false);
 
     await wrapper.setProps({ language: 'python' });
-    getFrontendFeatures.mockResolvedValueOnce({ enableGoProxy: true });
+    getFrontendFeatures.mockResolvedValueOnce({ enableGoProxyBuildArgsTips: true });
     await store.getFrontendFeatures();
     expect(wrapper.find('a[href="https://goproxy.example.com"]').exists()).toBe(false);
     expect(wrapper.findComponent(keyValueStub).props('valuePlaceholder')).toBeUndefined();
@@ -119,7 +119,7 @@ describe('GoBuildArgs feature flag', () => {
     expect(getFrontendFeatures).toHaveBeenCalledTimes(1);
     expect(wrapper.find('a[href="https://goproxy.example.com"]').exists()).toBe(false);
 
-    resolveFeatures({ enableGoProxy: true });
+    resolveFeatures({ enableGoProxyBuildArgsTips: true });
     await Promise.all([req1, req2]);
     await flushPromises();
 

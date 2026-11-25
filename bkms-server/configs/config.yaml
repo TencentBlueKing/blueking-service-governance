@@ -271,8 +271,8 @@ featureIntegrations:
   # true：蓝盾始终新建；新建容器则创建 BCS 项目，绑定已有容器则绑定已有 BCS 项目。
   # false：新建/绑定都按蓝盾项目处理，BCS ID/Code 复用蓝盾项目。
   enableIndependentBCSProject: false
-  # 启用 Go 模块代理（GOPROXY）构建参数指引，默认不展示，显式设为 true 时开启
-  enableGoProxy: false
+  # 启用 Go 模块代理（GOPROXY）构建参数提示，默认不展示，显式设为 true 时开启
+  enableGoProxyBuildArgsTips: false
   # 关闭 BSCP 对接，未部署 BSCP 的环境设为 true
   # 关闭期间创建的工作空间没有 BSCP 绑定，重新启用后需逐个执行 bind-bscp-project 命令补绑
   disableBSCP: false
