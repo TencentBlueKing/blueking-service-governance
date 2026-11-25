@@ -19,12 +19,15 @@
 package handler
 
 import (
+	"fmt"
+
 	"github.com/gin-gonic/gin"
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/serializer"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/i18n"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bscp"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
@@ -141,11 +144,7 @@ func (h *Handler) ListBSCPConfigs(c *gin.Context) {
 
 	ver := versions.LatestFullyReleased()
 	if ver == nil {
-		bkerrs.AbortWithErr(c, bkerrs.WrapBSCPNotFullyReleased(
-			bkerrs.New(bkerrs.ErrCodeNotFound, "no fully released version"),
-			uriInput.BizID,
-			uriInput.ServiceID,
-		))
+		bkerrs.AbortWithErr(c, newBSCPNotFullyReleasedError(uriInput.BizID, uriInput.ServiceID))
 		return
 	}
 
@@ -207,11 +206,7 @@ func (h *Handler) GetBSCPConfig(c *gin.Context) {
 
 	ver := versions.LatestFullyReleased()
 	if ver == nil {
-		bkerrs.AbortWithErr(c, bkerrs.WrapBSCPNotFullyReleased(
-			bkerrs.New(bkerrs.ErrCodeNotFound, "no fully released version"),
-			uriInput.BizID,
-			uriInput.ServiceID,
-		))
+		bkerrs.AbortWithErr(c, newBSCPNotFullyReleasedError(uriInput.BizID, uriInput.ServiceID))
 		return
 	}
 
@@ -255,9 +250,31 @@ func (h *Handler) GetBSCPConfig(c *gin.Context) {
 	}})
 }
 
+// wrapBSCPAPIError 为 BSCP API 错误附上操作描述，无权限映射为 403，其余交给错误出口按内部错误处理
 func wrapBSCPAPIError(err error, msg string) error {
-	if errors.Is(err, bscp.ErrNoPermission) {
-		return bkerrs.WrapBSCPNoPermission(err, msg)
-	}
-	return bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, msg)
+	return bkerrs.Map(errors.Wrap(err, msg), bkerrs.OnFunc(bscp.ErrNoPermission, wrapBSCPNoPermission))
+}
+
+func wrapBSCPNoPermission(err error) *bkerrs.Error {
+	return bkerrs.Wrap(err, bkerrs.ErrCodeNoPermission, i18n.Msg("no permission to access bscp resources")).SetDetails(
+		bkerrs.NewDetail(
+			bkerrs.ErrDetailCodeBSCPNoPermission,
+			"bscp service permission denied",
+			bkerrs.WithSystem(bkerrs.SystemName),
+			bkerrs.WithModule("bscp"),
+		),
+	)
+}
+
+func newBSCPNotFullyReleasedError(bizID, serviceID string) *bkerrs.Error {
+	return bkerrs.Errorf(
+		bkerrs.ErrCodeNotFound, i18n.Msg("no fully released version for service: %s in biz: %s"), serviceID, bizID,
+	).SetDetails(
+		bkerrs.NewDetail(
+			bkerrs.ErrDetailCodeNotFullyReleased,
+			fmt.Sprintf("bscp service %s has no fully released version in biz %s", serviceID, bizID),
+			bkerrs.WithSystem(bkerrs.SystemName),
+			bkerrs.WithModule("bscp"),
+		),
+	)
 }

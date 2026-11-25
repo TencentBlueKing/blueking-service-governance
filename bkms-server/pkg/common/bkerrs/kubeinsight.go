@@ -18,7 +18,9 @@
 
 package bkerrs
 
-const kubeInsightDisabledMsg = "kube-insight is disabled in current environment"
+import "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/i18n"
+
+const kubeInsightDisabledMsg = i18n.Msg("kube-insight is disabled in current environment")
 
 // NewKubeInsightDisabled 当前环境关闭了 KubeInsight（集群诊断）对接（featureIntegrations.disableKubeInsight）
 func NewKubeInsightDisabled() *Error {

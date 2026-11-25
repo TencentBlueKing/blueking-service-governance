@@ -110,6 +110,9 @@ var _ = Describe("Test EnvService", func() {
 				Namespace: &newNamespace,
 			})
 			Expect(updateErr.Error()).To(ContainSubstring("cannot update cluster"))
+			var hasApps *EnvHasAppsError
+			Expect(errors.As(updateErr, &hasApps)).To(BeTrue())
+			Expect(hasApps.AppCount).To(Equal(1))
 		})
 
 		It("returns domain conflict error when creating an env with occupied cluster namespace", func() {

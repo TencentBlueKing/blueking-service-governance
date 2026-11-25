@@ -26,6 +26,17 @@ uv run scripts/<category>/<script-name>.py [参数...]
 
 ## 脚本清单
 
+### `i18n-extract/` —— 提取待翻译文案
+
+- **用途**：扫描 `pkg/`、`cmd/` 中面向用户的英文原文（规则见 [`pkg/common/i18n/README.md`](../pkg/common/i18n/README.md)），
+  把 `pkg/common/i18n/locales/*.po` 中缺少的原文以 msgstr 为空的条目追加到文件末尾，并附 `#:` 注释标明引用位置。
+- **输出**：列出追加的条目数，以及 `.po` 中已不再被代码引用的原文，需手动删除。
+- **使用示例**（在 `bkms-server` 目录下）：
+
+    ```bash
+    make i18n
+    ```
+
 ### `platform-build/` —— 平台构建
 
 这一组脚本用于维护"平台构建"能力所依赖的运行时基础镜像：先由 `gen-runtime-images.py` 生成经过筛选的镜像清单文件，

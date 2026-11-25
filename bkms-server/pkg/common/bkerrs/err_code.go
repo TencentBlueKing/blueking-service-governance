@@ -106,3 +106,8 @@ func (c ErrCode) AsHTTPStatusCode() int {
 		return http.StatusInternalServerError
 	}
 }
+
+// isInternal 是否为未分类的服务端内部错误，其文案面向开发者，不直接展示给用户
+func (c ErrCode) isInternal() bool {
+	return c == ErrCodeInternalError || c == ErrCodeInternalServerError
+}

@@ -180,7 +180,10 @@ func (h *Handler) CreateAppConfigFileDef(c *gin.Context) {
 	}
 	bscpConfig, err := h.validateBSCPConfig(ctx, sourceType, input.BSCPConfig, fileFormat)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "validating bscp config"))
+		bkerrs.AbortWithErr(c, bkerrs.Map(err,
+			ginutils.BSCPDisabledRule,
+			bkerrs.Otherwise(bkerrs.ErrCodeInvalidArgument, "validating bscp config"),
+		))
 		return
 	}
 
@@ -398,7 +401,10 @@ func (h *Handler) UpdateHelmFile(c *gin.Context) {
 		ctx, defaultFile.ContentSourceType, input.BSCPConfig, defaultFile.GetConfigFormat(),
 	)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "validating bscp config"))
+		bkerrs.AbortWithErr(c, bkerrs.Map(err,
+			ginutils.BSCPDisabledRule,
+			bkerrs.Otherwise(bkerrs.ErrCodeInvalidArgument, "validating bscp config"),
+		))
 		return
 	}
 

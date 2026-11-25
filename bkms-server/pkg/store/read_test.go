@@ -19,6 +19,8 @@
 package store_test
 
 import (
+	"errors"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -50,9 +52,22 @@ var _ = Describe("GenericStore read operations", func() {
 			Expect(err).To(MatchError(ContainSubstring(widgetCollection)))
 		})
 
+		It("should declare the not found category and expose the domain sentinel", func() {
+			_, err := f.widgets.Get(f.ctx, f.byName("missing"))
+			var c categorized
+			Expect(errors.As(err, &c)).To(BeTrue())
+			Expect(c.IsNotFound()).To(BeTrue())
+			Expect(c.IsAlreadyExists()).To(BeFalse())
+			Expect(c.DomainError()).To(Equal(ErrWidgetNotFound))
+		})
+
 		It("should fall back to store.ErrNotFound when meta has no NotFound", func() {
 			_, err := f.items.Get(f.ctx, store.Where("_id", "missing"))
 			Expect(err).To(MatchError(store.ErrNotFound))
+			var c categorized
+			Expect(errors.As(err, &c)).To(BeTrue())
+			Expect(c.IsNotFound()).To(BeTrue())
+			Expect(c.DomainError()).To(BeNil())
 		})
 	})
 

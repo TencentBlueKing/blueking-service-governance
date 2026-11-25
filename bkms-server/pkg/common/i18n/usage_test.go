@@ -16,28 +16,31 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
-package bkerrs
+package i18n
 
-import "fmt"
+import (
+	"path/filepath"
 
-// WrapEnvClusterNamespaceOccupied 包装为"集群命名空间已被其他环境占用"API 错误。
-func WrapEnvClusterNamespaceOccupied(clusterID, namespace, occupiedByEnvName, occupiedByWorkspaceID string) error {
-	msg := fmt.Sprintf(
-		"cluster %s namespace %s is already bound to environment %q in workspace %s",
-		clusterID, namespace, occupiedByEnvName, occupiedByWorkspaceID,
-	)
-	return New(ErrCodeAlreadyExists, msg).SetDetails(
-		NewDetail(
-			ErrDetailCodeEnvClusterNamespaceOccupied,
-			msg,
-			WithSystem(SystemName),
-			WithModule("env"),
-			WithExtras(map[string]string{
-				"clusterID":             clusterID,
-				"namespace":             namespace,
-				"occupiedByEnvName":     occupiedByEnvName,
-				"occupiedByWorkspaceID": occupiedByWorkspaceID,
-			}),
-		),
-	)
-}
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/i18n/extract"
+)
+
+var _ = Describe("Translations in locale files", func() {
+	It("should only translate messages referenced in source", func() {
+		msgs, err := extract.Messages(filepath.Join("..", "..", ".."), "pkg", "cmd")
+		Expect(err).NotTo(HaveOccurred())
+
+		referenced := make(map[string]bool, len(msgs))
+		for _, m := range msgs {
+			referenced[m.ID] = true
+		}
+		for lang, entries := range messages {
+			for msgid := range entries {
+				Expect(referenced).To(HaveKey(msgid),
+					"msgid %q in %s.po is no longer referenced in source, remove it or run `make i18n`", msgid, lang)
+			}
+		}
+	})
+})

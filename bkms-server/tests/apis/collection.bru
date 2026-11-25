@@ -10,6 +10,10 @@ script:pre-request {
   const {userInfo} = require("./helpers/tenancy");
   req.setHeader('X-Bk-Authed-User-Info', userInfo("api-test-user"))
   req.setHeader('X-Bk-Authed-User-Credential', '{"bkTicket": "xxx"}')
+
+  // Request in English so error messages stay the source text; the server defaults to Chinese
+  // and would otherwise replace untranslated messages with the error code's default message
+  req.setHeader('Accept-Language', 'en')
   
   // Create a random suffix to avoid conflicts when creating the resources
   const randomSuffix = Math.random().toString(36).substring(2, 8);

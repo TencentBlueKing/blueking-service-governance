@@ -85,7 +85,8 @@ var _ = Describe("Register", func() {
 		Expect(rec.Code).To(Equal(http.StatusNotImplemented))
 		var out bkerrs.GinErrorOutput
 		Expect(json.Unmarshal(rec.Body.Bytes(), &out)).To(Succeed())
-		Expect(out.Error.Details).To(HaveLen(1))
+		// 业务明细保持在首位，翻译后追加的排查明细排在其后
+		Expect(out.Error.Details).To(HaveLen(2))
 		Expect(out.Error.Details[0]["code"]).To(Equal(string(bkerrs.ErrDetailCodeBSCPDisabled)))
 	})
 

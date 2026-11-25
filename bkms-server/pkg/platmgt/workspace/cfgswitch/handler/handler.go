@@ -20,13 +20,12 @@
 package handler
 
 import (
-	"errors"
-
 	"github.com/gin-gonic/gin"
+	"github.com/pkg/errors"
 	"github.com/samber/lo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
-	bkmsworkspace "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/i18n"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/cfgswitch/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/platmgt/workspace/cfgswitch"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/platmgt/workspace/cfgswitch/serializer"
@@ -67,7 +66,7 @@ func (h *Handler) ListPlatCfgSwitches(c *gin.Context) {
 
 	switches, err := h.manager().List(c.Request.Context(), path.WorkspaceID)
 	if err != nil {
-		bkerrs.AbortWithErr(c, toAPIError(err, "list platform workspace cfg switches"))
+		bkerrs.AbortWithErr(c, bkerrs.Map(errors.Wrap(err, "list platform workspace cfg switches"), apiErrorRules...))
 		return
 	}
 
@@ -106,7 +105,7 @@ func (h *Handler) UpdatePlatCfgSwitch(c *gin.Context) {
 		c.Request.Context(), path.WorkspaceID, model.SwitchKey(path.Key), lo.FromPtr(input.Enabled),
 	)
 	if err != nil {
-		bkerrs.AbortWithErr(c, toAPIError(err, "update platform workspace cfg switch"))
+		bkerrs.AbortWithErr(c, bkerrs.Map(errors.Wrap(err, "update platform workspace cfg switch"), apiErrorRules...))
 		return
 	}
 
@@ -117,14 +116,8 @@ func (h *Handler) manager() *cfgswitch.Manager {
 	return cfgswitch.NewManager(h.registry.DB)
 }
 
-// toAPIError 把 Manager 的错误映射为接口错误
-func toAPIError(err error, internalMessage string) error {
-	switch {
-	case errors.Is(err, bkmsworkspace.ErrWorkspaceNotFound):
-		return bkerrs.Wrap(err, bkerrs.ErrCodeNotFound, "platform workspace not found")
-	case errors.Is(err, model.ErrUnknownSwitch):
-		return bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "unknown cfg switch key")
-	default:
-		return bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, internalMessage)
-	}
+// apiErrorRules 把 Manager 的领域错误映射为接口错误；工作空间不存在由 store 声明错误类别，错误出口统一转换为 404，
+// 未命中的错误视为内部错误
+var apiErrorRules = []bkerrs.Rule{
+	bkerrs.On(model.ErrUnknownSwitch, bkerrs.ErrCodeInvalidArgument, i18n.Msg("unknown cfg switch key")),
 }
