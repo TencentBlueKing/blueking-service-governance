@@ -91,7 +91,7 @@ var _ = Describe("User authentication middleware", func() {
 		It("票据有效时写入用户与兼容元数据", func() {
 			authBackend.EXPECT().GetUserCredential(request).Return("valid-ticket")
 			authBackend.EXPECT().GetUserInfo(mock.Anything, "valid-ticket").
-				Return(&backends.UserInfo{ID: "blueking", TenantID: "default"}, nil)
+				Return(&backends.UserInfo{ID: "blueking", TenantID: "default", TimeZone: "Asia/Tokyo"}, nil)
 
 			result := authenticate(
 				context.Background(),
@@ -112,8 +112,11 @@ var _ = Describe("User authentication middleware", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(
 				user,
-			).To(Equal(User{ID: "blueking", TenantID: "default", Cred: UserCredential{BkTicket: "valid-ticket"}}))
+			).To(Equal(User{
+				ID: "blueking", TenantID: "default", TimeZone: "Asia/Tokyo", Cred: UserCredential{BkTicket: "valid-ticket"},
+			}))
 			Expect(result.RequestUser.GetTenantID()).To(Equal("default"))
+			Expect(result.RequestUser.GetTimeZone()).To(Equal("Asia/Tokyo"))
 
 			By("Get result back from the context")
 			stored, ok := GetResult(ctx)

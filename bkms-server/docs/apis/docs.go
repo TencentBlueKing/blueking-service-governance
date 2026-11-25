@@ -16477,6 +16477,7 @@ const docTemplate = `{
         },
         "/simple_account/info": {
             "get": {
+                "description": "未登录时返回 401，响应体为 {\"loginURL\": \"...\", \"code\": \"1000\"}",
                 "produces": [
                     "application/json"
                 ],
@@ -16485,7 +16486,20 @@ const docTemplate = `{
                 ],
                 "summary": "Get current user",
                 "operationId": "GetCurrentUser",
-                "responses": {}
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/account.CurrentUserOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/account.LegacyErrorOutput"
+                        }
+                    }
+                }
             }
         },
         "/user-statistics": {
@@ -21957,6 +21971,40 @@ const docTemplate = `{
                 "FailureNetworkUnreachable",
                 "FailureTokenInvalid"
             ]
+        },
+        "account.CurrentUserOutput": {
+            "type": "object",
+            "properties": {
+                "personalCenterURL": {
+                    "description": "用户管理个人中心地址，未配置用户管理地址时为空",
+                    "type": "string"
+                },
+                "tenantID": {
+                    "description": "用户所属租户，认证上游未返回租户时为空（如单租户环境）",
+                    "type": "string"
+                },
+                "timeZone": {
+                    "description": "用户时区（IANA 时区名），认证上游未返回时为 Asia/Shanghai",
+                    "type": "string"
+                },
+                "userID": {
+                    "description": "用户 ID",
+                    "type": "string"
+                }
+            }
+        },
+        "account.LegacyErrorOutput": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "description": "错误码，固定为 \"1000\"",
+                    "type": "string"
+                },
+                "message": {
+                    "description": "错误信息",
+                    "type": "string"
+                }
+            }
         },
         "admin.RoleCode": {
             "type": "string",

@@ -198,6 +198,8 @@ svcConf:
     authBaseURL: http://apigw.example.com
     # LoginURL 是登录页根地址（不含路径），用于拼接 /plain/
     loginURL: https://paas.example.com/login
+    # BkUserURL 是用户管理（bk-user）页面根地址（不含路径），用于拼接个人中心地址，不配置则不提供个人中心入口
+    # bkUserURL: https://bkuser.example.com
     # AuthEnvName 是用户 token 使用的环境，不同环境的 token 互相隔离，默认值为 "prod"
     # authEnvName: prod
     # BackendType 是用户认证使用的后端类型，比如 bk_ticket 或 bk_token，默认值为 "bk_token"

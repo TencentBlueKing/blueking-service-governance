@@ -34,6 +34,7 @@ const (
 type RequestUser interface {
 	GetID() string
 	GetTenantID() string
+	GetTimeZone() string
 	Credential() UserCredential
 	IsAuthenticated() bool
 }
@@ -44,6 +45,8 @@ type User struct {
 	ID string `json:"id"`
 	// TenantID 是认证上游返回的登录态所属租户，部分认证路径可能为空。
 	TenantID string `json:"tenantId,omitempty"`
+	// TimeZone 是认证上游返回的用户时区（IANA 时区名），部分认证路径可能为空。
+	TimeZone string `json:"timeZone,omitempty"`
 
 	// Cred 是用户认证凭据。
 	Cred UserCredential `json:"credential,omitempty"`
@@ -54,6 +57,9 @@ func (u User) GetID() string { return u.ID }
 
 // GetTenantID 返回认证结果中的租户 ID。
 func (u User) GetTenantID() string { return u.TenantID }
+
+// GetTimeZone 返回认证结果中的用户时区。
+func (u User) GetTimeZone() string { return u.TimeZone }
 
 // Credential 返回用户认证凭据。
 func (u User) Credential() UserCredential { return u.Cred }
@@ -71,6 +77,9 @@ func (u AnonymousUser) GetID() string { return "" }
 
 // GetTenantID 对匿名用户恒为空。
 func (u AnonymousUser) GetTenantID() string { return "" }
+
+// GetTimeZone 对匿名用户恒为空。
+func (u AnonymousUser) GetTimeZone() string { return "" }
 
 // Credential 返回已捕获但尚未通过认证的凭据。
 func (u AnonymousUser) Credential() UserCredential { return u.Cred }
