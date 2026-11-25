@@ -71,18 +71,18 @@ var _ = Describe("GetFrontendFeatures", func() {
 		features := getFeatures(config.Config{
 			Tenant: config.TenantConfig{EnableMultiTenantMode: true},
 			FeatureIntegrations: config.FeatureIntegrationsConfig{
-				EnableIndependentBkRepo: true,
-				EnableGoProxy:           true,
-				DisableBSCP:             true,
-				DisableKubeInsight:      true,
+				EnableIndependentBkRepo:    true,
+				EnableGoProxyBuildArgsTips: true,
+				DisableBSCP:                true,
+				DisableKubeInsight:         true,
 			},
 			BCS: config.BCSConfig{WeTermEnvID: "env-1"},
 		})
 		Expect(features).To(Equal(&slz.FrontendFeaturesOutput{
-			EnableMultiTenantMode:   true,
-			EnableIndependentBkRepo: true,
-			EnableWeTerm:            true,
-			EnableGoProxy:           true,
+			EnableMultiTenantMode:      true,
+			EnableIndependentBkRepo:    true,
+			EnableWeTerm:               true,
+			EnableGoProxyBuildArgsTips: true,
 		}))
 	})
 })

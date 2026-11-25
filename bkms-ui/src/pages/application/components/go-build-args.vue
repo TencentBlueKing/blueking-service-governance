@@ -51,10 +51,12 @@
   const frontendFeaturesStore = useFrontendFeaturesStore();
   const golangProxyUrl = import.meta.env.BK_GOLANG_PROXY_URL;
   const goProxyArgKeys = ['GOPROXY', 'GOPRIVATE', 'GOSUMDB'];
-  const isGoProxyEnabled = computed(() => props.language === 'go' && frontendFeaturesStore.enableGoProxy);
-  const showGoProxyGuide = computed(() => isGoProxyEnabled.value && Boolean(golangProxyUrl));
+  const isGoProxyTipsEnabled = computed(
+    () => props.language === 'go' && frontendFeaturesStore.enableGoProxyBuildArgsTips,
+  );
+  const showGoProxyGuide = computed(() => isGoProxyTipsEnabled.value && Boolean(golangProxyUrl));
   const valuePlaceholders = computed(() =>
-    isGoProxyEnabled.value
+    isGoProxyTipsEnabled.value
       ? {
           GOPROXY: '如 https://<用户名>:<凭证>@<代理地址>,direct',
           GOPRIVATE: t('一般可留空'),

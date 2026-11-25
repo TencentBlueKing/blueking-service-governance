@@ -27,8 +27,8 @@ export const useFrontendFeaturesStore = defineStore('frontend-features', () => {
   const features = ref<FrontendFeaturesOutput | null>(null);
   let pendingRequest: null | Promise<FrontendFeaturesOutput | null> = null;
 
-  // 默认关闭，仅在接口显式返回 enableGoProxy: true 时开启
-  const enableGoProxy = computed(() => Boolean(features.value?.enableGoProxy));
+  // 默认关闭，仅在接口显式返回 enableGoProxyBuildArgsTips: true 时开启
+  const enableGoProxyBuildArgsTips = computed(() => Boolean(features.value?.enableGoProxyBuildArgsTips));
 
   async function getFrontendFeatures() {
     if (pendingRequest) {
@@ -50,7 +50,7 @@ export const useFrontendFeaturesStore = defineStore('frontend-features', () => {
 
   return {
     features,
-    enableGoProxy,
+    enableGoProxyBuildArgsTips,
     getFrontendFeatures,
   };
 });
