@@ -104,6 +104,8 @@ func (h *Handler) execHelmAppDeploySteps(
 	}); err != nil {
 		return "", errors.Wrapf(err, "pre deploy check %s", deployInfo)
 	}
+	// 登记须晚于部署前检查，早于下发资源（集群中有应用资源时环境不能被删除）
+	deploypkg.TrackEnvAddApp(ctx, h.registry.DB, app.WorkspaceID, env.Name, app.ID)
 
 	// 2. 确保部署环境存在相应的 ImagePullSecret
 	buildCfg, err := store.Of(h.registry.DB, imagebuild.ConfigMeta).Get(ctx, imagebuild.ByApp(app.ID))

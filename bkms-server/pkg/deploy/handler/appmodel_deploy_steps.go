@@ -189,7 +189,6 @@ func (h *Handler) createAppModelDeploy(c *gin.Context) {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "init appmodel deploy service"))
 		return
 	}
-	deploypkg.TrackEnvAddApp(ctx, h.registry.DB, app.WorkspaceID, uriInput.EnvName, app.ID)
 	deployID, err := deployService.Deploy(ctx, app, appmodeldeploysvc.DeployParams{
 		EnvName:         uriInput.EnvName,
 		TrafficLaneName: input.TrafficLaneName,

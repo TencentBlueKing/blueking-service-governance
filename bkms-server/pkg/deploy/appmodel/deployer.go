@@ -153,6 +153,11 @@ func (d *Deployer) Deploy(
 		}
 	}()
 
+	// 登记须晚于创建部署记录（环境中登记的应用都有部署记录），早于下发资源（集群中有应用资源时环境不能被删除）
+	if err = bkmsenv.AddApp(ctx, d.db, env.ID, d.app.ID); err != nil {
+		return "", errors.Wrap(err, "track app in env")
+	}
+
 	// 确保待部署环境中已经存在对应的 ImagePullSecret
 	if err = d.syncImagePullSecret(ctx, env); err != nil {
 		return "", err
