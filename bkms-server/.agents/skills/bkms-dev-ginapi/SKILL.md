@@ -84,7 +84,7 @@ func New(registry *storereg.Registry) *Handler {
 ## 鉴权与错误处理
 
 - Gin 鉴权使用 `pkg/common/auth` 中的能力，常见链路是 `auth.UserAuth()`。
-- Gin 错误处理中间件使用 `bkerrs.ErrorHandler()`。
+- Gin 错误处理中间件使用 `bkerrs.ErrorHandler(ginutils.GlobalErrorRules...)`。
 - handler 内返回错误时使用 `bkerrs.AbortErr(c, err)`。
 - Swagger 错误响应 schema 统一使用 `bkerrs.GinErrorOutput`。
 

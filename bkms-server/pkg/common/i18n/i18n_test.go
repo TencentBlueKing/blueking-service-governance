@@ -169,4 +169,24 @@ var _ = Describe("placeholders", func() {
 		Entry("verb order reversed", "%[1]s %[1]d"),
 		Entry("star width and verb", "%[1]*[1]d"),
 	)
+
+	DescribeTable("should reject malformed formats",
+		func(format, errSubstring string) {
+			_, err := placeholders(format)
+			Expect(err).To(MatchError(ContainSubstring(errSubstring)))
+		},
+		Entry("missing verb", "%s and %", "missing verb"),
+		Entry("missing verb after flags and width", "%-8", "missing verb"),
+		Entry("unclosed index", "%[1s", "unclosed argument index"),
+		Entry("non-numeric index", "%[a]s", "invalid argument index"),
+		Entry("zero index", "%[0]s", "invalid argument index"),
+		Entry("invalid index in width", "%[x]*d", "invalid argument index"),
+		Entry("invalid index in precision", "%.[x]*d", "invalid argument index"),
+		Entry("invalid index in precision digits", "%.2[x]d", "invalid argument index"),
+	)
+
+	It("should report which side of the entry is malformed", func() {
+		Expect(checkPlaceholders("%[1s", "%s")).To(MatchError(ContainSubstring("parse msgid")))
+		Expect(checkPlaceholders("%s", "%[1s")).To(MatchError(ContainSubstring("parse msgstr")))
+	})
 })

@@ -66,7 +66,7 @@ func (h *Handler) ListPlatCfgSwitches(c *gin.Context) {
 
 	switches, err := h.manager().List(c.Request.Context(), path.WorkspaceID)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Map(errors.Wrap(err, "list platform workspace cfg switches"), apiErrorRules...))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "list platform workspace cfg switches"), apiErrorRules...)
 		return
 	}
 
@@ -105,7 +105,7 @@ func (h *Handler) UpdatePlatCfgSwitch(c *gin.Context) {
 		c.Request.Context(), path.WorkspaceID, model.SwitchKey(path.Key), lo.FromPtr(input.Enabled),
 	)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Map(errors.Wrap(err, "update platform workspace cfg switch"), apiErrorRules...))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "update platform workspace cfg switch"), apiErrorRules...)
 		return
 	}
 

@@ -215,4 +215,88 @@ var _ = Describe("Gin error handling", func() {
 			Expect(out.Error.Details[0]["message"]).To(Equal("boom"))
 		})
 	})
+
+	Context("when global rules are registered", func() {
+		errGlobal := errors.New("integration disabled")
+		globalRule := On(errGlobal, ErrCodeNotImplemented, "integration is disabled")
+
+		// 原文均无译文，错误详情的最后一项为完整错误链，据此判断最外层错误来自哪里
+		requestWithGlobal := func(err error) (ErrCode, string) {
+			router := gin.New()
+			router.Use(i18n.Middleware(), ErrorHandler(globalRule))
+			router.GET("/ping", func(c *gin.Context) {
+				AbortWithErr(c, err)
+			})
+			req := httptest.NewRequest(http.MethodGet, "/ping", nil)
+			req.AddCookie(&http.Cookie{Name: i18n.LangCookieName, Value: "zh"})
+			rec := httptest.NewRecorder()
+			router.ServeHTTP(rec, req)
+
+			var out GinErrorOutput
+			Expect(json.Unmarshal(rec.Body.Bytes(), &out)).To(Succeed())
+			Expect(out.Error.Details).NotTo(BeEmpty())
+			return out.Error.Code, out.Error.Details[len(out.Error.Details)-1]["message"].(string)
+		}
+
+		It("should map the error without handler rules", func() {
+			code, chain := requestWithGlobal(pkgerrors.Wrap(errGlobal, "validate config"))
+
+			Expect(code).To(Equal(ErrCodeNotImplemented))
+			Expect(chain).To(Equal("integration is disabled: validate config: integration disabled"))
+		})
+
+		It("should take precedence over the handler mapping", func() {
+			code, chain := requestWithGlobal(Wrap(errGlobal, ErrCodeInvalidArgument, "validate config"))
+
+			Expect(code).To(Equal(ErrCodeNotImplemented))
+			Expect(chain).To(HavePrefix("integration is disabled: "))
+		})
+
+		It("should keep the handler error with the same code", func() {
+			code, chain := requestWithGlobal(Wrap(errGlobal, ErrCodeNotImplemented, "handler message"))
+
+			Expect(code).To(Equal(ErrCodeNotImplemented))
+			Expect(chain).To(Equal("handler message: integration disabled"))
+		})
+
+		It("should leave unmatched errors untouched", func() {
+			code, chain := requestWithGlobal(New(ErrCodeInvalidArgument, "bad input"))
+
+			Expect(code).To(Equal(ErrCodeInvalidArgument))
+			Expect(chain).To(Equal("bad input"))
+		})
+	})
+})
+
+var _ = Describe("Abort shortcuts", func() {
+	recorded := func(abort func(c *gin.Context)) *Error {
+		c, _ := gin.CreateTestContext(httptest.NewRecorder())
+		abort(c)
+		Expect(c.IsAborted()).To(BeTrue())
+		var bkErr *Error
+		Expect(errors.As(c.Errors.Last().Err, &bkErr)).To(BeTrue())
+		return bkErr
+	}
+
+	It("should wrap the error as invalid argument", func() {
+		cause := errors.New("bad id")
+		bkErr := recorded(func(c *gin.Context) { AbortInvalidArg(c, cause, "parse id") })
+
+		Expect(bkErr.Code()).To(Equal(ErrCodeInvalidArgument))
+		Expect(bkErr).To(MatchError(cause))
+	})
+
+	It("should wrap the error as not found", func() {
+		bkErr := recorded(func(c *gin.Context) { AbortNotFound(c, errors.New("missing"), "get version") })
+
+		Expect(bkErr.Code()).To(Equal(ErrCodeNotFound))
+	})
+
+	It("should wrap the error as internal even if it declares a store category", func() {
+		cause := &testStoreError{notFound: true}
+		bkErr := recorded(func(c *gin.Context) { AbortInternal(c, cause, "lookup dependency") })
+
+		Expect(bkErr.Code()).To(Equal(ErrCodeInternalServerError))
+		Expect(bkErr).To(MatchError(cause))
+	})
 })

@@ -23,31 +23,37 @@ import (
 	"fmt"
 )
 
-// Rule 把领域错误映射为 API 错误的规则，err 不匹配时返回 nil
+// Rule 把领域错误转换为 API 错误的规则，err 不匹配时返回 nil
 type Rule func(err error) *Error
 
-// Map 按顺序匹配 rules，返回第一条命中规则生成的 API 错误；都不命中时原样返回 err，
-// 由错误出口按存储类别（不存在 / 已存在）转换或视为内部错误
+// Match 按顺序匹配 rules，返回第一条命中规则生成的 API 错误；都不命中时原样返回 err，
+// 由错误出口按存储类别（不存在 / 已存在）转换或视为内部错误。
+// 一般通过 AbortWithErr 的 rules 参数使用，只匹配、不中止请求时（如把匹配结果交给调用方）才直接调用：
 //
-// 使用示例:
-//
-//	bkerrs.AbortWithErr(c, bkerrs.Map(err,
-//	    bkerrs.On(model.ErrUnknownSwitch, bkerrs.ErrCodeInvalidArgument, i18n.Msg("unknown cfg switch key")),
-//	    bkerrs.OnAs(func(err error, e *bkmsenv.EnvHasAppsError) *bkerrs.Error {
-//	        return bkerrs.Wrapf(err, bkerrs.ErrCodeInvalidRequest,
-//	            i18n.Msg("environment has %d deployed apps, cannot delete"), e.AppCount)
-//	    }),
-//	))
-func Map(err error, rules ...Rule) error {
+//	return bkerrs.Match(errors.Wrap(err, msg), bkerrs.OnFunc(bscp.ErrNoPermission, wrapBSCPNoPermission))
+func Match(err error, rules ...Rule) error {
 	if err == nil {
 		return nil
 	}
-	for _, rule := range rules {
-		if apiErr := rule(err); apiErr != nil {
-			return apiErr
-		}
+	if apiErr := Rules(rules...)(err); apiErr != nil {
+		return apiErr
 	}
 	return err
+}
+
+// Rules 把多条规则组合为一条，按顺序匹配并返回第一条命中的结果，
+// 用于定义同一个操作可能返回的一组业务错误，组合后的规则可以与其他规则一起传入：
+//
+//	var DeleteRules = bkerrs.Rules(HasAppsCannotDelete, HasFeatureEnvsCannotDelete)
+func Rules(rules ...Rule) Rule {
+	return func(err error) *Error {
+		for _, rule := range rules {
+			if apiErr := rule(err); apiErr != nil {
+				return apiErr
+			}
+		}
+		return nil
+	}
 }
 
 // On 错误链上存在 target 时，以 code 与 format 包装 err；面向用户的 format 用 i18n.Msg 标记，`make i18n` 才能提取翻译

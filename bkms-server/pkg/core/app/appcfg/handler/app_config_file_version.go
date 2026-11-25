@@ -69,14 +69,14 @@ func (h *Handler) ListAppConfigFileVersions(c *gin.Context) {
 
 	filter, err := queryInput.ToVersionListOpt()
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "parse appConfigFileID"))
+		bkerrs.AbortInvalidArg(c, err, "parse appConfigFileID")
 		return
 	}
 
 	acfService := appcfg.NewAppConfigFileService(h.registry.DB)
 	versions, err := acfService.ListVersions(ctx, app.ID, queryInput.Page, queryInput.PageSize, filter)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list app config file versions"))
+		bkerrs.AbortInternal(c, err, "list app config file versions")
 		return
 	}
 
@@ -121,7 +121,7 @@ func (h *Handler) GetAppConfigFileVersion(c *gin.Context) {
 
 	id, err := uriInput.VersionObjectID()
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "parse version ID"))
+		bkerrs.AbortInvalidArg(c, err, "parse version ID")
 		return
 	}
 
@@ -130,7 +130,7 @@ func (h *Handler) GetAppConfigFileVersion(c *gin.Context) {
 	)
 	version, err := acfService.GetVersionByAppAndID(ctx, app.ID, id)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeNotFound, "get app config file version"))
+		bkerrs.AbortNotFound(c, err, "get app config file version")
 		return
 	}
 	ginutils.OK(c, serializer.GetAppConfigFileVersionOutput{
@@ -169,7 +169,7 @@ func (h *Handler) CompareAppConfigFileVersions(c *gin.Context) {
 
 	previousID, currentID, err := input.VersionIDs()
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "parse compare version IDs"))
+		bkerrs.AbortInvalidArg(c, err, "parse compare version IDs")
 		return
 	}
 
@@ -186,7 +186,7 @@ func (h *Handler) CompareAppConfigFileVersions(c *gin.Context) {
 			bkerrs.AbortWithErr(c, bkerrs.New(bkerrs.ErrCodeInvalidArgument, err.Error()))
 			return
 		}
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "compare app config file versions"))
+		bkerrs.AbortInternal(c, err, "compare app config file versions")
 		return
 	}
 	ginutils.OK(c, serializer.CompareAppConfigFileVersionsOutput{
@@ -227,7 +227,7 @@ func (h *Handler) RollbackAppConfigFileVersion(c *gin.Context) {
 
 	id, err := uriInput.VersionObjectID()
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "parse version ID"))
+		bkerrs.AbortInvalidArg(c, err, "parse version ID")
 		return
 	}
 
@@ -236,12 +236,12 @@ func (h *Handler) RollbackAppConfigFileVersion(c *gin.Context) {
 	)
 	targetVersion, err := acfService.GetVersionByAppAndID(ctx, app.ID, id)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeNotFound, "get rollback target version"))
+		bkerrs.AbortNotFound(c, err, "get rollback target version")
 		return
 	}
 	acf, err := h.configFiles().GetByID(ctx, targetVersion.AppConfigFileID)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get app config file"))
+		bkerrs.AbortInternal(c, err, "get app config file")
 		return
 	}
 	oldAcf := *acf
@@ -260,14 +260,14 @@ func (h *Handler) RollbackAppConfigFileVersion(c *gin.Context) {
 		input.CurrentVersion,
 	); err != nil {
 		if errors.Is(err, appcfg.ErrInvalidConfigSpec) {
-			bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "create rollback version"))
+			bkerrs.AbortInvalidArg(c, err, "create rollback version")
 			return
 		}
 		if errors.Is(err, appcfg.ErrAppConfigFileVersionConflict) {
 			bkerrs.AbortWithErr(c, bkerrs.WrapAppConfigFileVersionConflict(err, app.ID, id.Hex()))
 			return
 		}
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "create rollback version"))
+		bkerrs.AbortInternal(c, err, "create rollback version")
 		return
 	}
 
@@ -313,7 +313,7 @@ func (h *Handler) DeleteAppConfigFileVersion(c *gin.Context) {
 
 	id, err := uriInput.VersionObjectID()
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "parse version ID"))
+		bkerrs.AbortInvalidArg(c, err, "parse version ID")
 		return
 	}
 
@@ -324,14 +324,14 @@ func (h *Handler) DeleteAppConfigFileVersion(c *gin.Context) {
 	version, _, err := acfService.DeleteVersion(ctx, app.ID, id, deleter)
 	if err != nil {
 		if errors.Is(err, appcfg.ErrAppCfgFileVersionNotFound) {
-			bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeNotFound, "get app config file version"))
+			bkerrs.AbortNotFound(c, err, "get app config file version")
 			return
 		}
 		if errors.Is(err, appcfg.ErrUsingVersionCannotBeDeleted) {
 			bkerrs.AbortWithErr(c, bkerrs.New(bkerrs.ErrCodeInvalidArgument, err.Error()))
 			return
 		}
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "delete app config file version"))
+		bkerrs.AbortInternal(c, err, "delete app config file version")
 		return
 	}
 

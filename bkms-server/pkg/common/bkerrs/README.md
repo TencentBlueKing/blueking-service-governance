@@ -13,13 +13,15 @@
 
 ## 映射领域错误
 
-handler 用 `bkerrs.Map` 按顺序匹配规则，返回第一条命中规则生成的 API 错误；都不命中时原样返回，交给错误出口处理：
+handler 把规则传给 `bkerrs.AbortWithErr`，按顺序匹配，使用第一条命中规则生成的 API 错误；都不命中时原样记录，交给错误出口处理：
 
 ```go
-bkerrs.AbortWithErr(c, bkerrs.Map(errors.Wrap(err, "update cfg switch"),
+bkerrs.AbortWithErr(c, errors.Wrap(err, "update cfg switch"),
     bkerrs.On(model.ErrUnknownSwitch, bkerrs.ErrCodeInvalidArgument, i18n.Msg("unknown cfg switch key")),
-))
+)
 ```
+
+只匹配、不中止请求时（如把匹配结果返回给调用方）直接调用 `bkerrs.Match(err, rules...)`。
 
 | 规则 | 用途 |
 | - | - |
@@ -27,10 +29,36 @@ bkerrs.AbortWithErr(c, bkerrs.Map(errors.Wrap(err, "update cfg switch"),
 | `OnAs[T](build)` | 错误链上存在 `T` 类型的错误时，由 `build` 取出其中的参数生成错误 |
 | `OnFunc(target, build)` | 需要附带错误详情等，无法用 `On` 表达的场景 |
 | `Otherwise(code, format, args...)` | 放在末尾兜底；不需要兜底时省略 |
+| `Rules(rules...)` | 把多条规则组合为一条，用于定义同一个操作可能返回的一组业务错误 |
 
-- 同一领域在多个 handler 中复用的规则放在该领域的 `apierrs` 包，如 `pkg/core/env/apierrs`（环境下仍有应用、命名空间被占用等）
+- 同一领域在多个 handler 中复用的规则放在该领域的 `apierrs` 包，如 `pkg/core/env/apierrs`（环境下仍有应用、命名空间被占用等）、
+  `pkg/core/app/appcfg/apierrs`（`BSCPConfigRules`）
 - 领域错误需要携带参数时定义错误类型，由 `OnAs` 取出，如 `bkmsenv.EnvHasAppsError`
-- 也可以直接返回 `bkerrs.Error`，如 `ginutils.WrapBSCPDisabled`；需要在多处匹配时再导出对应的规则（`ginutils.BSCPDisabledRule`）
+- 也可以直接返回 `bkerrs.Error`，如 `ginutils.WrapBSCPDisabled`
+- 只映射确定由用户输入导致的错误，不要用 `Otherwise` 把调用下游失败等内部错误兜成 4xx；不命中的错误由错误出口按内部错误处理
+
+只需要把错误整体包装为某个错误码时，使用快捷函数：
+
+```go
+bkerrs.AbortInvalidArg(c, err, "parse version ID")  // 等价于 AbortWithErr(c, bkerrs.Wrap(err, ErrCodeInvalidArgument, msg))
+bkerrs.AbortNotFound(c, err, "get app config file version")
+bkerrs.AbortInternal(c, err, "list bscp user bizs") // 内部错误，msg 只用于日志与错误详情，不展示给用户
+```
+
+内部错误的两种写法表达不同的意图：
+
+| 写法 | 适用场景 | 结果 |
+| - | - | - |
+| `AbortInternal(c, err, msg)` | 确定是内部错误，如调用下游失败、内部查询失败 | 一律 500，store 的"不存在 / 已存在"也不转换 |
+| `AbortWithErr(c, errors.Wrap(err, msg))` | 错误可能是 store 的"不存在 / 已存在"，需要错误出口分类 | 404 / 409，其余为 500 |
+
+两种写法下全局规则都会生效。
+
+### 全局规则
+
+在任何接口中含义都相同的错误（BSCP 未启用、无权限访问 BSCP）注册为全局规则（`ginutils.GlobalErrorRules`，
+在 `server.go` 中传给 `bkerrs.ErrorHandler`），handler 不需要逐个指定。全局规则优先于 handler 的映射：
+即使 handler 已把错误包装为其他错误码，错误链上命中时仍以全局规则为准；handler 给出的错误码与全局规则相同时保留 handler 的错误。
 
 ### 资源不存在 / 已存在
 
@@ -50,7 +78,8 @@ bkerrs.AbortWithErr(c, bkerrs.Map(errors.Wrap(err, "update cfg switch"),
 
 `WriteError` 按以下顺序处理：
 
-1. **定码**：取错误链上最外层的 `bkerrs.Error`；没有时按上述存储类别转换；仍没有时为 `INTERNAL_ERROR`（500）
+1. **定码**：先匹配全局规则（由 `ErrorHandler` 在调用 `WriteError` 前完成）；再取错误链上最外层的 `bkerrs.Error`；
+   没有时按上述存储类别转换；仍没有时为 `INTERNAL_ERROR`（500）
 2. **文案**：
     - 内部错误（`INTERNAL_ERROR` / `INTERNAL_SERVER_ERROR`）统一返回通用文案，不暴露错误链
     - 其他错误翻译最外层 `bkerrs.Error` 的原文（`New` / `Wrap` 的 `msg`，`Errorf` / `Wrapf` 的 `format`），再用原参数格式化；

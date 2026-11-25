@@ -22,7 +22,6 @@ import (
 	"fmt"
 
 	"github.com/gin-gonic/gin"
-	"github.com/pkg/errors"
 	"github.com/samber/lo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/serializer"
@@ -48,13 +47,13 @@ func (h *Handler) ListBSCPBizs(c *gin.Context) {
 	ctx := c.Request.Context()
 	client, err := bscp.New(auth.MustGetUser(ctx))
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "initial bscp client"))
+		bkerrs.AbortInternal(c, err, "initial bscp client")
 		return
 	}
 
 	bizs, err := client.ListUserBizs(ctx)
 	if err != nil {
-		bkerrs.AbortWithErr(c, wrapBSCPAPIError(err, "list bscp user bizs"))
+		bkerrs.AbortInternal(c, err, "list bscp user bizs")
 		return
 	}
 
@@ -88,13 +87,13 @@ func (h *Handler) ListBSCPServices(c *gin.Context) {
 	ctx := c.Request.Context()
 	client, err := bscp.New(auth.MustGetUser(ctx))
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "initial bscp client"))
+		bkerrs.AbortInternal(c, err, "initial bscp client")
 		return
 	}
 
 	services, err := client.ListBizServices(ctx, uriInput.BizID)
 	if err != nil {
-		bkerrs.AbortWithErr(c, wrapBSCPAPIError(err, "list bscp biz services"))
+		bkerrs.AbortInternal(c, err, "list bscp biz services")
 		return
 	}
 
@@ -132,13 +131,13 @@ func (h *Handler) ListBSCPConfigs(c *gin.Context) {
 	ctx := c.Request.Context()
 	client, err := bscp.New(auth.MustGetUser(ctx))
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "initial bscp client"))
+		bkerrs.AbortInternal(c, err, "initial bscp client")
 		return
 	}
 
 	versions, err := client.ListServiceVersions(ctx, uriInput.BizID, uriInput.ServiceID)
 	if err != nil {
-		bkerrs.AbortWithErr(c, wrapBSCPAPIError(err, "list bscp service versions"))
+		bkerrs.AbortInternal(c, err, "list bscp service versions")
 		return
 	}
 
@@ -150,7 +149,7 @@ func (h *Handler) ListBSCPConfigs(c *gin.Context) {
 
 	cfgs, err := client.ListServiceConfigs(ctx, uriInput.BizID, uriInput.ServiceID, ver.ID)
 	if err != nil {
-		bkerrs.AbortWithErr(c, wrapBSCPAPIError(err, "list bscp service configs"))
+		bkerrs.AbortInternal(c, err, "list bscp service configs")
 		return
 	}
 
@@ -194,13 +193,13 @@ func (h *Handler) GetBSCPConfig(c *gin.Context) {
 	ctx := c.Request.Context()
 	client, err := bscp.New(auth.MustGetUser(ctx))
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "initial bscp client"))
+		bkerrs.AbortInternal(c, err, "initial bscp client")
 		return
 	}
 
 	versions, err := client.ListServiceVersions(ctx, uriInput.BizID, uriInput.ServiceID)
 	if err != nil {
-		bkerrs.AbortWithErr(c, wrapBSCPAPIError(err, "list bscp service versions"))
+		bkerrs.AbortInternal(c, err, "list bscp service versions")
 		return
 	}
 
@@ -212,25 +211,25 @@ func (h *Handler) GetBSCPConfig(c *gin.Context) {
 
 	cfg, err := client.GetServiceConfig(ctx, uriInput.BizID, uriInput.ServiceID, ver.ID, uriInput.ConfigID)
 	if err != nil {
-		bkerrs.AbortWithErr(c, wrapBSCPAPIError(err, "get bscp service config"))
+		bkerrs.AbortInternal(c, err, "get bscp service config")
 		return
 	}
 
 	content, err := cfg.Content(ctx)
 	if err != nil {
-		bkerrs.AbortWithErr(c, wrapBSCPAPIError(err, "get bscp config content"))
+		bkerrs.AbortInternal(c, err, "get bscp config content")
 		return
 	}
 
 	biz, err := client.GetBiz(ctx, uriInput.BizID)
 	if err != nil {
-		bkerrs.AbortWithErr(c, wrapBSCPAPIError(err, "get bscp biz"))
+		bkerrs.AbortInternal(c, err, "get bscp biz")
 		return
 	}
 
 	svc, err := client.GetBizService(ctx, uriInput.BizID, uriInput.ServiceID)
 	if err != nil {
-		bkerrs.AbortWithErr(c, wrapBSCPAPIError(err, "get bscp service"))
+		bkerrs.AbortInternal(c, err, "get bscp service")
 		return
 	}
 
@@ -248,22 +247,6 @@ func (h *Handler) GetBSCPConfig(c *gin.Context) {
 		VersionID:    ver.ID,
 		VersionName:  ver.Name,
 	}})
-}
-
-// wrapBSCPAPIError 为 BSCP API 错误附上操作描述，无权限映射为 403，其余交给错误出口按内部错误处理
-func wrapBSCPAPIError(err error, msg string) error {
-	return bkerrs.Map(errors.Wrap(err, msg), bkerrs.OnFunc(bscp.ErrNoPermission, wrapBSCPNoPermission))
-}
-
-func wrapBSCPNoPermission(err error) *bkerrs.Error {
-	return bkerrs.Wrap(err, bkerrs.ErrCodeNoPermission, i18n.Msg("no permission to access bscp resources")).SetDetails(
-		bkerrs.NewDetail(
-			bkerrs.ErrDetailCodeBSCPNoPermission,
-			"bscp service permission denied",
-			bkerrs.WithSystem(bkerrs.SystemName),
-			bkerrs.WithModule(bscp.ModuleName),
-		),
-	)
 }
 
 func newBSCPNotFullyReleasedError(bizID, serviceID string) *bkerrs.Error {

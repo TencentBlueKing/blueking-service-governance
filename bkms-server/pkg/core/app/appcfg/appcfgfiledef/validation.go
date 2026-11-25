@@ -18,8 +18,7 @@
 
 package appcfgfiledef
 
-// 本文件的校验函数与旧 handler（handler/app_config_file_validation.go）中的
-// validateBaseAppConfigFileID、validateBSCPConfig 逻辑一致。
+// 本文件的 validateBaseAppConfigFileID 与旧 handler（handler/app_config_file_validation.go）中的逻辑一致。
 // 为避免对旧接口做结构性改动，本次单独实现；待旧接口废弃后统一收敛到公共层。
 
 import (
@@ -28,14 +27,11 @@ import (
 
 	"github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/v2/bson"
-	"gopkg.in/yaml.v3"
 
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime/runtimemod/mods"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bscp"
 )
 
 // validateConfigKindForApp 校验应用能否新建该种类的配置文件：
@@ -91,45 +87,9 @@ func (h *Handler) validateBSCPConfig(
 	cfg *BSCPConfigInput,
 	fileFormat appcfg.FileFormat,
 ) (*appcfg.BSCPConfig, error) {
-	if sourceType != appcfg.ContentSourceTypeBSCP {
-		return nil, nil
+	var ref *appcfg.BSCPConfig
+	if cfg != nil {
+		ref = &appcfg.BSCPConfig{BizID: cfg.BizID, ServiceID: cfg.ServiceID, ConfigID: cfg.ID}
 	}
-	if cfg == nil {
-		return nil, stderrors.New("bscpConfig is required when contentSourceType is bscp")
-	}
-
-	client, err := bscp.New(auth.MustGetUser(ctx))
-	if err != nil {
-		return nil, errors.Wrap(err, "initializing bscp client")
-	}
-	versions, err := client.ListServiceVersions(ctx, cfg.BizID, cfg.ServiceID)
-	if err != nil {
-		return nil, errors.Wrap(err, "listing bscp service versions")
-	}
-	ver := versions.LatestFullyReleased()
-	if ver == nil {
-		return nil, stderrors.New("no fully released bscp version")
-	}
-	svcCfg, err := client.GetServiceConfig(ctx, cfg.BizID, cfg.ServiceID, ver.ID, cfg.ID)
-	if err != nil {
-		return nil, errors.Wrap(err, "getting bscp service config")
-	}
-	content, err := svcCfg.Content(ctx)
-	if err != nil {
-		return nil, errors.Wrap(err, "fetching bscp config content")
-	}
-	// BSCP 内容也需要做格式校验
-	if content != "" && fileFormat == appcfg.FileFormatYAML {
-		var out any
-		if err := yaml.Unmarshal([]byte(content), &out); err != nil {
-			return nil, errors.Wrap(err, "bscp config content is not valid YAML")
-		}
-	}
-
-	return &appcfg.BSCPConfig{
-		BizID:     cfg.BizID,
-		ServiceID: cfg.ServiceID,
-		VersionID: ver.ID,
-		ConfigID:  cfg.ID,
-	}, nil
+	return appcfg.ResolveBSCPConfig(ctx, sourceType, ref, fileFormat)
 }

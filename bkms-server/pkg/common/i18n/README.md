@@ -45,7 +45,7 @@ msgstr 为空或标记为 `fuzzy` 的条目视为未翻译，运行时回退到�
 
 ### 标记错误文案
 
-错误出口翻译最外层 `bkerrs.Error` 的原文，因此只需标记会成为最外层的文案，通常是 handler 中 `bkerrs.Map` 的规则与直接返回的错误：
+错误出口翻译最外层 `bkerrs.Error` 的原文，因此只需标记会成为最外层的文案，通常是 handler 传给 `bkerrs.AbortWithErr` 的规则与直接返回的错误：
 
 ```go
 bkerrs.On(model.ErrUnknownSwitch, bkerrs.ErrCodeInvalidArgument, i18n.Msg("unknown cfg switch key"))

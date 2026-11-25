@@ -25,6 +25,7 @@ import (
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
+	appcfgapierrs "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg/apierrs"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime/runtimemod/mods"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/misc/audit"
@@ -104,7 +105,7 @@ func (h *Handler) ListDefaultFilesWithDef(c *gin.Context) {
 
 	defs, err := appcfg.ListDefsByApp(ctx, store.Of(h.registry.DB, appcfg.AppConfigFileDefMeta), app.ID)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "listing defs"))
+		bkerrs.AbortInternal(c, err, "listing defs")
 		return
 	}
 
@@ -119,7 +120,7 @@ func (h *Handler) ListDefaultFilesWithDef(c *gin.Context) {
 		appcfg.AcfFilterEnvName(appcfg.EnvNameDefault),
 	)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "listing default files"))
+		bkerrs.AbortInternal(c, err, "listing default files")
 		return
 	}
 	fileByDefID := make(map[string]*appcfg.AppConfigFile, len(defaultFiles))
@@ -169,21 +170,18 @@ func (h *Handler) CreateAppConfigFileDef(c *gin.Context) {
 	fileFormat := appcfg.FileFormat(input.FileFormat)
 
 	if err = validateConfigKindForApp(app, appcfg.ConfigKind(input.ConfigKind)); err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "validating config kind"))
+		bkerrs.AbortInvalidArg(c, err, "validating config kind")
 		return
 	}
 
 	baseFileID, err := h.validateBaseAppConfigFileID(ctx, app.ID, fileType, input.BaseAppConfigFileID)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "validating base file"))
+		bkerrs.AbortInvalidArg(c, err, "validating base file")
 		return
 	}
 	bscpConfig, err := h.validateBSCPConfig(ctx, sourceType, input.BSCPConfig, fileFormat)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Map(err,
-			ginutils.BSCPDisabledRule,
-			bkerrs.Otherwise(bkerrs.ErrCodeInvalidArgument, "validating bscp config"),
-		))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "validating bscp config"), appcfgapierrs.BSCPConfigRules)
 		return
 	}
 
@@ -250,7 +248,7 @@ func (h *Handler) GetAppCfgFileDetail(c *gin.Context) {
 		return
 	}
 	if err := c.ShouldBindQuery(&query); err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "invalid query"))
+		bkerrs.AbortInvalidArg(c, err, "invalid query")
 		return
 	}
 
@@ -386,7 +384,7 @@ func (h *Handler) UpdateHelmFile(c *gin.Context) {
 	svc := h.newAppCfgFileDefService()
 	defaultFile, err := svc.GetDefaultFileWithDef(ctx, def.ID)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "loading default file"))
+		bkerrs.AbortInternal(c, err, "loading default file")
 		return
 	}
 
@@ -394,17 +392,14 @@ func (h *Handler) UpdateHelmFile(c *gin.Context) {
 		ctx, app.ID, defaultFile.Type, input.BaseAppConfigFileID,
 	)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "validating base file"))
+		bkerrs.AbortInvalidArg(c, err, "validating base file")
 		return
 	}
 	bscpConfig, err := h.validateBSCPConfig(
 		ctx, defaultFile.ContentSourceType, input.BSCPConfig, defaultFile.GetConfigFormat(),
 	)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Map(err,
-			ginutils.BSCPDisabledRule,
-			bkerrs.Otherwise(bkerrs.ErrCodeInvalidArgument, "validating bscp config"),
-		))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "validating bscp config"), appcfgapierrs.BSCPConfigRules)
 		return
 	}
 
@@ -481,14 +476,11 @@ func (h *Handler) DeleteAppCfgFileDef(c *gin.Context) {
 	svc := h.newAppCfgFileDefService()
 	defaultFile, fErr := h.configFiles().Get(ctx, appcfg.FileByDefEnv(def.ID, appcfg.EnvNameDefault))
 	if fErr != nil {
-		bkerrs.AbortWithErr(
-			c,
-			bkerrs.Wrap(fErr, bkerrs.ErrCodeInternalServerError, "loading default file for deletion"),
-		)
+		bkerrs.AbortInternal(c, fErr, "loading default file for deletion")
 		return
 	}
 	if _, err = svc.DeleteFile(ctx, def.AppID, defaultFile.ID); err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "deleting def"))
+		bkerrs.AbortInternal(c, err, "deleting def")
 		return
 	}
 
@@ -532,7 +524,7 @@ func (h *Handler) ListEnvInstances(c *gin.Context) {
 	ctx := c.Request.Context()
 	files, err := h.configFiles().List(ctx, appcfg.FilesByDef(def.ID))
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "listing env instances"))
+		bkerrs.AbortInternal(c, err, "listing env instances")
 		return
 	}
 
@@ -568,7 +560,7 @@ func (h *Handler) UpdateContent(c *gin.Context) {
 		return
 	}
 	if err := c.ShouldBindQuery(&query); err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "invalid query"))
+		bkerrs.AbortInvalidArg(c, err, "invalid query")
 		return
 	}
 
@@ -671,10 +663,10 @@ func (h *Handler) ResetEnvToDefault(c *gin.Context) {
 	envFile, err := svc.ResetEnvInstanceToDefault(ctx, def, uriInput.EnvName)
 	if err != nil {
 		if errors.Is(err, appcfg.ErrResetToDefaultRequiresIndependentConfig) {
-			bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "reset requires independent mode"))
+			bkerrs.AbortInvalidArg(c, err, "reset requires independent mode")
 			return
 		}
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "resetting env to default"))
+		bkerrs.AbortInternal(c, err, "resetting env to default")
 		return
 	}
 
@@ -712,7 +704,7 @@ func (h *Handler) GetMountPreview(c *gin.Context) {
 		return
 	}
 	if err := c.ShouldBindQuery(&query); err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "invalid query"))
+		bkerrs.AbortInvalidArg(c, err, "invalid query")
 		return
 	}
 
@@ -726,7 +718,7 @@ func (h *Handler) GetMountPreview(c *gin.Context) {
 	svc := h.newAppCfgFileDefService()
 	items, err := svc.GetMountPreview(ctx, app.ID, query.EnvName)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "getting mount preview"))
+		bkerrs.AbortInternal(c, err, "getting mount preview")
 		return
 	}
 

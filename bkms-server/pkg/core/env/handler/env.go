@@ -122,10 +122,7 @@ func (h *Handler) CreateEnv(c *gin.Context) {
 
 	if err = svc.Create(ctx, envData); err != nil {
 		metrics.CreateEnvFailed(ws.ID, input.Name)
-		bkerrs.AbortWithErr(
-			c,
-			bkerrs.Map(errors.Wrapf(err, "create env %s", input.Name), envapierrs.NamespaceOccupied),
-		)
+		bkerrs.AbortWithErr(c, errors.Wrapf(err, "create env %s", input.Name), envapierrs.NamespaceOccupied)
 		return
 	}
 
@@ -239,11 +236,11 @@ func (h *Handler) CreateFeatureEnv(c *gin.Context) {
 		NsType: cmp.Or(input.NsType, bkmsenv.NsTypeIndependent),
 	})
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Map(errors.Wrap(err, "create feature environment"),
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "create feature environment"),
 			envapierrs.NamespaceOccupied,
 			envapierrs.InvalidFeatureEnvInput,
 			envapierrs.FeatureEnvNameConflict,
-		))
+		)
 		return
 	}
 
@@ -575,10 +572,10 @@ func (h *Handler) UpdateEnvCluster(c *gin.Context) {
 
 	svc := bkmsenv.NewEnvService(h.registry.DB)
 	if err = svc.Update(ctx, env.ID, updateData); err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Map(errors.Wrap(err, "update env cluster"),
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "update env cluster"),
 			envapierrs.HasAppsCannotUpdateCluster,
 			envapierrs.NamespaceOccupied,
-		))
+		)
 		return
 	}
 
@@ -626,10 +623,10 @@ func (h *Handler) DeleteEnv(c *gin.Context) {
 
 	svc := bkmsenv.NewEnvService(h.registry.DB)
 	if err = svc.Delete(ctx, envID); err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Map(errors.Wrap(err, "delete environment"),
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "delete environment"),
 			envapierrs.HasAppsCannotDelete,
 			envapierrs.HasFeatureEnvsCannotDelete,
-		))
+		)
 		return
 	}
 

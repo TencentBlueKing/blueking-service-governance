@@ -30,8 +30,6 @@ import (
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
 	slz "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg/serializer"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bscp"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/perm"
 )
 
@@ -93,43 +91,11 @@ func (h *Handler) validateBSCPConfig(
 	cfg *slz.BSCPAppConfigFileConfig,
 	fileFormat appcfg.FileFormat,
 ) (*appcfg.BSCPConfig, error) {
-	if sourceType != appcfg.ContentSourceTypeBSCP {
-		return nil, nil
+	var ref *appcfg.BSCPConfig
+	if cfg != nil {
+		ref = &appcfg.BSCPConfig{BizID: cfg.BizID, ServiceID: cfg.ServiceID, ConfigID: cfg.ID}
 	}
-	if cfg == nil {
-		return nil, errors.New("bscp config required when sourceType is bscp")
-	}
-
-	client, err := bscp.New(auth.MustGetUser(ctx))
-	if err != nil {
-		return nil, pkgerrors.Wrap(err, "initial bscp client")
-	}
-	versions, err := client.ListServiceVersions(ctx, cfg.BizID, cfg.ServiceID)
-	if err != nil {
-		return nil, pkgerrors.Wrap(err, "list bscp service versions")
-	}
-	ver := versions.LatestFullyReleased()
-	if ver == nil {
-		return nil, errors.New("no fully released version")
-	}
-	svcCfg, err := client.GetServiceConfig(ctx, cfg.BizID, cfg.ServiceID, ver.ID, cfg.ID)
-	if err != nil {
-		return nil, pkgerrors.Wrap(err, "get bscp service config")
-	}
-	content, err := svcCfg.Content(ctx)
-	if err != nil {
-		return nil, pkgerrors.Wrap(err, "get bscp service config content")
-	}
-	if err = validateFileContent(content, fileFormat); err != nil {
-		return nil, pkgerrors.Wrap(err, "validate values file content")
-	}
-
-	return &appcfg.BSCPConfig{
-		BizID:     cfg.BizID,
-		ServiceID: cfg.ServiceID,
-		VersionID: ver.ID,
-		ConfigID:  cfg.ID,
-	}, nil
+	return appcfg.ResolveBSCPConfig(ctx, sourceType, ref, fileFormat)
 }
 
 func validateFileContent(content string, format appcfg.FileFormat) error {

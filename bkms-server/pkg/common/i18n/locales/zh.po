@@ -98,10 +98,22 @@ msgstr "当前环境未启用 BSCP 配置服务"
 msgid "kube-insight is disabled in current environment"
 msgstr "当前环境未启用集群诊断（KubeInsight）服务"
 
-#: pkg/bkintegrations/handler/bscp.go
+#: pkg/server/ginutils/integration_guard.go
 msgid "no permission to access bscp resources"
 msgstr "无权访问 BSCP 资源，请先申请对应业务的权限"
 
 #: pkg/bkintegrations/handler/bscp.go
 msgid "no fully released version for service: %s in biz: %s"
 msgstr "业务 %[2]s 下的服务 %[1]s 没有全量发布的版本"
+
+#: pkg/core/app/appcfg/apierrs/apierrs.go
+msgid "bscp config is required when content source type is bscp"
+msgstr "内容来源为 BSCP 时必须指定 BSCP 配置项"
+
+#: pkg/core/app/appcfg/apierrs/apierrs.go
+msgid "the bscp service has no fully released version"
+msgstr "所选 BSCP 服务没有全量发布的版本，请先在 BSCP 中全量发布"
+
+#: pkg/core/app/appcfg/apierrs/apierrs.go
+msgid "bscp config content is not valid YAML"
+msgstr "BSCP 配置项内容不是合法的 YAML"
