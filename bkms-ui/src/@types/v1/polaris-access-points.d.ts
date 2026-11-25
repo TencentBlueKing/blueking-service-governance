@@ -3,13 +3,6 @@
 // 来源：apps/bkms-server/docs/apis/swagger.json
 // 模块：polaris-access-points
 
-export interface GetEnvPolarisOperatorRequest {
-  /**
-   * 环境 ID
-   */
-  envID: string;
-}
-
 export interface ListPolarisAccessPointsRequest {
   /**
    * 工作空间 ID
@@ -30,13 +23,6 @@ export type TestPolarisAccessPointConnectivityRequest = ConnectivityTestInput & 
    */
   workspaceID: string;
 };
-
-export interface GetPolarisAccessPointNetworkInfoRequest {
-  /**
-   * 工作空间 ID
-   */
-  workspaceID: string;
-}
 
 export interface DeletePolarisAccessPointRequest {
   /**
@@ -71,17 +57,6 @@ export interface ListPolarisAccessPointNamespacesRequest {
   accessPointID: string;
 }
 
-export type InstallPolarisOperatorsRequest = OperatorInstallInput & {
-  /**
-   * 工作空间 ID
-   */
-  workspaceID: string;
-  /**
-   * 接入点 ID
-   */
-  accessPointID: string;
-};
-
 export interface ListPolarisClustersRequest {
   /**
    * 工作空间 ID
@@ -89,15 +64,15 @@ export interface ListPolarisClustersRequest {
   workspaceID: string;
 }
 
-export interface ListPolarisOperatorsRequest {
+export interface ListPolarisOperatorValuesRequest {
   /**
    * 工作空间 ID
    */
   workspaceID: string;
-}
-
-export interface PolarisOperatorResponse {
-  data?: PolarisOperatorOutput;
+  /**
+   * 只返回绑定到该接入点的集群
+   */
+  accessPointID?: string;
 }
 
 export interface AccessPointListResponse {
@@ -154,10 +129,6 @@ export interface ConnectivityTestResponse {
   data?: ConnectivityTestOutput;
 }
 
-export interface NetworkInfoResponse {
-  data?: NetworkInfoOutput;
-}
-
 export interface EmptyResponse {
 }
 
@@ -188,117 +159,43 @@ export interface NamespacesResponse {
   data?: string[];
 }
 
-export interface OperatorInstallInput {
-  /**
-   * chart 版本
-   */
-  chartVersion: string;
-  /**
-   * 目标集群 ID，必须已绑定该接入点
-   */
-  clusterIDs: string[];
-}
-
-export interface OperatorTaskListResponse {
-  data?: OperatorTaskOutput[];
-}
-
 export interface PolarisClusterListResponse {
   data?: PolarisClusterOutput[];
 }
 
-export interface PolarisOperatorListResponse {
-  data?: PolarisOperatorListOutput;
+export interface PolarisOperatorValuesListResponse {
+  data?: PolarisOperatorValuesListOutput;
 }
 
-export interface PolarisOperatorListOutput {
+export interface PolarisOperatorValuesListOutput {
   /**
-   * 可选的 chart 版本，从新到旧
+   * 组件对应的集群插件名称，安装与状态查询使用集群插件接口
    */
-  chartVersions?: string[];
+  addonName?: string;
   /**
-   * 候选集群的组件状态
+   * 已绑定接入点的集群
    */
-  operators?: PolarisOperatorOutput[];
+  clusters?: PolarisOperatorValuesOutput[];
 }
 
-export interface PolarisOperatorOutput {
+export interface PolarisOperatorValuesOutput {
   /**
-   * 集群绑定的自建接入点 ID，未绑定为空
+   * 集群绑定的自建接入点 ID
    */
   accessPointID?: string;
   /**
-   * 已安装的 chart 版本，未安装为空
+   * 集群绑定的自建接入点名称
    */
-  chartVersion?: string;
+  accessPointName?: string;
   /**
    * 集群 ID
    */
   clusterID?: string;
   /**
-   * 与接入点期望值不一致的 values 键，仅 outdated 时非空
+   * 由接入点推导出安装北极星组件的期望 values
    */
-  driftFields?: string[];
-  /**
-   * 是否已安装
-   */
-  installed?: boolean;
-  /**
-   * 最近一次安装任务，没有任务时为 null
-   */
-  lastTask?: OperatorTaskOutput;
-  /**
-   * helm release 所在命名空间，未安装为空
-   */
-  namespace?: string;
-  /**
-   * helm release 名称，未安装为空
-   */
-  releaseName?: string;
-  /**
-   * 组件状态
-   */
-  status?: OperatorStatus;
+  values?: Record<string, unknown>;
 }
-
-export interface OperatorTaskOutput {
-  /**
-   * chart 版本
-   */
-  chartVersion?: string;
-  /**
-   * 目标集群 ID
-   */
-  clusterID?: string;
-  /**
-   * 结束时间，运行中为 null
-   */
-  finishedAt?: string;
-  /**
-   * 任务 ID
-   */
-  id?: string;
-  /**
-   * 失败原因等补充信息
-   */
-  message?: string;
-  /**
-   * 发起人
-   */
-  operator?: string;
-  /**
-   * 开始时间
-   */
-  startedAt?: string;
-  /**
-   * 任务状态
-   */
-  status?: Status;
-}
-
-export type OperatorStatus = "ready" | "installing" | "failed" | "outdated" | "not_installed";
-
-export type Status = "running" | "succeeded" | "failed";
 
 export interface PolarisClusterOutput {
   /**
@@ -344,13 +241,6 @@ export interface PolarisClusterEnvOutput {
    * 环境名称
    */
   name?: string;
-}
-
-export interface NetworkInfoOutput {
-  /**
-   * 平台访问北极星的出口 IP，需加入北极星白名单
-   */
-  egressIPs?: string[];
 }
 
 export interface ConnectivityTestOutput {

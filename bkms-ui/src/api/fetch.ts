@@ -90,9 +90,9 @@ interceptors.response.use(
       resolveRes = res.data;
     }
 
-    // Cookie 过期
+    // Cookie 过期。/simple_account/info 的 401 体里带登录地址，字段已改为 loginURL。
     if (response.status === 401) {
-      window.location.href = `${window.BK_LOGIN_URL}?c_url=${window.location.href}`;
+      window.location.href = `${resolveLoginURL(res)}?c_url=${window.location.href}`;
       return Promise.reject(new Error('Unauthorized'));
     }
 
@@ -359,6 +359,11 @@ function appendFormDataValue(formData: FormData, key: string, value: unknown) {
     return;
   }
   formData.append(key, typeof value === 'object' ? JSON.stringify(value) : String(value));
+}
+
+function resolveLoginURL(res: ResponseData) {
+  const fromBody = [res.loginURL, res.login_url].find(value => typeof value === 'string' && value.trim());
+  return typeof fromBody === 'string' ? fromBody.trim() : window.BK_LOGIN_URL;
 }
 
 async function resultReduction(response: Response, config: Config): Promise<ResponseData> {

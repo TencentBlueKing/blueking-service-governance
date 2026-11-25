@@ -73,51 +73,41 @@
         <!-- 集群资源 -->
         <div class="overflow-hidden rounded-[2px] shadow-[0_2px_4px_0_#1919290d]">
           <div class="h-[32px] bg-[#EAEBF0]"></div>
-          <div class="flex flex-wrap gap-[32px] p-[24px] bg-[#fff]">
-            <div class="w-[240px] shrink-0 overflow-hidden rounded-[2px]">
-              <div class="flex items-center h-[136px] px-[24px] bg-[#FAFBFD]">
+          <div class="overflow-x-auto p-[24px] bg-[#fff]">
+            <div class="flex min-w-max items-center gap-[40px]">
+              <div class="flex shrink-0 items-center gap-[40px]">
+                <Layout.formItem
+                  :item-height="22"
+                  :item-width="120"
+                  :label-height="22"
+                  :label-width="60"
+                />
+                <Layout.formItem
+                  :item-height="22"
+                  :item-width="148"
+                  :label-height="22"
+                  :label-width="36"
+                />
+                <Layout.formItem
+                  :item-height="22"
+                  :item-width="128"
+                  :label-height="22"
+                  :label-width="60"
+                />
+              </div>
+              <div
+                v-if="featuresStore.enableKubeInsight"
+                class="ml-auto flex shrink-0 items-center gap-[16px]"
+              >
                 <Layout.shape
-                  :height="80"
-                  type="circle"
+                  :height="16"
                   :width="80"
                 />
-                <div class="flex-1 ml-[16px]">
-                  <Layout.shape
-                    :height="18"
-                    width="100%"
-                  />
-                  <Layout.shape
-                    class="mt-[16px]"
-                    :height="18"
-                    width="80%"
-                  />
-                </div>
+                <Layout.shape
+                  :height="16"
+                  :width="144"
+                />
               </div>
-              <Layout.shape
-                class="!block"
-                :height="32"
-                width="100%"
-              />
-            </div>
-            <div class="flex-1 grid grid-cols-1 gap-[12px] content-center min-w-0">
-              <Layout.formItem
-                :item-height="22"
-                :item-width="180"
-                :label-height="22"
-                :label-width="88"
-              />
-              <Layout.formItem
-                :item-height="22"
-                :item-width="148"
-                :label-height="22"
-                :label-width="88"
-              />
-              <Layout.formItem
-                :item-height="22"
-                :item-width="128"
-                :label-height="22"
-                :label-width="88"
-              />
             </div>
           </div>
         </div>
@@ -195,9 +185,16 @@
                   field-direction="left"
                   :field-value="$t('创建人')"
                   field-width="auto"
-                  :value="envData.creator"
-                  value-color="#313238"
-                />
+                >
+                  <template #value>
+                    <OverflowTitle
+                      class="max-w-[220px] text-[12px] text-[#313238]"
+                      type="tips"
+                    >
+                      <UserDisplay :value="envData.creator" />
+                    </OverflowTitle>
+                  </template>
+                </FieldItem>
                 <FieldItem
                   class="!w-auto"
                   :container-height="22"
@@ -266,11 +263,14 @@
               </Select>
             </Form.FormItem>
             <Form.FormItem :label="$t('创建人')">
-              <Input
-                class="w-[400px]"
-                :model-value="envData.creator"
-                readonly
-              />
+              <div class="flex items-center h-[32px] w-[400px] px-[8px] border border-[#c4c6cc] rounded-[2px]">
+                <OverflowTitle type="tips">
+                  <UserDisplay
+                    empty-text=""
+                    :value="envData.creator"
+                  />
+                </OverflowTitle>
+              </div>
             </Form.FormItem>
             <Form.FormItem :label="$t('创建时间')">
               <DatePicker
@@ -308,70 +308,81 @@
       >
         <div
           v-show="!clusterResources.isEdit"
-          class="flex flex-wrap gap-[32px] items-stretch p-[24px] bg-[#fff]"
+          class="overflow-x-auto p-[24px] bg-[#fff]"
         >
-          <div
-            v-bkloading="{
-              loading: clusterScoreLoading || isLoading,
-              opacity: 1,
-              size: 'small',
-            }"
-            class="w-[240px] shrink-0 flex flex-col rounded-[2px] overflow-hidden"
-          >
-            <div class="flex-1 flex flex-col items-center justify-center p-[12px] bg-[#FAFBFD]">
-              <ClusterHealthScore
-                :count="{
-                  RISK: clusterScore?.RISK,
-                  WARN: clusterScore?.WARN,
-                }"
-                :radius="40"
-                :value-size="18"
+          <div class="flex min-w-max items-center gap-[40px]">
+            <div class="flex shrink-0 items-center gap-[40px]">
+              <FieldItem
+                class="!w-auto shrink-0"
+                :container-height="22"
+                field-direction="left"
+                :field-value="$t('容器项目')"
+                field-width="auto"
+                :value="envData?.cluster?.projectCode"
+                value-color="#313238"
+                :value-max-width="220"
+              />
+              <FieldItem
+                class="!w-auto shrink-0"
+                :container-height="22"
+                field-direction="left"
+                :field-value="$t('集群')"
+                field-width="auto"
+                :value="envData?.cluster?.clusterID"
+                value-color="#313238"
+                :value-max-width="220"
+              />
+              <FieldItem
+                class="!w-auto shrink-0"
+                :container-height="22"
+                field-direction="left"
+                :field-value="$t('命名空间')"
+                field-width="auto"
+                :value="envData?.cluster?.namespace"
+                value-color="#313238"
+                :value-max-width="220"
               />
             </div>
             <div
-              class="w-full bg-[#F0F5FF] hover:bg-[#E1ECFF] flex justify-center items-center h-[32px] cursor-pointer transition-colors"
+              v-if="featuresStore.enableKubeInsight && (clusterHealthLoading || clusterHealthCounts)"
+              :aria-busy="clusterHealthLoading"
+              :aria-label="$t('集群诊断')"
+              class="ml-auto flex shrink-0 items-center gap-[16px] whitespace-nowrap text-[12px]"
+              role="status"
             >
-              <Button
-                v-bk-tooltips="{
-                  content: curDisabledClusterTips,
-                  placement: 'bottom',
-                  disabled: !!clusterScore,
-                }"
-                :disabled="clusterScore === null"
-                text
-                theme="primary"
-                @click="$router.push({ name: 'clusterHealthDiagnosis', params: { envId, space: $route.params.space } })"
-              >
-                {{ $t('集群诊断') }}
-                <i class="bkms-icon bkms-icon-arrows-right text-[24px]"></i>
-              </Button>
+              <Layout.shape
+                v-if="clusterHealthLoading"
+                :height="16"
+                :width="208"
+              />
+              <template v-else-if="clusterHealthCounts">
+                <span class="text-[#979BA5]">{{ $t('集群诊断') }}</span>
+                <template v-if="hasClusterAlerts">
+                  <span class="inline-flex items-center gap-[6px] text-[#EA3636]">
+                    <span class="w-[6px] h-[6px] rounded-full bg-[#EA3636]"></span>
+                    {{ $t('致命') }} {{ clusterHealthCounts.RISK }}
+                  </span>
+                  <span class="inline-flex items-center gap-[6px] text-[#F59500]">
+                    <span class="w-[6px] h-[6px] rounded-full bg-[#F59500]"></span>
+                    {{ $t('预警') }} {{ clusterHealthCounts.WARN }}
+                  </span>
+                </template>
+                <span
+                  v-else
+                  class="inline-flex items-center gap-[6px] text-[#2DCB56]"
+                >
+                  <span class="w-[6px] h-[6px] rounded-full bg-[#2DCB56]"></span>
+                  {{ $t('未发现异常') }}
+                </span>
+                <Button
+                  text
+                  theme="primary"
+                  @click="router.push({ name: 'clusterHealthDiagnosis', params: { envId, space: workspaceId } })"
+                >
+                  {{ hasClusterAlerts ? $t('查看详情') : $t('查看报告') }}
+                </Button>
+              </template>
             </div>
-          </div>
-          <div class="flex-1 grid grid-cols-1 gap-[12px] content-center min-w-0">
-            <FieldItem
-              :container-height="22"
-              :field-value="$t('容器项目')"
-              :field-width="88"
-              :value="envData?.cluster?.projectCode"
-              value-color="#313238"
-              :value-max-width="'100%'"
-            />
-            <FieldItem
-              :container-height="22"
-              :field-value="$t('集群')"
-              :field-width="88"
-              :value="envData?.cluster?.clusterID"
-              value-color="#313238"
-              :value-max-width="'100%'"
-            />
-            <FieldItem
-              :container-height="22"
-              :field-value="$t('命名空间')"
-              :field-width="88"
-              :value="envData?.cluster?.namespace"
-              value-color="#313238"
-              :value-max-width="'100%'"
-            />
           </div>
         </div>
         <div
@@ -485,7 +496,7 @@
 <script lang="ts" setup>
   import { computed, onBeforeUnmount, ref, watch } from 'vue';
 
-  import { Button, DatePicker, Form, Input, Message, Select, Tag } from 'bkui-vue';
+  import { Button, DatePicker, Form, Input, Message, OverflowTitle, Select, Tag } from 'bkui-vue';
   import { ExclamationCircleShape } from 'bkui-vue/lib/icon';
   import { cloneDeep, countBy } from 'lodash-es';
   import { useI18n } from 'vue-i18n';
@@ -497,8 +508,8 @@
   import useClusterSelector from '~/components/cluster-selector/use-cluster-selector';
   import Layout from '~/components/skeleton/skeleton-layout';
   import { envTypeAvatarColorMap, envTypeTagClassMap } from '~/composables/use-env-manager';
-  import { useErrorHandler } from '~/composables/use-error-handler';
   import { useEnvDetailStore } from '~/stores/env-detail';
+  import { useFrontendFeaturesStore } from '~/stores/frontend-features';
   import { useSpaceStore } from '~/stores/space';
 
   import ClusterComponents from './cluster-components/cluster-components.vue';
@@ -516,17 +527,17 @@
   const route = useRoute();
   const router = useRouter();
   const spaceStore = useSpaceStore();
+  const featuresStore = useFrontendFeaturesStore();
   const envDetailStore = useEnvDetailStore();
-  const { handleError } = useErrorHandler();
   let disposed = false;
   onBeforeUnmount(() => {
     disposed = true;
   });
 
-  const routeEnvId = String(route.params.envId || '');
-  const routeSpace = String(route.params.space || '');
-  const envId = computed(() => props.env || routeEnvId || envDetailStore.currentEnv?.id || '');
-  const workspaceId = computed(() => props.workspace || routeSpace || spaceStore.currentSpace || '');
+  const envId = computed(() => props.env || String(route.params.envId || '') || envDetailStore.currentEnv?.id || '');
+  const workspaceId = computed(
+    () => props.workspace || String(route.params.space || '') || spaceStore.currentSpace || '',
+  );
 
   const envData = ref<EnvDetailOutput>({} as EnvDetailOutput);
   const formattedCreatedAt = computed(() => (envData.value.createdAt ? new Date(envData.value.createdAt) : ''));
@@ -661,25 +672,36 @@
 
   // 获取环境详情
   const isLoading = ref<boolean>(false);
+  let envDetailSequence = 0;
   async function getEnvDetail() {
-    if (!workspaceId.value || !envId.value) {
+    const sequence = ++envDetailSequence;
+    const requestedWorkspace = workspaceId.value;
+    const requestedEnvId = envId.value;
+    if (!requestedWorkspace || !requestedEnvId) {
+      isLoading.value = false;
       return;
     }
     isLoading.value = true;
     const newData =
-      envDetailStore.currentEnv?.id === envId.value
+      envDetailStore.currentEnv?.id === requestedEnvId
         ? envDetailStore.currentEnv
-        : await envDetailStore.waitForCurrentEnv(envId.value);
-    if (disposed || !newData) {
+        : await envDetailStore.waitForCurrentEnv(requestedEnvId);
+    if (
+      disposed ||
+      sequence !== envDetailSequence ||
+      requestedWorkspace !== workspaceId.value ||
+      requestedEnvId !== envId.value
+    ) {
+      return;
+    }
+    if (!newData) {
       isLoading.value = false;
       return;
     }
     updateViewData(newData);
     isLoading.value = false;
 
-    if (newData.cluster?.clusterID) {
-      initCLusterHealth();
-    }
+    initCLusterHealth();
   }
 
   // 更新环境信息的通用处理函数
@@ -691,7 +713,7 @@
       .catch(() => false);
     if (result) {
       await envDetailStore.syncSavedEnv(savedWorkspace, savedEnvId, changes);
-      if (disposed) return result;
+      if (disposed || savedEnvId !== envId.value || savedWorkspace !== workspaceId.value) return result;
       const savedEnv = envDetailStore.currentEnv;
       if (savedEnv?.id === savedEnvId) updateViewData(savedEnv);
       Message({
@@ -701,7 +723,7 @@
       });
 
       emits('update', envData.value);
-      if (envData.value.cluster?.clusterID) initCLusterHealth();
+      initCLusterHealth();
     }
     return result;
   }
@@ -759,53 +781,39 @@
   );
 
   const projectID = ref<string>('');
-  const clusterScoreLoading = ref(false);
-  const clusterScore = ref<null | {
-    RISK?: number;
-    WARN?: number;
-  }>(null);
-  const clusterHealthTipsMap = {
-    notFount: t('集群未正确安装 kubeinsight 组件，无法查看健康诊断结果'),
-    notCluster: t('无集群资源信息'),
-  };
-  const curDisabledClusterTips = computed(() => {
-    if (clusterScore.value === null) {
-      return envData?.value?.cluster?.clusterID ? clusterHealthTipsMap.notFount : clusterHealthTipsMap.notCluster;
-    }
-    return '';
-  });
+  const clusterHealthLoading = ref(false);
+  const clusterHealthCounts = ref<null | { RISK: number; WARN: number }>(null);
+  const hasClusterAlerts = computed(
+    () => !!clusterHealthCounts.value && clusterHealthCounts.value.RISK + clusterHealthCounts.value.WARN > 0,
+  );
+  let clusterHealthSequence = 0;
 
   const { loading, clusterData, getClusterList } = useClusterSelector(projectID.value || '', 'all');
 
   async function initCLusterHealth() {
-    clusterScoreLoading.value = true;
-    try {
-      const response: Response = await BkintegrationsKubeinsightService.getLatestEnvReport(
-        { envID: envId.value },
-        { interceptorErr: false, originalResponse: true, needStatus: true },
-      );
-      const res = await response.json();
-      if (disposed) return;
-      clusterScore.value = countBy(res.data.abnormalItems, 'level');
-    } catch (err: unknown) {
-      if (disposed) return;
-      const errorInfo = err as { error?: { message?: string }; status: number };
-      const { error, status } = errorInfo;
-      if (status !== 404) {
-        handleError(error ?? {}, 500, {
-          theme: 'error',
-          message: {
-            code: status,
-            overview: error?.message || t('请求异常'),
-            suggestion: '',
-            type: 'json',
-            details: `${JSON.stringify(error || {}, null, 2)}`,
-          },
-        });
-      }
-    } finally {
-      clusterScoreLoading.value = false;
-    }
+    resetClusterHealth();
+    if (!featuresStore.enableKubeInsight || !envId.value || !hasClusterConfig.value) return;
+    const sequence = clusterHealthSequence;
+    const requestedEnvId = envId.value;
+    const requestedWorkspace = workspaceId.value;
+    const requestedClusterId = envData.value.cluster?.clusterID;
+    const isCurrentRequest = () =>
+      !disposed &&
+      sequence === clusterHealthSequence &&
+      requestedEnvId === envId.value &&
+      requestedWorkspace === workspaceId.value &&
+      requestedClusterId === envData.value.cluster?.clusterID &&
+      featuresStore.enableKubeInsight;
+    clusterHealthLoading.value = true;
+    const report = await BkintegrationsKubeinsightService.getLatestEnvReport(
+      { envID: requestedEnvId },
+      { interceptorErr: false },
+    ).catch(() => null);
+    if (!disposed && sequence === clusterHealthSequence) clusterHealthLoading.value = false;
+    if (!isCurrentRequest() || !report) return;
+    const activeItems = (report.abnormalItems || []).filter(item => !item.recovered && item.level !== 'RECOVERED');
+    const counts = countBy(activeItems, 'level');
+    clusterHealthCounts.value = { RISK: counts.RISK || 0, WARN: counts.WARN || 0 };
   }
 
   // 初始化集群列表
@@ -814,10 +822,17 @@
     await getClusterList(projectID.value);
   }
 
+  function resetClusterHealth() {
+    ++clusterHealthSequence;
+    clusterHealthLoading.value = false;
+    clusterHealthCounts.value = null;
+  }
+
   // 初始化
   watch(
     [workspaceId, envId],
     async () => {
+      resetClusterHealth();
       await getEnvDetail();
       if (!disposed) await initClusters();
     },

@@ -475,7 +475,7 @@
                       :label="$t('操作人')"
                       :label-width="70"
                     >
-                      {{ row.latestPublish.operator || '--' }}
+                      <UserDisplay :value="row.latestPublish.operator" />
                     </DetailItem>
                     <DetailItem
                       :label="$t('更新时间')"
@@ -690,6 +690,7 @@
                       {{ $t('监控') }}
                     </Dropdown.DropdownItem>
                     <Dropdown.DropdownItem
+                      v-if="featuresStore.enableWeTerm"
                       v-bk-tooltips="{
                         content: $t('实例当前未处于运行状态，无法登录'),
                         disabled: canLogin(row),
@@ -745,6 +746,7 @@
   import { useTableSettings } from '~/composables/use-table-settings';
   import AutoScaleTag from '~/pages/application/detail/components/auto-scale-tag.vue';
   import { useAppDetail } from '~/stores/app-detail';
+  import { useFrontendFeaturesStore } from '~/stores/frontend-features';
 
   import {
     type RestartSortOrder,
@@ -813,6 +815,7 @@
   }>();
 
   const appDetailStore = useAppDetail();
+  const featuresStore = useFrontendFeaturesStore();
   const tableRef = ref();
   const { isEnglish } = useLanguage();
 

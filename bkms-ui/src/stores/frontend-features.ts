@@ -23,12 +23,33 @@ import { FrontendFeaturesService } from '~/api/modules/v1/frontend-features';
 
 import type { FrontendFeaturesOutput } from '~/@types/v1/frontend-features';
 
+/**
+ * 部署配置决定的前端功能开关。
+ * 只控制页面入口和展示，后端接口仍会各自校验。
+ * 请求失败时保持缺省值：BSCP 与 KubeInsight 开启，其余关闭。
+ */
 export const useFrontendFeaturesStore = defineStore('frontend-features', () => {
   const features = ref<FrontendFeaturesOutput | null>(null);
   let pendingRequest: null | Promise<FrontendFeaturesOutput | null> = null;
 
+  const polarisWorkspaceAccessPoint = ref(false);
+  const enableMultiTenantMode = ref(false);
+  const enableIndependentBkRepo = ref(false);
+  const enableWeTerm = ref(false);
+  const enableBSCP = ref(true);
+  const enableKubeInsight = ref(true);
+
   // 默认关闭，仅在接口显式返回 enableGoProxyBuildArgsTips: true 时开启
   const enableGoProxyBuildArgsTips = computed(() => Boolean(features.value?.enableGoProxyBuildArgsTips));
+
+  function apply(features?: FrontendFeaturesOutput) {
+    polarisWorkspaceAccessPoint.value = !!features?.polarisWorkspaceAccessPoint;
+    enableMultiTenantMode.value = !!features?.enableMultiTenantMode;
+    enableIndependentBkRepo.value = !!features?.enableIndependentBkRepo;
+    enableWeTerm.value = !!features?.enableWeTerm;
+    enableBSCP.value = features?.enableBSCP !== false;
+    enableKubeInsight.value = features?.enableKubeInsight !== false;
+  }
 
   async function getFrontendFeatures() {
     if (pendingRequest) {
@@ -38,9 +59,13 @@ export const useFrontendFeaturesStore = defineStore('frontend-features', () => {
     pendingRequest = FrontendFeaturesService.getFrontendFeatures(undefined, { interceptorErr: false })
       .then(res => {
         features.value = res ?? null;
+        apply(res);
         return features.value;
       })
-      .catch(() => null)
+      .catch(err => {
+        console.error('获取前端功能开关失败:', err);
+        return null;
+      })
       .finally(() => {
         pendingRequest = null;
       });
@@ -48,9 +73,20 @@ export const useFrontendFeaturesStore = defineStore('frontend-features', () => {
     return pendingRequest;
   }
 
+  async function load() {
+    await getFrontendFeatures();
+  }
+
   return {
     features,
     enableGoProxyBuildArgsTips,
     getFrontendFeatures,
+    polarisWorkspaceAccessPoint,
+    enableMultiTenantMode,
+    enableIndependentBkRepo,
+    enableWeTerm,
+    enableBSCP,
+    enableKubeInsight,
+    load,
   };
 });

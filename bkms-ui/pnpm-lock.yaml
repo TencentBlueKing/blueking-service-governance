@@ -25,6 +25,9 @@ importers:
       '@antv/g6':
         specifier: 5.0.50
         version: 5.0.50(workerize-loader@2.0.2(webpack@5.105.4(esbuild@0.20.2)))
+      '@blueking/bk-user-display-name':
+        specifier: 1.0.3-beta.3
+        version: 1.0.3-beta.3
       '@blueking/bk-user-selector':
         specifier: ^0.1.9
         version: 0.1.9(highlight.js@11.5.0)(vue@3.5.24(typescript@5.9.3))
@@ -34,6 +37,9 @@ importers:
       '@blueking/ediatable':
         specifier: 0.0.1-beta.32
         version: 0.0.1-beta.32(vue@3.5.24(typescript@5.9.3))
+      '@blueking/login-userinfo':
+        specifier: ^0.0.21
+        version: 0.0.21(vue@3.5.24(typescript@5.9.3))
       '@blueking/monitor-vue3-components':
         specifier: 1.0.7-beta.1
         version: 1.0.7-beta.1(@blueking/bkui-library@0.0.0-beta.6)(@lezer/highlight@1.2.3)(@lezer/lr@1.4.10)(highlight.js@11.5.0)(typescript@5.9.3)
@@ -549,6 +555,11 @@ packages:
   '@blueking/ediatable@0.0.1-beta.32':
     resolution: {integrity: sha512-GqoPjSwi+eZONsj+0U96kQBY8I7KYZFFkbVeo3P+yJQ+0fFpuoryjqurbtFGXdNlxh7MD28QTR/MgdURuUNF0g==}
     engines: {node: '>=18.16.0'}
+    peerDependencies:
+      vue: ^3
+
+  '@blueking/login-userinfo@0.0.21':
+    resolution: {integrity: sha512-71HixcC4HK2RxMA7FJX/huXY9QHjbItvAfIi9rYDhFv/qMgxTV4J6kZkaqTd6y0beWDWFjvPdYcrYK6kowy/Ng==}
     peerDependencies:
       vue: ^3
 
@@ -1273,6 +1284,7 @@ packages:
     resolution: {integrity: sha512-mcEl6CUT5IAUmQf1m9FYSmVqCJlpQ8r8eyftFUHG8i9OhY7BkBXSUdnLH5DOf0wCOjcP9v/QO93zpmF1SptCCw==}
     cpu: [riscv64]
     os: [linux]
+    libc: [musl]
 
   '@rollup/rollup-linux-s390x-gnu@4.60.4':
     resolution: {integrity: sha512-ynt3JxVd2w2buzoKDWIyiV1pJW93xlQic1THVLXilz429oijRpSHivZAgp65KBu+cMcgf1eVVjdnTLvPxgCuoQ==}
@@ -6094,6 +6106,12 @@ snapshots:
       vue: 3.5.24(typescript@5.9.3)
     transitivePeerDependencies:
       - '@vue/composition-api'
+
+  '@blueking/login-userinfo@0.0.21(vue@3.5.24(typescript@5.9.3))':
+    dependencies:
+      js-cookie: 3.0.5
+      tippy.js: 6.3.7
+      vue: 3.5.24(typescript@5.9.3)
 
   '@blueking/monitor-vue3-components@1.0.7-beta.1(@blueking/bkui-library@0.0.0-beta.6)(@lezer/highlight@1.2.3)(@lezer/lr@1.4.10)(highlight.js@11.5.0)(typescript@5.9.3)':
     dependencies:

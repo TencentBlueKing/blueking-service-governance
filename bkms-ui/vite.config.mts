@@ -32,6 +32,13 @@ import SvgLoader from 'vite-svg-loader';
 export default ({ mode }: { mode: string }) => {
   const env = loadEnv(mode, process.cwd(), 'BK_');
   const isDev = mode === 'development';
+
+  // 多租户联调：bk_token Cookie 域在租户环境，本地拿不到，由代理注入请求头（凭据在 .env.tenant.local）；非 tenant 模式下为空对象，零影响。
+  const devIdentityHeaders = {
+    ...(env.BK_DEV_BK_TOKEN ? { 'X-User-Bk-Token': env.BK_DEV_BK_TOKEN } : {}),
+    ...(env.BK_DEV_TENANT_ID ? { 'X-Bk-Tenant-Id': env.BK_DEV_TENANT_ID } : {}),
+  };
+
   return defineConfig({
     base: env.BK_STATIC_URL,
 
@@ -46,6 +53,7 @@ export default ({ mode }: { mode: string }) => {
           target: env.BK_API_BASE_URL,
           changeOrigin: true,
           secure: true,
+          headers: { ...devIdentityHeaders },
         },
         '/bkms': {
           target: env.BK_API_BASE_URL,
@@ -55,6 +63,7 @@ export default ({ mode }: { mode: string }) => {
           headers: {
             referer: env.BK_API_BASE_URL,
             origin: env.BK_API_BASE_URL,
+            ...devIdentityHeaders,
           },
         },
         '/generic': {
@@ -90,6 +99,9 @@ export default ({ mode }: { mode: string }) => {
             'sec-fetch-site': 'same-origin',
             'sec-fetch-mode': 'cors',
             'sec-fetch-dest': 'empty',
+            // 与 /simple_account、/bkms 同理：本地拿不到租户环境的 bk_token Cookie，
+            // bk-user 网关用户认证失败（401）时组件静默回退显示原始 ID
+            ...devIdentityHeaders,
           },
         },
       },
@@ -123,7 +135,11 @@ export default ({ mode }: { mode: string }) => {
 
     plugins: [
       // https://github.com/vitejs/vite-plugin-vue/tree/main/packages/plugin-vue
-      Vue(),
+      Vue({
+        template: {
+          compilerOptions: { isCustomElement: tag => tag === 'bk-user-display-name' },
+        },
+      }),
 
       // viteCompression({
       //   filter: /\.js|.css$/,

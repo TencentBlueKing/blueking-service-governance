@@ -22,7 +22,7 @@
       v-model="internalValue"
       :api-base-url="bkUserApiUrl"
       :current-user-id="currentUserId"
-      :tenant-id="tenantId"
+      :tenant-id="resolvedTenantId"
       v-bind="$attrs"
     />
     <Close
@@ -38,6 +38,8 @@
 
   import BkUserSelector from '@blueking/bk-user-selector';
   import { Close } from 'bkui-vue/lib/icon';
+  import { getBkUserApiUrl } from '~/common/bk-user-api';
+  import { useUserStore } from '~/stores/user';
 
   import '@blueking/bk-user-selector/vue3/vue3.css';
 
@@ -56,17 +58,12 @@
   const props = withDefaults(defineProps<Props>(), {
     modelValue: () => [],
     currentUserId: '',
-    tenantId: 'default',
     clearable: false,
   });
 
-  /** API 基础地址：开发走 Vite 代理，生产拼完整 URL */
-  const bkUserApiUrl = (() => {
-    if (import.meta.env.DEV) return '/api-bk-user-selector';
-    const template = import.meta.env.BK_API_URL_TMPL || '';
-    if (!template) return '';
-    return template.includes('{api_name}') ? `${template.replace('{api_name}', 'bk-user-web')}/prod` : template;
-  })();
+  const userStore = useUserStore();
+  const resolvedTenantId = computed(() => props.tenantId || userStore.tenantId || 'default');
+  const bkUserApiUrl = getBkUserApiUrl();
 
   const emit = defineEmits<{
     'update:modelValue': [value: string[]];

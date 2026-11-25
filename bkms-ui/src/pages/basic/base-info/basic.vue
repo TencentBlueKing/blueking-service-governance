@@ -347,7 +347,11 @@
               field="username"
               :label="$t('用户名')"
               :width="260"
-            />
+            >
+              <template #default="{ row }: { row: Row }">
+                <UserDisplay :value="row.username" />
+              </template>
+            </TableColumn>
             <TableColumn
               :label="$t('角色')"
               :width="260"
@@ -465,7 +469,7 @@
   import { Button, Form, InfoBox, Input, Message, PopConfirm, Radio, Sideslider, Tag } from 'bkui-vue';
   import { Copy, Plus, Share } from 'bkui-vue/lib/icon';
   import { cloneDeep } from 'lodash-es';
-  import { useI18n } from 'vue-i18n';
+  import { I18nT, useI18n } from 'vue-i18n';
   import { useRouter } from 'vue-router';
   import { UpdateWorkspaceInfoRequest, WorkspaceDetailOutputObj } from '~/@types/v1/workspace';
   import { WorkspaceService } from '~/api/modules/v1';
@@ -475,6 +479,7 @@
   import FlexRow from '~/components/flex-row.vue';
   import SecretToggle from '~/components/secret-toggle.vue';
   import Layout from '~/components/skeleton/skeleton-layout';
+  import UserDisplay from '~/components/user-display.vue';
   import UserSelector from '~/components/user-selector.vue';
   import { useCopy } from '~/composables/use-copy';
   import useDebouncedRef from '~/composables/use-debounce';
@@ -482,6 +487,7 @@
   import useTableEmpty from '~/composables/use-table-empty';
   import useToLink from '~/composables/use-to-link';
   import { useSpaceStore } from '~/stores/space';
+  import { useUserNameStore } from '~/stores/user-name';
 
   import PermissionContent from './permission-content.vue';
   import permissionModel from './permissionModel.vue';
@@ -497,9 +503,11 @@
 
   const router = useRouter();
   const spaceStore = useSpaceStore();
+  const userNameStore = useUserNameStore();
   const { handleToLink } = useToLink();
   const { copyText } = useCopy();
-  const { t } = useI18n();
+  const i18n = useI18n();
+  const { t } = i18n;
 
   const defaultData: Partial<WorkspaceDetailOutputObj> = {
     id: '',
@@ -589,6 +597,8 @@
       });
 
       memberData.value = Object.values(tempData);
+      // 多租户下 username 为 userid，批量反查显示名称用于搜索
+      userNameStore.resolveUserNames(memberData.value.map(item => item.username));
       pagination.value.count = memberData.value.length;
       clearErrorType();
     } catch (error) {
@@ -645,7 +655,10 @@
     memberData.value.filter(item => {
       const result1 = memberType.value === 'all' || item.role.includes(memberType.value);
       if (searchValue.value) {
-        const result2 = item.username.toLowerCase().includes(searchValue.value.toLowerCase());
+        const keyword = searchValue.value.toLowerCase();
+        // 多租户下 userid 无可读性，同时匹配显示名称与 userid
+        const displayName = userNameStore.getDisplayName(item.username).toLowerCase();
+        const result2 = displayName.includes(keyword) || item.username.toLowerCase().includes(keyword);
         return result1 && result2;
       }
       return result1;
@@ -656,6 +669,7 @@
   const { setTypeToError, clearErrorType, curExceptionType } = useTableEmpty({
     filters: searchValue,
   });
+
   /**
    * 角色描述
    * @param role 角色
@@ -694,7 +708,11 @@
       title: t('确定删除该成员？'),
       contentAlign: 'left',
       content: h('div', [
-        h('div', t('成员：{0}', [row.username])),
+        h(
+          I18nT,
+          { i18n, tag: 'div', keypath: '成员：{0}' },
+          { default: () => [h(UserDisplay, { value: row.username })] },
+        ),
         h(
           'p',
           { class: 'mt-[16px] px-[16px] py-[12px] bg-[#F5F7FA]' },

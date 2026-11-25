@@ -18,7 +18,11 @@
 
 import { getPlatformConfig, setDocumentTitle, setShortcutIcon } from '@blueking/platform-config';
 import { useI18n } from 'vue-i18n';
+import { useFrontendFeaturesStore } from '~/stores/frontend-features';
 import { usePlatformConfigStore } from '~/stores/platform-config';
+
+type PlatformConfigState = ReturnType<typeof usePlatformConfigStore>['$state'];
+
 export default function usePlatform() {
   const platformConfig = usePlatformConfigStore();
   async function getPlatformInfo() {
@@ -34,19 +38,43 @@ export default function usePlatform() {
       favicon: '/favicon.svg',
       helperLink: 'wxwork://message?uin=8444252571319680',
       helperText: t('技术支持'),
-      footerInfoHTML: '',
-      version: '',
-      i18n: {
-        footerInfoHTML: '',
-      },
+      // 版本号来自 index.html 注入的构建变量，未设置时为 '--'，兜底为空串
+      version: window.BK_BKMS_APP_VERSION && window.BK_BKMS_APP_VERSION !== '--' ? window.BK_BKMS_APP_VERSION : '',
     };
-    let data: { [key: string]: any } = {};
-    if (import.meta.env.BK_SHARED_RES_BASE_JS_URL) {
-      data = await getPlatformConfig(import.meta.env.BK_SHARED_RES_BASE_JS_URL, defaults);
-    } else {
-      data = await getPlatformConfig(defaults);
-    }
-    Object.keys(platformConfig.$state).forEach(key => {
+    const data: PlatformConfigState = import.meta.env.BK_SHARED_RES_BASE_JS_URL
+      ? await getPlatformConfig(import.meta.env.BK_SHARED_RES_BASE_JS_URL, defaults)
+      : await getPlatformConfig(defaults);
+    // footer 按部署模式固定，有意不用 bk-shared-res 下发的 footer。
+    // 远程地址整站只有一份，无法同时表达两种文案：
+    // 多租户用平台库默认「技术支持 | 社区论坛 | 产品官网」；
+    // 非多租户用「联系 BK 助手 | 蓝鲸桌面」。
+    // 这次 getPlatformConfig 只把 markdown 转成 HTML，不会再请求远程脚本。
+    const footerSource = useFrontendFeaturesStore().enableMultiTenantMode
+      ? await getPlatformConfig(defaults)
+      : await getPlatformConfig({
+          ...defaults,
+          ...footerMarkdown([
+            {
+              text: '联系BK助手',
+              textEn: 'Contact BK Assistant',
+              href: 'https://bk.tencent.com/s-mart/community',
+            },
+            {
+              text: '蓝鲸桌面',
+              textEn: 'BlueKing Desktop',
+              href: 'https://bk.tencent.com/s-mart/desktop',
+            },
+          ]),
+        });
+    data.footerInfo = footerSource.footerInfo;
+    data.footerInfoEn = footerSource.footerInfoEn;
+    data.footerInfoHTML = footerSource.footerInfoHTML;
+    data.footerInfoHTMLEn = footerSource.footerInfoHTMLEn;
+    data.i18n = {
+      ...data.i18n,
+      footerInfoHTML: footerSource.i18n.footerInfoHTML,
+    };
+    (Object.keys(platformConfig.$state) as (keyof PlatformConfigState)[]).forEach(key => {
       platformConfig.$patch({
         [key]: data[key],
       });
@@ -58,5 +86,13 @@ export default function usePlatform() {
     getPlatformInfo,
     setDocumentTitle,
     setShortcutIcon,
+  };
+}
+
+function footerMarkdown(links: { href: string; text: string; textEn: string }[]) {
+  const line = (label: 'text' | 'textEn') => links.map(link => `[${link[label]}](${link.href})`).join(' | ');
+  return {
+    footerInfo: line('text'),
+    footerInfoEn: line('textEn'),
   };
 }

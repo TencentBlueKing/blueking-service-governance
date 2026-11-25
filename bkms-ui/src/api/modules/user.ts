@@ -24,4 +24,35 @@ const fetch = new Fetch({
   prefix: `${import.meta.env.BK_API_PREFIX}`,
 });
 
-export const getUser = fetch.get<unknown, IUser>('/simple_account/info');
+const requestCurrentUser = fetch.get<unknown, unknown>('/simple_account/info');
+
+/** 响应体没有 data 包裹，固定取完整 body。 */
+export function getUser() {
+  return requestCurrentUser(undefined, { needRes: true }).then(normalizeCurrentUser);
+}
+
+/**
+ * /simple_account/info 现返回驼峰字段，旧环境仍返回下划线字段。
+ * 统一成页面已在使用的 user_id / tenant_id，并保留新增的时区和个人中心地址。
+ */
+export function normalizeCurrentUser(raw: unknown): IUser {
+  const source = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+  const tenant = source.tenantID ?? source.tenant_id;
+  const timeZone = readText(source, 'timeZone', 'time_zone');
+  const personalCenterURL = readText(source, 'personalCenterURL', 'personal_center_url');
+
+  return {
+    user_id: readText(source, 'userID', 'user_id'),
+    ...(typeof tenant === 'string' ? { tenant_id: tenant.trim() } : {}),
+    ...(timeZone ? { timeZone } : {}),
+    ...(personalCenterURL ? { personalCenterURL } : {}),
+  };
+}
+
+function readText(source: Record<string, unknown>, ...keys: string[]) {
+  for (const key of keys) {
+    const value = source[key];
+    if (typeof value === 'string' && value.trim()) return value.trim();
+  }
+  return '';
+}

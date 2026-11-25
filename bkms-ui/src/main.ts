@@ -18,6 +18,7 @@
 
 import { createApp } from 'vue';
 
+import BkUserDisplayName from '@blueking/bk-user-display-name';
 import { LineChart } from 'echarts/charts';
 import { GridComponent, LegendComponent, TitleComponent, ToolboxComponent, TooltipComponent } from 'echarts/components';
 // @blueking/monitor-vue3-components 内部通过 echarts/core 的 init() 初始化图表，
@@ -37,8 +38,10 @@ echarts.use([
 ]);
 
 import { getUser } from '~/api/modules/user';
+import { getUserDisplayConfig } from '~/common/bk-user-api';
 import { scopeIconSpriteIds } from '~/fonts/icon-sprite';
 import { registerMonitorChartApi } from '~/pages/application/detail/deploy/monitor-chart-bridge.js';
+import { useFrontendFeaturesStore } from '~/stores/frontend-features';
 import { useUserStore } from '~/stores/user';
 
 import App from './App.vue';
@@ -64,15 +67,19 @@ import '@blueking/table/vue3/vue3.css';
 import '@unocss/reset/tailwind.css';
 import 'uno.css';
 
-getUser({}, { needRes: true }).then(res => {
+getUser().then(async res => {
   const app = createApp(App);
   // 安装modules下面所有模块
   Object.values(import.meta.glob<{ install: UserModule }>('./modules/*.ts', { eager: true })).forEach(i => {
     i.install?.({ app });
   });
+  const userStore = useUserStore();
+  userStore.setUserInfo(res);
+  await useFrontendFeaturesStore().load();
+  const userDisplayConfig = getUserDisplayConfig(userStore.tenantId);
+  if (userDisplayConfig) BkUserDisplayName.configure(userDisplayConfig);
   registerMonitorChartApi(app);
   app.mount('#app');
-  useUserStore().setUserInfo(res);
 });
 
 console.log(

@@ -134,7 +134,10 @@
           :width="120"
         >
           <template #default="{ row }">
-            <span class="text-[12px]">{{ row?.operator || '--' }}</span>
+            <UserDisplay
+              class="text-[12px]"
+              :value="row?.operator"
+            />
           </template>
         </TableColumn>
         <TableColumn

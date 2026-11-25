@@ -30,24 +30,31 @@ export const useUserStore = defineStore('user', () => {
     user_id: '',
   });
   const roleInfo = ref<null | RoleInfo>(null);
+
+  // 租户 ID
+  const tenantId = computed(() => userInfo.value.tenant_id?.trim() || '');
   const currentUsername = computed(() => roleInfo.value?.username || userInfo.value.user_id || '');
   const hasPlatformRole = computed(() => !!roleInfo.value?.platRoleCode);
 
+  function setUserInfo(user: IUser) {
+    userInfo.value = user;
+    // 图表组件读 window.timezone。接口没给时区时保留 main.ts 里的浏览器兜底。
+    if (user.timeZone) window.timezone = user.timeZone;
+  }
+
   async function getUserInfo() {
-    userInfo.value = await getUser({}, { needRes: true }).catch(() => ({ user_id: '' }));
+    const user = await getUser().catch(() => ({ user_id: '' }));
+    setUserInfo(user);
   }
 
   async function getRoleInfo() {
     roleInfo.value = await AccountService.getRole(undefined, { interceptorErr: false }).catch(() => null);
   }
 
-  function setUserInfo(user: IUser) {
-    userInfo.value = user;
-  }
-
   return {
     userInfo,
     roleInfo,
+    tenantId,
     currentUsername,
     hasPlatformRole,
     getUserInfo,

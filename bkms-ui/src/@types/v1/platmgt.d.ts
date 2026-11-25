@@ -32,6 +32,10 @@ export interface ListPlatWorkspacesRequest {
    */
   state?: string;
   /**
+   * 租户 ID 过滤，为空时返回全部租户的工作空间
+   */
+  tenantID?: string;
+  /**
    * 排序字段：id / displayName / updatedAt
    */
   sortBy?: string;
@@ -277,6 +281,10 @@ export interface WorkspaceInfoOutput {
    */
   state?: string;
   /**
+   * 所属租户 ID
+   */
+  tenantID?: string;
+  /**
    * 更新时间
    */
   updatedAt?: string;
@@ -357,6 +365,10 @@ export interface WorkspaceWithStatsOutput {
    * 工作空间状态
    */
   state?: string;
+  /**
+   * 所属租户 ID
+   */
+  tenantID?: string;
   /**
    * 更新时间
    */

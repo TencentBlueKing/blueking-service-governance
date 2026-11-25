@@ -4,6 +4,7 @@
   "scripts": {
     "build": "vite build",
     "dev": "vite --mode development",
+    "dev:tenant": "vite --mode tenant",
     "gen:api:v1": "node scripts/gen-api-v1.js",
     "prepare": "cd ../.. && husky apps/ui/.husky",
     "preview": "vite preview",
@@ -24,9 +25,11 @@
   },
   "dependencies": {
     "@antv/g6": "5.0.50",
+    "@blueking/bk-user-display-name": "1.0.3-beta.3",
     "@blueking/bk-user-selector": "^0.1.9",
     "@blueking/date-picker": "^3.0.7",
     "@blueking/ediatable": "0.0.1-beta.32",
+    "@blueking/login-userinfo": "^0.0.21",
     "@blueking/monitor-vue3-components": "1.0.7-beta.1",
     "@blueking/notice-component": "^2.0.7",
     "@blueking/platform-config": "^1.0.5",

@@ -172,6 +172,7 @@ vi.mock('~/pages/application/detail/deploy/instance-list/composables/use-instanc
   };
 });
 vi.mock('~/stores/app-detail', () => ({ useAppDetail: () => ({ appID: 'app-1' }) }));
+vi.mock('~/stores/frontend-features', () => ({ useFrontendFeaturesStore: () => ({ enableWeTerm: true }) }));
 
 const passthroughComponent = (name: string) => ({
   name,

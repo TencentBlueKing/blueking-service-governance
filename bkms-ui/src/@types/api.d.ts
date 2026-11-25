@@ -96,6 +96,11 @@ export interface IProjectPerm {
 type ExtractData<T> = T extends { data: infer D } ? D : undefined;
 
 interface IUser {
+  /** 个人中心地址。为空时不展示入口。同时兼容旧字段 personal_center_url。 */
+  personalCenterURL?: string;
+  tenant_id?: string;
+  /** 用户时区，IANA 时区名。同时兼容旧字段 time_zone。 */
+  timeZone?: string;
   user_id: string;
 }
 

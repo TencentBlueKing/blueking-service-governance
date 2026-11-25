@@ -52,7 +52,7 @@
       <div class="flex px-[24px] gap-[36px] text-[12px] text-[#4D4F56] h-[18px] leading-[18px]">
         <span>{{ revisionLabel }}: {{ buildInfo.revision || '--' }}</span>
         <span>{{ $t('镜像 Tag') }}: {{ buildInfo.imageTag || '--' }}</span>
-        <span>{{ $t('操作人') }}: {{ buildInfo.operator || '--' }}</span>
+        <span>{{ $t('操作人') }}: <UserDisplay :value="buildInfo.operator" /></span>
         <Button
           class="inline-flex items-center ml-auto"
           text
