@@ -18,11 +18,11 @@
 /**
  * 场景级测试：环境管理（路径清单见 docs/vitest/guides/TEST_SCENARIOS_ROUTES.md S9）
  *
- * 覆盖九组用户可感知行为（#208「去宽窄表」重构后校准 V 7 → 9）：
+ * 覆盖十组用户可感知行为：
  *   列表有数据 / 空列表 → 列表 V = 2
- *   删除域 V = 7（入口已从列表行移至 basic-info.vue:457-482「删除环境」按钮 → delete-env-action.vue）：
+ *   删除域 V = 8（入口为 basic-info.vue「删除环境」按钮 → delete-env-action.vue）：
  *   打开确认 / 名称不一致禁用 / 删除成功 / 删除失败保留 / 部署应用告警拦截 /
- *   获取详情失败提示 / 删除进行中防重复提交
+ *   获取详情失败提示 / 删除进行中防重复提交 / 切换环境忽略迟到详情
  *
  * mock 边界：
  *   - @blueking/table stub（纯 field 列 jsdom 不产出 DOM，见 PLAYBOOK「vxe 垫片 + 表格 stub」）
@@ -230,6 +230,7 @@ describe('环境管理：删除二次确认', () => {
     // 现状行为：失败不关闭弹窗（错误由 interceptor 统一反馈），用户可修正后重试
     expect(screen.getByText(/确定删除环境/)).toBeInTheDocument();
     expect(mocks.message).not.toHaveBeenCalledWith({ message: '删除成功', theme: 'success' });
+    expect(mocks.deleted).not.toHaveBeenCalled();
   });
 
   it('当环境已部署应用时，应拦截删除并提示先卸载应用', async () => {
@@ -281,5 +282,22 @@ describe('环境管理：删除二次确认', () => {
     await waitFor(() => expect(mocks.message).toHaveBeenCalledWith({ message: '删除成功', theme: 'success' }));
     expect(mocks.deleteEnv).toHaveBeenCalledTimes(1);
     expect(mocks.deleted).toHaveBeenCalledTimes(1);
+  });
+
+  it('切换目标环境后应忽略前一个环境迟到的部署详情', async () => {
+    let resolvePrevious!: (value: unknown) => void;
+    mocks.getEnv
+      .mockImplementationOnce(() => new Promise(resolve => (resolvePrevious = resolve)))
+      .mockResolvedValueOnce({ appDeployStatuses: [] });
+    renderHarness();
+    await userEvent.click(screen.getByRole('button', { name: '删除环境' }));
+    mocks.envData.current = { id: 'env-id-2', name: 'env-b', displayName: '环境B' };
+    await userEvent.click(screen.getByRole('button', { name: '删除环境' }));
+    await screen.findByText(/确定删除环境/);
+    resolvePrevious({ appDeployStatuses: [{ appName: 'old-app', appType: 'trpc', deployStatus: 'deployed' }] });
+    await waitFor(() => expect(mocks.getEnv).toHaveBeenCalledTimes(2));
+    expect(screen.queryByText('无法删除环境')).not.toBeInTheDocument();
+    expect(screen.queryByText('old-app')).not.toBeInTheDocument();
+    expect(screen.getByPlaceholderText('请输入待删除环境名称')).toBeVisible();
   });
 });

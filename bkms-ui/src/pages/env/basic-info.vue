@@ -484,8 +484,8 @@
     <DeployedAppsWarning
       v-model:is-show="showDeployedWarning"
       :deployed-apps="warningDeployedApps"
-      :dialog-title="deployedWarningTitle"
-      :tips-text="deployedWarningTips"
+      :dialog-title="$t('无法修改集群信息')"
+      :tips-text="$t('该环境已部署应用，请先卸载后再修改集群信息')"
     />
     <DeleteEnvAction
       ref="deleteEnvActionRef"
@@ -604,8 +604,7 @@
   const showDeployedWarning = ref(false);
   const deleteEnvActionRef = ref<InstanceType<typeof DeleteEnvAction>>();
   const warningDeployedApps = ref<EnvAppDeployStatusOutput[]>([]);
-  const deployedWarningTitle = ref('');
-  const deployedWarningTips = ref('');
+  let clusterEditSequence = 0;
 
   // clusterType 不从详情取，完全来自选择器根据集群列表查出
   const selectedClusterType = ref('');
@@ -626,35 +625,38 @@
     cluster.namespace = '';
   }
 
-  // 集群资源编辑
-  function handleClusterResourcesEdit() {
-    if (deployedApps.value.length > 0) {
-      showDeployedAppsWarning(t('无法修改集群信息'), t('该环境已部署应用，请先卸载后再修改集群信息'));
-      return;
-    }
+  // 修改集群前重新检查已部署应用，避免使用页面加载时的旧详情放行。
+  async function handleClusterResourcesEdit() {
+    if (!envId.value) return;
+    const current = ++clusterEditSequence;
+    const requestedEnvId = envId.value;
+    // 环境或空间切换时序号会先递增，卸载时 disposed 为真，迟到响应据此丢弃。
+    const isCurrent = () => !disposed && current === clusterEditSequence;
+    showDeployedWarning.value = false;
+    try {
+      const detail = await EnvService.getEnv({ envID: requestedEnvId });
+      if (!isCurrent()) return;
+      warningDeployedApps.value = detail.appDeployStatuses || [];
+      if (warningDeployedApps.value.length) {
+        showDeployedWarning.value = true;
+        return;
+      }
 
-    formData.value.cluster = {
-      projectCode: envData.value.cluster?.projectCode || '',
-      clusterID: envData.value.cluster?.clusterID || '',
-      clusterType: envData.value.cluster?.clusterType || '',
-      namespace: envData.value.cluster?.namespace || '',
-    };
-    selectedClusterType.value = '';
-    clusterResources.value.isEdit = true;
+      formData.value.cluster = {
+        projectCode: detail.cluster?.projectCode || '',
+        clusterID: detail.cluster?.clusterID || '',
+        clusterType: detail.cluster?.clusterType || '',
+        namespace: detail.cluster?.namespace || '',
+      };
+      selectedClusterType.value = '';
+      clusterResources.value.isEdit = true;
+    } catch {
+      if (isCurrent()) Message({ message: t('获取环境详情失败，无法验证部署状态'), theme: 'error' });
+    }
   }
 
   function resetClusterResources() {
     Object.assign(clusterResources.value, { isEdit: false, loading: false });
-  }
-
-  /**
-   * 弹出已部署应用警告 Dialog（环境有已部署应用时阻止修改集群信息 / 删除环境）
-   */
-  function showDeployedAppsWarning(title: string, tips: string) {
-    warningDeployedApps.value = deployedApps.value;
-    deployedWarningTitle.value = title;
-    deployedWarningTips.value = tips;
-    showDeployedWarning.value = true;
   }
 
   const clusterResourcesFormRef = ref<InstanceType<typeof Form>>();
@@ -833,6 +835,10 @@
     [workspaceId, envId],
     async () => {
       resetClusterHealth();
+      ++clusterEditSequence;
+      showDeployedWarning.value = false;
+      resetClusterResources();
+      deleteEnvActionRef.value?.reset();
       await getEnvDetail();
       if (!disposed) await initClusters();
     },

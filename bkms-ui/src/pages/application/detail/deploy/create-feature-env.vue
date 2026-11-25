@@ -59,7 +59,7 @@
         </div>
         <div>
           <span class="text-[#63656E]">{{ $t('命名空间') }}：</span>
-          <span class="text-[#313238]">{{ createdEnv.cluster?.namespace || createdEnv.name }}</span>
+          <span class="text-[#313238]">{{ createdEnv.cluster?.namespace || '--' }}</span>
         </div>
       </div>
       <div>
@@ -103,7 +103,7 @@
     >
       <Alert
         class="mb-[16px]"
-        theme="info"
+        theme="warning"
         :title="
           $t('这里创建的是当前应用的特性环境：只属于本应用，其他应用无法使用，适合灰度验证、联调等场景，用完可以销毁。')
         "
@@ -123,11 +123,11 @@
             v-model="sourceEnvName"
             class="w-full"
             :columns="2"
-            :get-env-disabled-reason="getSourceEnvDisabledReason"
             :kinds="['standard']"
             :show-env-prefix="false"
             :show-only-deployed-filter="false"
             :sync-env-store="false"
+            @update:env-list="handleSourceEnvListChange"
             @update:item="handleSourceEnvChange"
           />
           <div class="mt-[8px] text-[12px] leading-[20px] text-[#979BA5]">
@@ -145,6 +145,82 @@
             :placeholder="$t('请输入 1-32 字符的环境展示名')"
           />
         </Form.FormItem>
+
+        <div class="flex items-center">
+          <Button
+            :aria-expanded="showAdvancedSettings"
+            text
+            theme="primary"
+            @click="showAdvancedSettings = !showAdvancedSettings"
+          >
+            <RightShape
+              class="mr-[4px] transition-transform duration-200"
+              :class="{ 'rotate-90': showAdvancedSettings }"
+              fill="#3A84FF"
+              height="12px"
+              width="12px"
+            />
+            {{ $t('高级设置') }}
+          </Button>
+          <span
+            v-if="!showAdvancedSettings"
+            class="ml-[12px] text-[12px] text-[#979BA5]"
+          >
+            {{ $t('命名空间') }}：{{ namespaceTypeText }}
+          </span>
+        </div>
+        <div
+          v-if="showAdvancedSettings"
+          class="mt-[8px] rounded-[2px] bg-[#F5F7FA] px-[16px] py-[12px]"
+        >
+          <div class="mb-[10px] text-[12px] font-bold text-[#313238]">{{ $t('命名空间') }}</div>
+          <Radio.Group
+            v-model="formModel.nsType"
+            class="flex w-full flex-col gap-[8px]"
+          >
+            <div
+              v-bk-tooltips="{ content: $t('共享命名空间仅支持 AppModel 应用，使用组件的应用无法部署。') }"
+              class="block w-full"
+            >
+              <Radio
+                class="!m-0 !h-auto !flex w-full items-start rounded-[2px] border border-solid px-[16px] py-[8px]"
+                :class="formModel.nsType === 'shared' ? 'border-[#3A84FF] bg-[#F0F5FF]' : 'border-[#DCDEE5] bg-white'"
+                label="shared"
+              >
+                <span class="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-[8px] leading-[20px]">
+                  <span class="shrink-0 text-[#4D4F56]">{{ $t('沿用来源环境（默认）') }}</span>
+                  <span class="text-[12px] leading-[20px] text-[#979BA5]">
+                    {{ $t('和来源环境共用资源额度，销毁不影响来源环境。') }}
+                  </span>
+                </span>
+              </Radio>
+            </div>
+            <div
+              v-bk-tooltips="{
+                content: independentNamespaceDisabledReason,
+                disabled: !independentNamespaceDisabledReason,
+              }"
+              class="block w-full"
+            >
+              <Radio
+                class="!m-0 !h-auto !flex w-full items-start rounded-[2px] border border-solid px-[16px] py-[8px]"
+                :class="[
+                  formModel.nsType === 'independent' ? 'border-[#3A84FF] bg-[#F0F5FF]' : 'border-[#DCDEE5] bg-white',
+                  { 'cursor-not-allowed opacity-60': isSourceFederationEnv },
+                ]"
+                :disabled="isSourceFederationEnv"
+                label="independent"
+              >
+                <span class="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-[8px] leading-[20px]">
+                  <span class="shrink-0 text-[#4D4F56]">{{ $t('独立创建') }}</span>
+                  <span class="text-[12px] leading-[20px] text-[#979BA5]">
+                    {{ $t('资源与来源环境分开，销毁时只删除本环境的资源。') }}
+                  </span>
+                </span>
+              </Radio>
+            </div>
+          </Radio.Group>
+        </div>
       </Form>
 
       <div class="mt-[32px]">
@@ -170,11 +246,11 @@
 <script lang="ts" setup>
   import { computed, nextTick, reactive, ref, watch } from 'vue';
 
-  import { Alert, Button, Dropdown, Form, Input, Message, Sideslider } from 'bkui-vue';
-  import { AngleDownLine, Success } from 'bkui-vue/lib/icon';
+  import { Alert, Button, Dropdown, Form, Input, Message, Radio, Sideslider } from 'bkui-vue';
+  import { AngleDownLine, RightShape, Success } from 'bkui-vue/lib/icon';
   import { useI18n } from 'vue-i18n';
   import { useRoute, useRouter } from 'vue-router';
-  import { EnvOutput } from '~/@types/v1/env';
+  import { EnvOutput, NsType } from '~/@types/v1/env';
   import { EnvService } from '~/api/modules/v1';
   import { BKMS_REGEX } from '~/common/const';
   import DividerHeader from '~/components/divider-header.vue';
@@ -199,25 +275,35 @@
   // 表单引用与状态
   const formRef = ref();
   const confirmLoading = ref(false);
-  const envListLoading = ref(false);
   const envList = ref<EnvOutput[]>([]);
   const sourceEnvName = ref('');
+  const showAdvancedSettings = ref(false);
   // 有值即代表已创建成功，侧栏切换到引导态
   const createdEnv = ref<EnvOutput>();
-  // 表单数据：展示名称、来源环境ID
+  // 表单数据：展示名称、来源环境和命名空间选择，统一参与未保存修改检测。
   const formModel = reactive<{
     displayName: string;
+    nsType: NsType;
     sourceEnvID: string;
   }>({
     displayName: '',
     sourceEnvID: '',
+    nsType: 'shared',
   });
 
   // 特性环境只能基于标准环境创建，未就绪的环境也没有集群可继承
   const availableEnvList = computed(() =>
-    envList.value.filter(
-      env => env.id && env.status !== 'NotReady' && (env.kind || 'standard') === 'standard' && !isFederationEnv(env),
-    ),
+    envList.value.filter(env => env.id && env.status !== 'NotReady' && (env.kind || 'standard') === 'standard'),
+  );
+  const sourceEnv = computed(() => availableEnvList.value.find(env => env.id === formModel.sourceEnvID));
+  const isSourceFederationEnv = computed(() => isFederationEnv(sourceEnv.value));
+  const namespaceTypeText = computed(() => (formModel.nsType === 'shared' ? t('沿用来源环境（默认）') : t('独立创建')));
+  const independentNamespaceDisabledReason = computed(() =>
+    isSourceFederationEnv.value
+      ? t('来源环境（{0}）绑定了联邦集群，暂不支持创建独立的特性环境。', [
+          sourceEnv.value?.displayName || sourceEnv.value?.name || '',
+        ])
+      : '',
   );
   const {
     confirmBox: confirmFormLeave,
@@ -242,11 +328,6 @@
       },
     ],
   };
-
-  /** 联邦环境可见但不能作为特性环境的来源环境。 */
-  function getSourceEnvDisabledReason(env: EnvOutput) {
-    return isFederationEnv(env) ? t('该环境绑定联邦集群，不支持作为来源环境创建新环境') : undefined;
-  }
 
   // 关闭前确认：已创建成功则直接放行，否则检查表单是否有未保存修改
   function handleBeforeClose() {
@@ -274,25 +355,6 @@
     if (!createdEnv.value) return;
     emits('deploy', createdEnv.value);
     isShow.value = false;
-  }
-
-  // 获取应用环境列表（用于来源环境选择）
-  async function handleGetEnvList() {
-    if (!appDetailStore.appID) {
-      envList.value = [];
-      return;
-    }
-    envListLoading.value = true;
-    try {
-      envList.value = await EnvService.listAppEnvs({
-        appID: appDetailStore.appID,
-      });
-    } catch (err) {
-      console.error(err);
-      envList.value = [];
-    } finally {
-      envListLoading.value = false;
-    }
   }
 
   // 应用配置在另一个菜单下，新开标签页避免用户丢掉当前部署页的上下文
@@ -337,24 +399,34 @@
     withPausedWatch(() => {
       formModel.sourceEnvID = defaultEnv?.id || '';
       formModel.displayName = '';
+      formModel.nsType = 'shared';
     });
+    showAdvancedSettings.value = false;
     sourceEnvName.value = defaultEnv?.name || '';
     markFormClean();
   }
 
   // 来源环境变更：更新表单值并清除校验状态
   function handleSourceEnvChange(env?: EnvOutput) {
-    formModel.sourceEnvID = env && !isFederationEnv(env) ? env.id || '' : '';
+    formModel.sourceEnvID = env?.id || '';
+    if (isFederationEnv(env)) formModel.nsType = 'shared';
     if (env?.name) {
       nextTick(() => formRef.value?.clearValidate?.());
     }
   }
 
+  // 共用选择器返回的列表，避免默认值、校验和联邦判断读取不同快照。
+  function handleSourceEnvListChange(list: EnvOutput[]) {
+    envList.value = list;
+    if (isShow.value && !createdEnv.value) handleInitForm();
+  }
+
   // 提交创建：校验通过后调用API，成功后切换到引导态
   async function handleSubmit() {
+    if (confirmLoading.value) return;
     const valid = await formRef.value?.validate().catch(() => false);
-    if (!valid || !appDetailStore.appID) return;
-    if (!availableEnvList.value.some(env => env.id === formModel.sourceEnvID)) return;
+    if (!valid || confirmLoading.value || !appDetailStore.appID || !sourceEnv.value) return;
+    if (isSourceFederationEnv.value) formModel.nsType = 'shared';
 
     confirmLoading.value = true;
     try {
@@ -362,6 +434,7 @@
         appID: appDetailStore.appID,
         displayName: formModel.displayName,
         sourceEnvID: formModel.sourceEnvID,
+        nsType: formModel.nsType,
       });
       if (!env?.name) {
         Message({
@@ -380,12 +453,12 @@
     }
   }
 
-  // 监听侧栏打开：重置状态、加载环境列表、初始化表单
-  watch(isShow, async val => {
+  // 监听侧栏打开：重置状态，选择器加载完成后再初始化来源环境。
+  watch(isShow, val => {
     if (val) {
       createdEnv.value = undefined;
-      await handleGetEnvList();
-      nextTick(handleInitForm);
+      envList.value = [];
+      handleInitForm();
     }
   });
 </script>

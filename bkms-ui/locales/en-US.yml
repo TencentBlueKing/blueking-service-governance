@@ -1718,7 +1718,6 @@ Key 不能重复: Key 不能重复
 资源: Resource
 联邦集群不支持灰度操作: Federated clusters do not support gray deployment.
 联邦集群暂不支持自动扩缩: Federated clusters do not currently support autoscaling.
-该环境绑定联邦集群，不支持作为来源环境创建新环境: This environment is bound to a federated cluster and cannot be used as the source for a new environment.
 暂不支持选择绑定联邦集群的环境: Environments bound to federated clusters are not currently supported.
 环境变量未定义: Undefined Environment Variables
 '{0} 个变量': '{0} variables'
@@ -1904,7 +1903,7 @@ runner 阶段: Runner Stage
 沿用来源环境的集群和环境分类。应用配置不会复制，新环境使用应用的默认配置。: The cluster and environment category are taken from the source environment. Application configuration is not copied; the new environment uses the application's default configuration.
 环境创建成功: Environment Created
 当前使用应用默认配置，未配置环境级变量。可直接部署，也可先调整配置。: The application is currently using default configurations; no environment-level variables have been set. You can deploy immediately or adjust the configuration first.
-'该操作不可恢复，请输入特性环境命名空间：{0} 进行确认': 'This operation is irreversible. Please enter the feature environment namespace: {0} to confirm'
+'该操作不可恢复，请输入特性环境名称：{0} 进行确认': 'This operation is irreversible. Please enter the feature environment name: {0} to confirm'
 特性环境只属于当前应用，其他应用无法使用。来源环境仅为创建时快照，之后互不影响。: A feature environment belongs to the current application only and cannot be used by other applications. The source environment is just a snapshot taken at creation time; the two are independent afterwards.
 '环境变量不会从来源环境复制，可在列表中单独配置。': 'Environment variables are not copied from the source environment. Configure them separately from the list.'
 '环境创建后不会自动部署，需要单独执行部署；销毁前需先移除部署。': 'Creating an environment does not deploy it; deployment is a separate action. Remove the deployment before destroying the environment.'
@@ -1913,7 +1912,13 @@ runner 阶段: Runner Stage
 立即移除部署: Remove Deployment Immediately
 部署中或卸载中的特性环境暂不支持销毁: Feature environments that are deploying or uninstalling do not support destruction
 确认销毁特性环境: Confirm Destruction of Feature Environment
-'将永久删除特性环境及其命名空间，并清理应用配置 / 北极星 / 组件中的引用。': 'The feature environment and its namespace will be permanently deleted, and references in application configuration / Polaris / components will be cleaned up.'
+'将永久删除特性环境，并清理应用配置 / 北极星 / 组件中的引用。': 'The feature environment will be permanently deleted, and references in application configuration / Polaris / components will be cleaned up.'
+'沿用来源环境（默认）': 'Reuse source namespace (default)'
+'和来源环境共用资源额度，销毁不影响来源环境。': 'Share resource quotas with the source environment. Destroying this environment does not affect the source.'
+'独立创建': 'Create independently'
+'资源与来源环境分开，销毁时只删除本环境的资源。': 'Keep resources separate from the source environment. Only this environment’s resources are removed when it is destroyed.'
+'共享命名空间仅支持 AppModel 应用，使用组件的应用无法部署。': 'Shared namespaces support only AppModel applications. Applications that use components cannot be deployed.'
+'来源环境（{0}）绑定了联邦集群，暂不支持创建独立的特性环境。': 'The source environment ({0}) uses a federated cluster. Creating an independent feature environment is not supported yet.'
 '{0}已修改，保存后需重新部署才会生效。': '{0} has been modified; changes will take effect only after saving and redeploying.'
 '已复制 {0}': 'Copied {0}'
 '推荐用法：点击复制获取 {0}，由 tRPC 框架运行时解析；平台不会将环境变量值渲染进配置文件。': 'Recommended: Copy to get {0}, resolved by the tRPC framework at runtime; the platform will not render the environment variable value into the configuration file.'
@@ -2168,6 +2173,8 @@ HostPort 目前仅对绑定联邦集群的环境生效: HostPort currently only 
 请选择环境: Please select an environment
 重试: Retry
 获取环境详情失败，无法验证部署状态: Failed to load environment details. Unable to verify deployment status
+'特性环境': 'Feature environment'
+'待部署': 'Pending deployment'
 无匹配数据: No matching data
 环境未配置集群资源，无法部署应用: Configure cluster resources before deploying applications
 导入: Import
