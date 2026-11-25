@@ -86,8 +86,11 @@ vi.mock('~/components/monaco-editor/ms-editor.vue', () => ({
   }),
 }));
 
-vi.mock('bkui-vue', async importOriginal => {
-  const actual = await importOriginal<Record<string, unknown>>();
+vi.mock('bkui-vue', async () => {
+  // 直接组合全局 stub，不依赖 importOriginal 的解析结果：
+  // 部分环境下 importOriginal 会解析到真实 bkui-vue，真实 FormItem 渲染在
+  // 无 Form 上下文的 stub Form 下会触发其 labelStyles 的空指针缺陷
+  const stubs = await import('../stubs/bkui-vue');
   const inputStub = defineComponent({
     name: 'InputInteractiveStub',
     props: {
@@ -160,11 +163,10 @@ vi.mock('bkui-vue', async importOriginal => {
       return () => h('form', slots.default?.());
     },
   });
-  const formItem = (actual.Form as { FormItem: unknown }).FormItem;
   return {
-    ...actual,
+    ...stubs,
     Checkbox: checkboxStub,
-    Form: Object.assign(formStub, { FormItem: formItem }),
+    Form: Object.assign(formStub, { FormItem: stubs.FormItem }),
     Message: () => undefined,
     Input: inputStub,
     Select: Object.assign(selectStub, { Option: selectOptionStub }),

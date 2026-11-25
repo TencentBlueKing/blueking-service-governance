@@ -36,8 +36,6 @@ import { render, screen, waitFor, within } from '@testing-library/vue';
 import { flushPromises } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type * as BkuiVue from 'bkui-vue';
-
 const mocks = vi.hoisted(() => ({
   getTemplate: vi.fn(),
   listTemplates: vi.fn(),
@@ -60,8 +58,10 @@ vi.mock('vue-router', () => ({
   useRouter: () => ({ resolve: mocks.routerResolve }),
 }));
 
-vi.mock('bkui-vue', async importOriginal => {
-  const actual = await importOriginal<typeof BkuiVue>();
+vi.mock('bkui-vue', async () => {
+  // 直接组合全局 stub，不依赖 importOriginal 的解析结果：
+  // 部分环境下 importOriginal 会解析到真实 bkui-vue，其模块加载与渲染行为在 jsdom 下不受控
+  const stubs = await import('../stubs/bkui-vue');
   const selectOptionStub = defineComponent({
     name: 'SelectOptionInteractiveStub',
     props: {
@@ -100,7 +100,7 @@ vi.mock('bkui-vue', async importOriginal => {
     },
   });
   return {
-    ...actual,
+    ...stubs,
     InfoBox: mocks.infoBox,
     Message: () => undefined,
     Select: Object.assign(selectStub, { Option: selectOptionStub }),
