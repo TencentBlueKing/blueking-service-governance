@@ -1711,6 +1711,9 @@ Key 不能重复: Key 不能重复
 当前环境已绑定联邦集群。联邦集群要求 CPU、内存的 Requests 与 Limits 必须一致，否则无法部署。: This environment is bound to a federated cluster. CPU and memory Requests must match Limits, otherwise the environment cannot be deployed.
 '建议前往 {0} 将 Requests 调整为与 Limits 一致后再部署。': 'Go to {0} and set Requests equal to Limits before deploying.'
 缺少必选集群组件: Missing Required Cluster Components
+沿用来源环境不支持组件: Components are not supported when reusing the source environment
+这些组件会部署到来源环境的命名空间，影响来源环境。: These components are deployed into the source environment's namespace and affect the source environment.
+'建议前往 {0} 确认是否都需要；仍要使用时，前往 {1} 选择「独立创建」。': 'Go to {0} and confirm whether all components are needed. To keep using them, go to {1} and select "Create independently".'
 '{0} 个组件': '{0} component(s)'
 以下必选集群组件在目标环境所在集群中尚未安装，缺失时应用无法正常部署。: The following required cluster components are not installed in the target environment's cluster, so the application cannot be deployed normally.
 '建议前往 {0} 安装组件后再部署。': 'Go to {0}, install the components, and then deploy.'

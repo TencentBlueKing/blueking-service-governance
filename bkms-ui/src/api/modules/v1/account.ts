@@ -6,17 +6,21 @@
 import type { Config } from '~/api/interceptors';
 import type { NoInfer } from '~/api/ts-helpers';
 import { v1Fetch } from '~/api/clients';
-import type { GetCurrentUserRequest, RefreshTokenRequest, CreateTokenRequest, ValidateTokenRequest, GetRoleRequest, RoleInfo } from '~/@types/v1/account';
+import type { GetCurrentUserRequest, CurrentUserOutput, RefreshTokenRequest, CreateTokenRequest, ValidateTokenRequest, GetRoleRequest, RoleInfo } from '~/@types/v1/account';
 
 export const AccountService = {
   /**
    * Get current user
    *
+   * 未登录时返回 401，响应体为 {"loginURL": "...", "code": "1000"}
+   *
    * @method GET
    * @path /simple_account/info
    * @tag account
+   * @response 200 CurrentUserOutput OK
+   * @response 400 LegacyErrorOutput Bad Request
    */
-  getCurrentUser: async <Request extends GetCurrentUserRequest = GetCurrentUserRequest, ResponseData = unknown>(
+  getCurrentUser: async <Request extends GetCurrentUserRequest = GetCurrentUserRequest, ResponseData = CurrentUserOutput>(
     params?: NoInfer<Request>,
     config?: Config,
   ) => await v1Fetch.get<Request, ResponseData>('/simple_account/info')(params, config),

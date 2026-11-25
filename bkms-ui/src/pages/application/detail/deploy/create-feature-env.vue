@@ -301,7 +301,9 @@
                   </i18n-t>
                   <div class="mt-[10px] border-t border-dashed border-[#FFD2D2] pt-[8px]">
                     <Checkbox v-model="formModel.riskAcknowledged">
-                      <span class="whitespace-normal">{{ $t('我已知晓风险，仍要沿用来源环境创建') }}</span>
+                      <span class="whitespace-normal text-[12px] text-[#313238]">
+                        {{ $t('我已知晓风险，仍要沿用来源环境创建') }}
+                      </span>
                     </Checkbox>
                   </div>
                 </div>

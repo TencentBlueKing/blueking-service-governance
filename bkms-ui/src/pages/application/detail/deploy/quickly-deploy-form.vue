@@ -138,6 +138,7 @@
     :mismatches="federationMismatches"
     :missing-required-cluster-addons="missingRequiredClusterAddons"
     :undefined-vars="undefinedVars"
+    :unsupported-components="unsupportedComponents"
     @cancel="cancelDeploy"
     @go-modify="cancelDeploy"
     @still-deploy="continueDeploy"
@@ -198,6 +199,7 @@
     federationMismatches,
     isShowPrecheckDialog,
     missingRequiredClusterAddons,
+    unsupportedComponents,
     precheck,
     precheckEnvName,
     precheckEnvId,

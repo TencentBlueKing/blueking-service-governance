@@ -40,6 +40,8 @@ export function useDeployPrecheck() {
   const federationMismatches = ref<FederationResourceMismatch[]>([]);
   // 缺失的必选集群组件，属于硬阻断问题
   const missingRequiredClusterAddons = ref<ClusterAddonReferenceOutput[]>([]);
+  // 沿用来源环境不支持的组件，属于硬阻断问题
+  const unsupportedComponents = ref<string[]>([]);
   const undefinedVars = ref<UndefinedEnvVarOutput[]>([]);
   let precheckRunID = 0;
   let resolvePrecheck: ((passed: boolean) => void) | undefined;
@@ -58,7 +60,13 @@ export function useDeployPrecheck() {
 
   function continueDeploy() {
     // 硬阻断问题不能通过事件绕过弹窗按钮状态继续部署。
-    if (federationMismatches.value.length > 0 || missingRequiredClusterAddons.value.length > 0) return;
+    if (
+      federationMismatches.value.length > 0 ||
+      missingRequiredClusterAddons.value.length > 0 ||
+      unsupportedComponents.value.length > 0
+    ) {
+      return;
+    }
     completePrecheck(true);
   }
 
@@ -75,6 +83,7 @@ export function useDeployPrecheck() {
     precheckEnvId.value = targetEnv?.id || '';
     federationMismatches.value = [];
     missingRequiredClusterAddons.value = [];
+    unsupportedComponents.value = [];
     undefinedVars.value = [];
     isShowPrecheckDialog.value = false;
 
@@ -87,8 +96,10 @@ export function useDeployPrecheck() {
     if (runID !== precheckRunID || appID !== appDetailStore.appID) return false;
     undefinedVars.value = result.undefinedVars ?? [];
     missingRequiredClusterAddons.value = result.missingRequiredClusterAddons ?? [];
-    // 集群组件缺失与资源规格不一致同为硬阻断，存在任一阻断或未定义变量时弹出确认弹窗
-    const hasBlockingIssue = mismatches.length > 0 || missingRequiredClusterAddons.value.length > 0;
+    unsupportedComponents.value = result.unsupportedComponents ?? [];
+    // 集群组件缺失、沿用来源环境不支持组件与资源规格不一致同为硬阻断，存在任一阻断或未定义变量时弹出确认弹窗
+    const hasBlockingIssue =
+      mismatches.length > 0 || missingRequiredClusterAddons.value.length > 0 || unsupportedComponents.value.length > 0;
     if (!hasBlockingIssue && undefinedVars.value.length === 0) return true;
 
     isShowPrecheckDialog.value = true;
@@ -113,6 +124,7 @@ export function useDeployPrecheck() {
     federationMismatches,
     isShowPrecheckDialog,
     missingRequiredClusterAddons,
+    unsupportedComponents,
     precheck,
     precheckEnvName,
     precheckEnvId,

@@ -564,6 +564,10 @@ export interface DeployPreCheckOutput {
    */
   missingRequiredClusterAddons?: ClusterAddonReferenceOutput[];
   undefinedVars?: UndefinedEnvVarOutput[];
+  /**
+   * 环境与其他环境共用命名空间时不支持使用组件，列出应用在该环境下生效的组件名；非空时不能部署
+   */
+  unsupportedComponents?: string[];
 }
 
 export interface ListAppModelResourceSnapshotsOutput {
