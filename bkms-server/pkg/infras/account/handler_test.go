@@ -34,22 +34,23 @@ import (
 )
 
 var _ = Describe("GetCurrentUser", func() {
-	var router *gin.Engine
+	var handlerCfg Config
 
 	BeforeEach(func() {
 		gin.SetMode(gin.TestMode)
+		handlerCfg = Config{}
+	})
+
+	request := func(userInfo string) (int, map[string]any) {
 		optionalAuth, err := auth.Optional(auth.Config{
 			BackendType:          config.AuthBackendBkToken,
 			LoginURL:             "http://login.example.com",
 			AllowSetUserInHeader: true,
 		}, nil)
 		Expect(err).NotTo(HaveOccurred())
+		router := gin.New()
+		Register(router.Group(""), NewHandler(handlerCfg, nil), optionalAuth)
 
-		router = gin.New()
-		Register(router.Group(""), NewHandler(Config{}, nil), optionalAuth)
-	})
-
-	request := func(userInfo string) (int, map[string]any) {
 		req := httptest.NewRequest(http.MethodGet, "/simple_account/info", nil)
 		if userInfo != "" {
 			req.Header.Set(auth.BKAuthKey, userInfo)
@@ -62,18 +63,44 @@ var _ = Describe("GetCurrentUser", func() {
 		return rec.Code, body
 	}
 
-	It("returns the tenant of the authenticated user", func() {
-		code, body := request(`{"userId":"alice","tenantId":"tenant-a"}`)
+	It("returns the tenant and time zone of the authenticated user", func() {
+		code, body := request(`{"userId":"alice","tenantId":"tenant-a","timeZone":"Asia/Tokyo"}`)
 
 		Expect(code).To(Equal(http.StatusOK))
-		Expect(body).To(Equal(map[string]any{"user_id": "alice", "tenant_id": "tenant-a"}))
+		Expect(body).To(Equal(map[string]any{
+			"userID":            "alice",
+			"tenantID":          "tenant-a",
+			"timeZone":          "Asia/Tokyo",
+			"personalCenterURL": "",
+		}))
 	})
 
-	It("returns an empty tenant when the auth upstream does not provide one", func() {
+	It("returns an empty tenant and the default time zone when the auth upstream does not provide them", func() {
 		code, body := request(`{"userId":"alice"}`)
 
 		Expect(code).To(Equal(http.StatusOK))
-		Expect(body).To(Equal(map[string]any{"user_id": "alice", "tenant_id": ""}))
+		Expect(body).To(Equal(map[string]any{
+			"userID":            "alice",
+			"tenantID":          "",
+			"timeZone":          "Asia/Shanghai",
+			"personalCenterURL": "",
+		}))
+	})
+
+	It("returns the personal center url when the bk-user url is configured", func() {
+		handlerCfg.BkUserURL = "https://bkuser.example.com/"
+
+		code, body := request(`{"userId":"alice"}`)
+
+		Expect(code).To(Equal(http.StatusOK))
+		Expect(body).To(HaveKeyWithValue("personalCenterURL", "https://bkuser.example.com/personal-center"))
+	})
+
+	It("returns the login url when the user is not authenticated", func() {
+		code, body := request("")
+
+		Expect(code).To(Equal(http.StatusUnauthorized))
+		Expect(body).To(Equal(map[string]any{"loginURL": "http://login.example.com/plain/", "code": "1000"}))
 	})
 })
 

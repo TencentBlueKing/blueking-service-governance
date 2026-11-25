@@ -24,6 +24,8 @@ type UserInfo struct {
 	ID string
 	// TenantID 是认证上游返回的登录态所属租户，部分后端可能为空。
 	TenantID string
+	// TimeZone 是用户在用户管理中设置的时区（IANA 时区名），部分后端可能为空。
+	TimeZone string
 }
 
 // apigwUserInfoResponse 是 bk-login 网关 userinfo 接口的响应结构。
@@ -32,6 +34,7 @@ type apigwUserInfoResponse struct {
 		BkUsername  string `json:"bk_username"`
 		TenantID    string `json:"tenant_id"`
 		DisplayName string `json:"display_name"`
+		TimeZone    string `json:"time_zone"`
 	} `json:"data"`
 	Error *struct {
 		Code    string `json:"code"`

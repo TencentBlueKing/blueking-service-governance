@@ -49,6 +49,8 @@ type AccountConfig struct {
 	AuthBaseURL string `validate:"omitempty,url"`
 	// LoginURL 是登录页根地址，不含路径，用于拼接 /plain/ 跳转
 	LoginURL string `validate:"required,url"`
+	// BkUserURL 是用户管理（bk-user）页面根地址，不含路径，用于拼接个人中心地址；为空时不提供个人中心地址
+	BkUserURL string `validate:"omitempty,url"`
 	// AuthEnvName 是用户 token 使用的环境，不同环境的 token 互相隔离，默认值为 "prod"
 	AuthEnvName string
 	// BackendType 是用户认证使用的后端类型，比如 bk_ticket 或 bk_token，默认值为 "bk_token"

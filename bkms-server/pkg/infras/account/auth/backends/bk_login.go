@@ -91,7 +91,11 @@ func (b *BkTokenApigwAuthBackend) GetUserInfo(ctx context.Context, userCred stri
 		return nil, errors.New("bk-login returned empty bk_username")
 	}
 
-	return &UserInfo{ID: result.Data.BkUsername, TenantID: result.Data.TenantID}, nil
+	return &UserInfo{
+		ID:       result.Data.BkUsername,
+		TenantID: result.Data.TenantID,
+		TimeZone: result.Data.TimeZone,
+	}, nil
 }
 
 // NewBkTokenApigwAuthBackend 创建通过 bk-login 网关校验 bk_token 的认证后端。

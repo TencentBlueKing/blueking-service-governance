@@ -23,15 +23,21 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/samber/lo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/usertoken"
 )
 
-const tokenRequestTimeout = 10 * time.Second
+const (
+	tokenRequestTimeout = 10 * time.Second
+	// defaultTimeZone 是认证上游未返回用户时区时的兜底值
+	defaultTimeZone = "Asia/Shanghai"
+)
 
 // Config contains account API runtime configuration.
 type Config struct {
@@ -39,6 +45,8 @@ type Config struct {
 	AuthEnvName string
 	// LoginURL 是 bk-login 服务的地址，用于拼接重定向时的登录链接
 	LoginURL string
+	// BkUserURL 是用户管理页面根地址，用于拼接个人中心地址
+	BkUserURL string
 }
 
 // APIHandler implements the account Gin APIs.
@@ -142,11 +150,14 @@ func (h *APIHandler) ValidateToken(c *gin.Context) {
 
 // GetCurrentUser returns the user authenticated by the auth middleware.
 //
-//	@ID			GetCurrentUser
-//	@Summary	Get current user
-//	@Tags		account
-//	@Produce	json
-//	@Router		/simple_account/info [get]
+//	@ID				GetCurrentUser
+//	@Summary		Get current user
+//	@Description	未登录时返回 401，响应体为 {"loginURL": "...", "code": "1000"}
+//	@Tags			account
+//	@Produce		json
+//	@Success		200	{object}	CurrentUserOutput
+//	@Failure		400	{object}	LegacyErrorOutput
+//	@Router			/simple_account/info [get]
 func (h *APIHandler) GetCurrentUser(c *gin.Context) {
 	// 直接从上下文中获取用户信息，信息由中间件注入
 	result, ok := auth.GetResult(c.Request.Context())
@@ -155,15 +166,25 @@ func (h *APIHandler) GetCurrentUser(c *gin.Context) {
 		return
 	}
 	if !result.RequestUser.IsAuthenticated() {
-		// This response intentionally preserves the historical response contract during migration.
-		c.JSON(http.StatusUnauthorized, gin.H{"login_url": result.LoginURL, "code": "1000"})
+		c.JSON(http.StatusUnauthorized, gin.H{"loginURL": result.LoginURL, "code": "1000"})
 		return
 	}
-	// tenant_id 为空表示认证上游未返回租户（如单租户环境的 bk-login）
-	c.JSON(http.StatusOK, gin.H{
-		"user_id":   result.RequestUser.GetID(),
-		"tenant_id": result.RequestUser.GetTenantID(),
+	// tenantID 为空表示认证上游未返回租户（如单租户环境的 bk-login）；
+	// 仅 bk-login 网关 userinfo 认证路径能拿到用户时区，其余路径返回默认时区
+	c.JSON(http.StatusOK, CurrentUserOutput{
+		UserID:   result.RequestUser.GetID(),
+		TenantID: result.RequestUser.GetTenantID(),
+		TimeZone: lo.CoalesceOrEmpty(result.RequestUser.GetTimeZone(), defaultTimeZone),
+		// 未配置用户管理地址时为空，前端据此隐藏个人中心入口
+		PersonalCenterURL: h.personalCenterURL(),
 	})
+}
+
+func (h *APIHandler) personalCenterURL() string {
+	if h.cfg.BkUserURL == "" {
+		return ""
+	}
+	return strings.TrimRight(h.cfg.BkUserURL, "/") + "/personal-center"
 }
 
 func parseNeedNewToken(raw string) bool {
@@ -173,5 +194,5 @@ func parseNeedNewToken(raw string) bool {
 
 func writeLegacyError(c *gin.Context, message string) {
 	// Account endpoints retain the legacy error shape for compatibility and may adopt bkms errors later.
-	c.JSON(http.StatusBadRequest, gin.H{"message": message, "code": "1000"})
+	c.JSON(http.StatusBadRequest, LegacyErrorOutput{Message: message, Code: "1000"})
 }

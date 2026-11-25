@@ -73,7 +73,9 @@ var _ = Describe("Auth backends", func() {
 			Expect(json.Unmarshal([]byte(request.Header.Get("X-Bkapi-Authorization")), &authHeader)).To(Succeed())
 			Expect(authHeader).To(Equal(map[string]string{"bk_app_code": "bkms", "bk_app_secret": "secret"}))
 
-			_, _ = w.Write([]byte(`{"data":{"bk_username":"admin","tenant_id":"system","display_name":"admin"}}`))
+			_, _ = w.Write([]byte(
+				`{"data":{"bk_username":"admin","tenant_id":"system","display_name":"admin","time_zone":"Asia/Tokyo"}}`,
+			))
 		}))
 		defer server.Close()
 
@@ -81,7 +83,7 @@ var _ = Describe("Auth backends", func() {
 		Expect(err).NotTo(HaveOccurred())
 		user, err := backend.GetUserInfo(context.Background(), "token")
 		Expect(err).NotTo(HaveOccurred())
-		Expect(user).To(Equal(&UserInfo{ID: "admin", TenantID: "system"}))
+		Expect(user).To(Equal(&UserInfo{ID: "admin", TenantID: "system", TimeZone: "Asia/Tokyo"}))
 	})
 
 	It("returns the apigw login-expired error", func() {

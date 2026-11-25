@@ -191,7 +191,7 @@ func authenticate(
 		return result
 	}
 
-	result.RequestUser = User{ID: userInfo.ID, TenantID: userInfo.TenantID, Cred: cred}
+	result.RequestUser = User{ID: userInfo.ID, TenantID: userInfo.TenantID, TimeZone: userInfo.TimeZone, Cred: cred}
 	return result
 }
 
@@ -200,6 +200,8 @@ type headerUserInfo struct {
 	UserID string `json:"userId"`
 	// TenantID 用户所属租户，可选；多租户模式下 tenant 中间件据此校验租户头，不再回源 bk-user
 	TenantID string `json:"tenantId"`
+	// TimeZone 用户时区，可选
+	TimeZone string `json:"timeZone"`
 }
 
 // 从请求头中获取用户信息，仅在允许通过请求头设置用户的环境中使用。
@@ -216,16 +218,16 @@ func getUserFromHeaders(request *http.Request) (User, error) {
 		return User{}, errors.Errorf("%s header does not contain an authenticated user", BKAuthKey)
 	}
 
+	user := User{ID: userInfo.UserID, TenantID: userInfo.TenantID, TimeZone: userInfo.TimeZone}
 	// Get the optional credential field
 	rawCredential := request.Header.Get(BKCredentialKey)
 	if rawCredential == "" {
-		return User{ID: userInfo.UserID, TenantID: userInfo.TenantID, Cred: UserCredential{}}, nil
+		return user, nil
 	}
-	credential := UserCredential{}
-	if err := json.Unmarshal([]byte(rawCredential), &credential); err != nil {
+	if err := json.Unmarshal([]byte(rawCredential), &user.Cred); err != nil {
 		return User{}, errors.Wrapf(err, "unmarshal %s header", BKCredentialKey)
 	}
-	return User{ID: userInfo.UserID, TenantID: userInfo.TenantID, Cred: credential}, nil
+	return user, nil
 }
 
 func newCredential(backendType, userCredential string) UserCredential {

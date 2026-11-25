@@ -65,6 +65,7 @@ bkPlatUrls:
 account:
   authBaseURL: http://auth.example.com
   loginURL: http://login.example.com
+  bkUserURL: http://bkuser.example.com
   authEnvName: test
   backendType: bk_token
 bkApiStages:
@@ -146,6 +147,7 @@ featureIntegrations:
 			Expect(cfg.BkApiStages.BCS).To(Equal("prod"))
 			Expect(cfg.Account.AuthBaseURL).To(Equal("http://auth.example.com"))
 			Expect(cfg.Account.LoginURL).To(Equal("http://login.example.com"))
+			Expect(cfg.Account.BkUserURL).To(Equal("http://bkuser.example.com"))
 			Expect(cfg.Account.AuthEnvName).To(Equal("test"))
 			Expect(cfg.Account.BackendType).To(Equal("bk_token"))
 			Expect(cfg.Tenant.EnableMultiTenantMode).To(BeFalse())
@@ -242,6 +244,7 @@ asynq:
 			Expect(cfg.HTTPServer.ShutdownTimeout).To(Equal(config.DefaultHTTPServerShutdownTimeout))
 			Expect(cfg.Account.AuthEnvName).To(Equal("prod"))
 			Expect(cfg.Account.BackendType).To(Equal("bk_token"))
+			Expect(cfg.Account.BkUserURL).To(BeEmpty())
 			Expect(cfg.Tenant.EnableMultiTenantMode).To(BeFalse())
 			Expect(cfg.FeatureIntegrations.EnableIndependentBCSProject).To(BeFalse())
 			Expect(cfg.BkMonitor.GatewayEndpoint).To(Equal("https://bk-monitor.example.com"))
