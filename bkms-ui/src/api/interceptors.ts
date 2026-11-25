@@ -58,10 +58,15 @@ function fetch<T, C extends Config>(input: RequestInfo | URL, init: Partial<C>) 
   return new Promise<FetchReturnType<T, C>>((resolve, reject) => {
     const controller = new AbortController();
     const requestID = uniqueId();
+    // 实际入队使用的 ID：请求完成时按该 ID 清理队列。
+    // 否则自定义 id 的队列项完成后残留，后续同 id 请求无法入队（AbortController 不被跟踪），cancelRequest 取消失效
+    const queueID = init?.id || requestID;
     const defaultHeaders = {
       'Access-Control-Allow-Origin': '*',
       'X-Bkapi-Request-Id': requestID,
     };
+    // 未真正入队（同 id 请求已在途）时，队列项归属在途请求，本请求完成时不清理
+    let enqueued = false;
 
     const request = OriginFetch(
       input,
@@ -78,19 +83,19 @@ function fetch<T, C extends Config>(input: RequestInfo | URL, init: Partial<C>) 
           res = fn(res, init) as Response;
         });
         resolve(res as FetchReturnType<T, C>);
-        removeQueue(requestID);
+        if (enqueued) removeQueue(queueID);
       })
       .catch(err => {
         interceptorsResError.forEach(fn => {
           err = fn(err, init);
         });
         reject(err);
-        removeQueue(requestID);
+        if (enqueued) removeQueue(queueID);
       });
 
     // const route = useRoute();
-    addQueue({
-      id: init?.id || requestID,
+    enqueued = addQueue({
+      id: queueID,
       controller,
       request,
       config: init,

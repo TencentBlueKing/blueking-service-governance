@@ -105,8 +105,10 @@
         :editor-lang="editorLang"
         :editor-title="form.frameworkConfigFile.name"
         :language="language"
+        :selected-template-id="frameworkTemplateId"
         :value="{ appModelSpec: form.appModelSpec }"
         :workspace-id="workspaceID"
+        @template-loading="appConfigTemplateLoading = $event"
       />
       <TafAppConfig
         v-else-if="step === 3 && form.framework === APP_FRAMEWORKS.TAF"
@@ -114,8 +116,10 @@
         ref="tafRef"
         :editor-lang="editorLang"
         :language="language"
+        :selected-template-id="frameworkTemplateId"
         :value="tafValue"
         :workspace-id="workspaceID"
+        @template-loading="appConfigTemplateLoading = $event"
       />
       <Result
         v-else-if="step === 4"
@@ -145,6 +149,7 @@
         <Button
           v-else
           class="min-w-[88px]"
+          :disabled="step === 3 && appConfigTemplateLoading"
           :loading="submitting"
           theme="primary"
           @click="createApp"
@@ -200,6 +205,11 @@
   const trpcRef = ref<InstanceType<typeof TrpcAppConfig> | null>(null);
   const tafRef = ref<InstanceType<typeof TafAppConfig> | null>(null);
   const submitting = ref(false);
+  // 当前套用的框架配置模板 ID：父组件跨步骤常驻，保存后重新进入配置步骤时传回选择器，
+  // 使其仅回显选中项而不重新套用默认模板，避免覆盖已编辑的框架配置内容
+  const frameworkTemplateId = ref('');
+  // 第 3 步框架配置模板切换/初始化未完成时禁用「创建」：窗口期内收集到的是旧模板内容
+  const appConfigTemplateLoading = ref(false);
   const createdType = ref<IAppType>(APP_TYPES.BKMS_APP);
   const result = ref<IResultData>({ status: 'CREATING', name: '', msg: '' });
   const workspaceID = computed(() => String(route.params.space || ''));
@@ -255,6 +265,7 @@
     }
     if (form.value?.framework === framework.value && form.value.language === language.value) return;
     form.value = createCurrentAppForm();
+    frameworkTemplateId.value = '';
     emit('update-text', {
       type: framework.value === APP_FRAMEWORKS.BLANK ? APP_FRAMEWORKS.BLANK : APP_TYPES.BKMS_APP,
     });
@@ -279,8 +290,10 @@
         envVars: data.env,
       };
       form.value.frameworkConfigFile.content = data.content;
+      frameworkTemplateId.value = data.templateId || '';
     } else if (tafRef.value) {
       const data = tafRef.value.getValue();
+      frameworkTemplateId.value = data.templateId || '';
       form.value.appModelSpec = {
         command: data.command,
         args: data.args,
@@ -338,6 +351,7 @@
   function recreate() {
     if (result.value.status === 'SUCCESS') {
       form.value = createCurrentAppForm();
+      frameworkTemplateId.value = '';
       forceCleanDirtyTag();
     }
     emit('update-step', 2);

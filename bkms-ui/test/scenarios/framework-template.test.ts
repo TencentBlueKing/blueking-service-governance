@@ -19,9 +19,10 @@ import { defineComponent, h, onMounted, onUpdated, ref } from 'vue';
  */
 /**
  * 场景级测试：空间框架配置模板（新模块，未纳入历史 ROUTES 台账）
- * 路径清单：V = 6
+ * 路径清单：V = 7
  * 1. 打开新建模板侧滑表单；2. 空表单确认显示校验；3. 新建和编辑时文件名不可修改；
- * 4. 切换 TAF/C++；5. 完整填写后确认新增；6. 默认模板切换时同语言旧默认失效。
+ * 4. 切换 TAF/C++；5. 完整填写后确认新增；6. 默认模板切换时同语言旧默认失效；
+ * 7. 编辑场景 A → 关闭 → 打开 B（延迟详情）：加载期间旧表单已清空且不可提交，加载后提交 B 的数据。
  * Stub 边界：bkui-vue 的 Input/Select/Checkbox 换为可交互 stub（全局 stub 为纯 slot），MsEditor mock 为 textarea，Sideslider/Radio/Form 使用全局结构 stub。
  * Backlog：真实 API 接入后补充接口失败、权限和持久化刷新路径。
  */
@@ -171,6 +172,7 @@ vi.mock('bkui-vue', async importOriginal => {
 });
 
 import FrameworkTemplateEditor from '~/pages/basic/framework-templates/template-editor.vue';
+import { normalizeTemplate } from '~/pages/basic/framework-templates/types';
 
 const editorProps = {
   appType: 'trpc' as const,
@@ -206,6 +208,8 @@ describe('框架配置模板：新建与默认模板', () => {
   it('打开表单后，空内容确认应显示必填校验', async () => {
     render(FrameworkTemplateEditor, { props: editorProps });
 
+    // 表单初始化期间禁止保存，先等待初始化完成
+    await waitFor(() => expect(screen.getByDisplayValue('trpc_go.yaml')).toBeInTheDocument());
     await userEvent.click(screen.getByText('确定'));
 
     expect(screen.getByText('请输入配置文件内容')).toBeInTheDocument();
@@ -223,6 +227,8 @@ describe('框架配置模板：新建与默认模板', () => {
   it('切换到 TAF 时应隐藏语言选择并切换配置文件默认名', async () => {
     render(FrameworkTemplateEditor, { props: editorProps });
 
+    // 表单初始化（加载平台模板）期间禁用切换，先等待初始化完成
+    await waitFor(() => expect(screen.getByDisplayValue('trpc_go.yaml')).toBeInTheDocument());
     await userEvent.click(screen.getAllByRole('radio')[1]);
 
     expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
@@ -233,6 +239,8 @@ describe('框架配置模板：新建与默认模板', () => {
   it('完整填写 tRPC 模板后确认应提交模板数据', async () => {
     render(FrameworkTemplateEditor, { props: editorProps });
 
+    // 表单初始化（加载平台模板）期间禁用输入，先等待初始化完成
+    await waitFor(() => expect(screen.getByDisplayValue('trpc_go.yaml')).toBeInTheDocument());
     await userEvent.type(screen.getByPlaceholderText('请输入模板名称'), 'tRPC 基础模板');
     await userEvent.type(screen.getByTestId('ms-editor'), 'global:\n  namespace: Development');
     await userEvent.click(screen.getByText('确定'));
@@ -251,6 +259,8 @@ describe('框架配置模板：新建与默认模板', () => {
   it('完整填写 TAF 模板后确认应提交 TAF 配置文件名', async () => {
     render(FrameworkTemplateEditor, { props: editorProps });
 
+    // 表单初始化（加载平台模板）期间禁用输入，先等待初始化完成
+    await waitFor(() => expect(screen.getByDisplayValue('trpc_go.yaml')).toBeInTheDocument());
     await userEvent.click(screen.getAllByRole('radio')[1]);
     await userEvent.type(screen.getByPlaceholderText('请输入模板名称'), 'TAF 基础模板');
     await userEvent.type(screen.getByTestId('ms-editor'), '<taf />');
@@ -265,5 +275,73 @@ describe('框架配置模板：新建与默认模板', () => {
         name: 'TAF 基础模板',
       }),
     );
+  });
+
+  it('打开 B 时详情未加载完成前不得提交（A → 关闭 → B 延迟详情）', async () => {
+    // 打开模板 A（自带内容，不触发详情请求）
+    const view = render(FrameworkTemplateEditor, { props: editProps });
+    await waitFor(() => expect(screen.getByDisplayValue('模板 1')).toBeInTheDocument());
+
+    // 关闭后打开模板 B：列表数据无 fileContent，详情请求延迟返回
+    let resolveDetail!: (value: { content?: string; fileName?: string }) => void;
+    apiMocks.get.mockImplementation(
+      () =>
+        new Promise(resolve => {
+          resolveDetail = resolve;
+        }),
+    );
+    const templateB = { ...editProps.template, fileContent: '', id: 'template-2', name: '模板 2' };
+    await view.rerender({ ...editProps, isShow: false });
+    await view.rerender({ ...editProps, isShow: true, template: templateB });
+
+    // 旧表单立即清空，详情加载期间保存按钮禁用，点击确定不发出更新请求
+    await waitFor(() => expect(screen.queryByDisplayValue('模板 1')).not.toBeInTheDocument());
+    expect(screen.getByText('确定')).toHaveAttribute('disabled', 'true');
+    await userEvent.click(screen.getByText('确定'));
+    expect(apiMocks.update).not.toHaveBeenCalled();
+
+    // 详情返回后表单填充 B 的数据，保存提交 B 的 ID 与内容
+    resolveDetail({ content: 'content-b', fileName: 'trpc_go.yaml' });
+    await waitFor(() => expect(screen.getByDisplayValue('模板 2')).toBeInTheDocument());
+    await userEvent.click(screen.getByText('确定'));
+
+    expect(apiMocks.update).toHaveBeenCalledWith(
+      expect.objectContaining({ templateID: 'template-2', content: 'content-b', name: '模板 2' }),
+    );
+  });
+});
+
+describe('normalizeTemplate 统一映射（列表页与编辑器共用）', () => {
+  it('内置模板映射为平台来源并收窄语言', () => {
+    const record = normalizeTemplate({
+      builtin: true,
+      content: 'platform-content',
+      fileName: 'trpc_go.yaml',
+      framework: 'trpc',
+      id: 'builtin-trpc-go',
+      isDefault: true,
+      language: 'go',
+      name: '平台默认',
+    });
+    expect(record).toMatchObject({
+      appType: 'trpc',
+      fileContent: 'platform-content',
+      fileName: 'trpc_go.yaml',
+      id: 'builtin-trpc-go',
+      isDefault: true,
+      language: 'go',
+      source: 'platform',
+    });
+  });
+
+  it('空间模板映射为空间来源，非法语言回退到传入的 fallback', () => {
+    const record = normalizeTemplate({ framework: 'taf', language: 'rust', name: '自定义' }, 'go');
+    expect(record.source).toBe('workspace');
+    expect(record.appType).toBe('taf');
+    expect(record.language).toBe('go');
+  });
+
+  it('未传 fallback 时非法语言收窄为空串', () => {
+    expect(normalizeTemplate({ framework: 'trpc', language: 'java' }).language).toBe('');
   });
 });

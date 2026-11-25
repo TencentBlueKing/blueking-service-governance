@@ -114,10 +114,10 @@
           v-model="appType"
           type="capsule"
         >
-          <Radio.Button label="trpc">
+          <Radio.Button :label="APP_FRAMEWORKS.TRPC">
             {{ `tRPC ( ${displayCounts.trpc} )` }}
           </Radio.Button>
-          <Radio.Button label="taf">
+          <Radio.Button :label="APP_FRAMEWORKS.TAF">
             {{ `TAF ( ${displayCounts.taf} )` }}
           </Radio.Button>
         </Radio.Group>
@@ -286,6 +286,7 @@
   import { Plus } from 'bkui-vue/lib/icon';
   import { useI18n } from 'vue-i18n';
   import { FrameworkConfigTemplatesService } from '~/api/modules/v1';
+  import { APP_FRAMEWORKS } from '~/common/app-types';
   import { formatTimeByTimezone } from '~/common/util';
   import BkmsContent from '~/components/bkms-content.vue';
   import Layout from '~/components/skeleton/skeleton-layout';
@@ -293,9 +294,13 @@
   import { useSpaceStore } from '~/stores/space';
 
   import TemplateEditor from './template-editor.vue';
-
-  import type { FrameworkAppType, FrameworkTemplateRecord as FrameworkTemplate } from './types';
-  import type { TemplateOutputObj } from '~/@types/v1/framework-config-templates';
+  import {
+    type FrameworkAppType,
+    type FrameworkTemplateRecord as FrameworkTemplate,
+    normalizeTemplate,
+    TEMPLATE_LANGUAGE_LABELS,
+    TEMPLATE_LANGUAGES,
+  } from './types';
 
   type Scene = 'create' | 'edit' | 'view';
 
@@ -303,7 +308,7 @@
   const spaceStore = useSpaceStore();
   const tipText = t('这里新建的模板用于创建 tRPC、TAF 应用时选择框架配置，只影响本空间之后新建的应用。');
 
-  const frameworkAppTypes = ['trpc', 'taf'] as const satisfies readonly FrameworkAppType[];
+  const frameworkAppTypes = [APP_FRAMEWORKS.TRPC, APP_FRAMEWORKS.TAF] as const satisfies readonly FrameworkAppType[];
 
   const PAGE_SIZE = 10;
   const skeletonTableStyle = {
@@ -320,21 +325,23 @@
 
   type SortOrder = 'asc' | 'desc' | null;
 
-  const appType = ref<FrameworkAppType>('trpc');
+  const appType = ref<FrameworkAppType>(APP_FRAMEWORKS.TRPC);
   const keyword = ref('');
   const loading = ref(false);
-  const sortOrdersByGroup = reactive<Record<string, SortOrder>>({ all: null, cpp: null, go: null });
+  // 分组 key：tRPC 按语言分组（go/cpp），TAF 单组 all
+  const groupKeys = ['all', ...TEMPLATE_LANGUAGES] as const;
+  const sortOrdersByGroup = reactive<Record<string, SortOrder>>(Object.fromEntries(groupKeys.map(key => [key, null])));
   const sortConfig = { remote: true, trigger: 'cell' as const };
   const paginationByGroup = reactive<
     Record<string, { count: number; current: number; limit: number; showLimit: boolean }>
   >({});
   const templatesByType = ref<Record<FrameworkAppType, FrameworkTemplate[]>>({
-    trpc: [],
-    taf: [],
+    [APP_FRAMEWORKS.TRPC]: [],
+    [APP_FRAMEWORKS.TAF]: [],
   });
   const templateCounts = ref<Record<FrameworkAppType, number>>({
-    trpc: 0,
-    taf: 0,
+    [APP_FRAMEWORKS.TRPC]: 0,
+    [APP_FRAMEWORKS.TAF]: 0,
   });
   // 追踪已加载的类型，避免 Tab 切换时重复请求已有数据
   const loadedTypes = new Set<FrameworkAppType>();
@@ -349,16 +356,19 @@
     return text ? templates.value.filter(item => displayName(item).toLowerCase().includes(text)) : templates.value;
   });
   const displayCounts = computed<Record<FrameworkAppType, number>>(() => ({
-    taf: appType.value === 'taf' ? visibleTemplates.value.length : templateCounts.value.taf,
-    trpc: appType.value === 'trpc' ? countTemplates('trpc', visibleTemplates.value) : templateCounts.value.trpc,
+    taf: appType.value === APP_FRAMEWORKS.TAF ? visibleTemplates.value.length : templateCounts.value.taf,
+    trpc:
+      appType.value === APP_FRAMEWORKS.TRPC
+        ? countTemplates(APP_FRAMEWORKS.TRPC, visibleTemplates.value)
+        : templateCounts.value.trpc,
   }));
   const templateGroups = computed(() => {
-    if (appType.value !== 'trpc') {
+    if (appType.value !== APP_FRAMEWORKS.TRPC) {
       return [{ key: 'all', label: '', rows: sortTemplates(visibleTemplates.value, 'all') }];
     }
-    return (['go', 'cpp'] as const).map(language => ({
+    return TEMPLATE_LANGUAGES.map(language => ({
       key: language,
-      label: languageLabel(language),
+      label: TEMPLATE_LANGUAGE_LABELS[language],
       rows: sortTemplates(
         visibleTemplates.value.filter(item => item.language === language),
         language,
@@ -379,8 +389,8 @@
   }
 
   function countTemplates(type: FrameworkAppType, list: FrameworkTemplate[]) {
-    if (type !== 'trpc') return list.length;
-    return list.filter(item => ['go', 'cpp'].includes(item.language)).length;
+    if (type !== APP_FRAMEWORKS.TRPC) return list.length;
+    return list.filter(item => (TEMPLATE_LANGUAGES as readonly string[]).includes(item.language)).length;
   }
 
   function displayName(row: FrameworkTemplate) {
@@ -390,8 +400,8 @@
   async function fetchTemplates(type?: FrameworkAppType) {
     if (!spaceStore.currentSpace) {
       fetchSeq += 1;
-      templatesByType.value = { trpc: [], taf: [] };
-      templateCounts.value = { trpc: 0, taf: 0 };
+      templatesByType.value = { [APP_FRAMEWORKS.TRPC]: [], [APP_FRAMEWORKS.TAF]: [] };
+      templateCounts.value = { [APP_FRAMEWORKS.TRPC]: 0, [APP_FRAMEWORKS.TAF]: 0 };
       loadedTypes.clear();
       return;
     }
@@ -410,18 +420,24 @@
         ),
       );
       if (seq !== fetchSeq || spaceStore.currentSpace !== workspaceID) return;
+      let hasFailure = false;
       results.forEach((result, index) => {
         const templateType = types[index];
-        loadedTypes.add(templateType);
         if (result.status === 'fulfilled') {
-          const list = (Array.isArray(result.value) ? result.value : []).map(normalizeTemplate);
+          // 仅成功时标记已加载：失败后切换 Tab 可重新请求，避免一次接口故障导致列表持续显示为空
+          loadedTypes.add(templateType);
+          const list = (Array.isArray(result.value) ? result.value : []).map(item => normalizeTemplate(item));
           templatesByType.value[templateType] = list;
           templateCounts.value[templateType] = countTemplates(templateType, list);
           return;
         }
+        hasFailure = true;
         templatesByType.value[templateType] = [];
         templateCounts.value[templateType] = 0;
       });
+      if (hasFailure) {
+        Message({ theme: 'warning', message: t('框架配置模板加载失败') });
+      }
     } finally {
       if (seq === fetchSeq) loading.value = false;
     }
@@ -474,30 +490,6 @@
     void fetchTemplates(type);
   }
 
-  function languageLabel(language: string) {
-    if (language === 'go') return 'Go';
-    if (language === 'cpp') return 'C++';
-    return '--';
-  }
-
-  function normalizeTemplate(template: TemplateOutputObj): FrameworkTemplate {
-    const appType = template.framework === 'taf' ? 'taf' : 'trpc';
-    const language = template.language === 'go' || template.language === 'cpp' ? template.language : '';
-    return {
-      appType,
-      createdAt: template.createdAt || '',
-      fileContent: template.content || '',
-      fileName: template.fileName || '',
-      id: template.id || '',
-      isDefault: Boolean(template.isDefault),
-      language,
-      name: template.name || '',
-      source: template.builtin ? 'platform' : 'workspace',
-      updatedAt: template.updatedAt,
-      updater: template.updater,
-    };
-  }
-
   function openSlider(scene: Scene, template: FrameworkTemplate | null = null) {
     sliderScene.value = scene;
     editingTemplate.value = template;
@@ -530,8 +522,8 @@
   watch(
     () => spaceStore.currentSpace,
     () => {
-      templatesByType.value = { trpc: [], taf: [] };
-      templateCounts.value = { trpc: 0, taf: 0 };
+      templatesByType.value = { [APP_FRAMEWORKS.TRPC]: [], [APP_FRAMEWORKS.TAF]: [] };
+      templateCounts.value = { [APP_FRAMEWORKS.TRPC]: 0, [APP_FRAMEWORKS.TAF]: 0 };
       loadedTypes.clear();
       void fetchTemplates();
     },

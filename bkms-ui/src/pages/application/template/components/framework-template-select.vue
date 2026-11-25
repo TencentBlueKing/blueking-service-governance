@@ -1,20 +1,20 @@
 <!--
- * TencentBlueKing is pleased to support the open source community by making
- * 蓝鲸智云 - 服务治理 (BlueKing Service Governance) available.
- * Copyright (C) Tencent. All rights reserved.
- * Licensed under the MIT License (the "License"); you may not use this file except
- * in compliance with the License. You may obtain a copy of the License at
- *
- *  http://opensource.org/licenses/MIT
- *
- * Unless required by applicable law or agreed to in writing, software distributed under
- * the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
- * either express or implied. See the License for the specific language governing permissions and
- * limitations under the License.
- *
- * We undertake not to change the open source license (MIT license) applicable
- * to the current version of the project delivered to anyone in the future.
- -->
+ - TencentBlueKing is pleased to support the open source community by making
+ - 蓝鲸智云 - 服务治理 (BlueKing Service Governance) available.
+ - Copyright (C) Tencent. All rights reserved.
+ - Licensed under the MIT License (the "License"); you may not use this file except
+ - in compliance with the License. You may obtain a copy of the License at
+ -
+ -  http://opensource.org/licenses/MIT
+ -
+ - Unless required by applicable law or agreed to in writing, software distributed under
+ - the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
+ - either express or implied. See the License for the specific language governing permissions and
+ - limitations under the License.
+ -
+ - We undertake not to change the open source license (MIT license) applicable
+ - to the current version of the project delivered to anyone in the future.
+-->
 <template>
   <div class="flex items-center gap-[8px]">
     <Select
@@ -46,7 +46,7 @@
       <Select.Option
         v-for="item in templates"
         :key="item.id"
-        :label="optionLabel(item)"
+        :label="item.name"
         :value="item.id"
       />
       <template #extension>
@@ -79,8 +79,8 @@
   import { cancelRequest } from '~/api/request-queue';
 
   import type { TemplateOutputObj } from '~/@types/v1/framework-config-templates';
+  import type { FrameworkAppType } from '~/pages/basic/framework-templates/types';
 
-  type FrameworkAppType = 'taf' | 'trpc';
   type TemplateDetail = TemplateOption & { content: string };
   type TemplateOption = TemplateOutputObj & { fileName: string; id: string; name: string };
 
@@ -102,10 +102,12 @@
     defineProps<{
       appType: FrameworkAppType;
       language: string;
+      selectedTemplateId?: string;
       variant?: 'field' | 'text';
       workspaceId: string;
     }>(),
     {
+      selectedTemplateId: '',
       variant: 'field',
     },
   );
@@ -135,7 +137,7 @@
 
   const currentLabel = computed(() => {
     const selected = templates.value.find(item => item.id === selectedId.value);
-    return selected ? optionLabel(selected) : '';
+    return selected ? selected.name : '';
   });
 
   function confirmSwitch() {
@@ -239,6 +241,19 @@
         .filter(hasTemplateOption)
         .sort((left, right) => Number(Boolean(right.builtin)) - Number(Boolean(left.builtin)));
       emit('availability', templates.value.length > 0);
+
+      // 恢复场景（如向导返回上一步后重新进入配置步骤）：宿主已持有模板选择与表单内容，
+      // 仅回显选中项、不再 emit，避免默认模板静默覆盖用户已编辑的配置内容
+      if (props.selectedTemplateId) {
+        const restored = templates.value.find(template => template.id === props.selectedTemplateId);
+        if (restored) {
+          selectedId.value = restored.id;
+          previousId.value = restored.id;
+          return;
+        }
+        // 已保存的模板不存在（如已被删除）时回退为默认模板并套用其内容
+      }
+
       const initial = templates.value.find(template => template.isDefault) || templates.value[0];
       if (!initial) return;
 
@@ -304,10 +319,6 @@
       },
     });
     window.open(href, '_blank', 'noopener,noreferrer');
-  }
-
-  function optionLabel(template: TemplateOption) {
-    return template.name;
   }
 
   function rollbackSelection() {

@@ -1,7 +1,7 @@
 <!--
  - TencentBlueKing is pleased to support the open source community by making
  - 蓝鲸智云 - 服务治理 (BlueKing Service Governance) available.
- * Copyright (C) Tencent. All rights reserved.
+ - Copyright (C) Tencent. All rights reserved.
  - Licensed under the MIT License (the "License"); you may not use this file except
  - in compliance with the License. You may obtain a copy of the License at
  -
@@ -73,6 +73,7 @@
           <FrameworkTemplateSelect
             app-type="trpc"
             :language="language"
+            :selected-template-id="selectedTemplateId"
             variant="text"
             :workspace-id="workspaceId"
             @availability="handleTemplateAvailability"
@@ -144,7 +145,7 @@
   </div>
 </template>
 <script setup lang="ts">
-  import { ref } from 'vue';
+  import { ref, watch } from 'vue';
 
   import { Form, ResizeLayout } from 'bkui-vue';
 
@@ -156,8 +157,13 @@
     editorLang?: string;
     editorTitle?: string;
     language: string;
+    selectedTemplateId?: string;
     value: { appModelSpec: AppModelSpecInput };
     workspaceId: string;
+  }>();
+
+  const emit = defineEmits<{
+    'template-loading': [loading: boolean];
   }>();
   import KeyValue from '~/components/key-value.vue';
   import MsEditor from '~/components/monaco-editor/ms-editor.vue';
@@ -168,6 +174,7 @@
 
   const {
     editorErr,
+    ensureTemplateReady,
     errorRef,
     envList,
     handleEditorErr,
@@ -184,7 +191,14 @@
     toggleEnvVarShow,
   } = useAppConfigCommon();
 
+  // 模板加载状态上抛父级：切换/初始化未完成时禁用「创建」按钮，避免提交旧模板内容
+  watch(templateLoading, loading => emit('template-loading', loading), { immediate: true });
+
   const editorContent = ref(props.content || '');
+
+  // 当前套用的框架配置模板 ID：随 getValue() 回传给父级保存，
+  // 重新进入配置步骤时经 props 传回，避免默认模板覆盖已编辑内容
+  const currentTemplateId = ref(props.selectedTemplateId || '');
 
   const formData = ref<{
     args: string[];
@@ -212,16 +226,20 @@
       env,
       ...startupCommandRef.value?.getValue(),
       content: msEditorRef.value?.getValue() || '',
+      templateId: currentTemplateId.value,
     };
   }
 
   function handleTemplateSelect(template: TemplateOutputObj) {
     if (template.content === undefined) return;
     editorContent.value = template.content;
+    currentTemplateId.value = template.id || '';
     resetStatus();
   }
 
   async function validate() {
+    // 模板切换/初始化未完成时禁止提交：此时编辑器内容仍是旧模板的
+    if (!ensureTemplateReady()) return false;
     const commandValid = await startupCommandRef.value?.validate();
     if (!commandValid || editorErr.value?.message?.length) return false;
     return true;

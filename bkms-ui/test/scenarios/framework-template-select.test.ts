@@ -19,11 +19,12 @@
 /**
  * 场景级测试：创建 tRPC 应用的配置模板选择（ROUTES 未单独收录）
  *
- * V = 8（判定节点：默认模板选择、无默认模板回退、内置模板排序、TAF 参数、切换确认、取消/详情失败回滚、旧详情请求隔离）
+ * V = 10（判定节点：默认模板选择、无默认模板回退、内置模板排序、TAF 参数、切换确认、取消/详情失败回滚、旧详情请求隔离、恢复场景不覆盖、恢复模板已删除回退）
  * 路径：① 有默认模板时优先默认且内置排前 ② 无默认模板时使用排序后的首项
  * ③ TAF 使用默认 Select trigger ④ 确认切换后带入新内容 ⑤ 取消切换恢复旧选项和内容
  * ⑥ 新详情加载失败恢复旧选项和内容 ⑦ 重新加载后忽略迟到的旧详情
- * ⑧ 无远端模板时通知宿主隐藏选择区域
+ * ⑧ 无远端模板时通知宿主隐藏选择区域 ⑨ 外部传入已选模板 id 时仅回显不覆盖
+ * ⑩ 已选模板不存在时回退默认模板并套用内容
  * stub/mock：仅替换 bkui-vue 的 Select 为原生可交互 select，InfoBox 为可触发确认/取消回调；模板 API 返回真实 TemplateOutputObj 形状。
  * backlog：请求失败提示由组件统一消息反馈处理，本文件只断言选项回滚和宿主可用性状态。
  */
@@ -132,6 +133,7 @@ const Harness = defineComponent({
   props: {
     appType: { type: String, default: 'trpc' },
     language: { type: String, default: 'go' },
+    selectedTemplateId: { type: String, default: '' },
     variant: { type: String, default: 'text' },
   },
   setup(props) {
@@ -145,6 +147,7 @@ const Harness = defineComponent({
         h(FrameworkTemplateSelect, {
           appType: props.appType as 'taf' | 'trpc',
           language: props.language,
+          selectedTemplateId: props.selectedTemplateId,
           variant: props.variant as 'field' | 'text',
           workspaceId: 'workspace-1',
           onAvailability: (available: boolean) => {
@@ -356,5 +359,36 @@ describe('配置模板选择', () => {
     await flushPromises();
     expect(screen.getByTestId('selected-content')).toHaveTextContent('content-custom-a');
     expect(screen.getByTestId('selected-content')).not.toHaveTextContent('late-old-content');
+  });
+
+  it('恢复已选模板时仅回显选中项，不重新套用模板内容', async () => {
+    // 模拟向导「第 3 步 → 上一步 → 再进第 3 步」：宿主已持有选中模板 id 与已保存的编辑内容
+    setTemplates([templates.customA, templates.customB]);
+    render(Harness, {
+      props: { selectedTemplateId: 'custom-b' },
+      global: {
+        mocks: { $t: (key: string) => key },
+      },
+    });
+
+    await waitFor(() => expect(screen.getByTestId('template-loading')).toHaveTextContent('ready'));
+    expect(screen.getByRole('combobox', { name: '配置模板' })).toHaveValue('custom-b');
+    expect(screen.getByText('配置模板：模板 B')).toBeInTheDocument();
+    // 未 emit select、未请求详情，宿主已保存的编辑内容不被默认模板覆盖
+    expect(screen.getByTestId('selected-content')).toHaveTextContent('');
+    expect(mocks.getTemplate).not.toHaveBeenCalled();
+  });
+
+  it('已选模板不在列表中时回退为默认模板并套用其内容', async () => {
+    setTemplates([{ ...templates.customA, isDefault: true }, templates.customB]);
+    render(Harness, {
+      props: { selectedTemplateId: 'deleted-template' },
+      global: {
+        mocks: { $t: (key: string) => key },
+      },
+    });
+
+    await waitFor(() => expect(screen.getByTestId('selected-content')).toHaveTextContent('content-custom-a'));
+    expect(screen.getByRole('combobox', { name: '配置模板' })).toHaveValue('custom-a');
   });
 });

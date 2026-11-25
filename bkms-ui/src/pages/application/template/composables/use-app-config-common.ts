@@ -18,6 +18,8 @@
 
 import { onMounted, ref, watch } from 'vue';
 
+import { Message } from 'bkui-vue';
+import { useI18n } from 'vue-i18n';
 import { ApiServerService } from '~/api/modules/bkmsserver';
 import useEnvManager from '~/composables/use-env-manager';
 
@@ -31,6 +33,7 @@ import type { IMonacoEditorErrorMarkerItem } from '~/common/util';
  * YAML 卡片展开/收起等两组件完全相同的逻辑。
  */
 export function useAppConfigCommon() {
+  const { t } = useI18n();
   const { envList, handleGetEnvList } = useEnvManager();
 
   // yaml 异常
@@ -103,6 +106,16 @@ export function useAppConfigCommon() {
     templateLoading.value = loading;
   }
 
+  /**
+   * 模板切换/初始化未完成时阻止提交并提示。
+   * 该窗口期内编辑器内容仍是上一个模板的，此时提交会把旧模板内容带入创建请求。
+   */
+  function ensureTemplateReady() {
+    if (!templateLoading.value) return true;
+    Message({ theme: 'warning', message: t('模板配置加载中，请稍后') });
+    return false;
+  }
+
   // 初始化隐藏错误侧栏
   watch(
     [editorErr.value, errorRef],
@@ -119,19 +132,17 @@ export function useAppConfigCommon() {
 
   return {
     editorErr,
+    ensureTemplateReady,
     errorRef,
     envList,
-    handleEnvMounted: handleGetEnvList,
     handleEditorErr,
     handleGetVarEnv,
     handleTemplateAvailability,
     handleTemplateLoading,
     handleYamlCardChange,
-    hideOrShowError,
     isYamlCardExpanded,
     resetStatus,
     resizeLayoutRef,
-    setEnvVarAsideVisible,
     showEnvVar,
     showTemplateSelect,
     templateLoading,

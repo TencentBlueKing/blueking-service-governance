@@ -91,6 +91,7 @@
         <FrameworkTemplateSelect
           app-type="taf"
           :language="language"
+          :selected-template-id="selectedTemplateId"
           :workspace-id="workspaceId"
           @availability="handleTemplateAvailability"
           @loading="handleTemplateLoading"
@@ -231,6 +232,7 @@
   interface IProps {
     editorLang?: string;
     language: string;
+    selectedTemplateId?: string;
     value: TafAppModelSpecForm;
     workspaceId: string;
   }
@@ -248,10 +250,15 @@
 
   const props = defineProps<IProps>();
 
+  const emit = defineEmits<{
+    'template-loading': [loading: boolean];
+  }>();
+
   const { t } = useI18n();
 
   const {
     editorErr,
+    ensureTemplateReady,
     errorRef,
     envList,
     handleEditorErr,
@@ -268,7 +275,14 @@
     toggleEnvVarShow,
   } = useAppConfigCommon();
 
+  // 模板加载状态上抛父级：切换/初始化未完成时禁用「创建」按钮，避免提交旧模板内容
+  watch(templateLoading, loading => emit('template-loading', loading), { immediate: true });
+
   const formData = ref<TafAppModelSpecForm>(cloneDeep(props.value));
+
+  // 当前套用的框架配置模板 ID：随 getValue() 回传给父级保存，
+  // 重新进入配置步骤时经 props 传回，避免默认模板覆盖已编辑内容
+  const currentTemplateId = ref(props.selectedTemplateId || '');
 
   // Popover 相关状态
   const isPopoverShow = ref(false);
@@ -302,6 +316,7 @@
     return {
       ...formData.value,
       ...startupCommandRef.value?.getValue(),
+      templateId: currentTemplateId.value,
     };
   }
 
@@ -332,6 +347,7 @@
   function handleTemplateSelect(template: TemplateOutputObj) {
     if (template.content === undefined) return;
     formData.value.tafSpec.fileContent = template.content;
+    currentTemplateId.value = template.id || '';
     resetStatus();
   }
 
@@ -341,6 +357,8 @@
   const startupCommandRef = ref<InstanceType<typeof StartupCommandInput> | null>(null);
   const msEditorRef = ref<InstanceType<typeof MsEditor> | null>(null);
   async function validate() {
+    // 模板切换/初始化未完成时禁止提交：此时编辑器内容仍是旧模板的
+    if (!ensureTemplateReady()) return false;
     firstTrigger.value = true;
     const [valid, commandValid] = await Promise.all([formRef.value?.validate(), startupCommandRef.value?.validate()]);
 

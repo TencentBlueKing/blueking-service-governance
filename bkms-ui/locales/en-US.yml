@@ -1135,6 +1135,7 @@ Pod 中的管理脚本将在重新部署后移除: Management scripts in the Pod
 切换: Switch
 框架配置模板加载失败: Failed to load framework configuration templates
 模板详情加载失败，请重试: Failed to load template details. Please try again.
+模板配置加载中，请稍后: Framework configuration template is loading, please wait
 这里新建的模板用于创建 tRPC、TAF 应用时选择框架配置，只影响本空间之后新建的应用。: Templates created here are used to select framework configurations when creating tRPC and TAF applications. They only affect new applications created in this space.
 请输入模板名称: Please enter the template name
 请输入配置文件内容: Please enter the configuration file content
