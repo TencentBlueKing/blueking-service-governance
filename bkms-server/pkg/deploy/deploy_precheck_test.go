@@ -516,6 +516,42 @@ ignored: ${LEGACY}
 		})
 	})
 
+	Context("environment sharing namespace", func() {
+		It("reports components as unsupported instead of failing the build", func() {
+			compDef := dbfactory.CompDef(ctx, componentDefStore, &dbfactory.ComponentDefOpts{
+				Properties: []component.Property{
+					{Name: "value", Type: component.PropTypeString, DefaultValue: "${{ env.UNDEFINED }}"},
+				},
+			})
+			app, appEnv := newApp(&dbfactory.TrpcApplicationOpts{
+				Components: []*component.Component{
+					{
+						Name:          "redis",
+						ComponentInst: component.ComponentInst{Type: compDef.Name, Version: compDef.Version},
+					},
+				},
+			})
+			appEnv.NsSharing = envmodel.NsSharing{ResPrefix: "fab12"}
+
+			result, err := checker.Check(ctx, app, appEnv)
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.UnsupportedComponents).To(Equal([]string{"redis"}))
+			// 跳过了构建，组件中引用的未定义变量不再上报
+			Expect(result.UndefinedVars).To(BeEmpty())
+		})
+
+		It("builds normally when the app uses no components", func() {
+			app, appEnv := newApp(nil)
+			appEnv.NsSharing = envmodel.NsSharing{ResPrefix: "fab12"}
+
+			result, err := checker.Check(ctx, app, appEnv)
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.UnsupportedComponents).To(BeEmpty())
+		})
+	})
+
 	Context("required cluster addons", func() {
 		var addon *clusteraddon.ClusterAddonDef
 		BeforeEach(func() {

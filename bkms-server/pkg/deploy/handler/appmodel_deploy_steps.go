@@ -134,7 +134,7 @@ func (h *Handler) preCheckDeploy(c *gin.Context, expectedFramework string) {
 	checker := h.newDeployPreChecker()
 	result, err := checker.Check(ctx, app, environment)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "pre-check deployment"))
+		bkerrs.AbortWithErr(c, wrapDeployErr(err, "pre-check deployment"))
 		return
 	}
 	ginutils.OK(c, new(serializer.DeployPreCheckOutput).FromModel(result))
@@ -528,7 +528,7 @@ func toAppModelDeployAPIError(
 		errors.Is(err, batchrelease.ErrRolloutNotInstalled) {
 		return batchrelease.APIError(err, "batch release app model app: "+deployInfo)
 	}
-	return bkerrs.Wrapf(err, bkerrs.ErrCodeInternalServerError, "deploy app model app: %s", deployInfo)
+	return wrapDeployErr(err, "deploy app model app: "+deployInfo)
 }
 
 // recordBatchDeployAudit 记录按策略分批部署的操作记录（含策略名称）。

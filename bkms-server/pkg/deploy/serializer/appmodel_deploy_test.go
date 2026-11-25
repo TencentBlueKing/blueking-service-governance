@@ -64,6 +64,7 @@ var _ = Describe("AppModel deploy serializers", func() {
 					},
 				},
 				MissingRequiredClusterAddons: []serializer.ClusterAddonReferenceOutput{},
+				UnsupportedComponents:        []string{},
 			}))
 		})
 
@@ -81,15 +82,28 @@ var _ = Describe("AppModel deploy serializers", func() {
 				{"name":"game","displayName":"Gamedeploy"},
 				{"name":"hook","displayName":"Hook-operator"},
 				{"name":"other","displayName":""}
-			]}`))
+			],"unsupportedComponents":[]}`))
 		})
 
-		It("serializes empty undefined vars as an empty array", func() {
+		It("converts components unsupported in an environment sharing namespace", func() {
+			output := new(serializer.DeployPreCheckOutput).FromModel(&deploypkg.DeployPreCheckResult{
+				UnsupportedComponents: []string{"redis", "mysql"},
+			})
+			payload, err := json.Marshal(output)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(payload).To(MatchJSON(
+				`{"undefinedVars":[],"missingRequiredClusterAddons":[],"unsupportedComponents":["redis","mysql"]}`,
+			))
+		})
+
+		It("serializes empty findings as empty arrays", func() {
 			output := new(serializer.DeployPreCheckOutput).FromModel(&deploypkg.DeployPreCheckResult{})
 
 			payload, err := json.Marshal(output)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(payload).To(MatchJSON(`{"undefinedVars":[],"missingRequiredClusterAddons":[]}`))
+			Expect(payload).To(MatchJSON(
+				`{"undefinedVars":[],"missingRequiredClusterAddons":[],"unsupportedComponents":[]}`,
+			))
 		})
 	})
 

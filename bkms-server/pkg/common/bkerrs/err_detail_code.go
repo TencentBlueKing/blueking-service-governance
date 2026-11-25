@@ -65,6 +65,9 @@ const (
 	// ErrDetailCodeEnvClusterNamespaceOccupied 环境绑定的集群+命名空间已被其他环境占用
 	ErrDetailCodeEnvClusterNamespaceOccupied ErrDetailCode = "ENV_CLUSTER_NAMESPACE_OCCUPIED"
 
+	// ErrDetailCodeSharedNamespaceUnsupported 与其他环境共用命名空间的环境不支持该部署（如 Helm 应用、使用组件）
+	ErrDetailCodeSharedNamespaceUnsupported ErrDetailCode = "SHARED_NAMESPACE_UNSUPPORTED"
+
 	// ErrDetailCodeScopedEnvVarKeyConflict 同一作用域内环境变量 Key 已存在
 	ErrDetailCodeScopedEnvVarKeyConflict ErrDetailCode = "SCOPED_ENV_VAR_KEY_CONFLICT"
 
