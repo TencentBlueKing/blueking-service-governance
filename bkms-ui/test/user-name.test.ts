@@ -119,4 +119,44 @@ describe('user name resolution', () => {
     expect(fetchMock).toHaveBeenCalledTimes(3);
     expect(fetchMock.mock.lastCall?.[0]).toEqual(expect.stringMatching(/bk_usernames=second$/));
   });
+
+  it('requests an in-flight user once when overlapping calls include that user', async () => {
+    const store = createStore();
+    let resolveFetch: (value: Response) => void = () => {
+      throw new Error('Promise resolver is not initialized');
+    };
+    const pending = new Promise<Response>(resolve => {
+      resolveFetch = resolve;
+    });
+    fetchMock.mockReturnValueOnce(pending);
+
+    const first = store.resolveUserNames(['member']);
+    const second = store.resolveUserNames(['member']);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    resolveFetch(displayInfo({ bk_username: 'member', display_name: 'Name' }));
+    await Promise.all([first, second]);
+    expect(store.getDisplayName('member')).toBe('Name');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('retries an in-flight user in the same flush when that batch fails', async () => {
+    const store = createStore();
+    let resolveFetch: (value: Response) => void = () => {
+      throw new Error('Promise resolver is not initialized');
+    };
+    const pending = new Promise<Response>(resolve => {
+      resolveFetch = resolve;
+    });
+    fetchMock
+      .mockReturnValueOnce(pending)
+      .mockResolvedValueOnce(displayInfo({ bk_username: 'member', display_name: 'Name' }));
+
+    const first = store.resolveUserNames(['member']);
+    const second = store.resolveUserNames(['member']);
+    resolveFetch(new Response(null, { status: 503 }));
+    await Promise.all([first, second]);
+    expect(store.getDisplayName('member')).toBe('Name');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
 });

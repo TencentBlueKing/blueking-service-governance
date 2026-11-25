@@ -75,12 +75,29 @@ export const useUserNameStore = defineStore('user-name', () => {
     }
   }
 
+  /**
+   * 取出下一批待请求的 userid。
+   * 在途期间被再次入队、但上一批已经写入有效缓存的 id 直接丢弃。
+   * 失败批次不写缓存，重叠调用重新入队后仍会在本轮继续请求。
+   */
+  function takeBatch() {
+    const now = Date.now();
+    const batch: string[] = [];
+    for (const id of waitingIds) {
+      waitingIds.delete(id);
+      if (now < (expiresAt.get(id) ?? 0)) continue;
+      batch.push(id);
+      if (batch.length === BATCH_SIZE) break;
+    }
+    return batch;
+  }
+
   /** 消费等待队列，分批请求直至清空 */
   async function flush() {
     try {
       while (waitingIds.size) {
-        const batch = Array.from(waitingIds).slice(0, BATCH_SIZE);
-        batch.forEach(id => waitingIds.delete(id));
+        const batch = takeBatch();
+        if (!batch.length) continue;
         try {
           await fetchBatch(batch);
         } catch (err) {
