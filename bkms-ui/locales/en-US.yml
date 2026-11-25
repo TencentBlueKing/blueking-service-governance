@@ -1905,7 +1905,7 @@ runner 阶段: Runner Stage
 '这里创建的是当前应用的特性环境：只属于本应用，其他应用无法使用，适合灰度验证、联调等场景，用完可以销毁。': 'This creates a feature environment for the current application: it belongs to this application only and cannot be used by other applications. It suits scenarios such as grayscale verification and joint debugging, and can be destroyed when no longer needed.'
 沿用来源环境的集群和环境分类。应用配置不会复制，新环境使用应用的默认配置。: The cluster and environment category are taken from the source environment. Application configuration is not copied; the new environment uses the application's default configuration.
 环境创建成功: Environment Created
-当前使用应用默认配置，未配置环境级变量。可直接部署，也可先调整配置。: The application is currently using default configurations; no environment-level variables have been set. You can deploy immediately or adjust the configuration first.
+特性环境使用独立的配置文件、环境变量，不继承来源环境的配置。: Feature environments use their own configuration files and environment variables, and do not inherit the source environment's configuration.
 '该操作不可恢复，请输入特性环境名称：{0} 进行确认': 'This operation is irreversible. Please enter the feature environment name: {0} to confirm'
 特性环境只属于当前应用，其他应用无法使用。来源环境仅为创建时快照，之后互不影响。: A feature environment belongs to the current application only and cannot be used by other applications. The source environment is just a snapshot taken at creation time; the two are independent afterwards.
 '环境变量不会从来源环境复制，可在列表中单独配置。': 'Environment variables are not copied from the source environment. Configure them separately from the list.'
@@ -1920,7 +1920,6 @@ runner 阶段: Runner Stage
 '和来源环境共用资源额度，销毁不影响来源环境，不支持组件。': 'Share resource quotas with the source environment. Destroying this environment does not affect the source. Components are not supported.'
 '独立创建': 'Create independently'
 '资源与来源环境分开，销毁时只删除本环境的资源。': 'Keep resources separate from the source environment. Only this environment’s resources are removed when it is destroyed.'
-'共享命名空间仅支持 AppModel 应用，使用组件的应用无法部署。': 'Shared namespaces support only AppModel applications. Applications that use components cannot be deployed.'
 '来源环境（{0}）绑定了联邦集群，暂不支持创建独立的特性环境。': 'The source environment ({0}) uses a federated cluster. Creating an independent feature environment is not supported yet.'
 '正在获取应用组件信息...': 'Loading application components...'
 '获取应用组件信息失败，请重试。': 'Failed to load application components. Please retry.'

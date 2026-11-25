@@ -135,6 +135,20 @@
           </TableColumn>
 
           <TableColumn
+            field="namespace"
+            :label="$t('命名空间')"
+            min-width="160"
+            show-overflow-tooltip
+          >
+            <template #default="{ row }: { row: FeatureEnvRow }">
+              <HoverCopy
+                :copy-value="row.namespace"
+                :text="row.namespace"
+              />
+            </template>
+          </TableColumn>
+
+          <TableColumn
             field="deployStatus"
             :filters="deployStatusFilterOptions"
             min-width="100"

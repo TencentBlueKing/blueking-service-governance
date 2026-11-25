@@ -278,7 +278,7 @@ describe('特性环境：创建时选择命名空间', () => {
     await openCreateForm();
     await userEvent.click(screen.getByRole('button', { name: '高级设置' }));
     expect(screen.getByRole('radio', { name: /沿用来源环境/ })).toBeChecked();
-    expect(screen.getByTitle('共享命名空间仅支持 AppModel 应用，使用组件的应用无法部署。')).toBeInTheDocument();
+    expect(screen.queryByTitle('共享命名空间仅支持 AppModel 应用，使用组件的应用无法部署。')).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole('radio', { name: /独立创建/ }));
     await userEvent.click(screen.getByRole('button', { name: '高级设置' }));
     expect(screen.getByText('命名空间：独立创建')).toBeInTheDocument();
@@ -547,9 +547,7 @@ describe('特性环境：创建时选择命名空间', () => {
       nsType: 'shared',
     });
     expect(screen.queryByRole('button', { name: '立即部署' })).not.toBeInTheDocument();
-    expect(
-      screen.queryByText('当前使用应用默认配置，未配置环境级变量。可直接部署，也可先调整配置。'),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByText('特性环境使用独立的配置文件、环境变量，不继承来源环境的配置。')).not.toBeInTheDocument();
     expect(screen.getByText(/应用使用了组件，沿用来源环境的特性环境将无法部署。/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '调整配置' })).toBeInTheDocument();
     expect(mocks.created).toHaveBeenCalledTimes(1);

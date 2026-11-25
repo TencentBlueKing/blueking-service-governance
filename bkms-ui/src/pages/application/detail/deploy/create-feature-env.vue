@@ -72,7 +72,7 @@
         v-else
         class="mb-[28px] max-w-[480px] text-center text-[14px] leading-[22px] text-[#4D4F56]"
       >
-        {{ $t('当前使用应用默认配置，未配置环境级变量。可直接部署，也可先调整配置。') }}
+        {{ $t('特性环境使用独立的配置文件、环境变量，不继承来源环境的配置。') }}
       </p>
       <div class="mb-[28px] w-full max-w-[480px] bg-[#F5F7FA] px-[16px] py-[12px] text-left text-[14px] leading-[22px]">
         <div>
@@ -245,10 +245,6 @@
               :class="formModel.nsType === 'shared' ? 'border-[#3A84FF] bg-[#F0F5FF]' : 'border-[#DCDEE5] bg-white'"
             >
               <Radio
-                v-bk-tooltips="{
-                  content: $t('共享命名空间仅支持 AppModel 应用，使用组件的应用无法部署。'),
-                  disabled: hasComponents,
-                }"
                 class="namespace-option !m-0 !h-auto !flex w-full items-start"
                 label="shared"
               >
