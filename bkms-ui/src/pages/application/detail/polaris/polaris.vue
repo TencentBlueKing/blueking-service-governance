@@ -75,7 +75,7 @@
       </FlexRow>
       <Table
         ref="tableRef"
-        v-bkloading="{ loading: filterLoading || loading, zIndex: 8 }"
+        v-bkloading="{ loading, zIndex: 8 }"
         class="bg-[#fff] mt-[16px]"
         :data="list"
         :filter-config="{ remote: true }"
@@ -362,8 +362,7 @@
 
   const { envList, envNameMapping, getAppEnvList, generateEnvNameMapping } = useEnvManager();
   const { maxHeight } = useDynamicsHeight(106, ['.header-right', '.container-header']);
-  const list = ref<PolarisConfigOutputObj[]>([]);
-  const originalList = ref<PolarisConfigOutputObj[]>([]); // 保存原始数据
+  const originalList = ref<PolarisConfigOutputObj[]>([]); // 全量数据，表格数据由它派生
 
   /** SearchSelect 数据配置 */
   const searchSelectData = ref<ISearchItem[]>([
@@ -398,7 +397,6 @@
   const associatedEnvConfig = ref<PolarisConfigOutputObj>();
   const certificateConfig = ref<PolarisConfigOutputObj>(); // 查看凭证时的配置
   const loading = ref(true);
-  const filterLoading = ref(false);
   const pendingRedeployRefreshing = ref(false);
   const deployingEnvNames = ref<string[]>([]);
   const redeployChecking = ref(false);
@@ -419,11 +417,12 @@
   const scopeEnvNamesFilterOptions = computed(() => filterOptions.value.scopeEnvNames);
   const tableRef = ref();
 
-  /** 统一更新北极星配置列表及其分页、错误状态。 */
+  /** 表格数据统一由全量数据派生，任何刷新路径都不会丢失当前筛选 */
+  const list = computed(() => filterPolarisConfigs(originalList.value, searchValue.value));
+
+  /** 统一更新北极星配置列表及错误状态。 */
   function applyPolarisConfigList(configs: PolarisConfigOutputObj[]) {
     originalList.value = configs;
-    list.value = configs;
-    pagination.value.count = configs.length;
     clearErrorType();
   }
 
@@ -514,6 +513,29 @@
     return Array.from(new Set((res || []).filter(isDeployingEnv).map(item => item.name)));
   }
 
+  /** 按当前筛选条件过滤北极星配置，searchValue 是唯一筛选真相来源 */
+  function filterPolarisConfigs(configs: PolarisConfigOutputObj[], filters: ISearchValue[]) {
+    if (!filters.length) return configs;
+
+    let filteredList = [...configs];
+    const polarisNamespaceFilter = filters.find(item => item.id === 'polarisNamespace');
+    const scopeEnvNamesFilter = filters.find(item => item.id === 'scopeEnvNames');
+
+    if (polarisNamespaceFilter?.values?.length) {
+      const selectedValues = polarisNamespaceFilter.values.map(value => value.id);
+      filteredList = filteredList.filter(
+        item => item.polarisNamespace && selectedValues.includes(item.polarisNamespace),
+      );
+    }
+
+    if (scopeEnvNamesFilter?.values?.length) {
+      const selectedValues = scopeEnvNamesFilter.values.map(value => value.id);
+      filteredList = filteredList.filter(item => item?.scopeEnvNames?.some(env => selectedValues.includes(env)));
+    }
+
+    return filteredList;
+  }
+
   /** 权重可管理环境 = 当前 scope 与已完成首次部署的环境并集。 */
   function getAssociatedEnvNames(config: PolarisConfigOutputObj) {
     const envNames = Array.from(new Set(config.scopeEnvNames || []));
@@ -565,16 +587,14 @@
   function handleAssociatedConfigUpdated(config: PolarisConfigOutputObj) {
     const replaceConfig = (item: PolarisConfigOutputObj) => (item.name === config.name ? config : item);
     originalList.value = originalList.value.map(replaceConfig);
-    list.value = list.value.map(replaceConfig);
     associatedEnvConfig.value = config;
   }
 
   /** 清除筛选条件 */
   function handleClearFilters() {
-    // 清除筛选效果
-    tableRef.value.getVxeTableInstance().clearFilter('polarisNamespace');
-    tableRef.value.getVxeTableInstance().clearFilter('scopeEnvNames');
-    // 清除 SearchSelect 选中值
+    const vxeTable = tableRef.value?.getVxeTableInstance?.();
+    vxeTable?.clearFilter?.('polarisNamespace');
+    vxeTable?.clearFilter?.('scopeEnvNames');
     searchValue.value = [];
   }
 
@@ -672,39 +692,6 @@
     }
   }
 
-  /** 前端筛选逻辑 */
-  function handleFilterList() {
-    filterLoading.value = true;
-    setTimeout(() => {
-      pagination.value.current = 1;
-
-      // 处理过滤逻辑
-      let filteredList = [...originalList.value];
-
-      // 从 searchValue 中提取筛选条件
-      const polarisNamespaceFilter = searchValue.value.find(item => item.id === 'polarisNamespace');
-      const scopeEnvNamesFilter = searchValue.value.find(item => item.id === 'scopeEnvNames');
-
-      // 筛选 polarisNamespace
-      if (polarisNamespaceFilter?.values && polarisNamespaceFilter.values.length > 0) {
-        const selectedValues = polarisNamespaceFilter.values.map(v => v.id);
-        filteredList = filteredList.filter(
-          item => item.polarisNamespace && selectedValues.includes(item.polarisNamespace),
-        );
-      }
-
-      // 筛选 scopeEnvNames (string[])
-      if (scopeEnvNamesFilter?.values && scopeEnvNamesFilter.values.length > 0) {
-        const selectedValues = scopeEnvNamesFilter.values.map(v => v.id);
-        filteredList = filteredList.filter(item => item?.scopeEnvNames?.some(env => selectedValues.includes(env)));
-      }
-
-      list.value = filteredList;
-      pagination.value.count = filteredList.length;
-      filterLoading.value = false;
-    }, 200);
-  }
-
   function handleGoDeploy(envName?: string) {
     const spaceParam = currentRoute.params.space;
     const space = (Array.isArray(spaceParam) ? spaceParam[0] : spaceParam) || spaceStore.currentSpace;
@@ -758,6 +745,7 @@
 
   function handlePageLimitChange(val: number) {
     pagination.value.limit = val;
+    pagination.value.current = 1;
   }
 
   function handlePageValueChange(val: number) {
@@ -779,9 +767,6 @@
       const latestConfigs = configs || [];
       applyPolarisConfigList(latestConfigs);
       deployingEnvNames.value = latestDeployingEnvNames;
-      if (searchValue.value.length) {
-        handleFilterList();
-      }
     } catch (error) {
       console.error(error);
     } finally {
@@ -971,23 +956,32 @@
     });
   }
 
-  // 监听 searchValue 变化，触发前端筛选
   watch(
     searchValue,
     () => {
-      handleFilterList();
+      pagination.value.current = 1;
     },
     { deep: true },
+  );
+
+  watch(
+    list,
+    newList => {
+      pagination.value.count = newList.length;
+      const maxPage = Math.max(1, Math.ceil(newList.length / pagination.value.limit));
+      if (pagination.value.current > maxPage) {
+        pagination.value.current = maxPage;
+      }
+    },
+    { immediate: true },
   );
 
   watch(
     () => appDetailStore.appID,
     async val => {
       originalList.value = [];
-      list.value = [];
       deployingEnvNames.value = [];
-      pagination.value.count = 0;
-      pagination.value.current = 1;
+      handleClearFilters();
 
       if (val) {
         await Promise.all([handleFetchList(), handleFetchDeployingEnvNames(), getAppEnvList(val)]);
