@@ -236,7 +236,7 @@ var _ = Describe("Public", func() {
 						"workPath": "/data/bkms/dev-mode/trpc",
 						"mountPath": "/data/bkms/dev-mode/trpc/configmap-scripts"
 					}},
-					"platformBuild":         {"supported": true},
+					"platformBuild":         {"supported": true, "props": {"requiresBuilderImage": true}},
 					"adminCommand":          {"supported": true},
 					"apmServiceName":        {"supported": true},
 					"polarisServiceCheck":   {"supported": true},
@@ -304,7 +304,7 @@ var _ = Describe("Public", func() {
 				"mods": {
 					"frameworkFile":         {"supported": false, "reasonCode": "unsupported_stack"},
 					"devMode":               {"supported": false, "reasonCode": "unsupported_stack"},
-					"platformBuild":         {"supported": true},
+					"platformBuild":         {"supported": true, "props": {"requiresBuilderImage": true}},
 					"adminCommand":          {"supported": false, "reasonCode": "unsupported_stack"},
 					"apmServiceName":        {"supported": false, "reasonCode": "unsupported_stack"},
 					"polarisServiceCheck":   {"supported": false, "reasonCode": "unsupported_stack"},
@@ -313,6 +313,15 @@ var _ = Describe("Public", func() {
 					"configFileMerge":       {"supported": true}
 				}
 			}`))
+	})
+
+	It("renders blank+python platformBuild with requiresBuilderImage false", func() {
+		Expect(
+			toJSON(
+				mustResolve(appruntime.FrameworkBlank, appruntime.LanguagePython).Public().Mods[runtimemod.ModPlatformBuild],
+			),
+		).
+			To(MatchJSON(`{"supported": true, "props": {"requiresBuilderImage": false}}`))
 	})
 
 	It("renders helm with no stack fields and an app type reason", func() {

@@ -21,7 +21,8 @@ import { ref } from 'vue';
 import { cloneDeep } from 'lodash-es';
 import { AppService } from '~/api/modules/v1/app';
 import { APP_FRAMEWORKS, BLANK_LANGUAGES } from '~/common/app-types';
-import { isRuntimeModSupported } from '~/composables/use-app-runtime';
+import { isPlatformBuilderImageRequired, isRuntimeModSupported } from '~/composables/use-app-runtime';
+import { createPlatformBuildConfig } from '~/composables/use-platform-build';
 
 import type {
   AppRuntimeDefinitionsOutputObj,
@@ -30,10 +31,11 @@ import type {
   CreateBKMSAppRequest,
   FrameworkConfigFileInput,
   PipelineBuildConfigInput,
-  PlatformBuildConfigInput,
   PublicView,
   RepoBuildConfigInput,
 } from '~/@types/v1/app';
+
+export { createPlatformBuildConfig };
 
 export interface BKMSAppForm {
   appModelSpec: BKMSAppModelSpecInput & { args: string[]; command: string[]; shCommand: string };
@@ -63,9 +65,15 @@ export function buildBKMSAppPayload(form: BKMSAppForm, runtime: PublicView): Cre
     if (buildConfig.repoBuildConfig) {
       if (!isRuntimeModSupported(runtime, 'platformBuild'))
         buildConfig.repoBuildConfig.imageBuildMode = 'repositoryDockerfile';
-      if (buildConfig.repoBuildConfig.imageBuildMode !== 'platform')
+      if (buildConfig.repoBuildConfig.imageBuildMode !== 'platform') {
         delete buildConfig.repoBuildConfig.platformBuildConfig;
-      else buildConfig.repoBuildConfig.dockerfile = '';
+      } else {
+        buildConfig.repoBuildConfig.dockerfile = '';
+        if (!isPlatformBuilderImageRequired(runtime) && buildConfig.repoBuildConfig.platformBuildConfig) {
+          buildConfig.repoBuildConfig.platformBuildConfig.builderImage = '';
+          buildConfig.repoBuildConfig.platformBuildConfig.extraFiles = [];
+        }
+      }
     }
   }
   const appModelSpec = cloneDeep(form.appModelSpec);
@@ -124,15 +132,6 @@ export function createBKMSAppForm(workspaceID: string, framework: string, langua
       content: '',
     },
   };
-}
-
-export function createPlatformBuildConfig() {
-  return {
-    builderImage: '',
-    runnerImage: '',
-    extraFiles: [] as string[],
-    commands: { build: [] as string[], preBuild: [] as string[], runtimeEnv: [] as string[], start: '' },
-  } satisfies PlatformBuildConfigInput;
 }
 
 export function findRuntime(definitions: AppRuntimeDefinitionsOutputObj | null, framework: string, language: string) {

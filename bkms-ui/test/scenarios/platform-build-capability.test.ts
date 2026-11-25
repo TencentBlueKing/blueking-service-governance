@@ -21,13 +21,14 @@ import { reactive } from 'vue';
 import { enableAutoUnmount, flushPromises, shallowMount } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import CardRadio from '~/components/card-radio.vue';
+import ImageModeSelect from '~/pages/application/components/image-mode-select.vue';
 import EditBuilderConfig from '~/pages/application/detail/base-info/trpc/edit-builder-config.vue';
 
 import { i18nGlobalMocks } from '../helpers/mock-i18n';
 
 import type { PublicView } from '~/@types/v1/app';
 
-const mocks = vi.hoisted(() => ({ validate: vi.fn(), getWorkspace: vi.fn() }));
+const mocks = vi.hoisted(() => ({ clearValidate: vi.fn(), validate: vi.fn(), getWorkspace: vi.fn() }));
 let state: { runtime: null | PublicView };
 
 vi.mock('vue-i18n', async () => (await import('../helpers/mock-i18n')).i18nMockFactory());
@@ -58,7 +59,7 @@ async function openEditor() {
         Sideslider: { template: '<div><slot /><slot name="footer" /></div>' },
         Form: {
           template: '<div><slot /></div>',
-          setup: () => ({ validate: mocks.validate }),
+          setup: () => ({ clearValidate: mocks.clearValidate, validate: mocks.validate }),
         },
         Button: {
           props: ['disabled'],
@@ -139,5 +140,37 @@ describe('构建配置的平台通用构建能力', () => {
       dockerfile: 'Dockerfile',
     });
     expect(builderData.repoBuildConfig.platformBuildConfig).toBeUndefined();
+  });
+
+  it('单阶段 Python 隐藏构建镜像与打包额外文件，留空产物目录不写入默认值，保存时清理残留字段', async () => {
+    state.runtime = {
+      language: 'python',
+      mods: { platformBuild: { supported: true, props: { requiresBuilderImage: false } } },
+    };
+    const { wrapper, builderData } = await openEditor();
+
+    expect(wrapper.findAllComponents(ImageModeSelect).map(c => c.props('type'))).toEqual(['runner']);
+    expect(wrapper.text()).not.toContain('打包额外文件');
+    const placeholders = wrapper.findAll('input-stub').map(node => node.attributes('placeholder'));
+    expect(placeholders).toContain('/app');
+    expect(placeholders).toContain('留空则自动识别 uv.lock / poetry.lock / requirements.txt 安装依赖');
+    expect(builderData.repoBuildConfig.platformBuildConfig).not.toHaveProperty('artifactDir');
+
+    const artifactDirInput = wrapper.find('input-stub[placeholder="/app"]');
+    await artifactDirInput.trigger('clear');
+    expect(mocks.clearValidate).toHaveBeenCalledWith('repoBuildConfig.platformBuildConfig.artifactDir');
+
+    (builderData.repoBuildConfig.platformBuildConfig as { artifactDir?: string }).artifactDir = ' /custom ';
+    const save = wrapper.findAll('button').find(button => button.text() === '保存')!;
+    await save.trigger('click');
+    await flushPromises();
+
+    expect(wrapper.emitted('confirm')).toHaveLength(1);
+    expect(builderData.repoBuildConfig.platformBuildConfig).toMatchObject({
+      artifactDir: '/custom',
+      builderImage: '',
+      runnerImage: 'runner:v1',
+      extraFiles: [],
+    });
   });
 });

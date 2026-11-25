@@ -134,6 +134,7 @@
             </Form.FormItem>
             <template v-else-if="formData.buildConfig.repoBuildConfig.imageBuildMode === 'platform'">
               <Form.FormItem
+                v-if="props.requiresBuilderImage"
                 :label="$t('构建镜像')"
                 required
               >
@@ -156,13 +157,29 @@
                   <ImageModeSelect
                     v-model="formData.buildConfig.repoBuildConfig.platformBuildConfig.runnerImage"
                     :language="formData.language"
-                    :peer-image-value="formData.buildConfig.repoBuildConfig.platformBuildConfig.builderImage"
+                    :peer-image-value="
+                      props.requiresBuilderImage
+                        ? formData.buildConfig.repoBuildConfig.platformBuildConfig.builderImage
+                        : ''
+                    "
                     :repo-info="workspaceRepoInfo"
                     :repo-info-loading="repoInfoLoading"
                     type="runner"
                     validate-prefix="buildConfig.repoBuildConfig"
                   />
                 </div>
+              </Form.FormItem>
+              <Form.FormItem
+                :label="$t('产物目录')"
+                property="buildConfig.repoBuildConfig.platformBuildConfig.artifactDir"
+              >
+                <Input
+                  v-model="formData.buildConfig.repoBuildConfig.platformBuildConfig.artifactDir"
+                  clearable
+                  :placeholder="artifactDirPlaceholder"
+                  @blur="handleArtifactDirBlur"
+                  @clear="handleArtifactDirClear"
+                />
               </Form.FormItem>
               <!-- 高级命令 -->
               <Form.FormItem
@@ -182,11 +199,13 @@
                   <div class="mb-[24px] last:mb-0">
                     <div class="flex items-center gap-[8px] mb-[8px]">
                       <span class="text-[14px]">{{ $t('编译前置命令') }}</span>
-                      <Tag theme="info">{{ $t('builder 阶段') }}</Tag>
+                      <Tag :theme="props.requiresBuilderImage ? 'info' : 'success'">{{
+                        props.requiresBuilderImage ? $t('builder 阶段') : $t('runner 阶段')
+                      }}</Tag>
                     </div>
                     <Input
                       v-model="preBuildText"
-                      :placeholder="$t('在 go build 之前执行，如代码生成、安装工具等')"
+                      :placeholder="preBuildPlaceholder"
                       :rows="4"
                       type="textarea"
                     />
@@ -194,7 +213,9 @@
                   <div class="mb-[24px] last:mb-0">
                     <div class="flex items-center gap-[8px] mb-[8px]">
                       <span class="text-[14px]">{{ $t('编译命令') }}</span>
-                      <Tag theme="info">{{ $t('builder 阶段') }}</Tag>
+                      <Tag :theme="props.requiresBuilderImage ? 'info' : 'success'">{{
+                        props.requiresBuilderImage ? $t('builder 阶段') : $t('runner 阶段')
+                      }}</Tag>
                     </div>
                     <Input
                       v-model="buildText"
@@ -205,9 +226,13 @@
                     <BuildOutputHint
                       :app-name="formData.name"
                       class="mt-[16px]"
+                      :requires-builder-image="props.requiresBuilderImage"
                     />
                   </div>
-                  <div class="mb-[24px] last:mb-0">
+                  <div
+                    v-if="props.requiresBuilderImage"
+                    class="mb-[24px] last:mb-0"
+                  >
                     <div class="flex items-center gap-[8px] mb-[8px]">
                       <span class="text-[14px]">{{ $t('打包额外文件') }}</span>
                       <Tag theme="success">{{ $t('runner 阶段') }}</Tag>
@@ -243,7 +268,7 @@
                     </div>
                     <Input
                       v-model.trim="formData.buildConfig.repoBuildConfig.platformBuildConfig.commands.start"
-                      :placeholder="$t('留空则使用平台默认：运行编译产物二进制')"
+                      :placeholder="startPlaceholder"
                       :rows="4"
                       type="textarea"
                     />
@@ -342,6 +367,13 @@
   import { BKMS_REGEX } from '~/common/const';
   import CardRadio, { type CardRadioOption } from '~/components/card-radio.vue';
   import StartupCommandInput from '~/components/startup-command-input.vue';
+  import {
+    createArtifactDirRules,
+    getBuildCommandPlaceholder,
+    getDefaultArtifactDir,
+    getPreBuildCommandPlaceholder,
+    getStartCommandPlaceholder,
+  } from '~/composables/use-platform-build';
   import BuildOutputHint from '~/pages/application/components/build-output-hint.vue';
   import GoBuildArgs from '~/pages/application/components/go-build-args.vue';
   import ImageModeSelect from '~/pages/application/components/image-mode-select.vue';
@@ -352,10 +384,16 @@
 
   import type { BkCIOAuthGitProjectOutput } from '~/@types/v1/bkintegrations-bkci';
 
-  const props = defineProps<{
-    form: BKMSAppForm;
-    platformBuildSupported: boolean;
-  }>();
+  const props = withDefaults(
+    defineProps<{
+      form: BKMSAppForm;
+      platformBuildSupported: boolean;
+      requiresBuilderImage?: boolean;
+    }>(),
+    {
+      requiresBuilderImage: true,
+    },
+  );
 
   const { t } = useI18n();
 
@@ -367,9 +405,10 @@
   const repoInfoLoading = ref(true);
 
   const formData = ref<BKMSAppForm>(props.form);
-  const buildPlaceholder = computed(
-    () => `${t('留空则使用平台默认：')}\ngo build -o /out/${formData.value.name || '{{ appName }}'} .`,
-  );
+  const artifactDirPlaceholder = computed(() => getDefaultArtifactDir(formData.value.language));
+  const preBuildPlaceholder = computed(() => getPreBuildCommandPlaceholder(t, props.requiresBuilderImage));
+  const buildPlaceholder = computed(() => getBuildCommandPlaceholder(t, formData.value.language, formData.value.name));
+  const startPlaceholder = computed(() => getStartCommandPlaceholder(t, props.requiresBuilderImage));
   const extraFilesPlaceholder = computed(
     () => `${t('每行一个，可填写文件路径或目录，相对构建目录，例如：')}\ndata/privatekey.pem\ncerts/`,
   );
@@ -377,6 +416,7 @@
   const startupCommandRef = ref<InstanceType<typeof StartupCommandInput> | null>(null);
   async function validate() {
     try {
+      handleArtifactDirBlur();
       // 校验基本表单
       const formValid = await formRef.value?.validate();
       const startupValid = formData.value.framework !== 'blank' || (await startupCommandRef.value?.validate());
@@ -423,18 +463,17 @@
         validator: (value: string) => !value || !value.startsWith('/'),
       },
     ],
+    'buildConfig.repoBuildConfig.platformBuildConfig.artifactDir': createArtifactDirRules(t),
   });
 
   const buildTypeOptions = computed<CardRadioOption[]>(() => [
-    ...(props.platformBuildSupported
-      ? [
-          {
-            value: 'platform',
-            label: t('平台通用构建'),
-            description: t('无需编写和维护 Dockerfile，平台按标准框架自动完成构建。可按需在「高级命令」补充构建步骤。'),
-          },
-        ]
-      : []),
+    {
+      value: 'platform',
+      label: t('平台通用构建'),
+      description: t('无需编写和维护 Dockerfile，平台按标准框架自动完成构建。可按需在「高级命令」补充构建步骤。'),
+      disabled: !props.platformBuildSupported,
+      disabledTip: t('暂不支持'),
+    },
     {
       value: 'repositoryDockerfile',
       label: t('使用仓库 Dockerfile'),
@@ -461,17 +500,7 @@
       if (newVal === 'platform') {
         formData.value.buildConfig.repoBuildConfig.dockerfile = '';
       } else if (newVal === 'repositoryDockerfile') {
-        formData.value.buildConfig.repoBuildConfig.platformBuildConfig = {
-          builderImage: '',
-          runnerImage: '',
-          extraFiles: [],
-          commands: {
-            build: [],
-            preBuild: [],
-            runtimeEnv: [],
-            start: '',
-          },
-        };
+        formData.value.buildConfig.repoBuildConfig.platformBuildConfig = createPlatformBuildConfig();
       }
     },
   );
@@ -526,14 +555,18 @@
   });
 
   function getValue() {
-    sanitizeCommands();
+    sanitizePlatformBuildConfig();
     const data = cloneDeep(formData.value);
     if (data.framework === 'blank') {
       Object.assign(data.appModelSpec, startupCommandRef.value?.getValue());
     }
-    // platform 模式下强制清空 dockerfile
+    // platform 模式下强制清空 dockerfile；单阶段模板不提交构建镜像与打包额外文件
     if (data.buildConfig.repoBuildConfig.imageBuildMode === 'platform') {
       data.buildConfig.repoBuildConfig.dockerfile = '';
+      if (!props.requiresBuilderImage) {
+        data.buildConfig.repoBuildConfig.platformBuildConfig.builderImage = '';
+        data.buildConfig.repoBuildConfig.platformBuildConfig.extraFiles = [];
+      }
     }
     // repositoryDockerfile 模式下移除 platformBuildConfig
     if (data.buildConfig.repoBuildConfig.imageBuildMode === 'repositoryDockerfile') {
@@ -542,8 +575,25 @@
     return data;
   }
 
-  function sanitizeCommands() {
-    const commands = formData.value.buildConfig.repoBuildConfig.platformBuildConfig?.commands;
+  function handleArtifactDirBlur() {
+    const platformCfg = formData.value.buildConfig.repoBuildConfig.platformBuildConfig;
+    if (platformCfg?.artifactDir !== undefined) {
+      platformCfg.artifactDir = platformCfg.artifactDir.trim();
+    }
+  }
+
+  function handleArtifactDirClear() {
+    formRef.value?.clearValidate('buildConfig.repoBuildConfig.platformBuildConfig.artifactDir');
+  }
+
+  function sanitizePlatformBuildConfig() {
+    const platformCfg = formData.value.buildConfig.repoBuildConfig.platformBuildConfig;
+    if (!platformCfg) return;
+    platformCfg.artifactDir = (platformCfg.artifactDir ?? '').trim();
+    // extraFiles 只做 trim / 去空行，非法项交给后端 400，避免创建页静默丢行
+    platformCfg.extraFiles = (platformCfg.extraFiles ?? []).map(s => s.trim()).filter(Boolean);
+
+    const commands = platformCfg.commands;
     if (!commands) return;
     // 过滤空行、trim、限制每行长度不超过 4096
     const sanitizeArray = (arr: string[]): string[] => {
@@ -558,11 +608,6 @@
     // start 校验：非空且不含换行符，长度不超过 4096
     if (commands.start) {
       commands.start = commands.start.trim().replace(/\n/g, '').slice(0, 4096);
-    }
-    // extraFiles 只做 trim / 去空行，非法项交给后端 400，避免创建页静默丢行
-    const platformCfg = formData.value.buildConfig.repoBuildConfig.platformBuildConfig;
-    if (platformCfg) {
-      platformCfg.extraFiles = (platformCfg.extraFiles ?? []).map(s => s.trim()).filter(Boolean);
     }
   }
 
@@ -662,17 +707,10 @@
     }
     // 初始化 platformBuildConfig
     if (!formData.value.buildConfig.repoBuildConfig.platformBuildConfig) {
-      formData.value.buildConfig.repoBuildConfig.platformBuildConfig = {
-        builderImage: '',
-        runnerImage: '',
-        extraFiles: [],
-        commands: {
-          build: [],
-          preBuild: [],
-          runtimeEnv: [],
-          start: '',
-        },
-      };
+      formData.value.buildConfig.repoBuildConfig.platformBuildConfig = createPlatformBuildConfig();
+    }
+    if (formData.value.buildConfig.repoBuildConfig.platformBuildConfig.artifactDir === undefined) {
+      formData.value.buildConfig.repoBuildConfig.platformBuildConfig.artifactDir = '';
     }
     if (!formData.value.buildConfig.repoBuildConfig.platformBuildConfig.extraFiles) {
       formData.value.buildConfig.repoBuildConfig.platformBuildConfig.extraFiles = [];

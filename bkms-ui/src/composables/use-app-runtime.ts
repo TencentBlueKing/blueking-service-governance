@@ -26,6 +26,14 @@ export function getFrameworkFileFormat(runtime: null | PublicView | undefined): 
   return props.format === 'taf' || props.format === 'yaml' ? props.format : undefined;
 }
 
+/** 读取平台通用构建是否需要构建镜像（含 builder 阶段）；仅在后端明确返回 requiresBuilderImage: false 时按单阶段处理。 */
+export function isPlatformBuilderImageRequired(runtime: null | PublicView | undefined): boolean {
+  if (!isRuntimeModSupported(runtime, 'platformBuild')) return true;
+  const props = runtime?.mods?.platformBuild?.props;
+  if (!props || typeof props !== 'object' || !('requiresBuilderImage' in props)) return true;
+  return typeof props.requiresBuilderImage === 'boolean' ? props.requiresBuilderImage : true;
+}
+
 /** 只接受后端明确支持，不根据应用类型或语言推断能力。 */
 export function isRuntimeModSupported(runtime: null | PublicView | undefined, key: string): boolean {
   return runtime?.mods?.[key]?.supported === true;

@@ -35,8 +35,14 @@ type Props struct {
 	RequiresBuilderImage bool
 }
 
-// Public 无对外内容。
-func (p Props) Public() any { return nil }
+// Public 对外展示平台构建参数，前端据此判断模板是否包含 builder 阶段
+func (p Props) Public() any {
+	return struct {
+		RequiresBuilderImage bool `json:"requiresBuilderImage"`
+	}{
+		RequiresBuilderImage: p.RequiresBuilderImage,
+	}
+}
 
 // Spec 平台构建：由平台生成 Dockerfile 并构建镜像。
 // tRPC、blank 的 go，以及 blank 的 python 支持。tRPC 不开放 python。

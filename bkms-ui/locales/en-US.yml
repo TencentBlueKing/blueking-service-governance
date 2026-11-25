@@ -1926,7 +1926,6 @@ tRPC 运行时解析，平台不渲染进配置文件: Resolved by tRPC at runti
 修改内容: Changes
 '默认值为{0}': 'The default value is {0}'
 一键添加: One-click Add
-'构建产物需输出为文件 {0}，runner 阶段只会把这个文件拷贝进运行镜像。不限定命令形式（{1} 等均可），只要最终产物是该文件即可，例如：': 'Build artifacts must be output as the file {0}. The runner stage only copies this file into the runtime image. There is no restriction on command format (e.g., {1}), as long as the final artifact is this file, for example:'
 '若 go.mod 有使用工蜂私有仓库依赖包，构建参数中需要添加 {0}，取值见：': "If go.mod uses dependencies from Woa's private repository, you need to add {0} to the build parameters. Refer to:"
 一般可留空: Can generally be left empty
 '请确认以下变量信息（共 {count} 个）': 'Please confirm the following variable information (total of {count} items)'
@@ -2443,3 +2442,16 @@ BSCP: BSCP
 '私有构建机信息加载失败': 'Failed to load private build node information'
 '构建机列表加载失败': 'Failed to load build nodes'
 '私有构建机需由 SRE 导入蓝盾项目 {0}（需预装 Docker），并在此关联到蓝鲸服务治理，关联后内置构建流水线将使用该构建机。': 'Private build nodes must be imported by SRE into BKCI project {0} (with Docker preinstalled) and associated with BlueKing Service Governance here. Once associated, built-in build pipelines use that build node.'
+'产物目录': 'Artifact Directory'
+'产物目录必须是绝对路径（以 / 开头）': 'Artifact directory must be an absolute path (starting with /)'
+'产物目录不能包含 .. 路径段': 'Artifact directory must not contain .. path segments'
+'产物目录不能是根目录 /': 'Artifact directory must not be the root directory /'
+'产物目录仅支持字母、数字、.、_、- 和 /': 'Artifact directory only allows letters, digits, ., _, -, and /'
+'产物目录长度不能超过 128 个字符': 'Artifact directory must not exceed 128 characters'
+'留空则使用平台默认：': 'Leave blank to use the platform default:'
+'留空则自动识别 uv.lock / poetry.lock / requirements.txt 安装依赖': 'Leave blank to auto-detect uv.lock / poetry.lock / requirements.txt and install dependencies'
+'在安装依赖或执行构建命令前运行，如安装系统包、生成代码等': 'Run before installing dependencies or executing build commands, e.g., installing system packages or generating code'
+'留空则沿用运行镜像默认入口，也可在部署时配置启动命令': 'Leave blank to keep the runtime image default entrypoint, or configure a startup command during deployment'
+'构建产物需放到产物目录（命令中可通过 {0} 引用），runner 阶段会将该目录下的全部内容拷贝到运行镜像的 {1} 目录，例如：': 'Build artifacts must be placed in the artifact directory (referenced via {0} in commands). The runner stage copies all contents of this directory into {1} in the runtime image, for example:'
+'源码会整体拷贝到产物目录并作为工作目录（命令中可通过 {0} 引用），构建结束时该目录不能为空。': 'Source code is copied into the artifact directory as the working directory (referenced via {0} in commands). This directory must not be empty after the build finishes.'
+'（默认）': ' (Default)'

@@ -187,6 +187,7 @@
               <!-- 平台通用构建模式 -->
               <template v-else>
                 <FieldItem
+                  v-if="showPlatformBuilderImage"
                   :container-height="20"
                   :field-value="$t('构建镜像')"
                   :value="getBuildConfigFieldValue('repoBuildConfig.platformBuildConfig.builderImage')"
@@ -197,6 +198,13 @@
                   :container-height="20"
                   :field-value="$t('运行镜像')"
                   :value="getBuildConfigFieldValue('repoBuildConfig.platformBuildConfig.runnerImage')"
+                  value-color="#313238"
+                  value-max-width="100%"
+                />
+                <FieldItem
+                  :container-height="20"
+                  :field-value="$t('产物目录')"
+                  :value="platformArtifactDirText"
                   value-color="#313238"
                   value-max-width="100%"
                 />
@@ -226,7 +234,9 @@
                         <template #title>
                           <div class="flex items-center gap-[8px] ml-[10px]">
                             <span>{{ $t('编译前置命令') }}</span>
-                            <Tag theme="info">{{ $t('builder 阶段') }}</Tag>
+                            <Tag :theme="requiresBuilderImage ? 'info' : 'success'">{{
+                              requiresBuilderImage ? $t('builder 阶段') : $t('runner 阶段')
+                            }}</Tag>
                           </div>
                         </template>
                         <pre
@@ -248,7 +258,9 @@
                         <template #title>
                           <div class="flex items-center gap-[8px] ml-[10px]">
                             <span>{{ $t('编译命令') }}</span>
-                            <Tag theme="info">{{ $t('builder 阶段') }}</Tag>
+                            <Tag :theme="requiresBuilderImage ? 'info' : 'success'">{{
+                              requiresBuilderImage ? $t('builder 阶段') : $t('runner 阶段')
+                            }}</Tag>
                           </div>
                         </template>
                         <pre
@@ -416,6 +428,8 @@
   import Layout from '~/components/skeleton/skeleton-layout';
   import ToggleCard from '~/components/toggle-card.vue';
   import { getAppDisplayKind, getAppDisplayLabel } from '~/composables/app-type';
+  import { isPlatformBuilderImageRequired } from '~/composables/use-app-runtime';
+  import { formatArtifactDirDisplay } from '~/composables/use-platform-build';
   import { getTagConfigDisplayText, normalizeTagConfig } from '~/composables/use-tag-config';
   import DeleteAppDialog from '~/pages/application/components/delete-app-dialog.vue';
   import TypeIcon from '~/pages/application/components/type-icon.vue';
@@ -445,6 +459,20 @@
 
   // 推荐版本号展示文本
   const tagConfigDisplayText = computed(() => getTagConfigDisplayText(appData.value?.buildConfig?.tagConfig, t));
+  const requiresBuilderImage = computed(() => isPlatformBuilderImageRequired(appDetailStore.runtime));
+  const effectiveLanguage = computed(() => appData.value?.language || appDetailStore.runtime?.language || '');
+  const platformArtifactDirText = computed(() =>
+    formatArtifactDirDisplay(
+      t,
+      appData.value?.buildConfig?.repoBuildConfig?.platformBuildConfig?.artifactDir,
+      effectiveLanguage.value,
+    ),
+  );
+  const showPlatformBuilderImage = computed(
+    () =>
+      requiresBuilderImage.value ||
+      Boolean(appData.value?.buildConfig?.repoBuildConfig?.platformBuildConfig?.builderImage),
+  );
 
   // 平台通用构建命令展示文本
   const platformCommands = computed(() => {
@@ -481,6 +509,7 @@
     );
   });
   const platformExtraFiles = computed(() => {
+    if (!requiresBuilderImage.value) return '';
     const extraFiles = appData.value?.buildConfig?.repoBuildConfig?.platformBuildConfig?.extraFiles;
     if (isEmpty(extraFiles)) return '';
     return (extraFiles as string[]).join('\n');
