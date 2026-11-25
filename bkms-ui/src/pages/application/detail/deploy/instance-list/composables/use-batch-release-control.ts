@@ -246,9 +246,9 @@ export function useBatchReleaseControl(options: UseBatchReleaseControlOptions) {
       if (actionID === pendingActionID) pendingAction.value = null;
     }, PENDING_ACTION_WATCHDOG);
     try {
-      // 带上确认时的 deployID：后端据此核对目标，避免「检查与写入之间」的竞争窗口。
+      // 目标是否仍是确认时的记录，已在上方用 progress.deployID 核对。
+      // 操作接口只接收 action 与 trafficLaneName，请求体不再附带 deployID。
       const payload: OperateBatchReleaseRequest = { action, appID, envName };
-      if (targetDeployID) payload.deployID = targetDeployID;
       await DeployService.operateBatchRelease(payload, { interceptorErr: false });
       // 操作期间切换了应用/环境：结果已不属于当前页面，直接丢弃。
       if (appID !== options.getAppID() || envName !== options.getEnvName()) return;
