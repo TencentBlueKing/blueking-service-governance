@@ -58,6 +58,20 @@ vi.mock('~/api/modules/v1', () => ({
 }));
 vi.mock('~/api/modules/v1/app', () => ({ AppService: {} }));
 vi.mock('~/api/modules/bkmsserver', () => ({ ApiServerService: { GetApp: mocks.getApp } }));
+// 模拟真实选择器的契约：初始化加载完成后上抛 loading=false，
+// 宿主的 ensureTemplateReady() 校验守卫随初始化完成而放行。
+vi.mock('~/pages/application/template/components/framework-template-select.vue', async () => {
+  const { defineComponent, onMounted } = await import('vue');
+  return {
+    default: defineComponent({
+      emits: ['availability', 'loading', 'select'],
+      setup(_props, { emit }) {
+        onMounted(() => emit('loading', false));
+        return () => null;
+      },
+    }),
+  };
+});
 vi.mock('~/composables/use-env-manager', async () => {
   const { ref } = await import('vue');
   return { default: () => ({ envList: ref([]), handleGetEnvList: vi.fn().mockResolvedValue([]) }) };
@@ -152,8 +166,9 @@ describe('启动命令输入', () => {
 });
 
 const createPageStubs = {
-  FrameworkTemplateSelect: true,
-  ToggleCard: { template: '<div><slot /></div>' },
+  // 渲染 title 插槽：tRPC 宿主的模板选择器位于 #title，
+  // 需其随插槽挂载后上抛 loading=false。
+  ToggleCard: { template: '<div><slot name="title" /><slot /></div>' },
   ResizeLayout: defineComponent({
     setup(_props, { expose }) {
       expose({ asideRef: { hidden: true } });

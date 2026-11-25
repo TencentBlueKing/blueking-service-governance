@@ -298,7 +298,7 @@ describe('框架配置模板：新建与默认模板', () => {
 
     // 旧表单立即清空，详情加载期间保存按钮禁用，点击确定不发出更新请求
     await waitFor(() => expect(screen.queryByDisplayValue('模板 1')).not.toBeInTheDocument());
-    expect(screen.getByText('确定')).toHaveAttribute('disabled', 'true');
+    expect(screen.getByText('确定')).toHaveAttribute('disabled');
     await userEvent.click(screen.getByText('确定'));
     expect(apiMocks.update).not.toHaveBeenCalled();
 
