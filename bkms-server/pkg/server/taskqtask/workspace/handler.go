@@ -30,6 +30,7 @@ import (
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace/customrole"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bkmonitor"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/perm"
@@ -155,6 +156,12 @@ func activateWorkspace(
 		go userGroupService.SyncMembersForEnvWithRetry(
 			context.WithoutCancel(ctx), ws, env.Name, ws.Creator,
 		)
+	}
+
+	// 监控项目就绪前创建的自定义角色还没有监控授权，按各环境绑定的 APM 应用补上。
+	// 空间已经就绪，这里失败不重试整个激活任务，重新保存这些角色即可补齐
+	if err = customrole.ReapplyAll(ctx, db, permMgr, ws.ID); err != nil {
+		log.Errorf(ctx, "reapply custom roles of workspace %s failed: %v", ws.ID, err)
 	}
 	return nil
 }

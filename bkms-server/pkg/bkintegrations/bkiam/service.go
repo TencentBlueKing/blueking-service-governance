@@ -762,7 +762,7 @@ func (s *IAMService) getRoleFromStorageByID(ctx context.Context, roleID string) 
 		return nil, errors.Wrapf(err, "get role(%s)", roleID)
 	}
 	if r.UserGroupID == 0 {
-		return nil, errors.Errorf("role(%s) not found", roleID)
+		return nil, errors.Wrapf(role.ErrRoleNotFound, "role(%s) has no user group", roleID)
 	}
 	return r, nil
 }

@@ -46,6 +46,7 @@ type fakeIAMServicer struct {
 	returnedErr          error
 	batchAllowed         map[string]bool
 	batchPairsAllowed    map[string]map[string]bool
+	customRoleResp       *role.Role
 
 	// Captured arguments
 	gotUsername          string
@@ -55,6 +56,7 @@ type fakeIAMServicer struct {
 	gotEnvType           string
 	gotEnvRefs           []bkiam.EnvRef
 	gotAppEnvRefs        []bkiam.AppEnvRef
+	gotCustomRoleData    bkiam.CustomRoleData
 	gotActionID          string
 	gotIDsForMulti       []string
 	gotActionIDsForMulti []string
@@ -227,6 +229,31 @@ func (f *fakeIAMServicer) AppEnvPairsActionAllowed(
 	return f.batchPairsAllowed, f.returnedErr
 }
 
+func (f *fakeIAMServicer) GetRole(_ context.Context, roleID string) (*role.Role, error) {
+	f.gotRoleID = roleID
+	return f.customRoleResp, f.returnedErr
+}
+
+func (f *fakeIAMServicer) CreateCustomRole(
+	_ context.Context, _, _ string, data bkiam.CustomRoleData,
+) (*role.Role, error) {
+	f.gotCustomRoleData = data
+	return f.customRoleResp, f.returnedErr
+}
+
+func (f *fakeIAMServicer) UpdateCustomRole(
+	_ context.Context, roleID, _, _ string, data bkiam.CustomRoleData,
+) (*role.Role, error) {
+	f.gotRoleID = roleID
+	f.gotCustomRoleData = data
+	return f.customRoleResp, f.returnedErr
+}
+
+func (f *fakeIAMServicer) DeleteCustomRole(_ context.Context, roleID string) error {
+	f.gotRoleID = roleID
+	return f.returnedErr
+}
+
 // ctxWithUser returns a context that carries the given username, mimicking
 // the auth middleware that injects auth.User into the request context.
 func ctxWithUser(username string) context.Context {
@@ -370,6 +397,17 @@ var _ = Describe("LocalManager", func() {
 		})
 	})
 
+	Context("custom roles", func() {
+		It("forwards updates to the IAM service", func() {
+			fake.customRoleResp = &role.Role{ID: "r-1", WorkspaceID: testWS}
+			data := bkiam.CustomRoleData{WorkspaceID: testWS}
+			_, err := mgr.UpdateCustomRole(ctx, "r-1", "name", "", data)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(fake.gotRoleID).To(Equal("r-1"))
+			Expect(fake.gotCustomRoleData).To(Equal(data))
+		})
+	})
+
 	Context("FilterViewableWorkspaces", func() {
 		It("returns the subset of workspaces that the IAMService marks as viewable", func() {
 			fake.multiActionsResponse = map[string]map[string]bool{
@@ -460,11 +498,16 @@ var _ = Describe("LocalManager", func() {
 			Expect(r.ID).To(Equal("r2"))
 		})
 
-		It("returns 'role not found' when no role matches", func() {
+		It("returns role.ErrRoleNotFound when no role matches", func() {
 			fake.listRolesResp = []*role.Role{{ID: "r1", RoleCode: RoleCodeAdmin}}
 			_, err := mgr.GetRole(ctx, testWS, RoleCodeOperator)
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("role not found"))
+			Expect(errors.Is(err, role.ErrRoleNotFound)).To(BeTrue())
+		})
+
+		It("returns role.ErrRoleNotFound when GetRoleByID finds a role in another workspace", func() {
+			fake.customRoleResp = &role.Role{ID: "r-other", WorkspaceID: "other-ws"}
+			_, err := mgr.GetRoleByID(ctx, testWS, "r-other")
+			Expect(errors.Is(err, role.ErrRoleNotFound)).To(BeTrue())
 		})
 	})
 

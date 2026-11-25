@@ -55,10 +55,13 @@ type fakeIAMClient struct {
 	gotAddUGExpiredAt     int
 	gotDeleteUGMembers    []string
 	gotGrantedScopesCalls int
+	gotGrantedScopes      []cloudapiiamtypes.AuthorizationScope
+	gotRevokedActions     []string
 	gotDeletedUserGroups  []int
 	gotDeletedGM          int
 	gotIsAllowedRequest   iamsdk.Request
 	gotBatchResources     []iamsdk.Resources
+	grantErr              error
 
 	// Counters for action checks
 	isAllowedReturn      bool
@@ -135,9 +138,18 @@ func (f *fakeIAMClient) DeleteUserGroup(_ context.Context, userGroupID int) erro
 }
 
 func (f *fakeIAMClient) GrantUserGroupPolicies(
-	_ context.Context, _ int, _ []cloudapiiamtypes.AuthorizationScope,
+	_ context.Context, _ int, scopes []cloudapiiamtypes.AuthorizationScope,
 ) error {
 	f.gotGrantedScopesCalls++
+	if f.grantErr != nil {
+		return f.grantErr
+	}
+	f.gotGrantedScopes = scopes
+	return nil
+}
+
+func (f *fakeIAMClient) RevokeUserGroupActions(_ context.Context, _ int, _ string, actionIDs []string) error {
+	f.gotRevokedActions = append([]string(nil), actionIDs...)
 	return nil
 }
 
@@ -413,6 +425,104 @@ var _ = Describe("IAMService", func() {
 				"app-2": {"env-b": true},
 			}))
 			Expect(client.gotBatchResources).To(HaveLen(3))
+		})
+	})
+
+	Context("custom roles", func() {
+		var data CustomRoleData
+
+		BeforeEach(func() {
+			_, err := svc.CreateWorkspaceAdmin(ctx, WorkspaceData{WorkspaceID: workspaceID}, []string{"alice"})
+			Expect(err).NotTo(HaveOccurred())
+			data = CustomRoleData{
+				WorkspaceID:   workspaceID,
+				WorkspaceName: "ws",
+				Permissions:   []role.Permission{role.Perm.SpaceView, role.Perm.AppView, role.Perm.EnvDeploy},
+				AppScope:      role.AppScope{Mode: role.AppScopeAll},
+				EnvScope:      role.EnvScope{Mode: role.EnvScopeTypes, EnvTypes: []string{"test"}},
+			}
+		})
+
+		It("creates a user group and grants policies", func() {
+			r, err := svc.CreateCustomRole(ctx, "non-prod", "desc", data)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(r.IsCustom()).To(BeTrue())
+			Expect(client.gotGrantedScopes).To(Equal(GenCustomRoleAuthScopes(data)))
+			// 新建时没有旧授权，不需要撤销
+			Expect(client.gotRevokedActions).To(BeEmpty())
+
+			got, err := svc.GetRole(ctx, r.ID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(got.DisplayName).To(Equal("non-prod"))
+		})
+
+		It("revokes old policies before granting new ones on update", func() {
+			r, err := svc.CreateCustomRole(ctx, "non-prod", "", data)
+			Expect(err).NotTo(HaveOccurred())
+
+			data.EnvScope = role.EnvScope{Mode: role.EnvScopeTypes, EnvTypes: []string{"development"}}
+			updated, err := svc.UpdateCustomRole(ctx, r.ID, "dev-only", "", data)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(updated.DisplayName).To(Equal("dev-only"))
+			Expect(client.gotRevokedActions).To(ContainElements("deploy_app_to_env", "view_app", "view_env"))
+			Expect(client.gotGrantedScopes).To(Equal(GenCustomRoleAuthScopes(data)))
+
+			got, err := svc.GetRole(ctx, r.ID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(got.DisplayName).To(Equal("dev-only"))
+			Expect(got.EnvScope.EnvTypes).To(Equal([]string{"development"}))
+		})
+
+		It("keeps the new definition when granting fails, so the same update can be retried", func() {
+			r, err := svc.CreateCustomRole(ctx, "non-prod", "", data)
+			Expect(err).NotTo(HaveOccurred())
+
+			client.grantErr = errors.New("iam unavailable")
+			data.EnvScope = role.EnvScope{Mode: role.EnvScopeTypes, EnvTypes: []string{"development"}}
+			_, err = svc.UpdateCustomRole(ctx, r.ID, "dev-only", "", data)
+			Expect(err).To(HaveOccurred())
+			got, err := svc.GetRole(ctx, r.ID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(got.EnvScope.EnvTypes).To(Equal([]string{"development"}))
+
+			// 原样再提交一次即可补齐授权
+			client.grantErr = nil
+			_, err = svc.UpdateCustomRole(ctx, r.ID, "dev-only", "", data)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(client.gotGrantedScopes).To(Equal(GenCustomRoleAuthScopes(data)))
+		})
+
+		It("refuses to modify or delete built-in roles", func() {
+			admin, err := svc.getAdminRoleFromStorage(ctx, workspaceID)
+			Expect(err).NotTo(HaveOccurred())
+			_, err = svc.UpdateCustomRole(ctx, admin.ID, "x", "", data)
+			Expect(errors.Is(err, ErrNotCustomRole)).To(BeTrue())
+			Expect(errors.Is(svc.DeleteCustomRole(ctx, admin.ID), ErrNotCustomRole)).To(BeTrue())
+		})
+
+		It("rolls back the user group and role record when initial grant fails", func() {
+			client.grantErr = errors.New("iam unavailable")
+			_, err := svc.CreateCustomRole(ctx, "non-prod", "desc", data)
+			Expect(err).To(HaveOccurred())
+			Expect(client.gotDeletedUserGroups).To(HaveLen(1))
+
+			allRoles, err := svc.ListRoles(
+				ctx,
+				workspaceID,
+				role.PermissionScope{ResourceType: role.WorkspaceResourceType, ResourceID: workspaceID},
+			)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(allRoles).To(HaveLen(1))
+			Expect(allRoles[0].IsCustom()).To(BeFalse())
+		})
+
+		It("deletes the user group and the role record", func() {
+			r, err := svc.CreateCustomRole(ctx, "non-prod", "", data)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(svc.DeleteCustomRole(ctx, r.ID)).To(Succeed())
+			Expect(client.gotDeletedUserGroups).To(ContainElement(r.UserGroupID))
+			_, err = svc.GetRole(ctx, r.ID)
+			Expect(err).To(HaveOccurred())
 		})
 	})
 

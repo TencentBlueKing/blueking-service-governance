@@ -23,10 +23,14 @@
 package role
 
 import (
+	"github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/v2/bson"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
+
+// ErrRoleNotFound 角色不存在
+var ErrRoleNotFound = errors.New("role not found")
 
 // RoleStore 角色存储
 type RoleStore = store.GenericStore[Role]
@@ -42,6 +46,7 @@ type GradeManagerStore = store.GenericStore[WorkspaceGradeManager]
 var RoleMeta = store.Meta[Role]{
 	Collection:   "iam_roles",
 	TenantScoped: true,
+	NotFound:     ErrRoleNotFound,
 }
 
 // GradeManagerMeta workspace 分级管理员表的存储元信息。

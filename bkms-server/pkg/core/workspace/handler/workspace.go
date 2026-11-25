@@ -48,7 +48,6 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/perm"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/taskq"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/misc/audit"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/bkmonitor"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
 	ginperm "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/perm"
 	storereg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
@@ -196,26 +195,24 @@ func (h *Handler) ListWorkspaceRoleMemberGroups(c *gin.Context) {
 	}
 
 	client := perm.NewManager()
-	var groups []*serializer.RoleMemberGroupOutputObj
-	// 获取角色列表
 	roles, err := client.ListRoles(ctx, ws.ID)
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list roles"))
 		return
 	}
+	membersByRole, err := listMembersByRole(ctx, client, roles)
+	if err != nil {
+		bkerrs.AbortWithErr(c, err)
+		return
+	}
+	groups := make([]*serializer.RoleMemberGroupOutputObj, 0, len(roles))
 	for _, r := range roles {
-		// 获取指定角色下的成员
-		members, lErr := client.ListRoleMembers(ctx, r.ID)
-		if lErr != nil {
-			bkerrs.AbortWithErr(c, bkerrs.Wrap(lErr, bkerrs.ErrCodeInternalServerError, "list role members"))
-			return
-		}
 		groups = append(groups, &serializer.RoleMemberGroupOutputObj{
 			RoleID:      r.ID,
 			RoleName:    r.Name,
 			RoleCode:    r.RoleCode,
 			UserGroupID: int64(r.UserGroupID),
-			Members:     members,
+			Members:     membersByRole[r.ID],
 		})
 	}
 
@@ -719,152 +716,6 @@ func (h *Handler) UpdateWorkspaceInfo(c *gin.Context) {
 		ws.ID,
 		audit.WithDataBefore(oldWs),
 		audit.WithDataAfter(ws),
-		audit.WithWorkspaceID(ws.ID),
-	)
-
-	ginutils.OK(c, serializer.EmptyOutput{})
-}
-
-// AddWorkspaceUser 授予用户工作空间下角色身份。
-//
-//	@ID				AddWorkspaceUser
-//	@Summary		授予用户工作空间下角色身份
-//	@Tags			workspace
-//	@Accept			json
-//	@Produce		json
-//	@Security		BkUserInfo
-//	@Security		BkUserCredential
-//	@Param			workspaceID	path		string							true	"工作空间 ID"
-//	@Param			roleCode	path		string							true	"角色 Code"
-//	@Param			body		body		serializer.AddWorkspaceUserInput	true	"添加用户请求"
-//	@Success		200			{object}	serializer.EmptyOutput
-//	@Failure		400			{object}	bkerrs.GinErrorOutput
-//	@Router			/workspaces/{workspaceID}/roles/{roleCode}/users [post]
-func (h *Handler) AddWorkspaceUser(c *gin.Context) {
-	var uriInput serializer.WorkspaceRoleURIInput
-	var input serializer.AddWorkspaceUserInput
-	if err := ginutils.BindURIJSON(c, &uriInput, &input); err != nil {
-		bkerrs.AbortWithErr(c, err)
-		return
-	}
-
-	ctx := c.Request.Context()
-	ws, err := ginperm.ValidateWorkspaceByID(ctx, h.registry, uriInput.WorkspaceID, ginperm.TypeEdit)
-	if err != nil {
-		bkerrs.AbortWithErr(c, err)
-		return
-	}
-
-	permMgr := perm.NewManager()
-
-	role, err := permMgr.GetRole(ctx, ws.ID, uriInput.RoleCode)
-	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get role"))
-		return
-	}
-
-	if err = permMgr.AddRoleForUsers(ctx, role.ID, input.UserIDs); err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "add role for users"))
-		return
-	}
-
-	// 对于 admin/sre 角色的新增，交由 UserGroupService 基于 workspace 统一处理
-	if uriInput.RoleCode == perm.RoleCodeAdmin || uriInput.RoleCode == perm.RoleCodeSre {
-		go bkmonitor.NewUserGroupService(h.registry.DB).SyncMembersForWorkspace(
-			ctx, ws, auth.MustGetUser(ctx).ID,
-		)
-	}
-
-	// 添加操作审计
-	go audit.AddOperationRecordAsync(
-		ctx,
-		audit.OperationTypeCreate,
-		audit.ResourceTypeWorkspace,
-		ws.ID,
-		audit.WithAttribute(audit.AttributeUserRole),
-		audit.WithDataAfter(map[string]interface{}{
-			"workspaceID": ws.ID,
-			"roleCode":    uriInput.RoleCode,
-			"userIDs":     input.UserIDs,
-		}),
-		audit.WithWorkspaceID(ws.ID),
-	)
-
-	ginutils.OK(c, serializer.EmptyOutput{})
-}
-
-// RemoveWorkspaceUser 移除用户工作空间下角色身份。
-//
-//	@ID				RemoveWorkspaceUser
-//	@Summary		移除用户工作空间下角色身份
-//	@Tags			workspace
-//	@Produce		json
-//	@Security		BkUserInfo
-//	@Security		BkUserCredential
-//	@Param			workspaceID	path		string	true	"工作空间 ID"
-//	@Param			userID		path		string	true	"用户 ID"
-//	@Success		200			{object}	serializer.EmptyOutput
-//	@Failure		400			{object}	bkerrs.GinErrorOutput
-//	@Router			/workspaces/{workspaceID}/users/{userID} [delete]
-func (h *Handler) RemoveWorkspaceUser(c *gin.Context) {
-	var uriInput serializer.WorkspaceUserURIInput
-	if err := ginutils.BindURI(c, &uriInput); err != nil {
-		bkerrs.AbortWithErr(c, err)
-		return
-	}
-
-	ctx := c.Request.Context()
-	ws, err := ginperm.ValidateWorkspaceByID(ctx, h.registry, uriInput.WorkspaceID, ginperm.TypeEdit)
-	if err != nil {
-		bkerrs.AbortWithErr(c, err)
-		return
-	}
-
-	userRoleCode := ""
-	permMgr := perm.NewManager()
-
-	// 遍历所有角色, 如果用户有对应角色身份, 则删除用户在该角色下的身份
-	for _, roleCode := range perm.RoleCodes() {
-		role, err := permMgr.GetRole(ctx, ws.ID, roleCode)
-		if err != nil {
-			bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get role"))
-			return
-		}
-
-		members, err := permMgr.ListRoleMembers(ctx, role.ID)
-		if err != nil {
-			bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list role members"))
-			return
-		}
-		if !lo.Contains(members, uriInput.UserID) {
-			continue
-		}
-
-		if err := permMgr.DeleteRoleForUsers(ctx, role.ID, []string{uriInput.UserID}); err != nil {
-			bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "delete role for users"))
-			return
-		}
-		userRoleCode = roleCode
-	}
-
-	// 从各环境的蓝鲸监控告警组中移除该用户（仅处理 type=user）
-	if userRoleCode == perm.RoleCodeAdmin || userRoleCode == perm.RoleCodeSre {
-		go bkmonitor.NewUserGroupService(h.registry.DB).RemoveMemberForWorkspace(
-			ctx, ws, uriInput.UserID, auth.MustGetUser(ctx).ID,
-		)
-	}
-
-	// 添加操作审计
-	go audit.AddOperationRecordAsync(
-		ctx,
-		audit.OperationTypeDelete,
-		audit.ResourceTypeWorkspace,
-		ws.ID,
-		audit.WithAttribute(audit.AttributeUserRole),
-		audit.WithDataBefore(map[string]interface{}{
-			"workspaceID": ws.ID,
-			"userID":      uriInput.UserID,
-		}),
 		audit.WithWorkspaceID(ws.ID),
 	)
 

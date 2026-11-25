@@ -154,6 +154,46 @@ func (c *BKIAMClient) GrantUserGroupPolicies(
 	return nil
 }
 
+// RevokeUserGroupActions 撤销用户组在 system 下指定 actions 的全部授权（不区分资源）。
+//
+// 用于收窄自定义角色的范围：IAM 重复授权只会合并，需要先撤销旧授权再重新授予。
+func (c *BKIAMClient) RevokeUserGroupActions(
+	ctx context.Context,
+	userGroupID int,
+	system string,
+	actionIDs []string,
+) error {
+	const errPrefix = "revoke user group actions error"
+	if len(actionIDs) == 0 {
+		return nil
+	}
+
+	actions := make([]types.Action, 0, len(actionIDs))
+	for _, id := range actionIDs {
+		actions = append(actions, types.Action{ID: id})
+	}
+	op := c.NewOperation(
+		bkapi.OperationConfig{
+			Name:   "management_groups_actions_policies_delete",
+			Method: "DELETE",
+			Path:   "/api/v1/open/management/groups/{group_id}/actions/policies/",
+		},
+		bkapi.OptSetRequestPathParams(map[string]string{
+			"group_id": strconv.Itoa(userGroupID),
+		}),
+		bkapi.OptSetRequestBody(map[string]any{"system": system, "actions": actions}),
+	)
+
+	var resp types.Resp
+	if err := c.executeOperation(ctx, op, &resp); err != nil {
+		return errors.Wrap(err, errPrefix)
+	}
+	if resp.Code != 0 {
+		return errors.Errorf("%s: %s", errPrefix, resp.Message)
+	}
+	return nil
+}
+
 // AddUserGroupMembers 添加用户组成员，其中 expiredAt 为过期时间戳。
 func (c *BKIAMClient) AddUserGroupMembers(
 	ctx context.Context,

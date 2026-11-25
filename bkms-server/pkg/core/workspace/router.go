@@ -31,9 +31,17 @@ type WorkspaceHandler interface {
 	// 创建与更新
 	CreateWorkspace(c *gin.Context)
 	UpdateWorkspaceInfo(c *gin.Context)
-	// 成员管理
+	// 角色与成员管理
+	ListWorkspaceRoles(c *gin.Context)
+	CreateWorkspaceRole(c *gin.Context)
+	UpdateWorkspaceRole(c *gin.Context)
+	DeleteWorkspaceRole(c *gin.Context)
+	ListWorkspaceRoleUsers(c *gin.Context)
 	AddWorkspaceUser(c *gin.Context)
+	RemoveWorkspaceRoleUser(c *gin.Context)
+	ListWorkspaceUsers(c *gin.Context)
 	RemoveWorkspaceUser(c *gin.Context)
+	ListEnvDeployers(c *gin.Context)
 	// 状态与删除
 	SetWorkspaceState(c *gin.Context)
 	DeleteWorkspace(c *gin.Context)
@@ -58,9 +66,20 @@ func Register(rg *gin.RouterGroup, h WorkspaceHandler) {
 	rg.POST("/workspaces", h.CreateWorkspace)
 	rg.PUT("/workspaces/:workspaceID/info", h.UpdateWorkspaceInfo)
 
-	// 成员管理
+	// 角色与成员管理；:roleCode 对内置角色为角色 Code，对自定义角色为角色 ID
+	rg.GET("/workspaces/:workspaceID/roles", h.ListWorkspaceRoles)
+	rg.POST("/workspaces/:workspaceID/roles", h.CreateWorkspaceRole)
+	rg.PUT("/workspaces/:workspaceID/roles/:roleCode", h.UpdateWorkspaceRole)
+	rg.DELETE("/workspaces/:workspaceID/roles/:roleCode", h.DeleteWorkspaceRole)
+	rg.GET("/workspaces/:workspaceID/roles/:roleCode/users", h.ListWorkspaceRoleUsers)
 	rg.POST("/workspaces/:workspaceID/roles/:roleCode/users", h.AddWorkspaceUser)
+	rg.DELETE("/workspaces/:workspaceID/roles/:roleCode/users/:userID", h.RemoveWorkspaceRoleUser)
+	// 按成员查看角色
+	rg.GET("/workspaces/:workspaceID/users", h.ListWorkspaceUsers)
+	// 退出空间：移出该用户在空间内的全部角色
 	rg.DELETE("/workspaces/:workspaceID/users/:userID", h.RemoveWorkspaceUser)
+	// 各标准环境的可部署人员
+	rg.GET("/workspaces/:workspaceID/env-deployers", h.ListEnvDeployers)
 
 	// 状态与删除
 	rg.PATCH("/workspaces/:workspaceID/state", h.SetWorkspaceState)

@@ -35,9 +35,11 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime/capability/apmservicename"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace/customrole"
 	appmodeldeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/appmodel"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	bkmapi "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bkmonitor"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/perm"
 	bkmmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/bkmonitor"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
 	ginperm "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/perm"
@@ -285,6 +287,10 @@ func (h *Handler) CreateEnvApm(c *gin.Context) {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "create and bind apm to env"))
 		return
 	}
+	// APM 已经绑定成功，这里失败只记录日志，重新保存覆盖该环境的自定义角色即可补齐
+	if rErr := customrole.ReapplyEnvApm(ctx, h.registry.DB, perm.NewManager(), env); rErr != nil {
+		log.Errorf(ctx, "reapply custom roles covering env %s/%s failed: %v", env.WorkspaceID, env.Name, rErr)
+	}
 
 	// APM 创建成功后，异步将 workspace 下 admin/sre 人员同步到新告警组
 	go bkmmodel.NewUserGroupService(storereg.G().DB).SyncMembersForEnvWithRetry(
@@ -352,6 +358,11 @@ func (h *Handler) BindApmToEnv(c *gin.Context) {
 	if err = apmSvc.BindToEnv(ctx, apm, env.ID, env.Name); err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "bind apm to env"))
 		return
+	}
+	// 环境改绑 APM 应用后，覆盖该环境的自定义角色需要按新的 APM 应用重新授权。
+	// 绑定已经成功，这里失败只记录日志，重新保存这些角色即可补齐
+	if rErr := customrole.ReapplyEnvApm(ctx, h.registry.DB, perm.NewManager(), env); rErr != nil {
+		log.Errorf(ctx, "reapply custom roles covering env %s/%s failed: %v", env.WorkspaceID, env.Name, rErr)
 	}
 
 	ginutils.OK(c, slz.EmptyOutput{})

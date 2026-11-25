@@ -97,6 +97,19 @@ type Manager interface {
 	// GetRole 获取角色信息
 	GetRole(ctx context.Context, workspaceID, roleCode string) (*role.Role, error)
 
+	// GetRoleByID 获取工作空间下指定 ID 的角色（内置或自定义）
+	GetRoleByID(ctx context.Context, workspaceID, roleID string) (*role.Role, error)
+	// CreateCustomRole 创建自定义角色并授权，data 中的权限须已经过 role.NormalizePermissions
+	CreateCustomRole(
+		ctx context.Context, displayName, description string, data bkiam.CustomRoleData,
+	) (*role.Role, error)
+	// UpdateCustomRole 修改自定义角色并重新授权，以最后一次修改为准
+	UpdateCustomRole(
+		ctx context.Context, roleID, displayName, description string, data bkiam.CustomRoleData,
+	) (*role.Role, error)
+	// DeleteCustomRole 删除自定义角色及其 IAM 用户组
+	DeleteCustomRole(ctx context.Context, roleID string) error
+
 	// CreateWorkspaceAdmin 创建工作空间管理员
 	CreateWorkspaceAdmin(
 		ctx context.Context,

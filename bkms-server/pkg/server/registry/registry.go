@@ -29,6 +29,7 @@ import (
 	apphooks "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/hooks"
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace/customrole"
 	releasestrategyhooks "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/releasestrategy/hooks"
 	polarisenvvars "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris/envvars"
 	cfgswitchmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/cfgswitch/model"
@@ -113,6 +114,7 @@ func (r *Registry) registerStoreHooks() {
 	envvarhooks.RegisterDeleteHooks(r.DB)
 	apphooks.RegisterDeleteHooks(r.DB)
 	appcfghooks.RegisterDeleteHooks(r.DB)
+	customrole.RegisterHooks(r.DB)
 	alertstrategyhooks.RegisterUpdateHooks(r.DB)
 	appdefaultshooks.RegisterPreDeleteHooks(r.DB)
 	frameworkcfgtmplhooks.RegisterPreDeleteHooks(r.DB)

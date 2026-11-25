@@ -48,7 +48,21 @@ type Role struct {
 	Scope PermissionScope `bson:"scope"`
 	// UserGroupID 角色对应的权限中心的用户组 id
 	UserGroupID int `bson:"userGroupID"`
+
+	// 以下字段仅自定义角色（RoleCode 为 CustomRoleCode）使用，内置角色的权限和范围由模板决定
+
+	// DisplayName 角色展示名称，空间内唯一
+	DisplayName string `bson:"displayName,omitempty"`
+	// Permissions 角色的权限项，见 Perm
+	Permissions []Permission `bson:"permissions,omitempty"`
+	// AppScope 角色的应用范围
+	AppScope *AppScope `bson:"appScope,omitempty"`
+	// EnvScope 角色的环境范围
+	EnvScope *EnvScope `bson:"envScope,omitempty"`
 }
+
+// IsCustom 是否为自定义角色
+func (r *Role) IsCustom() bool { return r.RoleCode == CustomRoleCode }
 
 // WorkspaceGradeManager workspace 分级管理员
 type WorkspaceGradeManager struct {

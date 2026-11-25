@@ -19762,6 +19762,49 @@ const docTemplate = `{
                 }
             }
         },
+        "/workspaces/{workspaceID}/env-deployers": {
+            "get": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "workspace"
+                ],
+                "summary": "列出空间内各标准环境能部署的人，以及每人来自哪些角色、能部署哪些应用",
+                "operationId": "ListEnvDeployers",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.ListEnvDeployersOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
         "/workspaces/{workspaceID}/envs": {
             "get": {
                 "security": [
@@ -21177,7 +21220,261 @@ const docTemplate = `{
                 }
             }
         },
+        "/workspaces/{workspaceID}/roles": {
+            "get": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "workspace"
+                ],
+                "summary": "获取工作空间的内置角色和自定义角色，包含权限、生效范围与成员数量",
+                "operationId": "ListWorkspaceRoles",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.ListWorkspaceRolesOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "workspace"
+                ],
+                "summary": "创建空白自定义角色，或克隆已有角色（复制权限与范围，不复制成员），仅空间管理员可操作",
+                "operationId": "CreateWorkspaceRole",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "创建角色请求",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/serializer.CreateWorkspaceRoleInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.WorkspaceRoleOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
+        "/workspaces/{workspaceID}/roles/{roleCode}": {
+            "put": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "workspace"
+                ],
+                "summary": "修改自定义角色的名称、权限和生效范围，变更立即影响角色的全部成员，仅空间管理员可操作",
+                "operationId": "UpdateWorkspaceRole",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "自定义角色 ID",
+                        "name": "roleCode",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "修改角色请求",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/serializer.UpdateWorkspaceRoleInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.WorkspaceRoleOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "workspace"
+                ],
+                "summary": "删除自定义角色，成员失去该角色的全部权限，其他角色不受影响，仅空间管理员可操作",
+                "operationId": "DeleteWorkspaceRole",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "自定义角色 ID",
+                        "name": "roleCode",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_core_workspace_serializer.EmptyOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
         "/workspaces/{workspaceID}/roles/{roleCode}/users": {
+            "get": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "workspace"
+                ],
+                "summary": "获取工作空间下某个角色的成员",
+                "operationId": "ListWorkspaceRoleUsers",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "内置角色为角色 Code，自定义角色为角色 ID",
+                        "name": "roleCode",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.ListWorkspaceRoleUsersOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            },
             "post": {
                 "security": [
                     {
@@ -21208,7 +21505,7 @@ const docTemplate = `{
                     },
                     {
                         "type": "string",
-                        "description": "角色 Code",
+                        "description": "内置角色为角色 Code，自定义角色为角色 ID",
                         "name": "roleCode",
                         "in": "path",
                         "required": true
@@ -21221,6 +21518,63 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/serializer.AddWorkspaceUserInput"
                         }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_core_workspace_serializer.EmptyOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
+        "/workspaces/{workspaceID}/roles/{roleCode}/users/{userID}": {
+            "delete": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "workspace"
+                ],
+                "summary": "将用户移出某个角色，只离开该角色，其他角色不受影响，仅空间管理员可操作",
+                "operationId": "RemoveWorkspaceRoleUser",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "内置角色为角色 Code，自定义角色为角色 ID",
+                        "name": "roleCode",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "用户 ID",
+                        "name": "userID",
+                        "in": "path",
+                        "required": true
                     }
                 ],
                 "responses": {
@@ -21708,6 +22062,55 @@ const docTemplate = `{
                     },
                     "500": {
                         "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
+        "/workspaces/{workspaceID}/users": {
+            "get": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "workspace"
+                ],
+                "summary": "按成员列出空间内的角色、合并后的生效范围与是否可部署，可按角色筛选",
+                "operationId": "ListWorkspaceUsers",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "只返回该角色的成员，内置角色为角色 Code，自定义角色为角色 ID",
+                        "name": "roleCode",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.ListWorkspaceUsersOutput"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
                         "schema": {
                             "$ref": "#/definitions/bkerrs.GinErrorOutput"
                         }
@@ -24934,6 +25337,29 @@ const docTemplate = `{
                 }
             }
         },
+        "serializer.AppScopeInput": {
+            "type": "object",
+            "required": [
+                "mode"
+            ],
+            "properties": {
+                "appIDs": {
+                    "description": "指定的应用 ID，mode 为 apps 时必填",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "mode": {
+                    "description": "范围类型：all（全部应用，包括之后新建的应用）、apps（指定应用）",
+                    "type": "string",
+                    "enum": [
+                        "all",
+                        "apps"
+                    ]
+                }
+            }
+        },
         "serializer.AppServiceOutput": {
             "type": "object",
             "properties": {
@@ -28150,6 +28576,48 @@ const docTemplate = `{
                 }
             }
         },
+        "serializer.CreateWorkspaceRoleInput": {
+            "type": "object",
+            "properties": {
+                "appScope": {
+                    "description": "应用范围，为空表示全部应用",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/serializer.AppScopeInput"
+                        }
+                    ]
+                },
+                "cloneFrom": {
+                    "description": "克隆来源，内置角色为角色 Code，自定义角色为角色 ID；指定时复制其权限与范围，不复制成员，忽略下列字段",
+                    "type": "string"
+                },
+                "description": {
+                    "description": "角色描述",
+                    "type": "string",
+                    "maxLength": 256
+                },
+                "envScope": {
+                    "description": "环境范围，为空表示全部环境",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/serializer.EnvScopeInput"
+                        }
+                    ]
+                },
+                "name": {
+                    "description": "角色名称，空间内唯一；克隆时为空则默认「原名 副本」",
+                    "type": "string",
+                    "maxLength": 64
+                },
+                "permissions": {
+                    "description": "权限项，见 GET /workspaces/{workspaceID}/roles 返回的 permissions；为空表示空白角色",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
         "serializer.CustomRuntimeImageOutputObj": {
             "type": "object",
             "properties": {
@@ -28886,6 +29354,53 @@ const docTemplate = `{
                 }
             }
         },
+        "serializer.EnvDeployerOutputObj": {
+            "type": "object",
+            "properties": {
+                "allApps": {
+                    "description": "可以部署全部应用",
+                    "type": "boolean"
+                },
+                "apps": {
+                    "description": "AllApps 为 false 时，可以部署的应用",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/serializer.RoleResourceOutputObj"
+                    }
+                },
+                "roles": {
+                    "description": "赋予该用户部署这个环境权限的角色",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/serializer.UserRoleOutputObj"
+                    }
+                },
+                "username": {
+                    "description": "用户名",
+                    "type": "string"
+                }
+            }
+        },
+        "serializer.EnvDeployersOutputObj": {
+            "type": "object",
+            "properties": {
+                "deployers": {
+                    "description": "能部署该环境的人，为空表示无人可部署",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/serializer.EnvDeployerOutputObj"
+                    }
+                },
+                "envID": {
+                    "description": "环境 ID",
+                    "type": "string"
+                },
+                "envName": {
+                    "description": "环境名称",
+                    "type": "string"
+                }
+            }
+        },
         "serializer.EnvDetailOutput": {
             "type": "object",
             "properties": {
@@ -29033,6 +29548,37 @@ const docTemplate = `{
                 "updatedAt": {
                     "description": "更新时间",
                     "type": "string"
+                }
+            }
+        },
+        "serializer.EnvScopeInput": {
+            "type": "object",
+            "required": [
+                "mode"
+            ],
+            "properties": {
+                "envIDs": {
+                    "description": "标准环境 ID，mode 为 envs 时必填",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "envTypes": {
+                    "description": "环境类型，mode 为 types 时必填，可选 development、test、staging、production",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "mode": {
+                    "description": "范围类型：all（全部环境）、types（按环境类型）、envs（指定标准环境）",
+                    "type": "string",
+                    "enum": [
+                        "all",
+                        "types",
+                        "envs"
+                    ]
                 }
             }
         },
@@ -31755,6 +32301,17 @@ const docTemplate = `{
                 }
             }
         },
+        "serializer.ListEnvDeployersOutput": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/serializer.EnvDeployersOutputObj"
+                    }
+                }
+            }
+        },
         "serializer.ListEnvTrafficLanesOutput": {
             "type": "object",
             "properties": {
@@ -32109,6 +32666,46 @@ const docTemplate = `{
                 }
             }
         },
+        "serializer.ListWorkspaceRoleUsersOutput": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "serializer.ListWorkspaceRolesOutput": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/serializer.RoleOutputObj"
+                    }
+                },
+                "permissions": {
+                    "description": "全部可选的权限项，按展示顺序排列",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "serializer.ListWorkspaceUsersOutput": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/serializer.WorkspaceUserOutputObj"
+                    }
+                }
+            }
+        },
         "serializer.ListWorkspacesOutput": {
             "type": "object",
             "properties": {
@@ -32163,6 +32760,45 @@ const docTemplate = `{
                 "timestamp": {
                     "description": "日志时间戳",
                     "type": "string"
+                }
+            }
+        },
+        "serializer.MergedAppScopeOutputObj": {
+            "type": "object",
+            "properties": {
+                "all": {
+                    "description": "是否覆盖全部应用",
+                    "type": "boolean"
+                },
+                "apps": {
+                    "description": "指定的应用，All 为 true 时为空",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/serializer.RoleResourceOutputObj"
+                    }
+                }
+            }
+        },
+        "serializer.MergedEnvScopeOutputObj": {
+            "type": "object",
+            "properties": {
+                "all": {
+                    "description": "是否覆盖全部环境",
+                    "type": "boolean"
+                },
+                "envTypes": {
+                    "description": "按环境类型覆盖的类型",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "envs": {
+                    "description": "指定的标准环境",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/serializer.RoleResourceOutputObj"
+                    }
                 }
             }
         },
@@ -35243,6 +35879,22 @@ const docTemplate = `{
                 }
             }
         },
+        "serializer.RoleAppScopeOutputObj": {
+            "type": "object",
+            "properties": {
+                "apps": {
+                    "description": "指定的应用，已删除的应用不再返回",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/serializer.RoleResourceOutputObj"
+                    }
+                },
+                "mode": {
+                    "description": "范围类型：all、apps",
+                    "type": "string"
+                }
+            }
+        },
         "serializer.RoleBindingOutput": {
             "type": "object",
             "properties": {
@@ -35272,6 +35924,29 @@ const docTemplate = `{
                 },
                 "username": {
                     "description": "平台管理员用户名",
+                    "type": "string"
+                }
+            }
+        },
+        "serializer.RoleEnvScopeOutputObj": {
+            "type": "object",
+            "properties": {
+                "envTypes": {
+                    "description": "环境类型",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "envs": {
+                    "description": "指定的标准环境，已删除的环境不再返回",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/serializer.RoleResourceOutputObj"
+                    }
+                },
+                "mode": {
+                    "description": "范围类型：all、types、envs",
                     "type": "string"
                 }
             }
@@ -35319,6 +35994,75 @@ const docTemplate = `{
                             "$ref": "#/definitions/admin.RoleCode"
                         }
                     ]
+                }
+            }
+        },
+        "serializer.RoleOutputObj": {
+            "type": "object",
+            "properties": {
+                "appScope": {
+                    "description": "应用范围",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/serializer.RoleAppScopeOutputObj"
+                        }
+                    ]
+                },
+                "builtin": {
+                    "description": "是否为内置角色；内置角色只能管理成员和克隆",
+                    "type": "boolean"
+                },
+                "description": {
+                    "description": "角色描述",
+                    "type": "string"
+                },
+                "envScope": {
+                    "description": "环境范围",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/serializer.RoleEnvScopeOutputObj"
+                        }
+                    ]
+                },
+                "id": {
+                    "description": "角色 ID",
+                    "type": "string"
+                },
+                "memberCount": {
+                    "description": "成员数量",
+                    "type": "integer"
+                },
+                "name": {
+                    "description": "角色名称",
+                    "type": "string"
+                },
+                "permissions": {
+                    "description": "权限项",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "roleCode": {
+                    "description": "角色 Code，内置角色为 admin / developer / sre / operator，自定义角色为 custom",
+                    "type": "string"
+                }
+            }
+        },
+        "serializer.RoleResourceOutputObj": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "description": "资源 ID",
+                    "type": "string"
+                },
+                "name": {
+                    "description": "展示名称",
+                    "type": "string"
+                },
+                "type": {
+                    "description": "环境类型，仅环境有值",
+                    "type": "string"
                 }
             }
         },
@@ -37183,6 +37927,49 @@ const docTemplate = `{
                 }
             }
         },
+        "serializer.UpdateWorkspaceRoleInput": {
+            "type": "object",
+            "required": [
+                "appScope",
+                "envScope",
+                "name"
+            ],
+            "properties": {
+                "appScope": {
+                    "description": "应用范围",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/serializer.AppScopeInput"
+                        }
+                    ]
+                },
+                "description": {
+                    "description": "角色描述",
+                    "type": "string",
+                    "maxLength": 256
+                },
+                "envScope": {
+                    "description": "环境范围",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/serializer.EnvScopeInput"
+                        }
+                    ]
+                },
+                "name": {
+                    "description": "角色名称，空间内唯一",
+                    "type": "string",
+                    "maxLength": 64
+                },
+                "permissions": {
+                    "description": "权限项",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
         "serializer.UpsertClusterAddonInput": {
             "type": "object",
             "required": [
@@ -37239,6 +38026,27 @@ const docTemplate = `{
                     "items": {
                         "$ref": "#/definitions/serializer.GPATimeRangeInput"
                     }
+                }
+            }
+        },
+        "serializer.UserRoleOutputObj": {
+            "type": "object",
+            "properties": {
+                "builtin": {
+                    "description": "是否为内置角色",
+                    "type": "boolean"
+                },
+                "id": {
+                    "description": "角色 ID",
+                    "type": "string"
+                },
+                "name": {
+                    "description": "角色名称",
+                    "type": "string"
+                },
+                "roleCode": {
+                    "description": "角色 Code，自定义角色为 custom",
+                    "type": "string"
                 }
             }
         },
@@ -37609,6 +38417,14 @@ const docTemplate = `{
                 }
             }
         },
+        "serializer.WorkspaceRoleOutput": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/serializer.RoleOutputObj"
+                }
+            }
+        },
         "serializer.WorkspaceStatsOutput": {
             "type": "object",
             "properties": {
@@ -37639,6 +38455,42 @@ const docTemplate = `{
             "properties": {
                 "data": {
                     "$ref": "#/definitions/serializer.WorkspaceStatsOutput"
+                }
+            }
+        },
+        "serializer.WorkspaceUserOutputObj": {
+            "type": "object",
+            "properties": {
+                "appScope": {
+                    "description": "各角色应用范围的合并结果，仅用于展示；实际权限按单个角色判断，不会跨角色拼接",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/serializer.MergedAppScopeOutputObj"
+                        }
+                    ]
+                },
+                "canDeploy": {
+                    "description": "是否有角色带部署到环境的权限",
+                    "type": "boolean"
+                },
+                "envScope": {
+                    "description": "各角色环境范围的合并结果，仅用于展示",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/serializer.MergedEnvScopeOutputObj"
+                        }
+                    ]
+                },
+                "roles": {
+                    "description": "用户在空间内的全部角色",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/serializer.UserRoleOutputObj"
+                    }
+                },
+                "username": {
+                    "description": "用户名",
+                    "type": "string"
                 }
             }
         },

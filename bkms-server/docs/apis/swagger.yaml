@@ -2200,6 +2200,22 @@ definitions:
           $ref: '#/definitions/runtimemod.PublicView'
         type: array
     type: object
+  serializer.AppScopeInput:
+    properties:
+      appIDs:
+        description: 指定的应用 ID，mode 为 apps 时必填
+        items:
+          type: string
+        type: array
+      mode:
+        description: 范围类型：all（全部应用，包括之后新建的应用）、apps（指定应用）
+        enum:
+        - all
+        - apps
+        type: string
+    required:
+    - mode
+    type: object
   serializer.AppServiceOutput:
     properties:
       createdAt:
@@ -4421,6 +4437,33 @@ definitions:
       data:
         $ref: '#/definitions/serializer.WorkspaceDetailOutputObj'
     type: object
+  serializer.CreateWorkspaceRoleInput:
+    properties:
+      appScope:
+        allOf:
+        - $ref: '#/definitions/serializer.AppScopeInput'
+        description: 应用范围，为空表示全部应用
+      cloneFrom:
+        description: 克隆来源，内置角色为角色 Code，自定义角色为角色 ID；指定时复制其权限与范围，不复制成员，忽略下列字段
+        type: string
+      description:
+        description: 角色描述
+        maxLength: 256
+        type: string
+      envScope:
+        allOf:
+        - $ref: '#/definitions/serializer.EnvScopeInput'
+        description: 环境范围，为空表示全部环境
+      name:
+        description: 角色名称，空间内唯一；克隆时为空则默认「原名 副本」
+        maxLength: 64
+        type: string
+      permissions:
+        description: 权限项，见 GET /workspaces/{workspaceID}/roles 返回的 permissions；为空表示空白角色
+        items:
+          type: string
+        type: array
+    type: object
   serializer.CustomRuntimeImageOutputObj:
     properties:
       createdAt:
@@ -4921,6 +4964,39 @@ definitions:
         description: 项目 code
         type: string
     type: object
+  serializer.EnvDeployerOutputObj:
+    properties:
+      allApps:
+        description: 可以部署全部应用
+        type: boolean
+      apps:
+        description: AllApps 为 false 时，可以部署的应用
+        items:
+          $ref: '#/definitions/serializer.RoleResourceOutputObj'
+        type: array
+      roles:
+        description: 赋予该用户部署这个环境权限的角色
+        items:
+          $ref: '#/definitions/serializer.UserRoleOutputObj'
+        type: array
+      username:
+        description: 用户名
+        type: string
+    type: object
+  serializer.EnvDeployersOutputObj:
+    properties:
+      deployers:
+        description: 能部署该环境的人，为空表示无人可部署
+        items:
+          $ref: '#/definitions/serializer.EnvDeployerOutputObj'
+        type: array
+      envID:
+        description: 环境 ID
+        type: string
+      envName:
+        description: 环境名称
+        type: string
+    type: object
   serializer.EnvDetailOutput:
     properties:
       appDeployStatuses:
@@ -5025,6 +5101,28 @@ definitions:
       updatedAt:
         description: 更新时间
         type: string
+    type: object
+  serializer.EnvScopeInput:
+    properties:
+      envIDs:
+        description: 标准环境 ID，mode 为 envs 时必填
+        items:
+          type: string
+        type: array
+      envTypes:
+        description: 环境类型，mode 为 types 时必填，可选 development、test、staging、production
+        items:
+          type: string
+        type: array
+      mode:
+        description: 范围类型：all（全部环境）、types（按环境类型）、envs（指定标准环境）
+        enum:
+        - all
+        - types
+        - envs
+        type: string
+    required:
+    - mode
     type: object
   serializer.EnvVarConflictedInfoOutputObj:
     properties:
@@ -6873,6 +6971,13 @@ definitions:
           $ref: '#/definitions/serializer.BgEnvVarOutputObj'
         type: array
     type: object
+  serializer.ListEnvDeployersOutput:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/serializer.EnvDeployersOutputObj'
+        type: array
+    type: object
   serializer.ListEnvTrafficLanesOutput:
     properties:
       data:
@@ -7093,6 +7198,32 @@ definitions:
           $ref: '#/definitions/serializer.RoleMemberGroupOutputObj'
         type: array
     type: object
+  serializer.ListWorkspaceRoleUsersOutput:
+    properties:
+      data:
+        items:
+          type: string
+        type: array
+    type: object
+  serializer.ListWorkspaceRolesOutput:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/serializer.RoleOutputObj'
+        type: array
+      permissions:
+        description: 全部可选的权限项，按展示顺序排列
+        items:
+          type: string
+        type: array
+    type: object
+  serializer.ListWorkspaceUsersOutput:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/serializer.WorkspaceUserOutputObj'
+        type: array
+    type: object
   serializer.ListWorkspacesOutput:
     properties:
       data:
@@ -7129,6 +7260,33 @@ definitions:
       timestamp:
         description: 日志时间戳
         type: string
+    type: object
+  serializer.MergedAppScopeOutputObj:
+    properties:
+      all:
+        description: 是否覆盖全部应用
+        type: boolean
+      apps:
+        description: 指定的应用，All 为 true 时为空
+        items:
+          $ref: '#/definitions/serializer.RoleResourceOutputObj'
+        type: array
+    type: object
+  serializer.MergedEnvScopeOutputObj:
+    properties:
+      all:
+        description: 是否覆盖全部环境
+        type: boolean
+      envTypes:
+        description: 按环境类型覆盖的类型
+        items:
+          type: string
+        type: array
+      envs:
+        description: 指定的标准环境
+        items:
+          $ref: '#/definitions/serializer.RoleResourceOutputObj'
+        type: array
     type: object
   serializer.MetadataOutput:
     properties:
@@ -9286,6 +9444,17 @@ definitions:
         description: Reason 跳过原因
         type: string
     type: object
+  serializer.RoleAppScopeOutputObj:
+    properties:
+      apps:
+        description: 指定的应用，已删除的应用不再返回
+        items:
+          $ref: '#/definitions/serializer.RoleResourceOutputObj'
+        type: array
+      mode:
+        description: 范围类型：all、apps
+        type: string
+    type: object
   serializer.RoleBindingOutput:
     properties:
       createdAt:
@@ -9306,6 +9475,22 @@ definitions:
         type: string
       username:
         description: 平台管理员用户名
+        type: string
+    type: object
+  serializer.RoleEnvScopeOutputObj:
+    properties:
+      envTypes:
+        description: 环境类型
+        items:
+          type: string
+        type: array
+      envs:
+        description: 指定的标准环境，已删除的环境不再返回
+        items:
+          $ref: '#/definitions/serializer.RoleResourceOutputObj'
+        type: array
+      mode:
+        description: 范围类型：all、types、envs
         type: string
     type: object
   serializer.RoleMemberGroupOutputObj:
@@ -9338,6 +9523,52 @@ definitions:
         allOf:
         - $ref: '#/definitions/admin.RoleCode'
         description: 角色编码
+    type: object
+  serializer.RoleOutputObj:
+    properties:
+      appScope:
+        allOf:
+        - $ref: '#/definitions/serializer.RoleAppScopeOutputObj'
+        description: 应用范围
+      builtin:
+        description: 是否为内置角色；内置角色只能管理成员和克隆
+        type: boolean
+      description:
+        description: 角色描述
+        type: string
+      envScope:
+        allOf:
+        - $ref: '#/definitions/serializer.RoleEnvScopeOutputObj'
+        description: 环境范围
+      id:
+        description: 角色 ID
+        type: string
+      memberCount:
+        description: 成员数量
+        type: integer
+      name:
+        description: 角色名称
+        type: string
+      permissions:
+        description: 权限项
+        items:
+          type: string
+        type: array
+      roleCode:
+        description: 角色 Code，内置角色为 admin / developer / sre / operator，自定义角色为 custom
+        type: string
+    type: object
+  serializer.RoleResourceOutputObj:
+    properties:
+      id:
+        description: 资源 ID
+        type: string
+      name:
+        description: 展示名称
+        type: string
+      type:
+        description: 环境类型，仅环境有值
+        type: string
     type: object
   serializer.RoleStatusOutput:
     properties:
@@ -10620,6 +10851,34 @@ definitions:
     required:
     - displayName
     type: object
+  serializer.UpdateWorkspaceRoleInput:
+    properties:
+      appScope:
+        allOf:
+        - $ref: '#/definitions/serializer.AppScopeInput'
+        description: 应用范围
+      description:
+        description: 角色描述
+        maxLength: 256
+        type: string
+      envScope:
+        allOf:
+        - $ref: '#/definitions/serializer.EnvScopeInput'
+        description: 环境范围
+      name:
+        description: 角色名称，空间内唯一
+        maxLength: 64
+        type: string
+      permissions:
+        description: 权限项
+        items:
+          type: string
+        type: array
+    required:
+    - appScope
+    - envScope
+    - name
+    type: object
   serializer.UpsertClusterAddonInput:
     properties:
       chartVersion:
@@ -10664,6 +10923,21 @@ definitions:
     required:
     - maxReplicas
     - minReplicas
+    type: object
+  serializer.UserRoleOutputObj:
+    properties:
+      builtin:
+        description: 是否为内置角色
+        type: boolean
+      id:
+        description: 角色 ID
+        type: string
+      name:
+        description: 角色名称
+        type: string
+      roleCode:
+        description: 角色 Code，自定义角色为 custom
+        type: string
     type: object
   serializer.UserStatisticsOutputObj:
     properties:
@@ -10921,6 +11195,11 @@ definitions:
         description: 更新人
         type: string
     type: object
+  serializer.WorkspaceRoleOutput:
+    properties:
+      data:
+        $ref: '#/definitions/serializer.RoleOutputObj'
+    type: object
   serializer.WorkspaceStatsOutput:
     properties:
       disabledCount:
@@ -10944,6 +11223,28 @@ definitions:
     properties:
       data:
         $ref: '#/definitions/serializer.WorkspaceStatsOutput'
+    type: object
+  serializer.WorkspaceUserOutputObj:
+    properties:
+      appScope:
+        allOf:
+        - $ref: '#/definitions/serializer.MergedAppScopeOutputObj'
+        description: 各角色应用范围的合并结果，仅用于展示；实际权限按单个角色判断，不会跨角色拼接
+      canDeploy:
+        description: 是否有角色带部署到环境的权限
+        type: boolean
+      envScope:
+        allOf:
+        - $ref: '#/definitions/serializer.MergedEnvScopeOutputObj'
+        description: 各角色环境范围的合并结果，仅用于展示
+      roles:
+        description: 用户在空间内的全部角色
+        items:
+          $ref: '#/definitions/serializer.UserRoleOutputObj'
+        type: array
+      username:
+        description: 用户名
+        type: string
     type: object
   serializer.WorkspaceWithAppsOutputObj:
     properties:
@@ -23484,6 +23785,32 @@ paths:
       summary: 查询 Redis 依赖服务实例详情
       tags:
       - depservice-redis
+  /workspaces/{workspaceID}/env-deployers:
+    get:
+      operationId: ListEnvDeployers
+      parameters:
+      - description: 工作空间 ID
+        in: path
+        name: workspaceID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.ListEnvDeployersOutput'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 列出空间内各标准环境能部署的人，以及每人来自哪些角色、能部署哪些应用
+      tags:
+      - workspace
   /workspaces/{workspaceID}/envs:
     get:
       description: '[bkms-cli 使用] 避免破坏性修改'
@@ -24377,7 +24704,165 @@ paths:
       summary: 获取工作空间下角色成员组列表
       tags:
       - workspace
+  /workspaces/{workspaceID}/roles:
+    get:
+      operationId: ListWorkspaceRoles
+      parameters:
+      - description: 工作空间 ID
+        in: path
+        name: workspaceID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.ListWorkspaceRolesOutput'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 获取工作空间的内置角色和自定义角色，包含权限、生效范围与成员数量
+      tags:
+      - workspace
+    post:
+      consumes:
+      - application/json
+      operationId: CreateWorkspaceRole
+      parameters:
+      - description: 工作空间 ID
+        in: path
+        name: workspaceID
+        required: true
+        type: string
+      - description: 创建角色请求
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/serializer.CreateWorkspaceRoleInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.WorkspaceRoleOutput'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 创建空白自定义角色，或克隆已有角色（复制权限与范围，不复制成员），仅空间管理员可操作
+      tags:
+      - workspace
+  /workspaces/{workspaceID}/roles/{roleCode}:
+    delete:
+      operationId: DeleteWorkspaceRole
+      parameters:
+      - description: 工作空间 ID
+        in: path
+        name: workspaceID
+        required: true
+        type: string
+      - description: 自定义角色 ID
+        in: path
+        name: roleCode
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_core_workspace_serializer.EmptyOutput'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 删除自定义角色，成员失去该角色的全部权限，其他角色不受影响，仅空间管理员可操作
+      tags:
+      - workspace
+    put:
+      consumes:
+      - application/json
+      operationId: UpdateWorkspaceRole
+      parameters:
+      - description: 工作空间 ID
+        in: path
+        name: workspaceID
+        required: true
+        type: string
+      - description: 自定义角色 ID
+        in: path
+        name: roleCode
+        required: true
+        type: string
+      - description: 修改角色请求
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/serializer.UpdateWorkspaceRoleInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.WorkspaceRoleOutput'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 修改自定义角色的名称、权限和生效范围，变更立即影响角色的全部成员，仅空间管理员可操作
+      tags:
+      - workspace
   /workspaces/{workspaceID}/roles/{roleCode}/users:
+    get:
+      operationId: ListWorkspaceRoleUsers
+      parameters:
+      - description: 工作空间 ID
+        in: path
+        name: workspaceID
+        required: true
+        type: string
+      - description: 内置角色为角色 Code，自定义角色为角色 ID
+        in: path
+        name: roleCode
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.ListWorkspaceRoleUsersOutput'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 获取工作空间下某个角色的成员
+      tags:
+      - workspace
     post:
       consumes:
       - application/json
@@ -24388,7 +24873,7 @@ paths:
         name: workspaceID
         required: true
         type: string
-      - description: 角色 Code
+      - description: 内置角色为角色 Code，自定义角色为角色 ID
         in: path
         name: roleCode
         required: true
@@ -24414,6 +24899,42 @@ paths:
       - BkUserInfo: []
       - BkUserCredential: []
       summary: 授予用户工作空间下角色身份
+      tags:
+      - workspace
+  /workspaces/{workspaceID}/roles/{roleCode}/users/{userID}:
+    delete:
+      operationId: RemoveWorkspaceRoleUser
+      parameters:
+      - description: 工作空间 ID
+        in: path
+        name: workspaceID
+        required: true
+        type: string
+      - description: 内置角色为角色 Code，自定义角色为角色 ID
+        in: path
+        name: roleCode
+        required: true
+        type: string
+      - description: 用户 ID
+        in: path
+        name: userID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_core_workspace_serializer.EmptyOutput'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 将用户移出某个角色，只离开该角色，其他角色不受影响，仅空间管理员可操作
       tags:
       - workspace
   /workspaces/{workspaceID}/scoped-env-vars:
@@ -24712,6 +25233,36 @@ paths:
       summary: 查询空间下的泳道候选应用列表
       tags:
       - app-networking
+  /workspaces/{workspaceID}/users:
+    get:
+      operationId: ListWorkspaceUsers
+      parameters:
+      - description: 工作空间 ID
+        in: path
+        name: workspaceID
+        required: true
+        type: string
+      - description: 只返回该角色的成员，内置角色为角色 Code，自定义角色为角色 ID
+        in: query
+        name: roleCode
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.ListWorkspaceUsersOutput'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 按成员列出空间内的角色、合并后的生效范围与是否可部署，可按角色筛选
+      tags:
+      - workspace
   /workspaces/{workspaceID}/users/{userID}:
     delete:
       operationId: RemoveWorkspaceUser
