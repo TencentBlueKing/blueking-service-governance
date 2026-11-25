@@ -251,7 +251,7 @@
                 <span class="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-[8px] leading-[20px]">
                   <span class="shrink-0 text-[#4D4F56]">{{ $t('沿用来源环境（默认）') }}</span>
                   <span class="text-[12px] leading-[20px] text-[#979BA5]">
-                    {{ $t('和来源环境共用资源额度，销毁不影响来源环境，不支持组件。') }}
+                    {{ $t('与来源环境共用命名空间，不支持使用组件。') }}
                   </span>
                 </span>
               </Radio>
@@ -324,7 +324,7 @@
                 <span class="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-[8px] leading-[20px]">
                   <span class="shrink-0 text-[#4D4F56]">{{ $t('独立创建') }}</span>
                   <span class="text-[12px] leading-[20px] text-[#979BA5]">
-                    {{ $t('资源与来源环境分开，销毁时只删除本环境的资源。') }}
+                    {{ $t('独占命名空间，资源完全隔离，适合使用组件等场景。') }}
                   </span>
                 </span>
               </Radio>
