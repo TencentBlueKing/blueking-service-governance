@@ -1246,6 +1246,20 @@ func newLinkedProjectsEnableFailedErr(failed []workspace.LinkedProjectResult) er
 			}),
 		)
 	})
-	return bkerrs.New(bkerrs.ErrCodeInvalidRequest,
+	return bkerrs.New(linkedProjectsEnableFailedCode(failed),
 		"enable linked projects failed, workspace stays disabled").SetDetails(details...)
+}
+
+// linkedProjectsEnableFailedCode 按失败原因选择错误码。
+//
+// 平台不可用或无法识别的错误不是请求本身的问题，返回 500，避免被当成调用方错误告警。
+// 项目不存在、无权限仍返回 400。混合失败时只要有平台侧故障就返回 500。
+func linkedProjectsEnableFailedCode(failed []workspace.LinkedProjectResult) bkerrs.ErrCode {
+	for _, r := range failed {
+		switch r.Reason {
+		case workspace.LinkedProjectFailureUnavailable, workspace.LinkedProjectFailureUnknown:
+			return bkerrs.ErrCodeInternalServerError
+		}
+	}
+	return bkerrs.ErrCodeInvalidRequest
 }

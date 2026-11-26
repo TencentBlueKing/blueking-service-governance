@@ -68,8 +68,6 @@ const (
 type LinkedProjectFailureReason string
 
 const (
-	// LinkedProjectFailureArchived 项目在平台已归档。蓝盾、监控目前都没有归档状态，暂不会返回
-	LinkedProjectFailureArchived LinkedProjectFailureReason = "archived"
 	// LinkedProjectFailureNotFound 项目在平台已不存在
 	LinkedProjectFailureNotFound LinkedProjectFailureReason = "notFound"
 	// LinkedProjectFailurePermission 当前用户没有项目的管理权限

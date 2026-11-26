@@ -6584,7 +6584,7 @@ definitions:
         description: 平台项目名称
         type: string
       reason:
-        description: 失败原因，可选值：archived、notFound、permission、unavailable、unknown；成功时为空
+        description: 失败原因，可选值：notFound、permission、unavailable、unknown；成功时为空
         type: string
       requestID:
         description: 平台请求 ID

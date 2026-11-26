@@ -98,7 +98,7 @@ type LinkedProjectResultOutputObj struct {
 	ProjectName string `json:"projectName"`
 	// 是否成功
 	Success bool `json:"success"`
-	// 失败原因，可选值：archived、notFound、permission、unavailable、unknown；成功时为空
+	// 失败原因，可选值：notFound、permission、unavailable、unknown；成功时为空
 	Reason string `json:"reason"`
 	// 平台返回的原始错误信息，仅用于排查
 	Detail string `json:"detail"`
