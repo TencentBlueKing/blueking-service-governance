@@ -98,7 +98,7 @@ func (h *Handler) ListWorkspaceRoles(c *gin.Context) {
 
 	outputs := make([]*serializer.RoleOutputObj, 0, len(roles))
 	for _, r := range roles {
-		outputs = append(outputs, toRoleOutput(r, len(membersByRole[r.ID]), names))
+		outputs = append(outputs, toRoleOutput(r, membersByRole[r.ID], names))
 	}
 	ginutils.OK(c, serializer.ListWorkspaceRolesOutput{
 		Data:        outputs,
@@ -163,14 +163,20 @@ func (h *Handler) CreateWorkspaceRole(c *gin.Context) {
 		return
 	}
 
-	r, err := permMgr.CreateCustomRole(ctx, name, input.Description, data)
+	r, err := permMgr.CreateCustomRole(ctx, name, input.Description, data, input.Members)
 	if err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "create custom role"))
 		return
 	}
 	h.addRoleAudit(ctx, ws.ID, audit.OperationTypeCreate, nil, r)
+	if len(input.Members) > 0 {
+		h.addRoleUserAudit(ctx, ws.ID, r, input.Members)
+	}
 
-	ginutils.OK(c, serializer.WorkspaceRoleOutput{Data: toRoleOutput(r, 0, roleResourceNamesFromData(data))})
+	ginutils.OK(
+		c,
+		serializer.WorkspaceRoleOutput{Data: toRoleOutput(r, input.Members, roleResourceNamesFromData(data))},
+	)
 }
 
 // UpdateWorkspaceRole 修改自定义角色。
@@ -241,7 +247,7 @@ func (h *Handler) UpdateWorkspaceRole(c *gin.Context) {
 	}
 	ginutils.OK(
 		c,
-		serializer.WorkspaceRoleOutput{Data: toRoleOutput(r, len(members), roleResourceNamesFromData(data))},
+		serializer.WorkspaceRoleOutput{Data: toRoleOutput(r, members, roleResourceNamesFromData(data))},
 	)
 }
 
@@ -439,22 +445,27 @@ func (h *Handler) AddWorkspaceRoleUser(c *gin.Context) {
 		)
 	}
 
+	h.addRoleUserAudit(ctx, ws.ID, r, input.UserIDs)
+
+	ginutils.OK(c, serializer.EmptyOutput{})
+}
+
+// addRoleUserAudit 记录向角色添加成员的操作审计
+func (h *Handler) addRoleUserAudit(ctx context.Context, workspaceID string, r *role.Role, userIDs []string) {
 	go audit.AddOperationRecordAsync(
 		ctx,
 		audit.OperationTypeCreate,
 		audit.ResourceTypeWorkspace,
-		ws.ID,
+		workspaceID,
 		audit.WithAttribute(audit.AttributeUserRole),
 		audit.WithDataAfter(map[string]any{
-			"workspaceID": ws.ID,
+			"workspaceID": workspaceID,
 			"roleCode":    r.RoleCode,
 			"roleID":      r.ID,
-			"userIDs":     input.UserIDs,
+			"userIDs":     userIDs,
 		}),
-		audit.WithWorkspaceID(ws.ID),
+		audit.WithWorkspaceID(workspaceID),
 	)
-
-	ginutils.OK(c, serializer.EmptyOutput{})
 }
 
 // RemoveWorkspaceUser 移除用户工作空间下角色身份。
@@ -758,19 +769,27 @@ func (h *Handler) validateWorkspaceAdmin(ctx context.Context, workspaceID string
 	if err != nil {
 		return nil, err
 	}
-	permMgr := perm.NewManager()
-	adminRole, err := permMgr.GetRole(ctx, ws.ID, perm.RoleCodeAdmin)
+	isAdmin, err := isWorkspaceAdmin(ctx, perm.NewManager(), ws.ID)
 	if err != nil {
-		return nil, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get admin role")
+		return nil, err
 	}
-	admins, err := permMgr.ListRoleMembers(ctx, adminRole.ID)
-	if err != nil {
-		return nil, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list admin role members")
-	}
-	if !lo.Contains(admins, auth.MustGetUser(ctx).ID) {
+	if !isAdmin {
 		return nil, bkerrs.New(bkerrs.ErrCodeNoPermission, "only workspace admins can manage roles and members")
 	}
 	return ws, nil
+}
+
+// isWorkspaceAdmin 当前用户是否为空间管理员（管理员角色的成员）
+func isWorkspaceAdmin(ctx context.Context, permMgr perm.Manager, workspaceID string) (bool, error) {
+	adminRole, err := permMgr.GetRole(ctx, workspaceID, perm.RoleCodeAdmin)
+	if err != nil {
+		return false, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get admin role")
+	}
+	admins, err := permMgr.ListRoleMembers(ctx, adminRole.ID)
+	if err != nil {
+		return false, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list admin role members")
+	}
+	return lo.Contains(admins, auth.MustGetUser(ctx).ID), nil
 }
 
 // getRoleByKey 按角色 Code（内置角色）或角色 ID（自定义角色）获取工作空间下的角色
@@ -906,7 +925,7 @@ func roleDisplayName(r *role.Role) string {
 }
 
 // toRoleOutput 转换角色为输出对象，已删除的应用和环境不出现在范围中
-func toRoleOutput(r *role.Role, memberCount int, names *roleResourceNames) *serializer.RoleOutputObj {
+func toRoleOutput(r *role.Role, members []string, names *roleResourceNames) *serializer.RoleOutputObj {
 	perms, appScope, envScope := customrole.Definition(r)
 	return &serializer.RoleOutputObj{
 		ID:          r.ID,
@@ -924,7 +943,8 @@ func toRoleOutput(r *role.Role, memberCount int, names *roleResourceNames) *seri
 			EnvTypes: lo.Ternary(envScope.EnvTypes == nil, []string{}, envScope.EnvTypes),
 			Envs:     names.envOutputs(envScope.EnvIDs),
 		},
-		MemberCount: memberCount,
+		MemberCount: len(members),
+		Members:     lo.Ternary(members == nil, []string{}, members),
 	}
 }
 

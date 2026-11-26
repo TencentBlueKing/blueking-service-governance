@@ -33,29 +33,30 @@ type Permission = string
 
 // Perm 页面权限项
 var Perm = struct {
-	SpaceView, SpaceCreate, SpaceEdit, SpaceDelete    Permission
-	AppCreate, AppView, AppEdit, AppDelete            Permission
-	EnvView, EnvDeploy, EnvCreate, EnvEdit, EnvDelete Permission
+	SpaceView, SpaceCreate, SpaceEdit, SpaceDelete             Permission
+	AppCreate, AppView, AppObservationView, AppEdit, AppDelete Permission
+	EnvView, EnvDeploy, EnvCreate, EnvEdit, EnvDelete          Permission
 }{
-	SpaceView:   "space.view",
-	SpaceCreate: "space.create",
-	SpaceEdit:   "space.edit",
-	SpaceDelete: "space.delete",
-	AppCreate:   "app.create",
-	AppView:     "app.view",
-	AppEdit:     "app.edit",
-	AppDelete:   "app.delete",
-	EnvView:     "env.view",
-	EnvDeploy:   "env.deploy",
-	EnvCreate:   "env.create",
-	EnvEdit:     "env.edit",
-	EnvDelete:   "env.delete",
+	SpaceView:          "space.view",
+	SpaceCreate:        "space.create",
+	SpaceEdit:          "space.edit",
+	SpaceDelete:        "space.delete",
+	AppCreate:          "app.create",
+	AppView:            "app.view",
+	AppObservationView: "app.observation.view",
+	AppEdit:            "app.edit",
+	AppDelete:          "app.delete",
+	EnvView:            "env.view",
+	EnvDeploy:          "env.deploy",
+	EnvCreate:          "env.create",
+	EnvEdit:            "env.edit",
+	EnvDelete:          "env.delete",
 }
 
 // AllPermissions 全部权限项，按页面展示顺序排列
 var AllPermissions = []Permission{
 	Perm.SpaceView, Perm.SpaceCreate, Perm.SpaceEdit, Perm.SpaceDelete,
-	Perm.AppCreate, Perm.AppView, Perm.AppEdit, Perm.AppDelete,
+	Perm.AppCreate, Perm.AppView, Perm.AppObservationView, Perm.AppEdit, Perm.AppDelete,
 	Perm.EnvView, Perm.EnvDeploy, Perm.EnvCreate, Perm.EnvEdit, Perm.EnvDelete,
 }
 
@@ -125,7 +126,7 @@ func NormalizePermissions(perms []Permission, appScope AppScope, envScope EnvSco
 
 	set := lo.SliceToMap(perms, func(p Permission) (Permission, struct{}) { return p, struct{}{} })
 	set[Perm.SpaceView] = struct{}{}
-	for _, p := range []Permission{Perm.AppEdit, Perm.AppDelete, Perm.EnvDeploy} {
+	for _, p := range []Permission{Perm.AppObservationView, Perm.AppEdit, Perm.AppDelete, Perm.EnvDeploy} {
 		if _, ok := set[p]; ok {
 			set[Perm.AppView] = struct{}{}
 		}

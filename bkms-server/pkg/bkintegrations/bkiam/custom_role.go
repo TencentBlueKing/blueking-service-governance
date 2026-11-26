@@ -31,6 +31,8 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkiam/role"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkiam/scope"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
+	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
+	cloudapiiam "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/iam"
 	cloudapiiamtypes "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/iam/types"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
@@ -198,7 +200,7 @@ func GenCustomRoleAuthScopes(data CustomRoleData) []cloudapiiamtypes.Authorizati
 	if len(appRes.Paths) > 0 && len(envRes.Paths) > 0 {
 		add(appEnvActions, appRes, envRes)
 	}
-	if data.BKMonitor != nil && lo.Contains(data.Permissions, role.Perm.AppView) {
+	if data.BKMonitor != nil && lo.Contains(data.Permissions, role.Perm.AppObservationView) {
 		scopes = append(scopes, genMonitorAuthScopes(*data.BKMonitor)...)
 	}
 	return scopes
@@ -281,13 +283,20 @@ func BuiltinRolePermissions(roleCode string) []role.Permission {
 }
 
 func parseBuiltinRolePermissions(roleCode string) []role.Permission {
-	authScopes := scope.BKMSRoleScopesGenerator{TplRoleCode: roleCode}.Generate()
 	set := make(map[role.Permission]struct{})
-	for _, s := range authScopes {
+	bkmsScopes := scope.BKMSRoleScopesGenerator{TplRoleCode: roleCode}.Generate()
+	for _, s := range bkmsScopes {
 		for _, a := range s.Actions {
 			if p, ok := actionPermissions[a.ID]; ok {
 				set[p] = struct{}{}
 			}
+		}
+	}
+	// 查看观测数据对应监控中的 APM 查看权限
+	monitorScopes := scope.BKMonitorRoleScopesGenerator{TplRoleCode: roleCode}.Generate()
+	for _, s := range monitorScopes {
+		if lo.ContainsBy(s.Actions, func(a cloudapiiamtypes.Action) bool { return a.ID == actions.APMAction.View }) {
+			set[role.Perm.AppObservationView] = struct{}{}
 		}
 	}
 	return lo.Filter(role.AllPermissions, func(p role.Permission, _ int) bool {
@@ -302,10 +311,11 @@ func (s *IAMService) GetRole(ctx context.Context, roleID string) (*role.Role, er
 }
 
 // CreateCustomRole creates a custom role under the workspace grade manager:
-// an IAM user group with the policies generated from data, and the local
-// role record holding the role definition.
+// an IAM user group with the policies generated from data and the initial
+// members, and the local role record holding the role definition. Everything
+// created is rolled back if any step fails.
 func (s *IAMService) CreateCustomRole(
-	ctx context.Context, displayName, description string, data CustomRoleData,
+	ctx context.Context, displayName, description string, data CustomRoleData, members []string,
 ) (*role.Role, error) {
 	gradeManagerID, err := s.getGradeManagerIDFromStorage(ctx, data.WorkspaceID)
 	if err != nil {
@@ -340,15 +350,30 @@ func (s *IAMService) CreateCustomRole(
 		EnvScope:    &data.EnvScope,
 	}
 	if err = s.roles.Create(ctx, r); err != nil {
-		_ = s.iamClient.DeleteUserGroup(ctx, groupID)
+		s.rollbackCustomRole(ctx, r)
 		return nil, errors.Wrap(err, "create custom role: persist role")
 	}
 	if err = s.applyCustomRole(ctx, r, data, false); err != nil {
-		_ = s.roles.DeleteIfExists(ctx, role.ByRoleID(r.ID))
-		_ = s.iamClient.DeleteUserGroup(ctx, groupID)
+		s.rollbackCustomRole(ctx, r)
 		return nil, errors.Wrap(err, "create custom role")
 	}
+	if len(members) > 0 {
+		if err = s.addRoleMembers(ctx, r, members, cloudapiiam.NeverExpireTimestamp); err != nil {
+			s.rollbackCustomRole(ctx, r)
+			return nil, errors.Wrap(err, "create custom role: add members")
+		}
+	}
 	return r, nil
+}
+
+// rollbackCustomRole 清理创建失败的自定义角色，失败只记录日志，调用方返回创建时的原始错误
+func (s *IAMService) rollbackCustomRole(ctx context.Context, r *role.Role) {
+	if err := s.roles.DeleteIfExists(ctx, role.ByRoleID(r.ID)); err != nil {
+		log.Errorf(ctx, "rollback custom role %s: delete role record failed: %v", r.ID, err)
+	}
+	if err := s.iamClient.DeleteUserGroup(ctx, r.UserGroupID); err != nil {
+		log.Errorf(ctx, "rollback custom role %s: delete user group %d failed: %v", r.ID, r.UserGroupID, err)
+	}
 }
 
 // UpdateCustomRole replaces the definition of a custom role and re-applies

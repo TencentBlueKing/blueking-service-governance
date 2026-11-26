@@ -254,8 +254,14 @@ func (h *Handler) GetWorkspace(c *gin.Context) {
 		return
 	}
 
+	isAdmin, err := isWorkspaceAdmin(ctx, perm.NewManager(), ws.ID)
+	if err != nil {
+		bkerrs.AbortWithErr(c, err)
+		return
+	}
+
 	ginutils.OK(c, serializer.GetWorkspaceOutput{
-		Data: new(serializer.WorkspaceDetailOutputObj).FromModel(*ws, imageRegistry),
+		Data: new(serializer.WorkspaceDetailOutputObj).FromModel(*ws, imageRegistry, isAdmin),
 	})
 }
 
@@ -662,8 +668,9 @@ func (h *Handler) CreateWorkspace(c *gin.Context) {
 		audit.WithWorkspaceID(ws.ID),
 	)
 
+	// 创建人即空间管理员
 	ginutils.JSON(c, http.StatusOK, serializer.CreateWorkspaceOutput{
-		Data: new(serializer.WorkspaceDetailOutputObj).FromModel(*ws, imageRegistry),
+		Data: new(serializer.WorkspaceDetailOutputObj).FromModel(*ws, imageRegistry, true),
 	})
 }
 

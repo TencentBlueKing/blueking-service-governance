@@ -28578,6 +28578,9 @@ const docTemplate = `{
         },
         "serializer.CreateWorkspaceRoleInput": {
             "type": "object",
+            "required": [
+                "members"
+            ],
             "properties": {
                 "appScope": {
                     "description": "应用范围，为空表示全部应用",
@@ -28603,6 +28606,13 @@ const docTemplate = `{
                             "$ref": "#/definitions/serializer.EnvScopeInput"
                         }
                     ]
+                },
+                "members": {
+                    "description": "初始成员的用户名；克隆时也生效",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 },
                 "name": {
                     "description": "角色名称，空间内唯一；克隆时为空则默认「原名 副本」",
@@ -36032,6 +36042,13 @@ const docTemplate = `{
                     "description": "成员数量",
                     "type": "integer"
                 },
+                "members": {
+                    "description": "成员的用户名",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
                 "name": {
                     "description": "角色名称",
                     "type": "string"
@@ -38296,6 +38313,10 @@ const docTemplate = `{
                 "creator": {
                     "description": "创建人",
                     "type": "string"
+                },
+                "currentUserIsSpaceAdmin": {
+                    "description": "当前用户是否为空间管理员，只有空间管理员能管理角色和成员",
+                    "type": "boolean"
                 },
                 "description": {
                     "description": "描述信息",

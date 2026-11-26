@@ -150,7 +150,7 @@ var _ = Describe("custom role scope maintenance", func() {
 
 		BeforeEach(func() {
 			var err error
-			r, err = mgr.CreateCustomRole(ctx, "partial", "", roleData)
+			r, err = mgr.CreateCustomRole(ctx, "partial", "", roleData, nil)
 			Expect(err).NotTo(HaveOccurred())
 		})
 
@@ -208,6 +208,7 @@ var _ = Describe("custom role scope maintenance", func() {
 				ctx, map[string]any{"bkSystems.bkMonitorProjectID": "100"}, workspace.ByWorkspaceID(ws.ID),
 			)).To(Succeed())
 			ws.BkSystems.BkMonitorProjectID = "100"
+			roleData.Permissions = append(roleData.Permissions, role.Perm.AppObservationView)
 			apms := store.Of(db, bkmonitor.ApmInstConfigMeta)
 			apmTest = &bkmonitor.ApmInstConfig{
 				WorkspaceID: ws.ID, ApmID: 11, Name: "apm-test", Token: "t",
@@ -239,6 +240,16 @@ var _ = Describe("custom role scope maintenance", func() {
 			Expect(data.BKMonitor.AllApms).To(BeTrue())
 		})
 
+		It("grants no APM apps without the observation permission", func() {
+			perms := lo.Without(roleData.Permissions, role.Perm.AppObservationView)
+			data, err := BuildData(ctx, db, ws, perms, roleData.AppScope, role.EnvScope{Mode: role.EnvScopeAll})
+			Expect(err).NotTo(HaveOccurred())
+			// 仍返回监控数据，修改角色时据此撤销旧的监控授权
+			Expect(data.BKMonitor).NotTo(BeNil())
+			Expect(data.BKMonitor.AllApms).To(BeFalse())
+			Expect(data.BKMonitor.Apms).To(BeEmpty())
+		})
+
 		It("grants nothing in monitor before the monitor space is ready", func() {
 			ws.BkSystems.BkMonitorProjectID = ""
 			data, err := BuildData(ctx, db, ws, roleData.Permissions, roleData.AppScope, roleData.EnvScope)
@@ -247,11 +258,11 @@ var _ = Describe("custom role scope maintenance", func() {
 		})
 
 		It("reapplies roles covering an env after its APM binding changes", func() {
-			_, err := mgr.CreateCustomRole(ctx, "partial", "", roleData)
+			_, err := mgr.CreateCustomRole(ctx, "partial", "", roleData, nil)
 			Expect(err).NotTo(HaveOccurred())
 			allData := roleData
 			allData.EnvScope = role.EnvScope{Mode: role.EnvScopeAll}
-			_, err = mgr.CreateCustomRole(ctx, "all-envs", "", allData)
+			_, err = mgr.CreateCustomRole(ctx, "all-envs", "", allData, nil)
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(ReapplyEnvApm(ctx, db, mgr, testEnv)).To(Succeed())
@@ -266,12 +277,12 @@ var _ = Describe("custom role scope maintenance", func() {
 		It("updates APM grants of env-type-scoped roles when env type changes or env is deleted", func() {
 			testTypeData := roleData
 			testTypeData.EnvScope = role.EnvScope{Mode: role.EnvScopeTypes, EnvTypes: []string{"test"}}
-			_, err := mgr.CreateCustomRole(ctx, "test-only", "", testTypeData)
+			_, err := mgr.CreateCustomRole(ctx, "test-only", "", testTypeData, nil)
 			Expect(err).NotTo(HaveOccurred())
 
 			prodTypeData := roleData
 			prodTypeData.EnvScope = role.EnvScope{Mode: role.EnvScopeTypes, EnvTypes: []string{"production"}}
-			_, err = mgr.CreateCustomRole(ctx, "prod-only", "", prodTypeData)
+			_, err = mgr.CreateCustomRole(ctx, "prod-only", "", prodTypeData, nil)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("changing testEnv from test to production revokes apm-test from test-only and grants it to prod-only")

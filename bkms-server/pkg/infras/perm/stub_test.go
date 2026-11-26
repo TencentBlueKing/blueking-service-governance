@@ -120,9 +120,10 @@ var _ = Describe("StubAllowAnyManager", func() {
 				AppScope:    role.AppScope{Mode: role.AppScopeAll},
 				EnvScope:    role.EnvScope{Mode: role.EnvScopeTypes, EnvTypes: []string{"test"}},
 			}
-			created, err := stub.CreateCustomRole(ctx, "non-prod", "", data)
+			created, err := stub.CreateCustomRole(ctx, "non-prod", "", data, []string{"bob"})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(created.IsCustom()).To(BeTrue())
+			Expect(stub.ListRoleMembers(ctx, created.ID)).To(ConsistOf("bob"))
 
 			roles, err := stub.ListRoles(ctx, "ws-1")
 			Expect(err).NotTo(HaveOccurred())

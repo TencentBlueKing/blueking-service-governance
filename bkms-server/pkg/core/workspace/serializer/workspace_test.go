@@ -132,9 +132,10 @@ var _ = Describe("Workspace serializer", func() {
 				Password: "secret",
 			}
 
-			output := new(serializer.WorkspaceDetailOutputObj).FromModel(ws, ir)
+			output := new(serializer.WorkspaceDetailOutputObj).FromModel(ws, ir, true)
 
 			Expect(output.ID).To(Equal("ws-detail"))
+			Expect(output.CurrentUserIsSpaceAdmin).To(BeTrue())
 			Expect(output.DisplayName).To(Equal("详情空间"))
 			Expect(output.Description).To(Equal("详情描述"))
 			Expect(output.ImageRegistryType).To(Equal("external"))
@@ -156,7 +157,7 @@ var _ = Describe("Workspace serializer", func() {
 				State:             workspace.StateReady,
 			}
 
-			output := new(serializer.WorkspaceDetailOutputObj).FromModel(ws, nil)
+			output := new(serializer.WorkspaceDetailOutputObj).FromModel(ws, nil, false)
 
 			Expect(output.ImageRegistryType).To(Equal("builtin"))
 			Expect(output.ImageRegistry).NotTo(BeNil())

@@ -38,6 +38,12 @@ var _ = Describe("NormalizePermissions", func() {
 		}))
 	})
 
+	It("adds view app for the observation permission", func() {
+		perms, err := NormalizePermissions([]Permission{Perm.AppObservationView}, someApps, nonProd)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(perms).To(Equal([]Permission{Perm.SpaceView, Perm.AppView, Perm.AppObservationView}))
+	})
+
 	It("returns only view workspace for a blank role", func() {
 		perms, err := NormalizePermissions(nil, allApps, allEnvs)
 		Expect(err).NotTo(HaveOccurred())

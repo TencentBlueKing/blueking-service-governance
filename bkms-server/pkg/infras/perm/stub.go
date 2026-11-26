@@ -303,9 +303,9 @@ func (m *StubAllowAnyManager) GetRoleByID(_ context.Context, workspaceID, roleID
 	return nil, errors.Wrapf(role.ErrRoleNotFound, "role %s in workspace %s", roleID, workspaceID)
 }
 
-// CreateCustomRole 在进程内创建自定义角色
+// CreateCustomRole 在进程内创建自定义角色并加入初始成员
 func (m *StubAllowAnyManager) CreateCustomRole(
-	_ context.Context, displayName, description string, data bkiam.CustomRoleData,
+	_ context.Context, displayName, description string, data bkiam.CustomRoleData, members []string,
 ) (*role.Role, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -321,6 +321,12 @@ func (m *StubAllowAnyManager) CreateCustomRole(
 		EnvScope:    &data.EnvScope,
 	}
 	m.customRoles = append(m.customRoles, r)
+	if len(members) > 0 {
+		if m.roleMembers == nil {
+			m.roleMembers = make(map[string][]string)
+		}
+		m.roleMembers[r.ID] = lo.Uniq(members)
+	}
 	return r, nil
 }
 

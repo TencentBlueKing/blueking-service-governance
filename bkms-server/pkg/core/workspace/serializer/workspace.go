@@ -194,12 +194,16 @@ type WorkspaceDetailOutputObj struct {
 	Updater string `json:"updater"`
 	// 更新时间
 	UpdatedAt time.Time `json:"updatedAt"`
+	// 当前用户是否为空间管理员，只有空间管理员能管理角色和成员
+	CurrentUserIsSpaceAdmin bool `json:"currentUserIsSpaceAdmin"`
 }
 
 // FromModel fills output fields from a Workspace model and ImageRegistry.
+// currentUserIsSpaceAdmin 为当前用户是否为空间管理员。
 func (o *WorkspaceDetailOutputObj) FromModel(
 	ws workspace.Workspace,
 	imageRegistry *bkmsreg.ImageRegistry,
+	currentUserIsSpaceAdmin bool,
 ) *WorkspaceDetailOutputObj {
 	irOutput := &ImageRegistryOutputObj{}
 	if imageRegistry != nil {
@@ -208,17 +212,18 @@ func (o *WorkspaceDetailOutputObj) FromModel(
 		irOutput.Password = imageRegistry.Password
 	}
 	*o = WorkspaceDetailOutputObj{
-		ID:                ws.ID,
-		DisplayName:       ws.DisplayName,
-		Description:       ws.Description,
-		ImageRegistryType: string(ws.ImageRegistryType),
-		BkSystems:         new(BkSystemsOutputObj).FromModel(ws.BkSystems),
-		ImageRegistry:     irOutput,
-		State:             string(ws.State),
-		Creator:           ws.Creator,
-		CreatedAt:         ws.CreatedAt,
-		Updater:           ws.Updater,
-		UpdatedAt:         ws.UpdatedAt,
+		ID:                      ws.ID,
+		DisplayName:             ws.DisplayName,
+		Description:             ws.Description,
+		ImageRegistryType:       string(ws.ImageRegistryType),
+		BkSystems:               new(BkSystemsOutputObj).FromModel(ws.BkSystems),
+		ImageRegistry:           irOutput,
+		State:                   string(ws.State),
+		Creator:                 ws.Creator,
+		CreatedAt:               ws.CreatedAt,
+		Updater:                 ws.Updater,
+		UpdatedAt:               ws.UpdatedAt,
+		CurrentUserIsSpaceAdmin: currentUserIsSpaceAdmin,
 	}
 	return o
 }

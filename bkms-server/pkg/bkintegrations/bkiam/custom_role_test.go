@@ -163,10 +163,10 @@ var _ = Describe("custom role auth scopes", func() {
 
 	It("derives built-in role permissions from the role templates", func() {
 		Expect(BuiltinRolePermissions(role.BuiltinRoleCode.Operator)).
-			To(ConsistOf(role.Perm.SpaceView, role.Perm.AppView, role.Perm.EnvView))
+			To(ConsistOf(role.Perm.SpaceView, role.Perm.AppView, role.Perm.AppObservationView, role.Perm.EnvView))
 		Expect(BuiltinRolePermissions(role.BuiltinRoleCode.Developer)).To(ConsistOf(
-			role.Perm.SpaceView, role.Perm.AppCreate, role.Perm.AppView, role.Perm.AppEdit, role.Perm.AppDelete,
-			role.Perm.EnvView, role.Perm.EnvDeploy,
+			role.Perm.SpaceView, role.Perm.AppCreate, role.Perm.AppView, role.Perm.AppObservationView,
+			role.Perm.AppEdit, role.Perm.AppDelete, role.Perm.EnvView, role.Perm.EnvDeploy,
 		))
 		Expect(BuiltinRolePermissions(role.BuiltinRoleCode.SRE)).NotTo(ContainElement(role.Perm.AppDelete))
 		Expect(BuiltinRolePermissions(role.BuiltinRoleCode.Admin)).To(ContainElements(
@@ -196,7 +196,7 @@ var _ = Describe("custom role auth scopes", func() {
 		It("grants business access and the APM apps of the envs in scope", func() {
 			scopes := GenCustomRoleAuthScopes(monitorData(
 				role.EnvScope{Mode: role.EnvScopeTypes, EnvTypes: []string{"test"}},
-				role.Perm.SpaceView, role.Perm.AppView,
+				role.Perm.SpaceView, role.Perm.AppView, role.Perm.AppObservationView,
 			))
 			business := findScope(scopes, "view_business_v2")
 			Expect(business.System).To(Equal("bk_monitorv3"))
@@ -211,7 +211,8 @@ var _ = Describe("custom role auth scopes", func() {
 
 		It("grants all APM apps of the space for all envs", func() {
 			scopes := GenCustomRoleAuthScopes(monitorData(
-				role.EnvScope{Mode: role.EnvScopeAll}, role.Perm.SpaceView, role.Perm.AppView,
+				role.EnvScope{Mode: role.EnvScopeAll},
+				role.Perm.SpaceView, role.Perm.AppView, role.Perm.AppObservationView,
 			))
 			apm := findScope(scopes, "view_apm_application_v2")
 			Expect(apm.Resources[0].Paths).To(HaveLen(1))
@@ -219,9 +220,9 @@ var _ = Describe("custom role auth scopes", func() {
 			Expect(apm.Resources[0].Paths[0][0].Type).To(BeEquivalentTo("space"))
 		})
 
-		It("grants nothing in monitor without the app view permission", func() {
+		It("grants nothing in monitor without the observation permission", func() {
 			scopes := GenCustomRoleAuthScopes(monitorData(
-				role.EnvScope{Mode: role.EnvScopeAll}, role.Perm.SpaceView, role.Perm.EnvView,
+				role.EnvScope{Mode: role.EnvScopeAll}, role.Perm.SpaceView, role.Perm.AppView, role.Perm.EnvView,
 			))
 			Expect(allActions(scopes)).NotTo(ContainElement("view_business_v2"))
 			Expect(allActions(scopes)).NotTo(ContainElement("view_apm_application_v2"))

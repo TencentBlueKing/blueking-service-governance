@@ -94,6 +94,8 @@ type CreateWorkspaceRoleInput struct {
 	AppScope *AppScopeInput `json:"appScope"`
 	// 环境范围，为空表示全部环境
 	EnvScope *EnvScopeInput `json:"envScope"`
+	// 初始成员的用户名；克隆时也生效
+	Members []string `json:"members" binding:"dive,required"`
 }
 
 // UpdateWorkspaceRoleInput is the JSON body for updating a custom role.
@@ -158,6 +160,8 @@ type RoleOutputObj struct {
 	EnvScope *RoleEnvScopeOutputObj `json:"envScope"`
 	// 成员数量
 	MemberCount int `json:"memberCount"`
+	// 成员的用户名
+	Members []string `json:"members"`
 }
 
 // ListWorkspaceRolesOutput is the JSON response for listing workspace roles.

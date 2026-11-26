@@ -235,7 +235,7 @@ func (f *fakeIAMServicer) GetRole(_ context.Context, roleID string) (*role.Role,
 }
 
 func (f *fakeIAMServicer) CreateCustomRole(
-	_ context.Context, _, _ string, data bkiam.CustomRoleData,
+	_ context.Context, _, _ string, data bkiam.CustomRoleData, _ []string,
 ) (*role.Role, error) {
 	f.gotCustomRoleData = data
 	return f.customRoleResp, f.returnedErr

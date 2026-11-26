@@ -144,8 +144,8 @@ func loadMonitorData(
 		return nil, nil
 	}
 	data := &bkiam.CustomRoleMonitorData{SpaceID: spaceID, SpaceName: ws.DisplayName}
-	// 无应用查看权限时不授予监控权限，但仍返回非空 BKMonitor 以便修改角色时撤销旧监控策略
-	if !lo.Contains(perms, role.Perm.AppView) {
+	// 无查看观测数据权限时不授予监控权限，但仍返回非空 BKMonitor 以便修改角色时撤销旧监控策略
+	if !lo.Contains(perms, role.Perm.AppObservationView) {
 		return data, nil
 	}
 
@@ -222,7 +222,7 @@ func PruneEnv(ctx context.Context, db *mongo.Database, permMgr perm.Manager, env
 		return r.EnvScope.Mode == role.EnvScopeTypes &&
 			lo.Contains(r.EnvScope.EnvTypes, env.Type) &&
 			ws.BkSystems.BkMonitorProjectID != "" &&
-			lo.Contains(r.Permissions, role.Perm.AppView)
+			lo.Contains(r.Permissions, role.Perm.AppObservationView)
 	})
 }
 
@@ -249,7 +249,7 @@ func ReapplyEnv(
 			}
 			return (CoversEnv(*r.EnvScope, before) || CoversEnv(*r.EnvScope, after)) &&
 				ws.BkSystems.BkMonitorProjectID != "" &&
-				lo.Contains(r.Permissions, role.Perm.AppView)
+				lo.Contains(r.Permissions, role.Perm.AppObservationView)
 		},
 	)
 }
@@ -266,7 +266,7 @@ func ReapplyEnvApm(ctx context.Context, db *mongo.Database, permMgr perm.Manager
 		ctx, db, permMgr, env.WorkspaceID, bson.NilObjectID,
 		func(ws *workspace.Workspace, r *role.Role) bool {
 			return ws.BkSystems.BkMonitorProjectID != "" &&
-				lo.Contains(r.Permissions, role.Perm.AppView) &&
+				lo.Contains(r.Permissions, role.Perm.AppObservationView) &&
 				r.EnvScope != nil && !r.EnvScope.IsAll() && CoversEnv(*r.EnvScope, env)
 		},
 	)
@@ -279,7 +279,7 @@ func ReapplyAll(ctx context.Context, db *mongo.Database, permMgr perm.Manager, w
 	return reapply(
 		ctx, db, permMgr, workspaceID, bson.NilObjectID,
 		func(_ *workspace.Workspace, r *role.Role) bool {
-			return lo.Contains(r.Permissions, role.Perm.AppView)
+			return lo.Contains(r.Permissions, role.Perm.AppObservationView)
 		},
 	)
 }

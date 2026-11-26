@@ -53,7 +53,7 @@ type iamServicer interface {
 
 	GetRole(ctx context.Context, roleID string) (*role.Role, error)
 	CreateCustomRole(
-		ctx context.Context, displayName, description string, data bkiam.CustomRoleData,
+		ctx context.Context, displayName, description string, data bkiam.CustomRoleData, members []string,
 	) (*role.Role, error)
 	UpdateCustomRole(
 		ctx context.Context, roleID, displayName, description string, data bkiam.CustomRoleData,
@@ -439,11 +439,11 @@ func (m *LocalManager) GetRoleByID(ctx context.Context, workspaceID, roleID stri
 	return r, nil
 }
 
-// CreateCustomRole 创建自定义角色并授权
+// CreateCustomRole 创建自定义角色、授权并加入初始成员
 func (m *LocalManager) CreateCustomRole(
-	ctx context.Context, displayName, description string, data bkiam.CustomRoleData,
+	ctx context.Context, displayName, description string, data bkiam.CustomRoleData, members []string,
 ) (*role.Role, error) {
-	r, err := m.svc.CreateCustomRole(ctx, displayName, description, data)
+	r, err := m.svc.CreateCustomRole(ctx, displayName, description, data, members)
 	if err != nil {
 		return nil, errors.Wrap(err, "create custom role")
 	}
