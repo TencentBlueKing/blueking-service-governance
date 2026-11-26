@@ -216,7 +216,7 @@
             @click="showAdvancedSettings = !showAdvancedSettings"
           >
             <RightShape
-              class="mr-[4px] transition-transform duration-200"
+              class="mr-[6px] transition-transform duration-200"
               :class="{ 'rotate-90': showAdvancedSettings }"
               fill="#3A84FF"
               height="12px"
@@ -233,75 +233,73 @@
         </div>
         <div
           v-if="showAdvancedSettings"
-          class="mt-[8px] rounded-[2px] bg-[#F5F7FA] px-[16px] py-[12px]"
+          class="mt-[12px] rounded-[2px] bg-[#F5F7FA] px-[16px] py-[12px]"
         >
-          <div class="mb-[10px] text-[12px] font-bold text-[#313238]">{{ $t('命名空间') }}</div>
+          <div class="mb-[10px] text-[12px] text-[#313238]">{{ $t('命名空间') }}</div>
           <Radio.Group
             v-model="formModel.nsType"
             class="flex w-full flex-col gap-[8px]"
           >
-            <div
-              class="block w-full rounded-[2px] border border-solid px-[16px] py-[8px]"
+            <Radio
+              class="namespace-option !m-0 !h-auto !flex w-full items-start rounded-[2px] border border-solid px-[16px] py-[8px]"
               :class="formModel.nsType === 'shared' ? 'border-[#3A84FF] bg-[#F0F5FF]' : 'border-[#DCDEE5] bg-white'"
+              label="shared"
             >
-              <Radio
-                class="namespace-option !m-0 !h-auto !flex w-full items-start"
-                label="shared"
-              >
-                <span class="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-[8px] leading-[20px]">
-                  <span class="shrink-0 text-[#4D4F56]">{{ $t('沿用来源环境（默认）') }}</span>
-                  <span class="text-[12px] leading-[20px] text-[#979BA5]">
-                    {{ $t('与来源环境共用命名空间，不支持使用组件。') }}
-                  </span>
+              <span class="flex min-w-0 flex-1 flex-wrap items-center gap-x-[8px] leading-[20px]">
+                <span class="shrink-0 text-[#4D4F56]">
+                  {{ $t('沿用来源环境（默认）') }}
                 </span>
-              </Radio>
-              <div
-                v-if="requiresComponentRiskConfirmation"
-                class="mt-[8px] flex items-start gap-[6px] rounded-[2px] border border-solid border-[#FFD2D2] bg-[#FFF2F2] px-[12px] py-[10px]"
-                role="alert"
-              >
-                <Error
-                  class="mt-[2px] h-[16px] w-[16px] shrink-0 rounded-full bg-[#EA3636]"
-                  fill="#FFFFFF"
-                  height="14px"
-                  width="14px"
-                />
-                <div class="min-w-0 flex-1 text-[12px] leading-[20px]">
-                  <p class="break-words text-[#EA3636]">{{ componentRiskMessage }}</p>
-                  <i18n-t
-                    class="mt-[4px] text-[#63656E]"
-                    :keypath="
-                      isSourceFederationEnv
-                        ? '组件需要部署在独立的命名空间，共用会与来源环境冲突。可前往「{0}」确认是否都需要；来源环境是联邦集群，暂不能「独立创建」。'
-                        : '组件需要部署在独立的命名空间，共用会与来源环境冲突。可前往「{0}」确认是否都需要，或改选「{1}」。'
-                    "
-                    tag="p"
+                <span class="text-[12px] leading-[20px] text-[#979BA5]">
+                  {{ $t('不新建命名空间，与来源环境共用，不支持使用组件。') }}
+                </span>
+              </span>
+            </Radio>
+            <div
+              v-if="requiresComponentRiskConfirmation"
+              class="flex items-start gap-[6px] rounded-[2px] border border-solid border-[#FFD2D2] bg-[#FFF2F2] px-[12px] py-[10px]"
+              role="alert"
+            >
+              <Error
+                class="mt-[2px] h-[16px] w-[16px] shrink-0 rounded-full bg-[#EA3636]"
+                fill="#FFFFFF"
+                height="14px"
+                width="14px"
+              />
+              <div class="min-w-0 flex-1 text-[12px] leading-[20px]">
+                <p class="break-words text-[#EA3636]">{{ componentRiskMessage }}</p>
+                <i18n-t
+                  class="mt-[4px] text-[#63656E]"
+                  :keypath="
+                    isSourceFederationEnv
+                      ? '组件需要部署在独立的命名空间，共用会与来源环境冲突。可前往「{0}」确认是否都需要；来源环境是联邦集群，暂不能「独立创建」。'
+                      : '组件需要部署在独立的命名空间，共用会与来源环境冲突。可前往「{0}」确认是否都需要，或改选「{1}」。'
+                  "
+                  tag="p"
+                >
+                  <Button
+                    class="!h-auto align-baseline"
+                    text
+                    theme="primary"
+                    @click="handleGoComponentConfig"
                   >
-                    <Button
-                      class="!h-auto align-baseline"
-                      text
-                      theme="primary"
-                      @click="handleGoComponentConfig"
-                    >
-                      {{ $t('组件配置') }}
-                    </Button>
-                    <Button
-                      v-if="!isSourceFederationEnv"
-                      class="!h-auto align-baseline"
-                      text
-                      theme="primary"
-                      @click="formModel.nsType = 'independent'"
-                    >
-                      {{ $t('独立创建') }}
-                    </Button>
-                  </i18n-t>
-                  <div class="mt-[10px] border-t border-dashed border-[#FFD2D2] pt-[8px]">
-                    <Checkbox v-model="formModel.riskAcknowledged">
-                      <span class="whitespace-normal text-[12px] text-[#313238]">
-                        {{ $t('我已知晓风险，仍要沿用来源环境创建') }}
-                      </span>
-                    </Checkbox>
-                  </div>
+                    {{ $t('组件配置') }}
+                  </Button>
+                  <Button
+                    v-if="!isSourceFederationEnv"
+                    class="!h-auto align-baseline"
+                    text
+                    theme="primary"
+                    @click="formModel.nsType = 'independent'"
+                  >
+                    {{ $t('独立创建') }}
+                  </Button>
+                </i18n-t>
+                <div class="mt-[10px] border-t border-dashed border-[#FFD2D2] pt-[8px]">
+                  <Checkbox v-model="formModel.riskAcknowledged">
+                    <span class="whitespace-normal text-[12px] text-[#313238]">
+                      {{ $t('我已知晓风险，仍要沿用来源环境创建') }}
+                    </span>
+                  </Checkbox>
                 </div>
               </div>
             </div>
@@ -709,6 +707,10 @@
 </script>
 
 <style scoped>
+  .namespace-option:not(.is-disabled):hover {
+    border-color: #3a84ff;
+  }
+
   .namespace-option :deep(.bk-radio-input) {
     flex-shrink: 0;
     margin-top: 3px;

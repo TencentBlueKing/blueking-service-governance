@@ -74,7 +74,10 @@
             theme="primary"
             @click="emit('create')"
           >
-            <Plus class="text-[18px]" />
+            <Plus
+              :height="24"
+              :width="24"
+            />
             {{ $t('新建') }}
           </Button>
           <Input

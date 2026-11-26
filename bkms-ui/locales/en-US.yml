@@ -1935,7 +1935,7 @@ runner 阶段: Runner Stage
 确认销毁特性环境: Confirm Destruction of Feature Environment
 '将永久删除特性环境，并清理应用配置 / 北极星 / 组件中的引用。': 'The feature environment will be permanently deleted, and references in application configuration / Polaris / components will be cleaned up.'
 '沿用来源环境（默认）': 'Reuse source namespace (default)'
-'与来源环境共用命名空间，不支持使用组件。': 'Share the namespace with the source environment. Components are not supported.'
+'不新建命名空间，与来源环境共用，不支持使用组件。': 'Do not create a new namespace. Share it with the source environment. Components are not supported.'
 '独立创建': 'Create independently'
 '独占命名空间，资源完全隔离，适合使用组件等场景。': 'Use a dedicated namespace with fully isolated resources. Suitable for scenarios such as using components.'
 '来源环境（{0}）绑定了联邦集群，暂不支持创建独立的特性环境。': 'The source environment ({0}) uses a federated cluster. Creating an independent feature environment is not supported yet.'
