@@ -19,7 +19,17 @@
 import { createPinia, setActivePinia } from 'pinia';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getAppDisplayKind, getAppDisplayLabel, isAppModelAppType } from '~/composables/app-type';
-import { getFrameworkFileFormat, isRuntimeModSupported } from '~/composables/use-app-runtime';
+import {
+  getFrameworkFileFormat,
+  isPlatformBuilderImageRequired,
+  isRuntimeModSupported,
+} from '~/composables/use-app-runtime';
+import {
+  ARTIFACT_DIR_MESSAGES,
+  createArtifactDirRules,
+  formatArtifactDirDisplay,
+  validateArtifactDir,
+} from '~/composables/use-platform-build';
 import { useAppDetail } from '~/stores/app-detail';
 
 import type { PublicView } from '~/@types/v1/app';
@@ -131,6 +141,46 @@ describe('能力与技术栈展示', () => {
     expect(
       getFrameworkFileFormat({ mods: { frameworkFile: { supported: false, props: { format: 'yaml' } } } }),
     ).toBeUndefined();
+    expect(
+      isPlatformBuilderImageRequired({
+        mods: { platformBuild: { supported: true, props: { requiresBuilderImage: false } } },
+      }),
+    ).toBe(false);
+    for (const view of [
+      undefined,
+      { mods: { platformBuild: { supported: false, props: { requiresBuilderImage: false } } } },
+      { mods: { platformBuild: { supported: true } } },
+      { mods: { platformBuild: { supported: true, props: { requiresBuilderImage: true } } } },
+      { mods: { platformBuild: { supported: true, props: { requiresBuilderImage: 'false' } } } },
+    ]) {
+      expect(isPlatformBuilderImageRequired(view)).toBe(true);
+    }
+  });
+
+  it('校验平台通用构建产物目录规则，按错误类型返回对应提示', () => {
+    for (const valid of ['', '/out', '/out/bin', '/app']) {
+      expect(validateArtifactDir(valid)).toBeNull();
+    }
+    expect(validateArtifactDir('out')).toBe(ARTIFACT_DIR_MESSAGES.ABSOLUTE_PATH);
+    expect(validateArtifactDir('/')).toBe(ARTIFACT_DIR_MESSAGES.NOT_ROOT);
+    expect(validateArtifactDir('/./')).toBe(ARTIFACT_DIR_MESSAGES.NOT_ROOT);
+    expect(validateArtifactDir('/out/../etc')).toBe(ARTIFACT_DIR_MESSAGES.NO_PARENT_SEGMENT);
+    expect(validateArtifactDir('/out/my dir')).toBe(ARTIFACT_DIR_MESSAGES.SAFE_CHARS);
+    expect(validateArtifactDir(`/${'a'.repeat(128)}`)).toBe(ARTIFACT_DIR_MESSAGES.MAX_LENGTH);
+
+    const rules = createArtifactDirRules(key => key);
+    const findFirstFailedMessage = (val: string) => rules.find(rule => !rule.validator(val))?.message ?? null;
+    expect(findFirstFailedMessage('')).toBeNull();
+    expect(findFirstFailedMessage('/out/bin')).toBeNull();
+    expect(findFirstFailedMessage('out')).toBe(ARTIFACT_DIR_MESSAGES.ABSOLUTE_PATH);
+    expect(findFirstFailedMessage('/')).toBe(ARTIFACT_DIR_MESSAGES.NOT_ROOT);
+    expect(findFirstFailedMessage('/out/../etc')).toBe(ARTIFACT_DIR_MESSAGES.NO_PARENT_SEGMENT);
+    expect(findFirstFailedMessage('/out/my dir')).toBe(ARTIFACT_DIR_MESSAGES.SAFE_CHARS);
+    expect(findFirstFailedMessage(`/${'a'.repeat(128)}`)).toBe(ARTIFACT_DIR_MESSAGES.MAX_LENGTH);
+
+    expect(formatArtifactDirDisplay(key => key, '', 'go')).toBe('/out（默认）');
+    expect(formatArtifactDirDisplay(key => key, undefined, 'python')).toBe('/app（默认）');
+    expect(formatArtifactDirDisplay(key => key, '/dist', 'python')).toBe('/dist');
   });
 
   it('新旧框架应用合并展示分类，blank 按语言显示但真实类型保留', () => {

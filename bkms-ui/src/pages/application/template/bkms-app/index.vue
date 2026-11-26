@@ -95,6 +95,7 @@
           class="mt-[16px]"
           :form="form"
           :platform-build-supported="isRuntimeModSupported(runtime, 'platformBuild')"
+          :requires-builder-image="isPlatformBuilderImageRequired(runtime)"
         />
       </div>
       <TrpcAppConfig
@@ -173,7 +174,11 @@
   import { AppService } from '~/api/modules/v1/app';
   import { APP_FRAMEWORKS, APP_LANGUAGES, APP_TEMPLATES, APP_TYPES } from '~/common/app-types';
   import { type IAppType, getAppDisplayLabel } from '~/composables/app-type';
-  import { getFrameworkFileFormat, isRuntimeModSupported } from '~/composables/use-app-runtime';
+  import {
+    getFrameworkFileFormat,
+    isPlatformBuilderImageRequired,
+    isRuntimeModSupported,
+  } from '~/composables/use-app-runtime';
   import { useFocusOnErrorField } from '~/composables/use-focus-on-error-field';
   import useLeaveConfirm from '~/composables/use-leave-confirm';
   import TypeIcon from '~/pages/application/components/type-icon.vue';

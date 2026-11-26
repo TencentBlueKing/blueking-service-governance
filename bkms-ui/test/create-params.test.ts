@@ -18,13 +18,16 @@
 
 import { nextTick, reactive } from 'vue';
 
-import { flushPromises, shallowMount } from '@vue/test-utils';
+import { flushPromises, mount, shallowMount } from '@vue/test-utils';
 import { createPinia } from 'pinia';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import CardRadio from '~/components/card-radio.vue';
+import BuildOutputHint from '~/pages/application/components/build-output-hint.vue';
+import ImageModeSelect from '~/pages/application/components/image-mode-select.vue';
 import ParamConfig from '~/pages/application/template/bkms-app/param-config.vue';
 import { buildBKMSAppPayload, createBKMSAppForm } from '~/pages/application/template/bkms-app/use-create-app';
 
-import { i18nGlobalMocks, i18nPlugin } from './helpers/mock-i18n';
+import { i18nGlobalMocks, i18nPlugin, I18nTStub } from './helpers/mock-i18n';
 
 const suffix = vi.hoisted(() => vi.fn());
 vi.mock('vue-i18n', async () => (await import('./helpers/mock-i18n')).i18nMockFactory());
@@ -132,5 +135,117 @@ describe('创建启动配置提交', () => {
     form.appModelSpec.envVars = [{ key: 'PORT', value: '8000' }];
 
     expect(buildBKMSAppPayload(form, {}).appModelSpec).toEqual(form.appModelSpec);
+  });
+});
+
+describe('平台通用构建产物目录与 Python 单阶段表单联动', () => {
+  it('不支持平台通用构建时展示禁用卡片与暂不支持提示，并回退到仓库 Dockerfile', () => {
+    const form = createBKMSAppForm('ws-1', 'trpc', 'cpp');
+    form.buildConfig.repoBuildConfig.imageBuildMode = 'platform';
+    const wrapper = shallowMount(ParamConfig, {
+      props: { form, platformBuildSupported: false },
+      global: {
+        plugins: [createPinia(), i18nPlugin],
+        mocks: i18nGlobalMocks,
+        renderStubDefaultSlot: true,
+        directives: { bkloading: {}, 'bk-xss-html': {} },
+      },
+    });
+
+    expect(form.buildConfig.repoBuildConfig.imageBuildMode).toBe('repositoryDockerfile');
+    expect(wrapper.findComponent(CardRadio).props('options')).toEqual(
+      expect.arrayContaining([expect.objectContaining({ value: 'platform', disabled: true, disabledTip: '暂不支持' })]),
+    );
+    wrapper.unmount();
+  });
+
+  it('Go 与 Python 切换时保留已填产物目录，更新 placeholder 并按单阶段显隐构建镜像与复制示例', async () => {
+    const form = reactive(createBKMSAppForm('ws-1', 'blank', 'go'));
+    form.name = 'demo';
+    form.id = 'demo-1';
+    form.buildConfig.repoBuildConfig.imageBuildMode = 'platform';
+    form.buildConfig.repoBuildConfig.platformBuildConfig.builderImage = 'golang:1.24';
+    form.buildConfig.repoBuildConfig.platformBuildConfig.runnerImage = 'debian:12';
+    form.buildConfig.repoBuildConfig.platformBuildConfig.artifactDir = ' /dist ';
+    form.buildConfig.repoBuildConfig.platformBuildConfig.extraFiles = ['certs/'];
+    const clearValidate = vi.fn();
+
+    const wrapper = shallowMount(ParamConfig, {
+      props: { form, platformBuildSupported: true, requiresBuilderImage: true },
+      global: {
+        plugins: [createPinia(), i18nPlugin],
+        mocks: i18nGlobalMocks,
+        renderStubDefaultSlot: true,
+        stubs: {
+          Form: {
+            template: '<div><slot /></div>',
+            setup(_, { expose }) {
+              expose({ clearValidate, validate: async () => true });
+              return {};
+            },
+          },
+          StartupCommandInput: {
+            setup(_, { expose }) {
+              expose({ getValue: () => ({}), validate: async () => true });
+              return () => null;
+            },
+          },
+        },
+        directives: { bkloading: {}, 'bk-xss-html': {} },
+      },
+    });
+    await nextTick();
+
+    const collectImageTypes = () => wrapper.findAllComponents(ImageModeSelect).map(c => c.props('type'));
+    const collectPlaceholders = () => wrapper.findAll('input-stub').map(node => node.attributes('placeholder'));
+    expect(collectImageTypes()).toEqual(['builder', 'runner']);
+    expect(collectPlaceholders()).toContain('/out');
+    expect(collectPlaceholders()).toContain('留空则使用平台默认：\ngo build -o ${BKMS_ARTIFACT_DIR}/demo .');
+    expect(wrapper.html()).not.toContain('/out/demo');
+    expect(wrapper.text()).toContain('打包额外文件');
+
+    const artifactDirInput = wrapper.find('input-stub[placeholder="/out"]');
+    await artifactDirInput.trigger('blur');
+    expect(form.buildConfig.repoBuildConfig.platformBuildConfig.artifactDir).toBe('/dist');
+    await artifactDirInput.trigger('clear');
+    expect(clearValidate).toHaveBeenCalledWith('buildConfig.repoBuildConfig.platformBuildConfig.artifactDir');
+
+    // 切到 Python 单阶段：保留已填 /dist，切换 placeholder，隐藏构建镜像与打包额外文件，提交清空残留字段
+    form.language = 'python';
+    await wrapper.setProps({ requiresBuilderImage: false });
+    await nextTick();
+
+    expect(form.buildConfig.repoBuildConfig.platformBuildConfig.artifactDir).toBe('/dist');
+    expect(collectImageTypes()).toEqual(['runner']);
+    expect(collectPlaceholders()).toContain('/app');
+    expect(collectPlaceholders()).toContain('留空则自动识别 uv.lock / poetry.lock / requirements.txt 安装依赖');
+    expect(wrapper.text()).not.toContain('打包额外文件');
+
+    const pythonRuntime = {
+      mods: { platformBuild: { supported: true, props: { requiresBuilderImage: false } } },
+    };
+    const payload = buildBKMSAppPayload(wrapper.vm.getValue(), pythonRuntime);
+    expect(payload.buildConfig.repoBuildConfig?.platformBuildConfig).toMatchObject({
+      artifactDir: '/dist',
+      builderImage: '',
+      runnerImage: 'debian:12',
+      extraFiles: [],
+    });
+    wrapper.unmount();
+
+    const goHint = mount(BuildOutputHint, {
+      props: { appName: 'demo', requiresBuilderImage: true },
+      global: { mocks: i18nGlobalMocks, components: { 'i18n-t': I18nTStub } },
+    });
+    expect(goHint.text()).toContain('go build -o ${BKMS_ARTIFACT_DIR}/demo .');
+    expect(goHint.text()).not.toContain('/out/');
+    goHint.unmount();
+
+    const pyHint = mount(BuildOutputHint, {
+      props: { appName: 'demo', requiresBuilderImage: false },
+      global: { mocks: i18nGlobalMocks, components: { 'i18n-t': I18nTStub } },
+    });
+    expect(pyHint.find('code').exists()).toBe(false);
+    pyHint.unmount();
   });
 });

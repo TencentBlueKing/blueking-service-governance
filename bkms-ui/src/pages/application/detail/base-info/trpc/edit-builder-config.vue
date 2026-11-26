@@ -100,13 +100,14 @@
           <!-- 平台通用构建 -->
           <template v-else-if="platformBuildSupported && builderData!.repoBuildConfig!.imageBuildMode === 'platform'">
             <Form.FormItem
+              v-if="requiresBuilderImage"
               :label="$t('构建镜像')"
               required
             >
               <div v-bkloading="{ loading: repoInfoLoading, size: 'small' }">
                 <ImageModeSelect
                   v-model="builderData!.repoBuildConfig!.platformBuildConfig!.builderImage"
-                  :language="props.language"
+                  :language="effectiveLanguage"
                   :repo-info="workspaceRepoInfo"
                   :repo-info-loading="repoInfoLoading"
                   type="builder"
@@ -122,8 +123,10 @@
               <div v-bkloading="{ loading: repoInfoLoading, size: 'small' }">
                 <ImageModeSelect
                   v-model="builderData!.repoBuildConfig!.platformBuildConfig!.runnerImage"
-                  :language="props.language"
-                  :peer-image-value="builderData!.repoBuildConfig!.platformBuildConfig!.builderImage"
+                  :language="effectiveLanguage"
+                  :peer-image-value="
+                    requiresBuilderImage ? builderData!.repoBuildConfig!.platformBuildConfig!.builderImage : ''
+                  "
                   :repo-info="workspaceRepoInfo"
                   :repo-info-loading="repoInfoLoading"
                   type="runner"
@@ -131,6 +134,18 @@
                   @init-complete="forceCleanDirtyTag"
                 />
               </div>
+            </Form.FormItem>
+            <Form.FormItem
+              :label="$t('产物目录')"
+              property="repoBuildConfig.platformBuildConfig.artifactDir"
+            >
+              <Input
+                v-model="builderData!.repoBuildConfig!.platformBuildConfig!.artifactDir"
+                clearable
+                :placeholder="artifactDirPlaceholder"
+                @blur="handleArtifactDirBlur"
+                @clear="handleArtifactDirClear"
+              />
             </Form.FormItem>
             <!-- 高级命令 -->
             <Form.FormItem
@@ -150,11 +165,13 @@
                 <div class="mb-[24px] last:mb-0">
                   <div class="flex items-center gap-[8px] mb-[8px]">
                     <span class="text-[14px] text-[#313238]">{{ $t('编译前置命令') }}</span>
-                    <Tag theme="info">{{ $t('builder 阶段') }}</Tag>
+                    <Tag :theme="requiresBuilderImage ? 'info' : 'success'">{{
+                      requiresBuilderImage ? $t('builder 阶段') : $t('runner 阶段')
+                    }}</Tag>
                   </div>
                   <Input
                     v-model="preBuildText"
-                    :placeholder="$t('在 go build 之前执行，如代码生成、安装工具等')"
+                    :placeholder="preBuildPlaceholder"
                     :rows="4"
                     type="textarea"
                   />
@@ -162,7 +179,9 @@
                 <div class="mb-[24px] last:mb-0">
                   <div class="flex items-center gap-[8px] mb-[8px]">
                     <span class="text-[14px] text-[#313238]">{{ $t('编译命令') }}</span>
-                    <Tag theme="info">{{ $t('builder 阶段') }}</Tag>
+                    <Tag :theme="requiresBuilderImage ? 'info' : 'success'">{{
+                      requiresBuilderImage ? $t('builder 阶段') : $t('runner 阶段')
+                    }}</Tag>
                   </div>
                   <Input
                     v-model="buildText"
@@ -173,9 +192,13 @@
                   <BuildOutputHint
                     :app-name="props.appName"
                     class="mt-[16px]"
+                    :requires-builder-image="requiresBuilderImage"
                   />
                 </div>
-                <div class="mb-[24px] last:mb-0">
+                <div
+                  v-if="requiresBuilderImage"
+                  class="mb-[24px] last:mb-0"
+                >
                   <div class="flex items-center gap-[8px] mb-[8px]">
                     <span class="text-[14px] text-[#313238]">{{ $t('打包额外文件') }}</span>
                     <Tag theme="success">{{ $t('runner 阶段') }}</Tag>
@@ -213,7 +236,7 @@
                   </div>
                   <Input
                     v-model.trim="builderData!.repoBuildConfig!.platformBuildConfig!.commands!.start"
-                    :placeholder="$t('留空则使用平台默认：运行编译产物二进制')"
+                    :placeholder="startPlaceholder"
                     :rows="4"
                     type="textarea"
                   />
@@ -334,8 +357,16 @@
   import CardRadio, { type CardRadioOption } from '~/components/card-radio.vue';
   import TagConfigForm from '~/components/tag-config-form.vue';
   import ToggleCard from '~/components/toggle-card.vue';
-  import { isRuntimeModSupported } from '~/composables/use-app-runtime';
+  import { isPlatformBuilderImageRequired, isRuntimeModSupported } from '~/composables/use-app-runtime';
   import useLeaveConfirm from '~/composables/use-leave-confirm';
+  import {
+    createArtifactDirRules,
+    createPlatformBuildConfig,
+    getBuildCommandPlaceholder,
+    getDefaultArtifactDir,
+    getPreBuildCommandPlaceholder,
+    getStartCommandPlaceholder,
+  } from '~/composables/use-platform-build';
   import BuildOutputHint from '~/pages/application/components/build-output-hint.vue';
   import GoBuildArgs from '~/pages/application/components/go-build-args.vue';
   import ImageModeSelect from '~/pages/application/components/image-mode-select.vue';
@@ -365,6 +396,8 @@
   const spaceStore = useSpaceStore();
   const appDetailStore = useAppDetail();
   const platformBuildSupported = computed(() => isRuntimeModSupported(appDetailStore.runtime, 'platformBuild'));
+  const requiresBuilderImage = computed(() => isPlatformBuilderImageRequired(appDetailStore.runtime));
+  const effectiveLanguage = computed(() => props.language || appDetailStore.runtime?.language || '');
 
   /** 空间镜像仓库信息（供 ImageModeSelect 复用，避免 builder/runner 两个实例重复请求 getWorkspace） */
   const workspaceRepoInfo = ref<null | { password: string; repositoryAddress: string; username: string }>(null);
@@ -394,17 +427,7 @@
     dockerfile: '',
     dockerBuildArgs: {},
     imageBuildMode: 'repositoryDockerfile',
-    platformBuildConfig: {
-      builderImage: '',
-      runnerImage: '',
-      extraFiles: [],
-      commands: {
-        build: [],
-        preBuild: [],
-        runtimeEnv: [],
-        start: '',
-      },
-    },
+    platformBuildConfig: createPlatformBuildConfig(),
   };
   const DEFAULT_PIPELINE_CONFIG: BuildConfigOutputObj['pipelineBuildConfig'] = {
     pipelineID: '',
@@ -412,9 +435,10 @@
   };
 
   const { t } = useI18n();
-  const buildPlaceholder = computed(
-    () => `${t('留空则使用平台默认：')}\ngo build -o /out/${props.appName || '{{ appName }}'} .`,
-  );
+  const artifactDirPlaceholder = computed(() => getDefaultArtifactDir(effectiveLanguage.value));
+  const preBuildPlaceholder = computed(() => getPreBuildCommandPlaceholder(t, requiresBuilderImage.value));
+  const buildPlaceholder = computed(() => getBuildCommandPlaceholder(t, effectiveLanguage.value, props.appName));
+  const startPlaceholder = computed(() => getStartCommandPlaceholder(t, requiresBuilderImage.value));
   const extraFilesPlaceholder = computed(
     () => `${t('每行一个，可填写文件路径或目录，相对构建目录，例如：')}\ndata/privatekey.pem\ncerts/`,
   );
@@ -429,6 +453,7 @@
         validator: (value: string) => !value || !value.startsWith('/'),
       },
     ],
+    'repoBuildConfig.platformBuildConfig.artifactDir': createArtifactDirRules(t),
   });
 
   // 能力不支持时禁用选项并保留已有配置，避免打开侧栏就改写表单。
@@ -459,17 +484,7 @@
       if (newVal === 'platform') {
         builderData.value.repoBuildConfig.dockerfile = '';
       } else if (newVal === 'repositoryDockerfile') {
-        builderData.value.repoBuildConfig.platformBuildConfig = {
-          builderImage: '',
-          runnerImage: '',
-          extraFiles: [],
-          commands: {
-            build: [],
-            preBuild: [],
-            runtimeEnv: [],
-            start: '',
-          },
-        };
+        builderData.value.repoBuildConfig.platformBuildConfig = createPlatformBuildConfig();
       }
     },
   );
@@ -646,6 +661,17 @@
 
   const formRef = ref();
   const pipelineParamsRef = ref();
+  function handleArtifactDirBlur() {
+    const platformCfg = builderData.value?.repoBuildConfig?.platformBuildConfig;
+    if (platformCfg?.artifactDir) {
+      platformCfg.artifactDir = platformCfg.artifactDir.trim();
+    }
+  }
+
+  function handleArtifactDirClear() {
+    formRef.value?.clearValidate?.('repoBuildConfig.platformBuildConfig.artifactDir');
+  }
+
   /** 保存编辑 */
   const handleSave = async () => {
     if (
@@ -654,6 +680,7 @@
       !platformBuildSupported.value
     )
       return;
+    handleArtifactDirBlur();
     // 表单校验，主要用于 源码仓库
     const formValid = await formRef.value.validate().catch(() => false);
     if (!formValid) return;
@@ -684,8 +711,12 @@
         builderData.value.pipelineBuildConfig = null;
         // 根据构建方式清理不相关字段
         if (builderData.value.repoBuildConfig?.imageBuildMode === 'platform') {
-          // platform 模式下清空 dockerfile
+          // platform 模式下清空 dockerfile；单阶段模板清空构建镜像与打包额外文件
           builderData.value.repoBuildConfig.dockerfile = '';
+          if (!requiresBuilderImage.value && builderData.value.repoBuildConfig.platformBuildConfig) {
+            builderData.value.repoBuildConfig.platformBuildConfig.builderImage = '';
+            builderData.value.repoBuildConfig.platformBuildConfig.extraFiles = [];
+          }
         } else {
           // repositoryDockerfile 模式下移除 platformBuildConfig
           builderData.value.repoBuildConfig!.platformBuildConfig = undefined;
@@ -731,17 +762,7 @@
       // 初始化 platformBuildConfig
       if (!builderData.value?.repoBuildConfig?.platformBuildConfig) {
         if (builderData.value.repoBuildConfig) {
-          builderData.value.repoBuildConfig.platformBuildConfig = {
-            builderImage: '',
-            runnerImage: '',
-            extraFiles: [],
-            commands: {
-              build: [],
-              preBuild: [],
-              runtimeEnv: [],
-              start: '',
-            },
-          };
+          builderData.value.repoBuildConfig.platformBuildConfig = createPlatformBuildConfig();
         }
       }
       if (

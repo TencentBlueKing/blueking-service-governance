@@ -35,10 +35,18 @@ tests {
       Object.entries(blank.mods).forEach(([id, mod]) => {
         const expected = id === "configFileMerge" || (id === "platformBuild" && platformBuildLanguages.includes(language));
         expect(mod.supported, `blank+${language} ${id}`).to.equal(expected);
+        if (id === "platformBuild" && expected) {
+          expect(mod.props, `blank+${language} platformBuild.props`).to.deep.equal({
+            requiresBuilderImage: language !== "python",
+          });
+        }
       });
     });
     const trpcGo = matrix.find((v) => v.framework === "trpc" && v.language === "go");
     expect(trpcGo.mods.platformBuild.supported, "trpc+go").to.equal(true);
+    expect(trpcGo.mods.platformBuild.props, "trpc+go platformBuild.props").to.deep.equal({
+      requiresBuilderImage: true,
+    });
     expect(matrix.find((v) => v.framework === "trpc" && v.language === "python")).to.equal(undefined);
   });
 }
