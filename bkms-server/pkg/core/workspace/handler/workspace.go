@@ -621,9 +621,10 @@ func (h *Handler) CreateWorkspace(c *gin.Context) {
 	defaultEnvs := workspace.BuildDefaultEnvs(auth.MustGetUser(ctx).ID, ws.ID, bkSystem.BkBCSProjectCode)
 	for _, env := range defaultEnvs {
 		if envErr := envSvc.Create(ctx, &env); envErr != nil {
-			bkerrs.AbortWithErr(c, envErr,
+			// 默认环境由系统生成，重名属于内部错误，不能按 store 类别返回 409
+			bkerrs.AbortWithErr(c,
+				bkerrs.Wrapf(envErr, bkerrs.ErrCodeInternalServerError, "create default env %s", env.Name),
 				envapierrs.NamespaceOccupied,
-				bkerrs.Otherwise(bkerrs.ErrCodeInternalServerError, "create default env %s", env.Name),
 			)
 			return
 		}

@@ -28,6 +28,8 @@ import (
 	"github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/v2/bson"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/i18n"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime"
@@ -41,9 +43,15 @@ func validateConfigKindForApp(app *bkmsapp.Application, kind appcfg.ConfigKind) 
 	isAppModel := appruntime.IsAppModelType(app.Type)
 	switch {
 	case kind == appcfg.ConfigKindPlain && !isAppModel:
-		return stderrors.New("plain config file is only supported for appmodel applications")
+		return bkerrs.New(
+			bkerrs.ErrCodeInvalidArgument, i18n.Msg("plain config files are only supported for appmodel applications"),
+		)
 	case kind == appcfg.ConfigKindFramework && isAppModel && !mods.Of(app).FrameworkFile.Supported:
-		return errors.Errorf("framework %q does not support framework config file", mods.Of(app).Stack.Framework)
+		return bkerrs.Errorf(
+			bkerrs.ErrCodeInvalidArgument,
+			i18n.Msg("framework %q does not support framework config files"),
+			mods.Of(app).Stack.Framework,
+		)
 	}
 	return nil
 }

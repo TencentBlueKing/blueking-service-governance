@@ -30,7 +30,7 @@ import (
 
 var (
 	// HasAppsCannotUpdateCluster 环境下仍有应用时不允许修改集群
-	HasAppsCannotUpdateCluster = bkerrs.OnAs(func(err error, e *bkmsenv.EnvHasAppsError) *bkerrs.Error {
+	HasAppsCannotUpdateCluster = bkerrs.WhenAs(func(err error, e *bkmsenv.EnvHasAppsError) *bkerrs.Error {
 		return bkerrs.Wrapf(
 			err,
 			bkerrs.ErrCodeInvalidRequest,
@@ -39,8 +39,24 @@ var (
 		)
 	})
 
+	// SharedNamespaceCannotUpdateCluster 共用来源环境命名空间的特性环境不能修改集群或命名空间，只能重建
+	SharedNamespaceCannotUpdateCluster = bkerrs.WhenIs(
+		envmodel.ErrSharedNamespaceUnsupported,
+		bkerrs.ErrCodeInvalidRequest,
+		i18n.Msg(
+			"environments sharing a namespace cannot change cluster or namespace, recreate the environment instead",
+		),
+	)
+
+	// HasNamespaceSharersCannotUpdateCluster 仍有特性环境共用该环境的命名空间时不允许修改集群或命名空间
+	HasNamespaceSharersCannotUpdateCluster = bkerrs.WhenIs(
+		bkmsenv.ErrEnvHasNamespaceSharers,
+		bkerrs.ErrCodeInvalidRequest,
+		i18n.Msg("namespace is shared by feature environments, delete them before changing cluster or namespace"),
+	)
+
 	// HasAppsCannotDelete 环境下仍有应用时不允许删除
-	HasAppsCannotDelete = bkerrs.OnAs(func(err error, e *bkmsenv.EnvHasAppsError) *bkerrs.Error {
+	HasAppsCannotDelete = bkerrs.WhenAs(func(err error, e *bkmsenv.EnvHasAppsError) *bkerrs.Error {
 		return bkerrs.Wrapf(
 			err,
 			bkerrs.ErrCodeInvalidRequest,
@@ -50,19 +66,19 @@ var (
 	})
 
 	// HasFeatureEnvsCannotDelete 仍存在派生自该环境的特性环境时不允许删除来源环境
-	HasFeatureEnvsCannotDelete = bkerrs.On(
+	HasFeatureEnvsCannotDelete = bkerrs.WhenIs(
 		bkmsenv.ErrEnvHasFeatureEnvs,
 		bkerrs.ErrCodeInvalidRequest,
 		i18n.Msg("environment has derived feature environments, delete them first"),
 	)
 
 	// InvalidFeatureEnvInput 创建特性环境的入参不符合业务约束
-	InvalidFeatureEnvInput = bkerrs.On(
+	InvalidFeatureEnvInput = bkerrs.WhenIs(
 		bkmsenv.ErrInvalidFeatureEnvInput, bkerrs.ErrCodeInvalidRequest, i18n.Msg("invalid feature environment input"),
 	)
 
 	// FeatureEnvNameConflict 特性环境名由系统生成，与已有环境重名属于内部错误，不能按 store 类别返回 409
-	FeatureEnvNameConflict = bkerrs.On(
+	FeatureEnvNameConflict = bkerrs.WhenIs(
 		envmodel.ErrEnvAlreadyExists,
 		bkerrs.ErrCodeInternalServerError,
 		"generated feature environment name conflicts",

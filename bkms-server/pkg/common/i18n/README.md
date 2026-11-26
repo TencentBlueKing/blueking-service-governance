@@ -12,7 +12,7 @@
 
 ## 文案资源
 
-- 源码中的文案即英文（源语言），只有中文需要翻译文件 `locales/zh.po`，启动时内嵌加载
+- 源码中的文案即英文（源语言），只有中文需要翻译文件 `locales/zh-cn.po`，启动时内嵌加载
 - 原文是 printf 格式串，参数沿用原文中的动词；译文需要调整参数顺序时使用 `%[n]s`：
 
 ```po
@@ -48,7 +48,7 @@ msgstr 为空或标记为 `fuzzy` 的条目视为未翻译，运行时回退到�
 错误出口翻译最外层 `bkerrs.Error` 的原文，因此只需标记会成为最外层的文案，通常是 handler 传给 `bkerrs.AbortWithErr` 的规则与直接返回的错误：
 
 ```go
-bkerrs.On(model.ErrUnknownSwitch, bkerrs.ErrCodeInvalidArgument, i18n.Msg("unknown cfg switch key"))
+bkerrs.WhenIs(model.ErrUnknownSwitch, bkerrs.ErrCodeInvalidArgument, i18n.Msg("unknown cfg switch key"))
 bkerrs.Wrapf(err, bkerrs.ErrCodeInvalidRequest, i18n.Msg("environment has %d deployed apps, cannot delete"), n)
 
 // 会被外层再次包装、或错误码为内部错误的文案不展示给用户，不需要标记

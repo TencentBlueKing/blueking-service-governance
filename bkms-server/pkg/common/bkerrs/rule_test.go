@@ -31,7 +31,10 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 )
 
-var errUnknownKey = errors.New("unknown key")
+var (
+	errUnknownKey = errors.New("unknown key")
+	errReadOnly   = errors.New("read only")
+)
 
 type quotaExceededError struct{ limit int }
 
@@ -45,18 +48,19 @@ func asBkErr(err error) *bkerrs.Error {
 
 var _ = Describe("Match", func() {
 	It("should return nil for nil error", func() {
-		Expect(bkerrs.Match(nil, bkerrs.Otherwise(bkerrs.ErrCodeInvalidArgument, "x"))).To(Succeed())
+		Expect(bkerrs.Match(nil, bkerrs.WhenIs(errUnknownKey, bkerrs.ErrCodeInvalidArgument, "x"))).To(Succeed())
 	})
 
 	It("should return the error unchanged when no rule matches", func() {
 		err := pkgerrors.New("boom")
-		Expect(bkerrs.Match(err, bkerrs.On(errUnknownKey, bkerrs.ErrCodeInvalidArgument, "unknown key"))).
+		Expect(bkerrs.Match(err, bkerrs.WhenIs(errUnknownKey, bkerrs.ErrCodeInvalidArgument, "unknown key"))).
 			To(BeIdenticalTo(err))
 	})
 
 	It("should match a sentinel error found anywhere in the chain", func() {
 		err := pkgerrors.Wrap(errUnknownKey, "update switch")
-		matched := bkerrs.Match(err, bkerrs.On(errUnknownKey, bkerrs.ErrCodeInvalidArgument, "unknown key %q", "k1"))
+		rule := bkerrs.WhenIs(errUnknownKey, bkerrs.ErrCodeInvalidArgument, "unknown key %q", "k1")
+		matched := bkerrs.Match(err, rule)
 
 		bkErr := asBkErr(matched)
 		Expect(bkErr.Code()).To(Equal(bkerrs.ErrCodeInvalidArgument))
@@ -65,21 +69,27 @@ var _ = Describe("Match", func() {
 	})
 
 	It("should use the first matching rule", func() {
-		matched := bkerrs.Match(errUnknownKey,
-			bkerrs.On(errUnknownKey, bkerrs.ErrCodeInvalidArgument, "first"),
-			bkerrs.Otherwise(bkerrs.ErrCodeInternalServerError, "fallback"),
-		)
+		rules := []bkerrs.Rule{
+			bkerrs.WhenIs(errUnknownKey, bkerrs.ErrCodeInvalidArgument, "first"),
+			bkerrs.WhenIs(errUnknownKey, bkerrs.ErrCodeInvalidRequest, "second"),
+			bkerrs.WhenIs(errReadOnly, bkerrs.ErrCodeInvalidRequest, "read only"),
+		}
+		Expect(asBkErr(bkerrs.Match(errUnknownKey, rules...)).Code()).To(Equal(bkerrs.ErrCodeInvalidArgument))
+		Expect(asBkErr(bkerrs.Match(errReadOnly, rules...)).Code()).To(Equal(bkerrs.ErrCodeInvalidRequest))
+	})
+
+	It("should override an internal error wrapped by the handler when a rule matches", func() {
+		rule := bkerrs.WhenIs(errUnknownKey, bkerrs.ErrCodeInvalidArgument, "unknown key")
+
+		matched := bkerrs.Match(bkerrs.Wrap(errUnknownKey, bkerrs.ErrCodeInternalServerError, "update"), rule)
 		Expect(asBkErr(matched).Code()).To(Equal(bkerrs.ErrCodeInvalidArgument))
 
-		matched = bkerrs.Match(pkgerrors.New("other"),
-			bkerrs.On(errUnknownKey, bkerrs.ErrCodeInvalidArgument, "first"),
-			bkerrs.Otherwise(bkerrs.ErrCodeInternalServerError, "fallback"),
-		)
+		matched = bkerrs.Match(bkerrs.Wrap(errReadOnly, bkerrs.ErrCodeInternalServerError, "update"), rule)
 		Expect(asBkErr(matched).Code()).To(Equal(bkerrs.ErrCodeInternalServerError))
 	})
 
 	It("should build the API error from a typed domain error", func() {
-		rule := bkerrs.OnAs(func(err error, e *quotaExceededError) *bkerrs.Error {
+		rule := bkerrs.WhenAs(func(err error, e *quotaExceededError) *bkerrs.Error {
 			return bkerrs.Wrapf(err, bkerrs.ErrCodeInvalidRequest, "at most %d items are allowed", e.limit)
 		})
 		matched := bkerrs.Match(pkgerrors.Wrap(&quotaExceededError{limit: 3}, "create item"), rule)
@@ -89,7 +99,7 @@ var _ = Describe("Match", func() {
 	})
 
 	It("should build the API error with details through OnFunc", func() {
-		rule := bkerrs.OnFunc(errUnknownKey, func(err error) *bkerrs.Error {
+		rule := bkerrs.WhenIsFunc(errUnknownKey, func(err error) *bkerrs.Error {
 			return bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "unknown key").
 				SetDetails(bkerrs.NewDetail("UNKNOWN_KEY", "unknown key"))
 		})
@@ -101,18 +111,19 @@ var _ = Describe("Match", func() {
 var _ = Describe("Rules", func() {
 	It("should return the first matching rule in the group", func() {
 		group := bkerrs.Rules(
-			bkerrs.On(errUnknownKey, bkerrs.ErrCodeInvalidArgument, "first"),
-			bkerrs.Otherwise(bkerrs.ErrCodeInvalidRequest, "second"),
+			bkerrs.WhenIs(errUnknownKey, bkerrs.ErrCodeInvalidArgument, "first"),
+			bkerrs.WhenIs(errReadOnly, bkerrs.ErrCodeInvalidRequest, "second"),
 		)
 		Expect(asBkErr(bkerrs.Match(errUnknownKey, group)).Code()).To(Equal(bkerrs.ErrCodeInvalidArgument))
-		Expect(asBkErr(bkerrs.Match(pkgerrors.New("other"), group)).Code()).To(Equal(bkerrs.ErrCodeInvalidRequest))
+		Expect(asBkErr(bkerrs.Match(errReadOnly, group)).Code()).To(Equal(bkerrs.ErrCodeInvalidRequest))
+		Expect(group(pkgerrors.New("other"))).To(BeNil())
 	})
 
 	It("should be combinable with other rules and groups", func() {
-		inner := bkerrs.Rules(bkerrs.On(errUnknownKey, bkerrs.ErrCodeInvalidArgument, "inner"))
-		matched := bkerrs.Match(pkgerrors.New("other"),
+		inner := bkerrs.Rules(bkerrs.WhenIs(errUnknownKey, bkerrs.ErrCodeInvalidArgument, "inner"))
+		matched := bkerrs.Match(errReadOnly,
 			bkerrs.Rules(inner),
-			bkerrs.Otherwise(bkerrs.ErrCodeNotFound, "outer"),
+			bkerrs.WhenIs(errReadOnly, bkerrs.ErrCodeNotFound, "outer"),
 		)
 		Expect(asBkErr(matched).Code()).To(Equal(bkerrs.ErrCodeNotFound))
 	})
@@ -132,7 +143,7 @@ var _ = Describe("AbortWithErr", func() {
 	It("should record the matched API error and abort", func() {
 		c := newContext()
 		bkerrs.AbortWithErr(c, pkgerrors.Wrap(errUnknownKey, "update"),
-			bkerrs.On(errUnknownKey, bkerrs.ErrCodeInvalidArgument, "unknown key"))
+			bkerrs.WhenIs(errUnknownKey, bkerrs.ErrCodeInvalidArgument, "unknown key"))
 
 		Expect(c.IsAborted()).To(BeTrue())
 		Expect(asBkErr(c.Errors.Last().Err).Code()).To(Equal(bkerrs.ErrCodeInvalidArgument))

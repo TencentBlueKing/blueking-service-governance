@@ -23,22 +23,24 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/i18n"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
+	bscpapierrs "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bscp/apierrs"
 )
 
-// BSCPConfigRules 校验 BSCP 配置引用（appcfg.ResolveBSCPConfig）时由用户输入导致的错误。
-// BSCP 未启用、无权限由全局规则处理；调用 BSCP 失败等其余错误不命中，由错误出口按内部错误处理
+// BSCPConfigRules 校验用户所选的 BSCP 配置引用（appcfg.ResolveBSCPConfig）时由用户输入或权限导致的错误。
+// BSCP 未启用由全局规则处理；调用 BSCP 失败等其余错误不命中，由错误出口按内部错误处理
 var BSCPConfigRules = bkerrs.Rules(
-	bkerrs.On(
+	bscpapierrs.NoPermission,
+	bkerrs.WhenIs(
 		appcfg.ErrBSCPConfigRequired,
 		bkerrs.ErrCodeInvalidArgument,
 		i18n.Msg("bscp config is required when content source type is bscp"),
 	),
-	bkerrs.On(
+	bkerrs.WhenIs(
 		appcfg.ErrBSCPNoFullyReleasedVersion,
 		bkerrs.ErrCodeInvalidRequest,
 		i18n.Msg("the bscp service has no fully released version"),
 	),
-	bkerrs.On(
+	bkerrs.WhenIs(
 		appcfg.ErrBSCPContentInvalidYAML,
 		bkerrs.ErrCodeInvalidArgument,
 		i18n.Msg("bscp config content is not valid YAML"),

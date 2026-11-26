@@ -6,51 +6,51 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Language: zh\n"
 
-#: pkg/common/bkerrs/gin.go
+#: pkg/common/bkerrs/response.go
 msgid "internal server error, please try again later or contact the administrator"
 msgstr "服务内部错误，请稍后重试或联系管理员"
 
-#: pkg/common/bkerrs/gin.go
+#: pkg/common/bkerrs/response.go
 msgid "resource not found"
 msgstr "资源不存在"
 
-#: pkg/common/bkerrs/gin.go
+#: pkg/common/bkerrs/response.go
 msgid "resource already exists"
 msgstr "资源已存在"
 
-#: pkg/common/bkerrs/gin.go
+#: pkg/common/bkerrs/response.go
 msgid "get auth user from request failed"
 msgstr "获取登录用户信息失败，请重新登录"
 
-#: pkg/common/bkerrs/gin.go
+#: pkg/common/bkerrs/response.go
 msgid "invalid request parameters"
 msgstr "请求参数不合法"
 
-#: pkg/common/bkerrs/gin.go
+#: pkg/common/bkerrs/response.go
 msgid "request does not meet business rules"
 msgstr "请求不符合业务规则"
 
-#: pkg/common/bkerrs/gin.go
+#: pkg/common/bkerrs/response.go
 msgid "user is not authenticated, please log in again"
 msgstr "用户未登录或登录已失效，请重新登录"
 
-#: pkg/common/bkerrs/gin.go
+#: pkg/common/bkerrs/response.go
 msgid "no permission to perform this operation"
 msgstr "无权限执行该操作"
 
-#: pkg/common/bkerrs/gin.go
+#: pkg/common/bkerrs/response.go
 msgid "resource was modified concurrently, please refresh and try again"
 msgstr "资源已被他人修改，请刷新后重试"
 
-#: pkg/common/bkerrs/gin.go
+#: pkg/common/bkerrs/response.go
 msgid "too many requests, please try again later"
 msgstr "请求过于频繁，请稍后重试"
 
-#: pkg/common/bkerrs/gin.go
+#: pkg/common/bkerrs/response.go
 msgid "resource quota exceeded"
 msgstr "资源配额不足"
 
-#: pkg/common/bkerrs/gin.go
+#: pkg/common/bkerrs/response.go
 msgid "not implemented yet"
 msgstr "该功能暂未实现"
 
@@ -90,7 +90,7 @@ msgstr "工作空间不存在"
 msgid "unknown cfg switch key"
 msgstr "未知的配置开关"
 
-#: pkg/server/ginutils/integration_guard.go
+#: pkg/infras/cloudapi/bscp/apierrs/apierrs.go
 msgid "bscp is disabled in current environment"
 msgstr "当前环境未启用 BSCP 配置服务"
 
@@ -98,7 +98,7 @@ msgstr "当前环境未启用 BSCP 配置服务"
 msgid "kube-insight is disabled in current environment"
 msgstr "当前环境未启用集群诊断（KubeInsight）服务"
 
-#: pkg/server/ginutils/integration_guard.go
+#: pkg/infras/cloudapi/bscp/apierrs/apierrs.go
 msgid "no permission to access bscp resources"
 msgstr "无权访问 BSCP 资源，请先申请对应业务的权限"
 
@@ -117,3 +117,53 @@ msgstr "所选 BSCP 服务没有全量发布的版本，请先在 BSCP 中全量
 #: pkg/core/app/appcfg/apierrs/apierrs.go
 msgid "bscp config content is not valid YAML"
 msgstr "BSCP 配置项内容不是合法的 YAML"
+
+#: pkg/core/app/appcfg/handler/app_config_file.go
+#: pkg/core/app/appcfg/handler/app_config_file_version.go
+msgid "invalid config file ID"
+msgstr "配置文件 ID 不合法"
+
+#: pkg/core/app/appcfg/handler/app_config_file_version.go
+msgid "invalid version ID"
+msgstr "版本 ID 不合法"
+
+#: pkg/core/app/appcfg/handler/app_config_file_version.go
+msgid "config file version not found"
+msgstr "配置文件版本不存在"
+
+#: pkg/core/app/appcfg/handler/app_config_file_version.go
+msgid "the target version has a different file type from the current config file and cannot be rolled back"
+msgstr "目标版本与当前配置文件的类型不一致，无法回滚"
+
+#: pkg/core/app/appcfg/appcfgfiledef/handler.go
+#: pkg/core/app/appcfg/handler/app_config_file.go
+msgid "the base file must be an existing normal config file of the current app"
+msgstr "基础文件必须是当前应用下已存在的普通配置文件"
+
+#: pkg/core/app/appcfg/handler/app_config_file.go
+msgid "overlay content is not valid YAML"
+msgstr "覆盖内容不是合法的 YAML"
+
+#: pkg/core/app/appcfg/appcfgfiledef/handler.go
+msgid "invalid envName query parameter"
+msgstr "查询参数 envName 不合法"
+
+#: pkg/core/app/appcfg/appcfgfiledef/handler.go
+msgid "only environment instances in independent config mode can be reset to default"
+msgstr "只有独立配置模式的环境实例才能重置为默认配置"
+
+#: pkg/core/app/appcfg/appcfgfiledef/validation.go
+msgid "plain config files are only supported for appmodel applications"
+msgstr "只有 AppModel 应用支持 plain 类型的配置文件"
+
+#: pkg/core/app/appcfg/appcfgfiledef/validation.go
+msgid "framework %q does not support framework config files"
+msgstr "框架 %q 不支持框架配置文件"
+
+#: pkg/core/env/apierrs/apierrs.go
+msgid "environments sharing a namespace cannot change cluster or namespace, recreate the environment instead"
+msgstr "共用命名空间的环境不能修改集群或命名空间，请重新创建环境"
+
+#: pkg/core/env/apierrs/apierrs.go
+msgid "namespace is shared by feature environments, delete them before changing cluster or namespace"
+msgstr "命名空间正被特性环境共用，请先删除这些特性环境再修改集群或命名空间"

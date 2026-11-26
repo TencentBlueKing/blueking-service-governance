@@ -60,9 +60,33 @@ the user to install them. ALWAYS prefer using `rg` rather than `find` or `grep`.
 
 * make changes to the router, handler, and serializer files in each feature package
 * keep handler code simple, place complex logic in other modules
+* return errors as described in "Returning errors from handlers" below
 * add Swagger annotations and run `make apidocs`
 * In Swagger annotations, only declare `@Failure 400`; do NOT add other error codes such as 401, 403, 404, or 5xx (e.g. a handler should have just `@Success 200` and `@Failure 400 {object} bkerrs.GinErrorOutput`)
 * `make build` to build the binary
+
+#### Returning errors from handlers
+
+Applies whenever you write or modify a handler. Full reference: [`pkg/common/bkerrs/README.md`](pkg/common/bkerrs/README.md).
+
+**Do NOT copy `bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "...")` from existing handlers.** It is a legacy pattern that appears hundreds of times; this rule overrides "be consistent with nearby code". Wrapping as 500 overrides the error exit's classification: a store "not found" caused by a user-supplied ID becomes a 500 instead of a 404, and the user only sees a generic "internal server error".
+
+Pick the first case that applies:
+
+1. `err` already carries an API error (from `ginutils.BindURI` / `BindJSON`, `perm.Validate*`, or any function returning `*bkerrs.Error`): `bkerrs.AbortWithErr(c, err)`. Do not wrap it again.
+2. **Default** for errors returned by a service or store call: `bkerrs.AbortWithErr(c, errors.Wrapf(err, "get env %s", envID))`. You do not choose a code: the error exit returns 404 / 409 for store "not found" / "already exists" and 500 for everything else.
+3. Some domain errors should become a specific 4xx: same as case 2, plus rules, e.g. `bkerrs.WhenIs(model.ErrUnknownSwitch, bkerrs.ErrCodeInvalidArgument, i18n.Msg("unknown cfg switch key"))`. Check the domain's `apierrs` package (e.g. `pkg/core/env/apierrs`) for existing rules first. Only map errors caused by user input; never map downstream failures to 4xx.
+4. The whole error means the user's input is invalid or the resource they asked for does not exist: `bkerrs.AbortInvalidArg(c, err, i18n.Msg("invalid version ID"))` / `bkerrs.AbortNotFound(c, err, i18n.Msg("..."))`.
+5. `bkerrs.AbortInternal(c, err, "list bscp user bizs")` only when the failure can never be the user's fault, e.g. a downstream API call or a lookup by a system-generated ID. Ask: "could this fail because the user passed a bad ID?" If yes, use case 2.
+
+Global rules (`ginutils.GlobalErrorRules`, e.g. BSCP disabled) apply automatically; do not map them in handlers. Model, service and store code returns domain errors (sentinels or typed errors) wrapped with `errors.Wrap`; the handler decides the code. Do not add `bkerrs` to new non-handler code, even though a few legacy packages still use it.
+
+Messages come in two kinds:
+
+* **User-facing** (`AbortInvalidArg` / `AbortNotFound` msg, `WhenIs` / `Errorf` / `Wrapf` format): a complete sentence describing the problem to the user, e.g. `i18n.Msg("invalid version ID")`, never a developer phrase like `"parse version ID"`. Always mark it with `i18n.Msg`, then run `make i18n` and fill in `pkg/common/i18n/locales/zh-cn.po`.
+* **Developer context** (`errors.Wrap` / `Wrapf`, `AbortInternal` msg, `NewDetail` message): a short "what was being done" phrase with identifiers via `Wrapf`. Never mark it with `i18n.Msg`; users never see it.
+
+Never write `bkerrs.New(code, err.Error())`: it drops the error chain and cannot be translated. Pass dynamic values as format args, never pre-format a message with `fmt.Sprintf`.
 
 #### Database model & migrations
 

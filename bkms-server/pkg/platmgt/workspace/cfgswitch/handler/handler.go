@@ -66,7 +66,7 @@ func (h *Handler) ListPlatCfgSwitches(c *gin.Context) {
 
 	switches, err := h.manager().List(c.Request.Context(), path.WorkspaceID)
 	if err != nil {
-		bkerrs.AbortWithErr(c, errors.Wrap(err, "list platform workspace cfg switches"), apiErrorRules...)
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "list platform workspace cfg switches"), cfgSwitchRules)
 		return
 	}
 
@@ -105,7 +105,7 @@ func (h *Handler) UpdatePlatCfgSwitch(c *gin.Context) {
 		c.Request.Context(), path.WorkspaceID, model.SwitchKey(path.Key), lo.FromPtr(input.Enabled),
 	)
 	if err != nil {
-		bkerrs.AbortWithErr(c, errors.Wrap(err, "update platform workspace cfg switch"), apiErrorRules...)
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "update platform workspace cfg switch"), cfgSwitchRules)
 		return
 	}
 
@@ -116,8 +116,8 @@ func (h *Handler) manager() *cfgswitch.Manager {
 	return cfgswitch.NewManager(h.registry.DB)
 }
 
-// apiErrorRules 把 Manager 的领域错误映射为接口错误；工作空间不存在由 store 声明错误类别，错误出口统一转换为 404，
+// cfgSwitchRules 配置开关 Manager 的领域错误；工作空间不存在由 store 声明错误类别，错误出口统一转换为 404，
 // 未命中的错误视为内部错误
-var apiErrorRules = []bkerrs.Rule{
-	bkerrs.On(model.ErrUnknownSwitch, bkerrs.ErrCodeInvalidArgument, i18n.Msg("unknown cfg switch key")),
-}
+var cfgSwitchRules = bkerrs.Rules(
+	bkerrs.WhenIs(model.ErrUnknownSwitch, bkerrs.ErrCodeInvalidArgument, i18n.Msg("unknown cfg switch key")),
+)

@@ -66,7 +66,7 @@ func New(registry *storereg.Registry) *Handler {
 5. 通过 `store.Of(h.registry.DB, XxxMeta)` 或领域 service 读写数据。
 6. 把领域模型转换为 serializer output。
 7. 用 `ginutils.JSON` 或 `ginutils.OK` 返回成功响应。
-8. 出错时用 `bkerrs.AbortErr(c, err)`。
+8. 出错时按 `pkg/common/bkerrs/README.md` 的「handler 中如何返回错误」选择 `bkerrs.AbortWithErr` 或快捷函数。
 
 不要为了“分层”额外包一层没有复用价值的私有函数。请求到响应的主流程应保持直接、清晰。
 
@@ -85,7 +85,7 @@ func New(registry *storereg.Registry) *Handler {
 
 - Gin 鉴权使用 `pkg/common/auth` 中的能力，常见链路是 `auth.UserAuth()`。
 - Gin 错误处理中间件使用 `bkerrs.ErrorHandler(ginutils.GlobalErrorRules...)`。
-- handler 内返回错误时使用 `bkerrs.AbortErr(c, err)`。
+- handler 内返回错误的写法、哪些文案需要 `i18n.Msg` 标记、错误码优先级，见 `pkg/common/bkerrs/README.md`。
 - Swagger 错误响应 schema 统一使用 `bkerrs.GinErrorOutput`。
 
 ## Swagger

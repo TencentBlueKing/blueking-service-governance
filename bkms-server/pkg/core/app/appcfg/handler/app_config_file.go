@@ -31,6 +31,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/i18n"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
 	appcfgapierrs "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg/apierrs"
@@ -98,7 +99,11 @@ func (h *Handler) CreateAppConfigFile(c *gin.Context) {
 
 	baseID, err := h.validateBaseAppConfigFileID(ctx, app.ID, input.Type, input.BaseAppConfigFileID)
 	if err != nil {
-		bkerrs.AbortInvalidArg(c, err, "validate baseAppConfigFileID")
+		bkerrs.AbortInvalidArg(
+			c,
+			err,
+			i18n.Msg("the base file must be an existing normal config file of the current app"),
+		)
 		return
 	}
 
@@ -148,7 +153,7 @@ func (h *Handler) CreateAppConfigFile(c *gin.Context) {
 	} else {
 		obj, err = acfService.Create(ctx, params)
 		if err != nil {
-			bkerrs.AbortInternal(c, err, "creating app config file")
+			bkerrs.AbortWithErr(c, pkgerrors.Wrap(err, "creating app config file"))
 			return
 		}
 	}
@@ -203,7 +208,11 @@ func (h *Handler) UpdateAppConfigFile(c *gin.Context) {
 	if input.BaseAppConfigFileID != "" {
 		baseID, vErr := h.validateBaseAppConfigFileID(ctx, app.ID, string(acf.Type), input.BaseAppConfigFileID)
 		if vErr != nil {
-			bkerrs.AbortInvalidArg(c, vErr, "validate baseAppConfigFileID")
+			bkerrs.AbortInvalidArg(
+				c,
+				vErr,
+				i18n.Msg("the base file must be an existing normal config file of the current app"),
+			)
 			return
 		}
 		acf.BaseAppConfigFileID = baseID
@@ -379,7 +388,7 @@ func (h *Handler) DeleteAppConfigFile(c *gin.Context) {
 
 	id, err := uriInput.AppConfigFileObjectID()
 	if err != nil {
-		bkerrs.AbortInvalidArg(c, err, "parse app config file ID")
+		bkerrs.AbortInvalidArg(c, err, i18n.Msg("invalid config file ID"))
 		return
 	}
 
@@ -405,7 +414,7 @@ func (h *Handler) DeleteAppConfigFile(c *gin.Context) {
 	)
 	oldAcf, err := acfService.DeleteFile(ctx, app.ID, id)
 	if err != nil {
-		bkerrs.AbortInternal(c, err, "deleting app config file")
+		bkerrs.AbortWithErr(c, pkgerrors.Wrapf(err, "deleting app config file %s", id.Hex()))
 		return
 	}
 
@@ -606,12 +615,12 @@ func (h *Handler) PreviewOverlayMerge(c *gin.Context) {
 
 	baseID, err := uriInput.AppConfigFileObjectID()
 	if err != nil {
-		bkerrs.AbortInvalidArg(c, err, "parse app config file ID")
+		bkerrs.AbortInvalidArg(c, err, i18n.Msg("invalid config file ID"))
 		return
 	}
 	baseFile, err := h.configFiles().GetByID(ctx, baseID)
 	if err != nil {
-		bkerrs.AbortInternal(c, err, "get base app config file")
+		bkerrs.AbortWithErr(c, pkgerrors.Wrapf(err, "get base app config file %s", baseID.Hex()))
 		return
 	}
 
@@ -626,7 +635,7 @@ func (h *Handler) PreviewOverlayMerge(c *gin.Context) {
 		},
 	}
 	if validateErr := validateFileContent(input.OverlayContent, baseFile.GetConfigFormat()); validateErr != nil {
-		bkerrs.AbortInvalidArg(c, validateErr, "validate overlayContent")
+		bkerrs.AbortInvalidArg(c, validateErr, i18n.Msg("overlay content is not valid YAML"))
 		return
 	}
 

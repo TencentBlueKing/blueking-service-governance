@@ -106,7 +106,7 @@ var _ = Describe("T", func() {
 
 var _ = Describe("load", func() {
 	po := func(body string) fstest.MapFS {
-		return fstest.MapFS{"locales/zh.po": {Data: []byte("msgid \"\"\nmsgstr \"\"\n\n" + body)}}
+		return fstest.MapFS{"locales/zh-cn.po": {Data: []byte("msgid \"\"\nmsgstr \"\"\n\n" + body)}}
 	}
 
 	It("should skip untranslated and fuzzy entries but still treat them as user-facing in the source language",
@@ -138,7 +138,7 @@ var _ = Describe("load", func() {
 			_, err := load(files)
 			Expect(err).To(MatchError(ContainSubstring(errSubstring)))
 		},
-		Entry("missing locale file", fstest.MapFS{}, "read locale file locales/zh.po"),
+		Entry("missing locale file", fstest.MapFS{}, "read locale file locales/zh-cn.po"),
 		Entry("placeholder mismatch", po("msgid \"%d apps\"\nmsgstr \"%s 个应用\"\n"), "do not match"),
 		Entry("missing placeholder", po("msgid \"app %s\"\nmsgstr \"应用\"\n"), "do not match"),
 		Entry("duplicated msgid", po("msgid \"a\"\nmsgstr \"甲\"\n\nmsgid \"a\"\nmsgstr \"乙\"\n"), "duplicated"),

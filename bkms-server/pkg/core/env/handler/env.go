@@ -574,6 +574,8 @@ func (h *Handler) UpdateEnvCluster(c *gin.Context) {
 	if err = svc.Update(ctx, env.ID, updateData); err != nil {
 		bkerrs.AbortWithErr(c, errors.Wrap(err, "update env cluster"),
 			envapierrs.HasAppsCannotUpdateCluster,
+			envapierrs.SharedNamespaceCannotUpdateCluster,
+			envapierrs.HasNamespaceSharersCannotUpdateCluster,
 			envapierrs.NamespaceOccupied,
 		)
 		return

@@ -24,6 +24,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/i18n"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
 	appcfgapierrs "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg/apierrs"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime/runtimemod/mods"
@@ -170,13 +171,17 @@ func (h *Handler) CreateAppConfigFileDef(c *gin.Context) {
 	fileFormat := appcfg.FileFormat(input.FileFormat)
 
 	if err = validateConfigKindForApp(app, appcfg.ConfigKind(input.ConfigKind)); err != nil {
-		bkerrs.AbortInvalidArg(c, err, "validating config kind")
+		bkerrs.AbortWithErr(c, err)
 		return
 	}
 
 	baseFileID, err := h.validateBaseAppConfigFileID(ctx, app.ID, fileType, input.BaseAppConfigFileID)
 	if err != nil {
-		bkerrs.AbortInvalidArg(c, err, "validating base file")
+		bkerrs.AbortInvalidArg(
+			c,
+			err,
+			i18n.Msg("the base file must be an existing normal config file of the current app"),
+		)
 		return
 	}
 	bscpConfig, err := h.validateBSCPConfig(ctx, sourceType, input.BSCPConfig, fileFormat)
@@ -248,7 +253,7 @@ func (h *Handler) GetAppCfgFileDetail(c *gin.Context) {
 		return
 	}
 	if err := c.ShouldBindQuery(&query); err != nil {
-		bkerrs.AbortInvalidArg(c, err, "invalid query")
+		bkerrs.AbortInvalidArg(c, err, i18n.Msg("invalid envName query parameter"))
 		return
 	}
 
@@ -392,7 +397,11 @@ func (h *Handler) UpdateHelmFile(c *gin.Context) {
 		ctx, app.ID, defaultFile.Type, input.BaseAppConfigFileID,
 	)
 	if err != nil {
-		bkerrs.AbortInvalidArg(c, err, "validating base file")
+		bkerrs.AbortInvalidArg(
+			c,
+			err,
+			i18n.Msg("the base file must be an existing normal config file of the current app"),
+		)
 		return
 	}
 	bscpConfig, err := h.validateBSCPConfig(
@@ -560,7 +569,7 @@ func (h *Handler) UpdateContent(c *gin.Context) {
 		return
 	}
 	if err := c.ShouldBindQuery(&query); err != nil {
-		bkerrs.AbortInvalidArg(c, err, "invalid query")
+		bkerrs.AbortInvalidArg(c, err, i18n.Msg("invalid envName query parameter"))
 		return
 	}
 
@@ -663,7 +672,11 @@ func (h *Handler) ResetEnvToDefault(c *gin.Context) {
 	envFile, err := svc.ResetEnvInstanceToDefault(ctx, def, uriInput.EnvName)
 	if err != nil {
 		if errors.Is(err, appcfg.ErrResetToDefaultRequiresIndependentConfig) {
-			bkerrs.AbortInvalidArg(c, err, "reset requires independent mode")
+			bkerrs.AbortInvalidArg(
+				c,
+				err,
+				i18n.Msg("only environment instances in independent config mode can be reset to default"),
+			)
 			return
 		}
 		bkerrs.AbortInternal(c, err, "resetting env to default")
@@ -704,7 +717,7 @@ func (h *Handler) GetMountPreview(c *gin.Context) {
 		return
 	}
 	if err := c.ShouldBindQuery(&query); err != nil {
-		bkerrs.AbortInvalidArg(c, err, "invalid query")
+		bkerrs.AbortInvalidArg(c, err, i18n.Msg("invalid envName query parameter"))
 		return
 	}
 

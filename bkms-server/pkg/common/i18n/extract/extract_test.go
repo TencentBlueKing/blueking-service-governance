@@ -63,7 +63,7 @@ var _ = Describe("Messages", func() {
 
 func f(err error, name string, msg string) {
 	_ = bkerrs.Errorf(bkerrs.ErrCodeNotFound, i18n.Msg("app %s not found"), name)
-	_ = bkerrs.On(errX, bkerrs.ErrCodeInvalidArgument, i18n.Msg("on msg"))
+	_ = bkerrs.WhenIs(errX, bkerrs.ErrCodeInvalidArgument, i18n.Msg("on msg"))
 	_ = bkerrs.New(bkerrs.ErrCodeInvalidArgument, "unmarked msg")
 	_ = bkerrs.Wrapf(err, bkerrs.ErrCodeInvalidRequest, "unmarked %d", 1)
 	_ = bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, msg)

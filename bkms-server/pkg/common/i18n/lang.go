@@ -32,7 +32,7 @@ type Lang string
 
 const (
 	// LangZH 中文
-	LangZH Lang = "zh"
+	LangZH Lang = "zh-cn"
 	// LangEN 英文
 	LangEN Lang = "en"
 

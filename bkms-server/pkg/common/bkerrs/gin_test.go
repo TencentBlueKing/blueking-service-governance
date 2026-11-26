@@ -214,11 +214,30 @@ var _ = Describe("Gin error handling", func() {
 			Expect(out.Error.Details[0]["code"]).To(Equal(string(ErrCodeInternalError)))
 			Expect(out.Error.Details[0]["message"]).To(Equal("boom"))
 		})
+
+		DescribeTable("should not expose the chain when the generic message is not translated",
+			func(entry string) {
+				restore, err := i18n.UseCatalogForTest(map[i18n.Lang]string{
+					i18n.LangZH: "msgid \"\"\nmsgstr \"\"\n\n" + entry,
+				})
+				Expect(err).NotTo(HaveOccurred())
+				DeferCleanup(restore)
+
+				out := request(errors.New("dial mongodb://10.0.0.1:27017: connection refused"), "zh")
+
+				Expect(out.Error.Code).To(Equal(ErrCodeInternalError))
+				Expect(out.Error.Message).To(Equal(internalErrorMessage))
+				Expect(out.Error.Details).To(HaveLen(1))
+				Expect(out.Error.Details[0]["message"]).To(Equal("dial mongodb://10.0.0.1:27017: connection refused"))
+			},
+			Entry("empty msgstr", "msgid \""+internalErrorMessage+"\"\nmsgstr \"\"\n"),
+			Entry("fuzzy", "#, fuzzy\nmsgid \""+internalErrorMessage+"\"\nmsgstr \"服务内部错误\"\n"),
+		)
 	})
 
 	Context("when global rules are registered", func() {
 		errGlobal := errors.New("integration disabled")
-		globalRule := On(errGlobal, ErrCodeNotImplemented, "integration is disabled")
+		globalRule := WhenIs(errGlobal, ErrCodeNotImplemented, "integration is disabled")
 
 		// 原文均无译文，错误详情的最后一项为完整错误链，据此判断最外层错误来自哪里
 		requestWithGlobal := func(err error) (ErrCode, string) {

@@ -22,26 +22,16 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/i18n"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bscp"
+	bscpapierrs "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bscp/apierrs"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/kubeinsight"
 )
-
-const bscpDisabledMsg = i18n.Msg("bscp is disabled in current environment")
-
-// GlobalErrorRules 在任何接口中含义都相同的错误规则，注册到 bkerrs.ErrorHandler 后 handler 无需逐个指定：
-//   - bscp.ErrDisabled：未挂 RequireBSCP、但会间接调用 BSCP 的接口（如配置文件校验）
-//   - bscp.ErrNoPermission：用户态调用 BSCP 被拒绝
-var GlobalErrorRules = []bkerrs.Rule{
-	bkerrs.OnFunc(bscp.ErrDisabled, WrapBSCPDisabled),
-	bkerrs.OnFunc(bscp.ErrNoPermission, WrapBSCPNoPermission),
-}
 
 // RequireBSCP 当前环境关闭了 BSCP 对接时，拦截 BSCP 相关接口并返回明确的未启用错误
 func RequireBSCP() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if bscp.IsDisabled() {
-			bkerrs.AbortWithErr(c, WrapBSCPDisabled(bscp.ErrDisabled))
+			bkerrs.AbortWithErr(c, bscpapierrs.WrapDisabled(bscp.ErrDisabled))
 			return
 		}
 		c.Next()
@@ -57,28 +47,4 @@ func RequireKubeInsight() gin.HandlerFunc {
 		}
 		c.Next()
 	}
-}
-
-// WrapBSCPDisabled 包装为当前环境关闭了 BSCP 对接的错误
-func WrapBSCPDisabled(err error) *bkerrs.Error {
-	return bkerrs.Wrap(err, bkerrs.ErrCodeNotImplemented, bscpDisabledMsg).SetDetails(
-		bkerrs.NewDetail(
-			bkerrs.ErrDetailCodeBSCPDisabled,
-			bscpDisabledMsg,
-			bkerrs.WithSystem(bkerrs.SystemName),
-			bkerrs.WithModule(bscp.ModuleName),
-		),
-	)
-}
-
-// WrapBSCPNoPermission 包装为无权限访问 BSCP 资源的错误
-func WrapBSCPNoPermission(err error) *bkerrs.Error {
-	return bkerrs.Wrap(err, bkerrs.ErrCodeNoPermission, i18n.Msg("no permission to access bscp resources")).SetDetails(
-		bkerrs.NewDetail(
-			bkerrs.ErrDetailCodeBSCPNoPermission,
-			"bscp service permission denied",
-			bkerrs.WithSystem(bkerrs.SystemName),
-			bkerrs.WithModule(bscp.ModuleName),
-		),
-	)
 }

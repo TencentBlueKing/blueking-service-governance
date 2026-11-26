@@ -130,7 +130,7 @@ func Translate(ctx context.Context, msgid string) (string, bool) {
 
 // Msg 标记面向用户、需要翻译的原文（对应 gettext 的 N_()），`make i18n` 只提取被标记的原文：
 //
-//	bkerrs.On(model.ErrUnknownSwitch, bkerrs.ErrCodeInvalidArgument, i18n.Msg("unknown cfg switch key"))
+//	bkerrs.WhenIs(model.ErrUnknownSwitch, bkerrs.ErrCodeInvalidArgument, i18n.Msg("unknown cfg switch key"))
 //
 // 定义为类型别名，i18n.Msg("...") 仍是字符串常量，go vet 可以照常检查作为格式串时的参数
 type Msg = string
