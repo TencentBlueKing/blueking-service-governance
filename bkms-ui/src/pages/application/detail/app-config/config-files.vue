@@ -236,14 +236,14 @@
                           theme="primary"
                           @click="showAdvancedFileSettings = !showAdvancedFileSettings"
                         >
-                          <RightShape
-                            class="mr-[4px] transition-transform duration-200"
-                            :class="showAdvancedFileSettings ? 'rotate-90' : ''"
+                          {{ $t('高级设置') }}
+                          <AngleDownLine
+                            class="ml-[4px] transition-transform duration-200"
+                            :class="showAdvancedFileSettings ? '' : 'rotate-180'"
                             fill="#3A84FF"
                             :height="12"
                             :width="12"
                           />
-                          {{ $t('高级设置') }}
                         </Button>
                         <div
                           v-show="showAdvancedFileSettings"
@@ -589,7 +589,7 @@
     Switcher,
     Tag,
   } from 'bkui-vue';
-  import { RightShape } from 'bkui-vue/lib/icon';
+  import { AngleDownLine } from 'bkui-vue/lib/icon';
   import { useI18n } from 'vue-i18n';
   import { onBeforeRouteLeave, onBeforeRouteUpdate } from 'vue-router';
   import { parse as parseYaml } from 'yaml';
