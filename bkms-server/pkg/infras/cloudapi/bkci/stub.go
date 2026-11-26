@@ -138,14 +138,6 @@ func (s *StubApiClient) CreateCredential(
 	return nil
 }
 
-// UpdateCredential 模拟更新凭证，总是返回成功
-func (s *StubApiClient) UpdateCredential(
-	ctx context.Context, projectCode, credentialID, _, _, _ string,
-) error {
-	log.Infof(ctx, "Stub: UpdateCredential request: %s, %s", projectCode, credentialID)
-	return nil
-}
-
 // CreateAccessTokenCredential 模拟创建 AccessToken 凭证，总是返回成功
 func (s *StubApiClient) CreateAccessTokenCredential(
 	ctx context.Context, projectCode, credentialID, _, _ string,

@@ -55,8 +55,6 @@ type Client interface {
 	CreateAccessTokenCredential(
 		ctx context.Context, projectCode, credentialID, credentialDesc, token string,
 	) error
-	// UpdateCredential 更新蓝盾凭证（USERNAME_PASSWORD 类型）
-	UpdateCredential(ctx context.Context, projectCode, credentialID, credentialDesc, username, password string) error
 	// DeleteCredential 删除蓝盾凭证；凭证不存在时返回 ObjectNotFound
 	DeleteCredential(ctx context.Context, projectCode, credentialID string) error
 

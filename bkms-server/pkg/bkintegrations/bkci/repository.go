@@ -130,11 +130,7 @@ func SyncRepository(ctx context.Context, db *mongo.Database, repo *coderepo.Code
 		if repo.BasicAuth == nil {
 			return nil, errors.Wrapf(coderepo.ErrCredentialRequired, "repository %s", repo.Alias)
 		}
-		credentialID := repositoryCredentialID(repo.Alias)
-		if err = syncer.upsertCredential(ctx, credentialID, repo); err != nil {
-			return nil, err
-		}
-		return syncer.ensure(ctx, repo, bkciRepoTypes[sourceType.Spec], credentialID)
+		return syncer.ensure(ctx, repo, bkciRepoTypes[sourceType.Spec], repositoryCredentialID(repo.Alias))
 	default:
 		return nil, errors.Wrapf(coderepo.ErrUnsupported, "sync %s repository %s to bkci", sourceType.Spec, repo.Alias)
 	}
@@ -220,11 +216,19 @@ func (s *repositorySyncer) ensure(
 		return nil, errors.Wrapf(err, "get workspace %s bkci repository %s", repo.WorkspaceID, repo.Alias)
 	}
 
+	// 蓝盾代码库不存在时才创建凭证，已存在的不再更新
+	var credentialErr error
+	if credentialID != "" {
+		credentialErr = s.createCredential(ctx, credentialID, repo)
+	}
 	opts := bkci.CreateRepositoryOptions{
 		RepoType: repoType, URL: repo.URL, Alias: repo.Alias, CredentialID: credentialID,
 	}
 	hashID, err := s.createOrReuse(ctx, opts)
 	if err != nil {
+		if credentialErr != nil {
+			return nil, errors.Wrapf(err, "create credential %s: %v", credentialID, credentialErr)
+		}
 		return nil, err
 	}
 	bkciRepo, err := s.client.GetRepository(ctx, s.project.Code, hashID)
@@ -273,20 +277,15 @@ func (s *repositorySyncer) createOrReuse(ctx context.Context, opts bkci.CreateRe
 	return existing.ID, nil
 }
 
-// upsertCredential 用 bkms 的账号密码覆盖蓝盾凭证，不存在时创建
-func (s *repositorySyncer) upsertCredential(
+// createCredential 创建蓝盾凭证；失败通常是凭证已存在（如上次关联中途失败残留），由调用方忽略
+func (s *repositorySyncer) createCredential(
 	ctx context.Context, credentialID string, repo *coderepo.CodeRepository,
 ) error {
 	desc := fmt.Sprintf(repoCredentialDescFmt, repo.Alias)
-	username, password := repo.BasicAuth.Username, repo.BasicAuth.Password
-	err := s.client.UpdateCredential(ctx, s.project.Code, credentialID, desc, username, password)
-	if errors.Is(err, bkci.ObjectNotFound) {
-		err = s.client.CreateCredential(ctx, s.project.Code, credentialID, desc, username, password)
-	}
-	if err != nil {
-		return errors.Wrapf(err, "sync credential %s of repository %s to bkci", credentialID, repo.Alias)
-	}
-	return nil
+	err := s.client.CreateCredential(
+		ctx, s.project.Code, credentialID, desc, repo.BasicAuth.Username, repo.BasicAuth.Password,
+	)
+	return errors.Wrapf(err, "create credential %s of repository %s in bkci", credentialID, repo.Alias)
 }
 
 // repositoryCredentialID 由别名生成固定的凭证 ID，超长时用摘要

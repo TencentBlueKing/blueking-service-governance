@@ -24,6 +24,7 @@ import (
 	"github.com/bytedance/mockey"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
@@ -56,23 +57,15 @@ func newRecordingBkCIClient() *recordingBkCIClient {
 	}
 }
 
+// CreateCredential 凭证已存在时报错，与蓝盾一致
 func (c *recordingBkCIClient) CreateCredential(
 	_ context.Context, _, credentialID, _, username, password string,
 ) error {
 	c.credentialOps = append(c.credentialOps, "create")
-	c.credentials[credentialID] = credentialCall{"create", credentialID, username, password}
-	return nil
-}
-
-// UpdateCredential 凭证不存在时返回 ObjectNotFound
-func (c *recordingBkCIClient) UpdateCredential(
-	_ context.Context, _, credentialID, _, username, password string,
-) error {
-	c.credentialOps = append(c.credentialOps, "update")
-	if _, ok := c.credentials[credentialID]; !ok {
-		return cloudbkci.ObjectNotFound
+	if _, ok := c.credentials[credentialID]; ok {
+		return errors.New("credential already exists")
 	}
-	c.credentials[credentialID] = credentialCall{"update", credentialID, username, password}
+	c.credentials[credentialID] = credentialCall{"create", credentialID, username, password}
 	return nil
 }
 
@@ -139,7 +132,7 @@ var _ = Describe("Repository sync", func() {
 	}
 
 	Describe("SyncRepository", func() {
-		It("syncs a basic repository bound with a credential and overwrites the credential on every sync", func() {
+		It("creates the credential only when the bkci repository does not exist", func() {
 			withClient(func() {
 				repo := saveGitRepo(testutil.GitServerPassword())
 				credentialID := repositoryCredentialID(repo.Alias)
@@ -151,17 +144,28 @@ var _ = Describe("Repository sync", func() {
 				Expect(client.createRepoOpts).To(Equal([]cloudbkci.CreateRepositoryOptions{{
 					RepoType: cloudbkci.RepoTypeCodeTGit, URL: gitURL, Alias: repo.Alias, CredentialID: credentialID,
 				}}))
-				Expect(client.credentialOps).To(Equal([]string{"update", "create"}))
+				Expect(client.credentialOps).To(Equal([]string{"create"}))
 				Expect(client.credentials[credentialID].password).To(Equal(testutil.GitServerPassword()))
 
-				// 再次同步：覆盖凭证，不重复创建代码库
+				// 蓝盾代码库已存在：不再调用凭证接口，账密变化也不更新
 				repo.BasicAuth.Password = "rotated"
 				_, err = SyncRepository(ctx, db, repo)
 				Expect(err).NotTo(HaveOccurred())
+				Expect(client.credentialOps).To(Equal([]string{"create"}))
 				Expect(client.createRepoOpts).To(HaveLen(1))
-				Expect(client.credentials[credentialID]).To(Equal(
-					credentialCall{"update", credentialID, testutil.GitServerUsername(), "rotated"},
-				))
+			})
+		})
+
+		It("ignores a leftover credential with the same id", func() {
+			withClient(func() {
+				repo := saveGitRepo(testutil.GitServerPassword())
+				credentialID := repositoryCredentialID(repo.Alias)
+				client.credentials[credentialID] = credentialCall{"create", credentialID, "old", "old"}
+
+				record, err := SyncRepository(ctx, db, repo)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(record.CredentialID).To(Equal(credentialID))
+				Expect(client.credentialOps).To(Equal([]string{"create"}))
 			})
 		})
 

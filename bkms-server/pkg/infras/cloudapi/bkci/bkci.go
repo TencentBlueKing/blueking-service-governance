@@ -330,36 +330,6 @@ func (c *ApiClient) CreateAccessTokenCredential(
 	return c.handleOperationWithoutResult(ctx, apiOperation)
 }
 
-// UpdateCredential 更新蓝盾凭证（USERNAME_PASSWORD 类型）
-func (c *ApiClient) UpdateCredential(
-	ctx context.Context, projectCode, credentialID, credentialDesc, username, password string,
-) error {
-	body := map[string]string{
-		"credentialType":   "USERNAME_PASSWORD",
-		"credentialName":   credentialID,
-		"credentialRemark": credentialDesc,
-		"v1":               username,
-		"v2":               password,
-	}
-
-	apiOperation := c.NewOperation(
-		bkapi.OperationConfig{
-			Name:   "v4_user_credential_edit",
-			Method: "PUT",
-			Path:   "v4/apigw-user/projects/{projectId}/credentials/credential",
-		},
-		bkapi.OptSetRequestPathParams(
-			map[string]string{"projectId": projectCode},
-		),
-		bkapi.OptSetRequestBody(body),
-	).SetQueryParams(map[string]string{"credentialId": credentialID})
-
-	if err := c.handleOperationWithoutResult(ctx, apiOperation); err != nil {
-		return errors.Wrapf(err, "update bkci credential %s in project %s", credentialID, projectCode)
-	}
-	return nil
-}
-
 // DeleteCredential 删除蓝盾凭证；凭证不存在时返回 ObjectNotFound
 func (c *ApiClient) DeleteCredential(ctx context.Context, projectCode, credentialID string) error {
 	apiOperation := c.NewOperation(
