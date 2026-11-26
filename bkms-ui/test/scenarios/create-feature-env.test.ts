@@ -18,7 +18,7 @@
 
 /**
  * 场景级测试：创建特性环境的命名空间选择（本头即新增交互的路径清单）。
- * 覆盖：默认共享 / 独立创建及折叠保留 / 联邦来源切换 / 重开重置与离开确认 /
+ * 覆盖：默认独立创建 / 沿用来源及折叠保留 / 联邦来源切换后恢复 / 重开重置与离开确认 /
  * 创建失败重试 / 请求期间防重 / 联邦默认来源 / 来源选择器与侧栏数据不一致 /
  * 组件风险确认、配置跳转及刷新 / 折叠后清单变化重新展开 / 组件信息失败时独立创建仍可提交 / 过期响应 / 成功态提交快照 /
  * 创建中关闭及重开 / 来源列表迟到保留填写 / 局部刷新不改全局详情。
@@ -212,6 +212,14 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+async function chooseSharedNamespace() {
+  const advanced = screen.getByRole('button', { name: '高级设置' });
+  if (advanced.getAttribute('aria-expanded') !== 'true') {
+    await userEvent.click(advanced);
+  }
+  await userEvent.click(screen.getByRole('radio', { name: /沿用来源环境/ }));
+}
+
 async function fillDisplayName() {
   await userEvent.type(screen.getByPlaceholderText('请输入 1-32 字符的环境展示名'), '订单联调');
 }
@@ -251,11 +259,11 @@ async function openCreateForm({ waitForSource = true } = {}) {
 }
 
 describe('特性环境：创建时选择命名空间', () => {
-  it('当用户使用默认设置创建时，应显式提交共享命名空间并展示实际命名空间', async () => {
+  it('当用户使用默认设置创建时，应显式提交独立命名空间并展示实际命名空间', async () => {
     await openCreateForm();
     expect(screen.getByRole('button', { name: '高级设置' })).toHaveAttribute('aria-expanded', 'false');
     expect(screen.queryByRole('radio')).not.toBeInTheDocument();
-    expect(screen.getByText('命名空间：沿用来源环境')).toBeInTheDocument();
+    expect(screen.getByText('命名空间：独立创建')).toBeInTheDocument();
     await fillDisplayName();
     await userEvent.click(screen.getByRole('button', { name: '创建' }));
     await waitFor(() =>
@@ -263,7 +271,7 @@ describe('特性环境：创建时选择命名空间', () => {
         appID: 'app-id-1',
         displayName: '订单联调',
         sourceEnvID: 'prod-id',
-        nsType: 'shared',
+        nsType: 'independent',
       }),
     );
     expect(await screen.findByText('环境创建成功')).toBeInTheDocument();
@@ -274,35 +282,46 @@ describe('特性环境：创建时选择命名空间', () => {
     expect(mocks.deploy).toHaveBeenCalledWith(createdEnv);
   });
 
-  it('当用户选择独立创建再折叠高级设置时，应保留选择并提交独立命名空间', async () => {
+  it('当用户改选沿用来源环境再折叠高级设置时，应保留选择并提交共享命名空间', async () => {
     await openCreateForm();
     await userEvent.click(screen.getByRole('button', { name: '高级设置' }));
     const namespaceRadios = screen.getAllByRole('radio');
     expect(namespaceRadios[0]).toHaveAccessibleName(/独立创建/);
     expect(namespaceRadios[1]).toHaveAccessibleName(/沿用来源环境/);
     expect(namespaceRadios[1]).not.toHaveAccessibleName(/默认/);
-    expect(screen.getByRole('radio', { name: /沿用来源环境/ })).toBeChecked();
+    expect(screen.getByRole('radio', { name: /独立创建/ })).toBeChecked();
     expect(screen.queryByTitle('共享命名空间仅支持 AppModel 应用，使用组件的应用无法部署。')).not.toBeInTheDocument();
-    await userEvent.click(screen.getByRole('radio', { name: /独立创建/ }));
+    await userEvent.click(screen.getByRole('radio', { name: /沿用来源环境/ }));
     await userEvent.click(screen.getByRole('button', { name: '高级设置' }));
-    expect(screen.getByText('命名空间：独立创建')).toBeInTheDocument();
+    expect(screen.getByText('命名空间：沿用来源环境')).toBeInTheDocument();
     await fillDisplayName();
     await userEvent.click(screen.getByRole('button', { name: '创建' }));
     await waitFor(() =>
-      expect(mocks.createFeatureEnv).toHaveBeenCalledWith(expect.objectContaining({ nsType: 'independent' })),
+      expect(mocks.createFeatureEnv).toHaveBeenCalledWith(expect.objectContaining({ nsType: 'shared' })),
     );
   });
 
-  it('当用户从独立创建切换到联邦来源时，应改为共享并禁用独立创建且切回后保持共享', async () => {
+  it('当用户从独立创建切换到联邦来源时，应改为共享并禁用独立创建，切回非联邦后恢复独立创建', async () => {
     await openCreateForm();
     await userEvent.click(screen.getByRole('button', { name: '高级设置' }));
-    await userEvent.click(screen.getByRole('radio', { name: /独立创建/ }));
+    expect(screen.getByRole('radio', { name: /独立创建/ })).toBeChecked();
     await userEvent.selectOptions(screen.getByRole('combobox', { name: '来源环境' }), 'prod-gz');
     expect(screen.getByRole('radio', { name: /独立创建/ })).toBeDisabled();
     expect(screen.getByRole('radio', { name: /沿用来源环境/ })).toBeChecked();
     expect(
       screen.getByTitle('来源环境（生产环境 - 广州）绑定了联邦集群，暂不支持创建独立的特性环境。'),
     ).toBeInTheDocument();
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: '来源环境' }), 'prod');
+    expect(screen.getByRole('radio', { name: /独立创建/ })).toBeEnabled();
+    expect(screen.getByRole('radio', { name: /独立创建/ })).toBeChecked();
+  });
+
+  it('当用户已改选沿用来源环境时，进出联邦来源后应保留沿用', async () => {
+    await openCreateForm();
+    await chooseSharedNamespace();
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: '来源环境' }), 'prod-gz');
+    expect(screen.getByRole('radio', { name: /独立创建/ })).toBeDisabled();
+    expect(screen.getByRole('radio', { name: /沿用来源环境/ })).toBeChecked();
     await userEvent.selectOptions(screen.getByRole('combobox', { name: '来源环境' }), 'prod');
     expect(screen.getByRole('radio', { name: /独立创建/ })).toBeEnabled();
     expect(screen.getByRole('radio', { name: /沿用来源环境/ })).toBeChecked();
@@ -382,15 +401,14 @@ describe('特性环境：创建时选择命名空间', () => {
     );
   });
 
-  it('当用户只修改命名空间后取消并重新打开时，应提示未保存修改且恢复共享和折叠状态', async () => {
+  it('当用户只修改命名空间后取消并重新打开时，应提示未保存修改且恢复独立创建和折叠状态', async () => {
     await openCreateForm();
-    await userEvent.click(screen.getByRole('button', { name: '高级设置' }));
-    await userEvent.click(screen.getByRole('radio', { name: /独立创建/ }));
+    await chooseSharedNamespace();
     await userEvent.click(screen.getByRole('button', { name: '取消' }));
     await waitFor(() => expect(mocks.infoBox).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(screen.queryByRole('button', { name: '创建' })).not.toBeInTheDocument());
     await userEvent.click(screen.getByRole('button', { name: '打开创建侧栏' }));
-    expect(await screen.findByText('命名空间：沿用来源环境')).toBeInTheDocument();
+    expect(await screen.findByText('命名空间：独立创建')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '高级设置' })).toHaveAttribute('aria-expanded', 'false');
     await userEvent.click(screen.getByRole('button', { name: '取消' }));
     expect(mocks.infoBox).toHaveBeenCalledTimes(1);
@@ -504,6 +522,8 @@ describe('特性环境：创建时选择命名空间', () => {
   it('当用户当前环境绑定联邦集群时，应保留该来源并支持默认共享创建', async () => {
     mocks.currentEnv.name = 'prod-gz';
     await openCreateForm();
+    expect(screen.getByRole('button', { name: '高级设置' })).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.getByText('命名空间：沿用来源环境')).toBeInTheDocument();
     await fillDisplayName();
     await userEvent.click(screen.getByRole('button', { name: '创建' }));
     await waitFor(() =>
@@ -516,12 +536,84 @@ describe('特性环境：创建时选择命名空间', () => {
     );
   });
 
-  it('当应用配置了任意组件时，应展开风险提示并在确认前阻止共享创建，失败后可保留确认重试', async () => {
+  it('当默认来源是联邦且应用有组件时，应选中沿用来源环境并展开高级设置', async () => {
+    mocks.currentEnv.name = 'prod-gz';
+    mocks.getApp.mockResolvedValue(appWithComponents);
+    await openCreateForm();
+
+    expect(screen.getByRole('button', { name: '高级设置' })).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByRole('radio', { name: /沿用来源环境/ })).toBeChecked();
+    expect(screen.getByRole('radio', { name: /独立创建/ })).toBeDisabled();
+    expect(screen.getByText(/来源环境是联邦集群，暂不能「独立创建」。/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '创建' })).toBeDisabled();
+  });
+
+  it('当联邦来源已确定后组件风险才返回时，应补展开高级设置', async () => {
+    let resolveDetail!: (value: AppDetailOutputObj) => void;
+    mocks.currentEnv.name = 'prod-gz';
+    mocks.getApp.mockImplementation(
+      () =>
+        new Promise(resolve => {
+          resolveDetail = resolve;
+        }),
+    );
+    await openCreateForm();
+    expect(screen.getByRole('button', { name: '高级设置' })).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.getByText('命名空间：沿用来源环境')).toBeInTheDocument();
+
+    resolveDetail(appWithComponents);
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: '高级设置' })).toHaveAttribute('aria-expanded', 'true'),
+    );
+    expect(screen.getByRole('radio', { name: /沿用来源环境/ })).toBeChecked();
+    expect(screen.getByText(/来源环境是联邦集群，暂不能「独立创建」。/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '创建' })).toBeDisabled();
+  });
+
+  it('当组件风险早于联邦来源返回时，应在来源确定后选中沿用并展开高级设置', async () => {
+    let resolveList!: () => void;
+    mocks.sourceListWait = new Promise(resolve => {
+      resolveList = resolve;
+    });
+    mocks.currentEnv.name = 'prod-gz';
+    mocks.getApp.mockResolvedValue(appWithComponents);
+    await openCreateForm({ waitForSource: false });
+    await flushPromises();
+    expect(screen.getByRole('button', { name: '高级设置' })).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.getByText('命名空间：独立创建')).toBeInTheDocument();
+
+    resolveList();
+    await waitFor(() => expect(screen.getByRole('combobox', { name: '来源环境' })).toHaveValue('prod-gz'));
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: '高级设置' })).toHaveAttribute('aria-expanded', 'true'),
+    );
+    expect(screen.getByRole('radio', { name: /沿用来源环境/ })).toBeChecked();
+    expect(screen.getByRole('radio', { name: /独立创建/ })).toBeDisabled();
+    expect(screen.getByText(/来源环境是联邦集群，暂不能「独立创建」。/)).toBeInTheDocument();
+  });
+
+  it('当高级设置处于折叠时改选联邦来源且应用有组件，应展开并选中沿用来源环境', async () => {
+    mocks.getApp.mockResolvedValue(appWithComponents);
+    await openCreateForm();
+    expect(screen.getByRole('button', { name: '高级设置' })).toHaveAttribute('aria-expanded', 'false');
+
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: '来源环境' }), 'prod-gz');
+    expect(screen.getByRole('button', { name: '高级设置' })).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByRole('radio', { name: /沿用来源环境/ })).toBeChecked();
+    expect(screen.getByRole('radio', { name: /独立创建/ })).toBeDisabled();
+    expect(screen.getByText(/来源环境是联邦集群，暂不能「独立创建」。/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '创建' })).toBeDisabled();
+  });
+
+  it('当应用配置了任意组件时，应在改选沿用来源后展开风险提示，并在确认前阻止共享创建，失败后可保留确认重试', async () => {
     mocks.getApp.mockResolvedValue(appWithComponents);
     mocks.createFeatureEnv.mockRejectedValueOnce(new MockedApiError());
     await openCreateForm();
 
-    expect(screen.getByRole('button', { name: '高级设置' })).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByRole('button', { name: '高级设置' })).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '创建' })).toBeEnabled();
+    await chooseSharedNamespace();
     expect(
       screen.getByText(/应用使用了组件（.*redis.*mysql.*），沿用来源环境创建的特性环境将无法部署。/),
     ).toBeInTheDocument();
@@ -558,10 +650,9 @@ describe('特性环境：创建时选择命名空间', () => {
     expect(mocks.deploy).not.toHaveBeenCalled();
   });
 
-  it('当应用使用组件但选择独立创建时，应隐藏风险确认并保留立即部署', async () => {
+  it('当应用使用组件且保持默认独立创建时，应隐藏风险确认并保留立即部署', async () => {
     mocks.getApp.mockResolvedValue(appWithComponents);
     await openCreateForm();
-    await userEvent.click(screen.getByRole('radio', { name: /独立创建/ }));
     expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: '创建' })).toBeEnabled();
     await fillDisplayName();
@@ -576,6 +667,7 @@ describe('特性环境：创建时选择命名空间', () => {
     mocks.getApp.mockResolvedValue(appWithComponents);
     await openCreateForm();
     await fillDisplayName();
+    await chooseSharedNamespace();
     await userEvent.click(screen.getByRole('checkbox', { name: '我已知晓风险，仍要沿用来源环境创建' }));
     await userEvent.selectOptions(screen.getByRole('combobox', { name: '来源环境' }), 'prod-gz');
     expect(screen.getByRole('radio', { name: /独立创建/ })).toBeDisabled();
@@ -598,21 +690,23 @@ describe('特性环境：创建时选择命名空间', () => {
     expect(screen.getByText(/来源环境是联邦集群，暂不能「独立创建」。/)).toBeInTheDocument();
   });
 
-  it('当只勾选风险确认后关闭并重开时，应提示未保存修改并清空上次确认', async () => {
+  it('当只勾选风险确认后关闭并重开时，应提示未保存修改并恢复默认独立创建', async () => {
     mocks.getApp.mockResolvedValue(appWithComponents);
     await openCreateForm();
+    await chooseSharedNamespace();
     await userEvent.click(screen.getByRole('checkbox'));
     await userEvent.click(screen.getByRole('button', { name: '取消' }));
     await waitFor(() => expect(mocks.infoBox).toHaveBeenCalledTimes(1));
     await userEvent.click(screen.getByRole('button', { name: '打开创建侧栏' }));
-    expect(await screen.findByRole('checkbox')).not.toBeChecked();
-    expect(screen.getByRole('button', { name: '高级设置' })).toHaveAttribute('aria-expanded', 'true');
-    expect(screen.getByRole('button', { name: '创建' })).toBeDisabled();
+    expect(await screen.findByText('命名空间：独立创建')).toBeInTheDocument();
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '高级设置' })).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.getByRole('button', { name: '创建' })).toBeEnabled();
     await userEvent.click(screen.getByRole('button', { name: '取消' }));
     expect(mocks.infoBox).toHaveBeenCalledTimes(1);
   });
 
-  it('当组件信息仍在加载时，应阻止创建并在加载后显示风险，且不覆盖用户输入', async () => {
+  it('当组件信息仍在加载时，独立创建可以提交；改选沿用来源后应阻止创建，加载完成后显示风险且不覆盖用户输入', async () => {
     let resolveDetail!: (value: AppDetailOutputObj) => void;
     mocks.getApp.mockImplementation(
       () =>
@@ -622,12 +716,15 @@ describe('特性环境：创建时选择命名空间', () => {
     );
     await openCreateForm();
     await fillDisplayName();
+    expect(screen.getByRole('button', { name: '创建' })).toBeEnabled();
+    await chooseSharedNamespace();
     expect(screen.getByRole('button', { name: '创建' })).toBeDisabled();
     await userEvent.click(screen.getByRole('button', { name: '创建' }));
     expect(mocks.createFeatureEnv).not.toHaveBeenCalled();
     resolveDetail(appWithComponents);
     expect(await screen.findByRole('checkbox')).not.toBeChecked();
     expect(screen.getByPlaceholderText('请输入 1-32 字符的环境展示名')).toHaveValue('订单联调');
+    expect(screen.getByRole('button', { name: '创建' })).toBeDisabled();
   });
 
   it('当来源列表迟到时，应保留已输入名称、风险确认、折叠状态及未保存标记', async () => {
@@ -638,6 +735,7 @@ describe('特性环境：创建时选择命名空间', () => {
     mocks.getApp.mockResolvedValue(appWithComponents);
     await openCreateForm({ waitForSource: false });
     await fillDisplayName();
+    await chooseSharedNamespace();
     await userEvent.click(screen.getByRole('checkbox'));
     await userEvent.click(screen.getByRole('button', { name: '高级设置' }));
 
@@ -666,6 +764,7 @@ describe('特性环境：创建时选择命名空间', () => {
       mocks.getApp.mockResolvedValue(appWithComponents);
       await openCreateForm({ waitForSource: false });
       await fillDisplayName();
+      await userEvent.click(screen.getByRole('button', { name: '高级设置' }));
       await userEvent.click(screen.getByRole('radio', { name: /独立创建/ }));
 
       resolveList();
@@ -677,41 +776,45 @@ describe('特性环境：创建时选择命名空间', () => {
     },
   );
 
-  it('当局部组件查询失败时，应保留全局应用详情及环境名单并禁止创建', async () => {
+  it('当局部组件查询失败时，应保留全局应用详情及环境名单，并仅阻止沿用来源环境创建', async () => {
     const existingDetail = mocks.appContext.appDetail;
     mocks.getApp.mockRejectedValueOnce(new MockedApiError());
     await openCreateForm();
 
     expect(await screen.findByText('获取应用组件信息失败，请重试。')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '创建' })).toBeEnabled();
+    await chooseSharedNamespace();
     expect(screen.getByRole('button', { name: '创建' })).toBeDisabled();
     expect(mocks.fetchAppDetail).not.toHaveBeenCalled();
     expect(mocks.appContext.appDetail).toBe(existingDetail);
     expect(mocks.appContext.appDetail?.visibleEnvNames).toEqual(['prod']);
   });
 
-  it.each(['请求失败', '空响应', '错误应用'])('当组件信息%s时，应阻止创建并支持保留输入重试', async failure => {
-    if (failure === '请求失败') mocks.getApp.mockRejectedValueOnce(new MockedApiError());
-    if (failure === '空响应') mocks.getApp.mockResolvedValueOnce(null);
-    if (failure === '错误应用') mocks.getApp.mockResolvedValueOnce({ id: 'another-app' });
-    await openCreateForm();
-    expect(await screen.findByText('获取应用组件信息失败，请重试。')).toBeInTheDocument();
-    await fillDisplayName();
-    expect(screen.getByRole('button', { name: '创建' })).toBeDisabled();
-    await userEvent.click(screen.getByRole('button', { name: '创建' }));
-    expect(mocks.createFeatureEnv).not.toHaveBeenCalled();
-    await userEvent.click(screen.getByRole('button', { name: '重试' }));
-    await waitFor(() => expect(screen.getByRole('button', { name: '创建' })).toBeEnabled());
-    expect(screen.getByPlaceholderText('请输入 1-32 字符的环境展示名')).toHaveValue('订单联调');
-    expect(mocks.getApp).toHaveBeenCalledTimes(2);
-  });
+  it.each(['请求失败', '空响应', '错误应用'])(
+    '当组件信息%s时，应允许独立创建，并在改选沿用来源后阻止创建直至重试成功',
+    async failure => {
+      if (failure === '请求失败') mocks.getApp.mockRejectedValueOnce(new MockedApiError());
+      if (failure === '空响应') mocks.getApp.mockResolvedValueOnce(null);
+      if (failure === '错误应用') mocks.getApp.mockResolvedValueOnce({ id: 'another-app' });
+      await openCreateForm();
+      expect(await screen.findByText('获取应用组件信息失败，请重试。')).toBeInTheDocument();
+      await fillDisplayName();
+      expect(screen.getByRole('button', { name: '创建' })).toBeEnabled();
+      await chooseSharedNamespace();
+      expect(screen.getByRole('button', { name: '创建' })).toBeDisabled();
+      await userEvent.click(screen.getByRole('button', { name: '创建' }));
+      expect(mocks.createFeatureEnv).not.toHaveBeenCalled();
+      await userEvent.click(screen.getByRole('button', { name: '重试' }));
+      await waitFor(() => expect(screen.getByRole('button', { name: '创建' })).toBeEnabled());
+      expect(screen.getByPlaceholderText('请输入 1-32 字符的环境展示名')).toHaveValue('订单联调');
+      expect(mocks.getApp).toHaveBeenCalledTimes(2);
+    },
+  );
 
-  it('当组件信息查询失败但选择独立创建时，应允许创建', async () => {
+  it('当组件信息查询失败时，默认独立创建仍可提交', async () => {
     mocks.getApp.mockRejectedValueOnce(new MockedApiError());
     await openCreateForm();
     expect(await screen.findByText('获取应用组件信息失败，请重试。')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '创建' })).toBeDisabled();
-    await userEvent.click(screen.getByRole('button', { name: '高级设置' }));
-    await userEvent.click(screen.getByRole('radio', { name: /独立创建/ }));
     expect(screen.getByRole('button', { name: '创建' })).toBeEnabled();
     await fillDisplayName();
     await userEvent.click(screen.getByRole('button', { name: '创建' }));
@@ -749,6 +852,7 @@ describe('特性环境：创建时选择命名空间', () => {
     mocks.getApp.mockResolvedValue(appWithComponents);
     await openCreateForm();
     await fillDisplayName();
+    await chooseSharedNamespace();
     await userEvent.click(screen.getByRole('checkbox'));
     await userEvent.click(screen.getByRole('button', { name: '组件配置' }));
     await userEvent.click(screen.getByRole('button', { name: '高级设置' }));
@@ -772,6 +876,7 @@ describe('特性环境：创建时选择命名空间', () => {
     mocks.getApp.mockResolvedValue(appWithComponents);
     await openCreateForm();
     await fillDisplayName();
+    await chooseSharedNamespace();
     await userEvent.click(screen.getByRole('button', { name: '组件配置' }));
     await userEvent.click(screen.getByRole('radio', { name: /独立创建/ }));
     await userEvent.click(screen.getByRole('button', { name: '高级设置' }));
@@ -791,6 +896,7 @@ describe('特性环境：创建时选择命名空间', () => {
     mocks.getApp.mockResolvedValue(appWithComponents);
     await openCreateForm();
     await fillDisplayName();
+    await chooseSharedNamespace();
     await userEvent.click(screen.getByRole('checkbox'));
     await userEvent.click(screen.getByRole('button', { name: '组件配置' }));
     window.dispatchEvent(new Event('focus'));
@@ -861,6 +967,7 @@ describe('特性环境：创建时选择命名空间', () => {
     );
     await openCreateForm();
     await fillDisplayName();
+    await chooseSharedNamespace();
     await userEvent.click(screen.getByRole('checkbox'));
     await userEvent.click(screen.getByRole('button', { name: '创建' }));
     await waitFor(() => expect(mocks.createFeatureEnv).toHaveBeenCalledTimes(1));

@@ -413,9 +413,11 @@
   }>({
     displayName: '',
     sourceEnvID: '',
-    nsType: 'shared',
+    nsType: 'independent',
     riskAcknowledged: false,
   });
+  // 非联邦来源默认独立创建。用户改选沿用后记住该选择；联邦来源强制沿用时不覆盖它。
+  let preferredNsType: NsType = 'independent';
 
   // 特性环境只能基于标准环境创建，未就绪的环境也没有集群可继承
   const availableEnvList = computed(() =>
@@ -475,6 +477,13 @@
       },
     ],
   };
+
+  // 联邦来源只能沿用。其他来源回到用户上一次的选择，初始为独立创建。
+  function applyNamespaceForSource(env?: EnvOutput) {
+    const federation = isFederationEnv(env);
+    formModel.nsType = federation ? 'shared' : preferredNsType;
+    if (federation && hasComponents.value) showAdvancedSettings.value = true;
+  }
 
   // 关闭前确认：已创建成功则直接放行，否则检查表单是否有未保存修改
   function handleBeforeClose() {
@@ -557,13 +566,14 @@
 
   // 重置整张表单，来源选择等待选择器返回列表后初始化。
   function handleInitForm() {
+    preferredNsType = 'independent';
     withPausedWatch(() => {
       formModel.sourceEnvID = '';
       formModel.displayName = '';
-      formModel.nsType = 'shared';
+      formModel.nsType = 'independent';
       formModel.riskAcknowledged = false;
     });
-    showAdvancedSettings.value = hasComponents.value;
+    showAdvancedSettings.value = false;
     sourceEnvName.value = '';
     markFormClean();
   }
@@ -571,7 +581,7 @@
   // 来源环境变更：更新表单值并清除校验状态
   function handleSourceEnvChange(env?: EnvOutput) {
     formModel.sourceEnvID = env?.id || '';
-    if (isFederationEnv(env)) formModel.nsType = 'shared';
+    applyNamespaceForSource(env);
     if (env?.name) {
       nextTick(() => formRef.value?.clearValidate?.());
     }
@@ -588,7 +598,7 @@
     // 列表加载只初始化来源，不覆盖用户已填写的名称、选择和修改标记。
     withPausedWatch(() => {
       formModel.sourceEnvID = nextEnv?.id || '';
-      if (isFederationEnv(nextEnv)) formModel.nsType = 'shared';
+      applyNamespaceForSource(nextEnv);
     });
     sourceEnvName.value = nextEnv?.name || '';
   }
@@ -668,7 +678,8 @@
       // 沿用时清单变化会清掉确认。已折叠则重新展开，避免创建按钮禁用却看不到原因。
       const shouldExpand =
         components.length > 0 &&
-        (componentSignature === '' || !hasComponents.value || (signatureChanged && formModel.nsType === 'shared'));
+        formModel.nsType === 'shared' &&
+        (componentSignature === '' || !hasComponents.value || signatureChanged);
       if (signatureChanged) formModel.riskAcknowledged = false;
       appComponents.value = components;
       componentSignature = signature;
@@ -678,6 +689,13 @@
       if (isCurrent()) componentLoadState.value = 'error';
     }
   }
+
+  watch(
+    () => formModel.nsType,
+    nsType => {
+      if (!isSourceFederationEnv.value) preferredNsType = nsType;
+    },
+  );
 
   useEventListener(window, 'focus', handleComponentConfigReturn);
   onScopeDispose(() => {
