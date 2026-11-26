@@ -13,6 +13,7 @@ WORKDIR /app
 RUN corepack enable
 
 COPY .npmrc package.json pnpm-lock.yaml ./
+COPY patches/ ./patches/
 RUN --mount=type=cache,id=pnpm-store,target=/root/.pnpm-store \
     pnpm install --frozen-lockfile
 

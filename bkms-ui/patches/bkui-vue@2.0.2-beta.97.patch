@@ -1,0 +1,19 @@
+diff --git a/lib/popover/index.js b/lib/popover/index.js
+index 90129ef..d0aa9d4 100644
+--- a/lib/popover/index.js
++++ b/lib/popover/index.js
+@@ -4396,13 +4396,9 @@
+     if (!isMouseenter) {
+       isMouseenter = true;
+     }
+-    // 设置setTimeout的延时为delay, 避免出现同时触发mouseenter mouseleave事件
+-    var delay = resolvePopoverDelay()[1];
+     if (popHideTimerId) {
+       clearTimeout(popHideTimerId);
+-      setTimeout(function () {
+-        popHideTimerId = undefined;
+-      }, delay);
++      popHideTimerId = undefined;
+     }
+     emitPopContentMouseEnter(e);
+   };

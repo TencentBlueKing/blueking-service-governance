@@ -97,6 +97,9 @@
     "vue-tsc": "^2.0.19"
   },
   "pnpm": {
+    "patchedDependencies": {
+      "bkui-vue@2.0.2-beta.97": "patches/bkui-vue@2.0.2-beta.97.patch"
+    },
     "overrides": {
       "brace-expansion": "2.1.0",
       "defu": "6.1.7",
