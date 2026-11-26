@@ -54,7 +54,7 @@ const CANARY_BLOCK_MESSAGES: Record<Exclude<CanaryBlockReason, ''>, string> = {
 };
 
 /** 分批更新期间实例数被锁定后的输入框说明 */
-const REPLICAS_LOCKED_HINT = '分批更新时不能修改实例数。如需调整，请选择「一次更新全部实例」，或发布完成后再扩缩容。';
+const REPLICAS_LOCKED_HINT = '分批更新时不能修改实例数。如需调整，请选择「单批发布」，或发布完成后再扩缩容。';
 
 export interface ReleaseStrategyModel {
   releaseMode: ReleaseMode;
@@ -262,7 +262,7 @@ export function useReleaseStrategy(options: UseReleaseStrategyOptions) {
     }
   }
 
-  /** 静默回落到「一次更新全部实例」并清空已选策略（切换镜像来源 / 更新内容等必然导致分批不可用） */
+  /** 静默回落到「单批发布」并清空已选策略（切换镜像来源 / 更新内容等必然导致分批不可用） */
   function resetToAllInstances() {
     if (model.releaseMode === RELEASE_MODE.ALL && !model.releaseStrategyID) return;
     model.releaseMode = RELEASE_MODE.ALL;
@@ -293,7 +293,7 @@ export function useReleaseStrategy(options: UseReleaseStrategyOptions) {
     resetToAllInstances();
     // 实例数被改成与生效值不同属于用户可自行修正的临时状态，改回即可重选，不必提示「环境不支持」
     if (reason === 'replicasChanged') return;
-    Message({ theme: 'warning', message: t('当前环境不支持分批发布，已重置为一次更新全部实例') });
+    Message({ theme: 'warning', message: t('当前环境不支持分批发布，已重置为单批发布') });
   });
 
   // 分批更新期间实例数固定为当前生效值：表单重置 / 环境切换留下的旧值不允许被一起提交。
