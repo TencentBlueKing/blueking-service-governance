@@ -19,6 +19,7 @@
 import appDefaultConfig from '~/pages/basic/app-default-config/index.vue';
 import basic from '~/pages/basic/base-info/basic.vue';
 import buildNode from '~/pages/basic/build-node/index.vue';
+import frameworkTemplates from '~/pages/basic/framework-templates/index.vue';
 import operationHistory from '~/pages/basic/operation-history/index.vue';
 import releaseStrategies from '~/pages/basic/release-strategies/index.vue';
 
@@ -28,8 +29,9 @@ import type { NavigationItem } from './types';
 
 /**
  * 空间设置导航配置
- * - 基础：基本信息、操作记录
- * - 配置：应用默认配置、构建机
+ * - 基础：基本信息
+ * - 配置：应用默认配置、构建机、框架配置模板
+ * - 其他：操作记录
  */
 export const BASIC_NAVIGATION: NavigationItem[] = [
   {
@@ -42,12 +44,6 @@ export const BASIC_NAVIGATION: NavigationItem[] = [
         name: i18n.global.t('基本信息'),
         icon: 'basic-info',
         component: basic,
-      },
-      {
-        key: 'history',
-        name: i18n.global.t('操作记录'),
-        icon: 'historical-tasks',
-        component: operationHistory,
       },
     ],
   },
@@ -73,6 +69,25 @@ export const BASIC_NAVIGATION: NavigationItem[] = [
         name: i18n.global.t('私有构建机'),
         icon: 'chuangjianyingyong',
         component: buildNode,
+      },
+      {
+        key: 'frameworkTemplates',
+        name: i18n.global.t('框架配置模板'),
+        icon: 'shezhi',
+        component: frameworkTemplates,
+      },
+    ],
+  },
+  {
+    key: 'otherGroup',
+    name: i18n.global.t('其他'),
+    foldName: i18n.global.t('其他'),
+    children: [
+      {
+        key: 'history',
+        name: i18n.global.t('操作记录'),
+        icon: 'historical-tasks',
+        component: operationHistory,
       },
     ],
   },

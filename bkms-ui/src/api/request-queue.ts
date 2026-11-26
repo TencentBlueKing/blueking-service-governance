@@ -32,12 +32,14 @@ export type RouteName = null | RouteRecordName | undefined;
 
 // 请求队列
 const requestQueue: Array<IQueue> = [];
-// 添加队列
+// 添加队列；返回是否真正入队（已存在相同 ID 时不入队，返回 false，调用方完成时不应清理他人在途的队列项）
 function addQueue(data: IQueue) {
   const index = requestQueue.findIndex(q => q.id === data?.id);
   if (index === -1) {
     requestQueue.push(data);
+    return true;
   }
+  return false;
 }
 // 取消队列请求
 async function cancelRequest(id?: string | string[]) {

@@ -56,10 +56,32 @@
         { 'h-full': isYamlCardExpanded },
       ]"
       content-class="!mt-0 h-full p-[24px]"
-      :name="editorTitle"
       type="normal"
       @change="handleYamlCardChange"
     >
+      <template #title>
+        <span class="ml-[10px] select-none font-bold text-[14px]">{{ editorTitle }}</span>
+        <span
+          v-show="showTemplateSelect"
+          class="mx-[12px] inline-block h-[14px] w-px bg-[#DCDEE5]"
+        ></span>
+        <span
+          v-show="showTemplateSelect"
+          class="inline-flex"
+          @click.stop
+        >
+          <FrameworkTemplateSelect
+            app-type="trpc"
+            :language="language"
+            :selected-template-id="selectedTemplateId"
+            variant="text"
+            :workspace-id="workspaceId"
+            @availability="handleTemplateAvailability"
+            @loading="handleTemplateLoading"
+            @select="handleTemplateSelect"
+          />
+        </span>
+      </template>
       <template #header-right>
         <IconTextButton
           v-show="isYamlCardExpanded"
@@ -108,9 +130,10 @@
             <template #main>
               <MsEditor
                 ref="msEditorRef"
+                v-model="editorContent"
                 class="h-full"
                 :lang="editorLang"
-                :model-value="content ?? builderTemplate"
+                :readonly="templateLoading"
                 :title="editorTitle"
                 @error="handleEditorErr"
               />
@@ -122,29 +145,60 @@
   </div>
 </template>
 <script setup lang="ts">
-  import { onMounted, ref, watch } from 'vue';
+  import { ref, watch } from 'vue';
 
   import { Form, ResizeLayout } from 'bkui-vue';
-  import { ApiServerService } from '~/api/modules/bkmsserver';
 
-  import builderTemplate from './trpc-go-template.yaml?raw';
+  import FrameworkTemplateSelect from '../components/framework-template-select.vue';
+  import { useAppConfigCommon } from '../composables/use-app-config-common';
 
   const props = defineProps<{
     content?: string;
     editorLang?: string;
     editorTitle?: string;
+    language: string;
+    selectedTemplateId?: string;
     value: { appModelSpec: AppModelSpecInput };
+    workspaceId: string;
   }>();
 
+  const emit = defineEmits<{
+    'template-loading': [loading: boolean];
+  }>();
   import KeyValue from '~/components/key-value.vue';
   import MsEditor from '~/components/monaco-editor/ms-editor.vue';
   import StartupCommandInput from '~/components/startup-command-input.vue';
-  import useEnvManager from '~/composables/use-env-manager';
 
   import type { AppModelSpecInput } from '~/@types/v1/app';
-  import type { IMonacoEditorErrorMarkerItem } from '~/common/util';
+  import type { TemplateOutputObj } from '~/@types/v1/framework-config-templates';
 
-  const { envList, handleGetEnvList } = useEnvManager();
+  const {
+    editorErr,
+    ensureTemplateReady,
+    errorRef,
+    envList,
+    handleEditorErr,
+    handleGetVarEnv,
+    handleTemplateAvailability,
+    handleTemplateLoading,
+    handleYamlCardChange,
+    isYamlCardExpanded,
+    resetStatus,
+    resizeLayoutRef,
+    showEnvVar,
+    showTemplateSelect,
+    templateLoading,
+    toggleEnvVarShow,
+  } = useAppConfigCommon();
+
+  // 模板加载状态上抛父级：切换/初始化未完成时禁用「创建」按钮，避免提交旧模板内容
+  watch(templateLoading, loading => emit('template-loading', loading), { immediate: true });
+
+  const editorContent = ref(props.content || '');
+
+  // 当前套用的框架配置模板 ID：随 getValue() 回传给父级保存，
+  // 重新进入配置步骤时经 props 传回，避免默认模板覆盖已编辑内容
+  const currentTemplateId = ref(props.selectedTemplateId || '');
 
   const formData = ref<{
     args: string[];
@@ -160,15 +214,7 @@
 
   const startupCommandRef = ref<InstanceType<typeof StartupCommandInput> | null>(null);
   const msEditorRef = ref<InstanceType<typeof MsEditor> | null>(null);
-  // yaml异常
-  const editorErr = ref<{
-    message: string[];
-    type: string;
-  }>({
-    type: '',
-    message: [],
-  });
-  const errorRef = ref<InstanceType<typeof ResizeLayout> | null>(null);
+
   function getValue() {
     const env = formData.value.env.map(item => ({
       ...props.value.appModelSpec.envVars?.find(variable => variable.key === item.key),
@@ -180,76 +226,24 @@
       env,
       ...startupCommandRef.value?.getValue(),
       content: msEditorRef.value?.getValue() || '',
+      templateId: currentTemplateId.value,
     };
   }
-  function handleEditorErr(err: IMonacoEditorErrorMarkerItem[]) {
-    // 捕获编辑器错误提示
-    editorErr.value.type = 'content'; // 编辑内容错误
-    editorErr.value.message = err.map(item => item.message);
-    hideOrShowError();
+
+  function handleTemplateSelect(template: TemplateOutputObj) {
+    if (template.content === undefined) return;
+    editorContent.value = template.content;
+    currentTemplateId.value = template.id || '';
+    resetStatus();
   }
 
-  function hideOrShowError() {
-    if (!editorErr.value?.message?.length && errorRef.value) {
-      errorRef.value.asideRef.hidden = true;
-    } else if (editorErr.value?.message?.length && errorRef.value) {
-      errorRef.value.asideRef.hidden = false;
-    }
-  }
-
-  function resetStatus() {
-    editorErr.value = {
-      type: '',
-      message: [],
-    };
-    hideOrShowError();
-  }
   async function validate() {
+    // 模板切换/初始化未完成时禁止提交：此时编辑器内容仍是旧模板的
+    if (!ensureTemplateReady()) return false;
     const commandValid = await startupCommandRef.value?.validate();
     if (!commandValid || editorErr.value?.message?.length) return false;
     return true;
   }
-
-  const showEnvVar = ref(false);
-  const isYamlCardExpanded = ref(true);
-  const resizeLayoutRef = ref<InstanceType<typeof ResizeLayout> | null>(null);
-
-  // 获取应用环境变量
-  function handleGetVarEnv(env: string) {
-    const envID = envList.value.find(item => item.name === env)?.id;
-    if (!envID) return Promise.resolve([]);
-    return ApiServerService.ListEnvAvailableEnvVars({ envID });
-  }
-
-  // 处理yaml卡片展开/收起状态变化
-  function handleYamlCardChange(expanded: boolean) {
-    isYamlCardExpanded.value = expanded;
-  }
-
-  function setEnvVarAsideVisible(visible: boolean) {
-    if (resizeLayoutRef.value?.asideRef) {
-      resizeLayoutRef.value.asideRef.hidden = !visible;
-    }
-  }
-
-  function toggleEnvVarShow() {
-    showEnvVar.value = !showEnvVar.value;
-    setEnvVarAsideVisible(showEnvVar.value);
-  }
-
-  // 初始化隐藏错误侧栏
-  watch(
-    [editorErr.value, errorRef],
-    () => {
-      hideOrShowError();
-    },
-    { immediate: true },
-  );
-
-  onMounted(async () => {
-    await handleGetEnvList();
-    setEnvVarAsideVisible(showEnvVar.value);
-  });
 
   defineExpose({
     getValue,

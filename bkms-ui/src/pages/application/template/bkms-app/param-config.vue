@@ -609,9 +609,11 @@
           ? `# 进入 ${sourceDir} 目录执行构建，仅该目录下的文件参与镜像构建`
           : '# 进入仓库根目录执行构建，仅该目录下的文件参与镜像构建'
       }</span>`,
-      '<span class="build-command-comment"># Dockerfile 由平台根据标准框架自动生成</span>',
-      'docker build \\',
     ];
+    if (formData.value.buildConfig.repoBuildConfig.imageBuildMode === 'platform') {
+      lines.push('<span class="build-command-comment"># Dockerfile 由平台根据标准框架自动生成</span>');
+    }
+    lines.push('docker build \\');
 
     Object.entries(buildArgs || {}).forEach(([key, value]) => {
       lines.push(
