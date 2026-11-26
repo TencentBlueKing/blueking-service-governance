@@ -38,7 +38,7 @@ const (
 
 // builtinPipelineTypes 工作空间级共享的内置流水线类型（精确匹配）
 // 用户自定义的流水线，类型即 pipelineID：p-[a-z0-9]{32}
-// 触发专用流水线通过前缀匹配判定，见 isBuiltinPipelineType / ParseBuildTriggerPipelineType
+// 触发专用流水线通过前缀匹配判定，见 ResolveBuiltinTemplateType / ParseBuildTriggerPipelineType
 var builtinPipelineTypes = []PipelineType{
 	PipelineTypeDockerfile,
 	PipelineTypeHelmGitBuild,

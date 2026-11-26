@@ -21,6 +21,7 @@ package handler
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -32,6 +33,7 @@ import (
 	buildserializer "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/build/serializer"
 	imagebuild "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/revision"
+	buildtrigger "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/trigger"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
@@ -123,6 +125,11 @@ func (h *Handler) UpdateBuildConfig(c *gin.Context) {
 
 	// 校验放在所有副作用之前，避免非法配置已登记代码库或落库
 	if err = h.validatePlatformBuildImages(ctx, app, cfg); err != nil {
+		bkerrs.AbortWithErr(c, err)
+		return
+	}
+
+	if err = h.guardTriggerPolicyLock(ctx, app.ID, dataBefore, cfg); err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return
 	}
@@ -220,6 +227,29 @@ func (h *Handler) scheduleBuildConfigUpdateFollowUps(
 		audit.WithWorkspaceID(app.WorkspaceID),
 		audit.WithAppID(app.ID),
 	)
+}
+
+// guardTriggerPolicyLock 在应用存在自动触发策略时，拦截对 repoAlias、仓库类型、sourceType 与自动生成 tag 的改动。
+// 已按 ErrCode 包装好，调用方直接 AbortWithErr 即可
+func (h *Handler) guardTriggerPolicyLock(
+	ctx context.Context,
+	appID string,
+	oldCfg, newCfg *imagebuild.Config,
+) error {
+	// 策略存储与构建配置都从 DB 现取，Registry 不再挂具体 Store
+	manager, err := buildtrigger.NewPolicyManagerForDB(h.registry.DB, nil)
+	if err != nil {
+		return bkerrs.Wrapf(err, bkerrs.ErrCodeInternalServerError, "guard build config update of app %s", appID)
+	}
+	err = manager.GuardBuildConfigUpdate(ctx, appID, oldCfg, newCfg)
+	switch {
+	case err == nil:
+		return nil
+	case errors.Is(err, buildtrigger.ErrBuildConfigLocked):
+		return bkerrs.New(bkerrs.ErrCodeInvalidArgument, err.Error())
+	default:
+		return bkerrs.Wrapf(err, bkerrs.ErrCodeInternalServerError, "guard build config update of app %s", appID)
+	}
 }
 
 // ListBuildRecords 获取应用构建记录列表。
