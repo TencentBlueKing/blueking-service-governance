@@ -139,8 +139,7 @@ OpenAPI 只用第一个地址（`http://{clientHosts[0]}:8090`），SDK 使用�
 ## 6. REST API 契约
 
 路由注册在 `accesspoint/router.go`，handler 在 `accesspoint/handler`，请求与响应结构在 `accesspoint/serializer`。
-接入点管理的 6 个接口已实现，业务逻辑在 `accesspoint.Manager`；集群绑定的 3 个接口在 `accesspoint/binding`。
-组件期望 values 接口的 handler 目前只做参数绑定与权限校验，然后返回 `NOT_IMPLEMENTED`，由 04 补齐。
+接入点管理的 6 个接口已实现，业务逻辑在 `accesspoint.Manager`；集群绑定的 3 个接口与组件期望 values 接口在 `accesspoint/binding`。
 
 | 接口 | 路由 | 权限 | 实现方 |
 | --- | --- | --- | --- |
@@ -153,7 +152,7 @@ OpenAPI 只用第一个地址（`http://{clientHosts[0]}:8090`），SDK 使用�
 | 替换绑定集群 | `PUT /workspaces/{ws}/polaris-access-points/{accessPointID}/clusters` | 空间编辑 | 已实现 |
 | 集群绑定视图 | `GET /workspaces/{ws}/polaris-clusters` | 空间查看 | 已实现 |
 | 绑定单个集群 | `PUT /workspaces/{ws}/polaris-clusters/{clusterID}` | 空间编辑 | 已实现 |
-| 组件期望 values | `GET /workspaces/{ws}/polaris-operator-values?accessPointID=` | 空间查看 | 04 |
+| 组件期望 values | `GET /workspaces/{ws}/polaris-operator-values?accessPointID=` | 空间查看 | 已实现 |
 
 以上接口只在 `allowWorkspaceAccessPoints=true` 时注册，此时平台托管接入点不可用，因此接口只处理空间自建接入点：
 列表不返回平台托管接入点，路径中的 `accessPointID` 传 `platform` 时返回 `NOT_FOUND`。

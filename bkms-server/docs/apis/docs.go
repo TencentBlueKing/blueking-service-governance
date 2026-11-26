@@ -21161,7 +21161,7 @@ const docTemplate = `{
                         "BkUserCredential": []
                     }
                 ],
-                "description": "返回由接入点推导出的北极星相关 values",
+                "description": "返回已绑定接入点的集群上由接入点推导出的北极星相关 values，按集群 ID 排序。\n不读取集群内的 release，也不返回安装状态。\nvalues 只含 args[name=polaris_api_type]、env 中的北极星地址、鉴权方式与集群、BCS 项目标识，\n以及 authProxy.bcsPolarisPlatformID，不含 Token。\n安装或更新时以集群插件接口返回的 currentValues 为基础覆盖这些键（args 按 name 合并），\n再调用集群插件安装接口",
                 "produces": [
                     "application/json"
                 ],
@@ -33970,7 +33970,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "clusters": {
-                    "description": "已绑定接入点的集群",
+                    "description": "已绑定接入点的集群，按集群 ID 排序",
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/serializer.PolarisOperatorValuesOutput"

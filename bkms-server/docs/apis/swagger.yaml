@@ -8155,7 +8155,7 @@ definitions:
         description: 组件对应的集群插件名称，安装与状态查询使用集群插件接口
         type: string
       clusters:
-        description: 已绑定接入点的集群
+        description: 已绑定接入点的集群，按集群 ID 排序
         items:
           $ref: '#/definitions/serializer.PolarisOperatorValuesOutput'
         type: array
@@ -24556,7 +24556,13 @@ paths:
       - polaris-access-points
   /workspaces/{workspaceID}/polaris-operator-values:
     get:
-      description: 返回由接入点推导出的北极星相关 values
+      description: |-
+        返回已绑定接入点的集群上由接入点推导出的北极星相关 values，按集群 ID 排序。
+        不读取集群内的 release，也不返回安装状态。
+        values 只含 args[name=polaris_api_type]、env 中的北极星地址、鉴权方式与集群、BCS 项目标识，
+        以及 authProxy.bcsPolarisPlatformID，不含 Token。
+        安装或更新时以集群插件接口返回的 currentValues 为基础覆盖这些键（args 按 name 合并），
+        再调用集群插件安装接口
       operationId: ListPolarisOperatorValues
       parameters:
       - description: 工作空间 ID
