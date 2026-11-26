@@ -215,14 +215,14 @@
             theme="primary"
             @click="showAdvancedSettings = !showAdvancedSettings"
           >
-            <RightShape
-              class="mr-[6px] transition-transform duration-200"
-              :class="{ 'rotate-90': showAdvancedSettings }"
+            {{ $t('高级设置') }}
+            <AngleDownLine
+              class="ml-[4px] transition-transform duration-200"
+              :class="{ 'rotate-180': !showAdvancedSettings }"
               fill="#3A84FF"
               height="12px"
               width="12px"
             />
-            {{ $t('高级设置') }}
           </Button>
           <span
             v-if="!showAdvancedSettings"
@@ -240,6 +240,30 @@
             v-model="formModel.nsType"
             class="flex w-full flex-col gap-[8px]"
           >
+            <div
+              v-bk-tooltips="{
+                content: independentNamespaceDisabledReason,
+                disabled: !independentNamespaceDisabledReason,
+              }"
+              class="block w-full"
+            >
+              <Radio
+                class="namespace-option !m-0 !h-auto !flex w-full items-start rounded-[2px] border border-solid px-[16px] py-[8px]"
+                :class="[
+                  formModel.nsType === 'independent' ? 'border-[#3A84FF] bg-[#F0F5FF]' : 'border-[#DCDEE5] bg-white',
+                  { 'cursor-not-allowed opacity-60': isSourceFederationEnv },
+                ]"
+                :disabled="isSourceFederationEnv"
+                label="independent"
+              >
+                <span class="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-[8px] leading-[20px]">
+                  <span class="shrink-0 text-[#4D4F56]">{{ $t('独立创建') }}</span>
+                  <span class="text-[12px] leading-[20px] text-[#979BA5]">
+                    {{ $t('独占命名空间，资源完全隔离，适合使用组件等场景。') }}
+                  </span>
+                </span>
+              </Radio>
+            </div>
             <Radio
               class="namespace-option !m-0 !h-auto !flex w-full items-start rounded-[2px] border border-solid px-[16px] py-[8px]"
               :class="formModel.nsType === 'shared' ? 'border-[#3A84FF] bg-[#F0F5FF]' : 'border-[#DCDEE5] bg-white'"
@@ -247,7 +271,7 @@
             >
               <span class="flex min-w-0 flex-1 flex-wrap items-center gap-x-[8px] leading-[20px]">
                 <span class="shrink-0 text-[#4D4F56]">
-                  {{ $t('沿用来源环境（默认）') }}
+                  {{ $t('沿用来源环境') }}
                 </span>
                 <span class="text-[12px] leading-[20px] text-[#979BA5]">
                   {{ $t('不新建命名空间，与来源环境共用，不支持使用组件。') }}
@@ -303,30 +327,6 @@
                 </div>
               </div>
             </div>
-            <div
-              v-bk-tooltips="{
-                content: independentNamespaceDisabledReason,
-                disabled: !independentNamespaceDisabledReason,
-              }"
-              class="block w-full"
-            >
-              <Radio
-                class="namespace-option !m-0 !h-auto !flex w-full items-start rounded-[2px] border border-solid px-[16px] py-[8px]"
-                :class="[
-                  formModel.nsType === 'independent' ? 'border-[#3A84FF] bg-[#F0F5FF]' : 'border-[#DCDEE5] bg-white',
-                  { 'cursor-not-allowed opacity-60': isSourceFederationEnv },
-                ]"
-                :disabled="isSourceFederationEnv"
-                label="independent"
-              >
-                <span class="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-[8px] leading-[20px]">
-                  <span class="shrink-0 text-[#4D4F56]">{{ $t('独立创建') }}</span>
-                  <span class="text-[12px] leading-[20px] text-[#979BA5]">
-                    {{ $t('独占命名空间，资源完全隔离，适合使用组件等场景。') }}
-                  </span>
-                </span>
-              </Radio>
-            </div>
           </Radio.Group>
         </div>
       </Form>
@@ -357,7 +357,7 @@
 
   import { useEventListener, useMounted } from '@vueuse/core';
   import { Alert, Button, Checkbox, Dropdown, Form, Input, Message, Radio, Sideslider } from 'bkui-vue';
-  import { AngleDownLine, Error, RightShape, Success } from 'bkui-vue/lib/icon';
+  import { AngleDownLine, Error, Success } from 'bkui-vue/lib/icon';
   import { useI18n } from 'vue-i18n';
   import { useRoute, useRouter } from 'vue-router';
   import { ComponentOutputObj } from '~/@types/v1/app';
@@ -441,7 +441,7 @@
         ])
       : t('应用使用了组件，沿用来源环境创建的特性环境将无法部署。');
   });
-  const namespaceTypeText = computed(() => (formModel.nsType === 'shared' ? t('沿用来源环境（默认）') : t('独立创建')));
+  const namespaceTypeText = computed(() => (formModel.nsType === 'shared' ? t('沿用来源环境') : t('独立创建')));
   const independentNamespaceDisabledReason = computed(() =>
     isSourceFederationEnv.value
       ? t(

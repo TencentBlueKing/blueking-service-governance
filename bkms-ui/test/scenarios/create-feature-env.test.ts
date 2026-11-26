@@ -255,7 +255,7 @@ describe('特性环境：创建时选择命名空间', () => {
     await openCreateForm();
     expect(screen.getByRole('button', { name: '高级设置' })).toHaveAttribute('aria-expanded', 'false');
     expect(screen.queryByRole('radio')).not.toBeInTheDocument();
-    expect(screen.getByText('命名空间：沿用来源环境（默认）')).toBeInTheDocument();
+    expect(screen.getByText('命名空间：沿用来源环境')).toBeInTheDocument();
     await fillDisplayName();
     await userEvent.click(screen.getByRole('button', { name: '创建' }));
     await waitFor(() =>
@@ -277,6 +277,10 @@ describe('特性环境：创建时选择命名空间', () => {
   it('当用户选择独立创建再折叠高级设置时，应保留选择并提交独立命名空间', async () => {
     await openCreateForm();
     await userEvent.click(screen.getByRole('button', { name: '高级设置' }));
+    const namespaceRadios = screen.getAllByRole('radio');
+    expect(namespaceRadios[0]).toHaveAccessibleName(/独立创建/);
+    expect(namespaceRadios[1]).toHaveAccessibleName(/沿用来源环境/);
+    expect(namespaceRadios[1]).not.toHaveAccessibleName(/默认/);
     expect(screen.getByRole('radio', { name: /沿用来源环境/ })).toBeChecked();
     expect(screen.queryByTitle('共享命名空间仅支持 AppModel 应用，使用组件的应用无法部署。')).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole('radio', { name: /独立创建/ }));
@@ -386,7 +390,7 @@ describe('特性环境：创建时选择命名空间', () => {
     await waitFor(() => expect(mocks.infoBox).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(screen.queryByRole('button', { name: '创建' })).not.toBeInTheDocument());
     await userEvent.click(screen.getByRole('button', { name: '打开创建侧栏' }));
-    expect(await screen.findByText('命名空间：沿用来源环境（默认）')).toBeInTheDocument();
+    expect(await screen.findByText('命名空间：沿用来源环境')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '高级设置' })).toHaveAttribute('aria-expanded', 'false');
     await userEvent.click(screen.getByRole('button', { name: '取消' }));
     expect(mocks.infoBox).toHaveBeenCalledTimes(1);
@@ -578,7 +582,7 @@ describe('特性环境：创建时选择命名空间', () => {
     expect(screen.getByText(/来源环境是联邦集群，暂不能「独立创建」。/)).toBeInTheDocument();
     expect(screen.getByRole('checkbox')).toBeChecked();
     await userEvent.click(screen.getByRole('button', { name: '高级设置' }));
-    expect(screen.getByText('命名空间：沿用来源环境（默认）')).toBeInTheDocument();
+    expect(screen.getByText('命名空间：沿用来源环境')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: '高级设置' }));
     expect(screen.getByRole('checkbox')).toBeChecked();
     expect(screen.getByPlaceholderText('请输入 1-32 字符的环境展示名')).toHaveValue('订单联调');
