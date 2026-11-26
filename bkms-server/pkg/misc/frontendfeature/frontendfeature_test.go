@@ -34,15 +34,6 @@ import (
 	slz "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/misc/frontendfeature/serializer"
 )
 
-// defaultRepoSourceTypes 未配置代码库接入方式时下发的默认值
-var defaultRepoSourceTypes = []*slz.RepoSourceTypeOutput{
-	{
-		Name:  config.DefaultRepoSourceTypeName,
-		Spec:  config.RepoSourceSpecBkCIManaged,
-		Label: config.DefaultRepoSourceTypeLabel,
-	},
-}
-
 var _ = Describe("GetFrontendFeatures", func() {
 	getFeatures := func(cfg config.Config) *slz.FrontendFeaturesOutput {
 		origin := config.G
@@ -74,7 +65,6 @@ var _ = Describe("GetFrontendFeatures", func() {
 		Expect(getFeatures(config.Config{})).To(Equal(&slz.FrontendFeaturesOutput{
 			EnableBSCP:        true,
 			EnableKubeInsight: true,
-			RepoSourceTypes:   defaultRepoSourceTypes,
 		}))
 	})
 
@@ -94,7 +84,6 @@ var _ = Describe("GetFrontendFeatures", func() {
 			EnableIndependentBkRepo:    true,
 			EnableWeTerm:               true,
 			EnableGoProxyBuildArgsTips: true,
-			RepoSourceTypes:            defaultRepoSourceTypes,
 		}))
 	})
 

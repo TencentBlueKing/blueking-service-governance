@@ -24,22 +24,13 @@ import (
 
 	"github.com/gin-gonic/gin/binding"
 	"github.com/go-playground/validator/v10"
+	"github.com/samber/lo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/coderepo"
 )
 
 // workspaceIDPattern 工作空间 ID 校验规则
 var workspaceIDPattern = regexp.MustCompile("^[a-z]([a-z0-9-]*[a-z0-9])?$")
-
-func init() {
-	if v, ok := binding.Validator.Engine().(*validator.Validate); ok {
-		if err := v.RegisterValidation("workspace_id", func(fl validator.FieldLevel) bool {
-			return workspaceIDPattern.MatchString(fl.Field().String())
-		}); err != nil {
-			panic("failed to register workspace_id validator: " + err.Error())
-		}
-	}
-}
 
 // WorkspaceURIInput 路径参数
 type WorkspaceURIInput struct {
@@ -60,18 +51,6 @@ type RepositoryInput struct {
 	Password string `json:"password" binding:"omitempty,max=256"`
 }
 
-// ToSpec 转为保存参数
-func (in RepositoryInput) ToSpec(workspaceID string) coderepo.SaveSpec {
-	return coderepo.SaveSpec{
-		WorkspaceID: workspaceID,
-		Type:        in.Type,
-		URL:         in.RepoURL,
-		Alias:       in.RepoAlias,
-		Username:    in.Username,
-		Password:    in.Password,
-	}
-}
-
 // ConnectivityTestInput 连通性测试请求
 type ConnectivityTestInput struct {
 	RepositoryInput
@@ -90,13 +69,6 @@ type ListRefsInput struct {
 	PageSize int64 `json:"pageSize" binding:"required,oneof=5 10 20 50 100"`
 }
 
-// ToQuery 转为查询参数
-func (in ListRefsInput) ToQuery() coderepo.RefsQuery {
-	return coderepo.RefsQuery{
-		Kind: coderepo.RefKind(in.Kind), Search: in.Search, Page: in.Page, PageSize: in.PageSize,
-	}
-}
-
 // RefOutput 分支或 Tag
 type RefOutput struct {
 	Name    string `json:"name"`
@@ -110,14 +82,41 @@ type ListRefsOutput struct {
 	Data []*RefOutput `json:"data"`
 }
 
-// NewListRefsOutput 生成响应
-func NewListRefsOutput(refs []coderepo.Ref) *ListRefsOutput {
-	data := make([]*RefOutput, 0, len(refs))
-	for _, ref := range refs {
-		data = append(data, &RefOutput{Name: ref.Name, Path: ref.Path, SHA: ref.SHA, LinkURL: ref.LinkURL})
-	}
-	return &ListRefsOutput{Data: data}
-}
-
 // EmptyOutput 空响应
 type EmptyOutput struct{}
+
+func init() {
+	if v, ok := binding.Validator.Engine().(*validator.Validate); ok {
+		if err := v.RegisterValidation("workspace_id", func(fl validator.FieldLevel) bool {
+			return workspaceIDPattern.MatchString(fl.Field().String())
+		}); err != nil {
+			panic("failed to register workspace_id validator: " + err.Error())
+		}
+	}
+}
+
+// ToSpec 转为保存参数
+func (in RepositoryInput) ToSpec(workspaceID string) coderepo.SaveSpec {
+	return coderepo.SaveSpec{
+		WorkspaceID: workspaceID,
+		Type:        in.Type,
+		URL:         in.RepoURL,
+		Alias:       in.RepoAlias,
+		Username:    in.Username,
+		Password:    in.Password,
+	}
+}
+
+// ToQuery 转为查询参数
+func (in ListRefsInput) ToQuery() coderepo.RefsQuery {
+	return coderepo.RefsQuery{
+		Kind: coderepo.RefKind(in.Kind), Search: in.Search, Page: in.Page, PageSize: in.PageSize,
+	}
+}
+
+// NewListRefsOutput 生成响应
+func NewListRefsOutput(refs []coderepo.Ref) *ListRefsOutput {
+	return &ListRefsOutput{Data: lo.Map(refs, func(ref coderepo.Ref, _ int) *RefOutput {
+		return &RefOutput{Name: ref.Name, Path: ref.Path, SHA: ref.SHA, LinkURL: ref.LinkURL}
+	})}
+}

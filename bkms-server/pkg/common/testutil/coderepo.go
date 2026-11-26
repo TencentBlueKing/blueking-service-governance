@@ -25,9 +25,14 @@ import (
 // BasicRepoSourceTypeName 单测使用的账号密码接入方式名
 const BasicRepoSourceTypeName = "Git"
 
-// BkCIManagedRepoSourceType 默认接入方式（蓝盾托管）
+// BkCIManagedRepoSourceType 蓝盾托管接入方式，名称沿用历史取值 TGit
 func BkCIManagedRepoSourceType() config.RepoSourceTypeConfig {
-	return config.DefaultRepoSourceTypes[0]
+	return config.RepoSourceTypeConfig{
+		Name:    config.DefaultRepoSourceTypeName,
+		Spec:    config.RepoSourceSpecBkCIManaged,
+		Label:   config.DefaultRepoSourceTypeName,
+		Enabled: true,
+	}
 }
 
 // BasicRepoSourceType 单测使用的账号密码接入方式

@@ -20,8 +20,6 @@
 package coderepo
 
 import (
-	"slices"
-
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
 
@@ -39,11 +37,7 @@ type SourceType = config.RepoSourceTypeConfig
 
 // SourceTypes 返回已启用的接入方式
 func SourceTypes() []SourceType {
-	all := config.DefaultRepoSourceTypes
-	if config.G != nil {
-		all = config.G.CodeRepository.EffectiveSourceTypes()
-	}
-	return slices.DeleteFunc(slices.Clone(all), func(t SourceType) bool { return !t.Enabled })
+	return lo.Filter(config.G.CodeRepository.SourceTypes, func(t SourceType, _ int) bool { return t.Enabled })
 }
 
 // DefaultSourceType 默认接入方式：第一个蓝盾托管方式，没有时取第一个
@@ -62,7 +56,7 @@ func ResolveSourceType(name string) (SourceType, error) {
 	if t, ok := lo.Find(types, func(t SourceType) bool { return t.Name == name }); ok {
 		return t, nil
 	}
-	if name == "" || slices.Contains(legacyTypeNames, name) {
+	if name == "" || lo.Contains(legacyTypeNames, name) {
 		return DefaultSourceType(), nil
 	}
 	return SourceType{}, errors.Wrapf(ErrSourceTypeNotFound, "source type %q", name)

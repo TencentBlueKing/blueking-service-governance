@@ -26,6 +26,7 @@ import (
 	"strings"
 
 	"github.com/pkg/errors"
+	"github.com/samber/lo"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
@@ -55,24 +56,28 @@ var bkciRepoTypes = map[string]string{
 	config.RepoSourceSpecBasic:       bkci.RepoTypeCodeTGit,
 }
 
+// repositorySyncer 同步代码库到工作空间的蓝盾项目
+type repositorySyncer struct {
+	db      *mongo.Database
+	client  bkci.Client
+	project *Project
+	user    auth.User
+}
+
+// managedController 蓝盾托管方式的 Controller，通过蓝盾接口访问代码库
+type managedController struct {
+	db   *mongo.Database
+	repo *coderepo.CodeRepository
+}
+
 func init() {
 	coderepo.RegisterControllerFactory(config.RepoSourceSpecBkCIManaged, newManagedController)
 }
 
-// SaveWorkspaceRepositories 保存代码库；蓝盾托管方式立即同步到蓝盾，其余在构建时同步
+// SaveWorkspaceRepositories 保存代码库；蓝盾托管方式立即同步到蓝盾
 func SaveWorkspaceRepositories(ctx context.Context, db *mongo.Database, specs []coderepo.SaveSpec) error {
-	type repoKey struct{ workspaceID, typ, url, alias string }
-	seen := make(map[repoKey]struct{}, len(specs))
+	specs = lo.Uniq(lo.Filter(specs, func(spec coderepo.SaveSpec, _ int) bool { return spec.URL != "" }))
 	for _, spec := range specs {
-		if spec.URL == "" {
-			continue
-		}
-		key := repoKey{spec.WorkspaceID, spec.Type, spec.URL, spec.Alias}
-		if _, ok := seen[key]; ok {
-			continue
-		}
-		seen[key] = struct{}{}
-
 		repo, err := coderepo.Save(ctx, db, spec)
 		if err != nil {
 			return errors.Wrapf(err, "save repository %s", spec.URL)
@@ -135,12 +140,55 @@ func SyncRepository(ctx context.Context, db *mongo.Database, repo *coderepo.Code
 	}
 }
 
-// repositorySyncer 同步代码库到工作空间的蓝盾项目
-type repositorySyncer struct {
-	db      *mongo.Database
-	client  bkci.Client
-	project *Project
-	user    auth.User
+// ListWorkspaceRepositoryRefs 列出代码库分支或 Tag：bkms 中有记录的按接入方式查询，否则走蓝盾接口
+func ListWorkspaceRepositoryRefs(
+	ctx context.Context,
+	db *mongo.Database,
+	workspaceID, repositoryID, repositoryType string,
+	query coderepo.RefsQuery,
+) ([]coderepo.Ref, error) {
+	alias := repositoryID
+	if repositoryType == RepositoryIdentityTypeID {
+		record, err := store.Of(db, RepositoryMeta).Get(ctx, ByWorkspaceAndRepositoryID(workspaceID, repositoryID))
+		switch {
+		case err == nil:
+			alias = record.Alias
+		case errors.Is(err, ErrRepositoryNotFound):
+			alias = ""
+		default:
+			return nil, errors.Wrapf(err, "get workspace %s bkci repository %s", workspaceID, repositoryID)
+		}
+	}
+
+	if alias != "" {
+		repo, err := coderepo.Get(ctx, db, workspaceID, alias)
+		switch {
+		case err == nil:
+			controller, ctrlErr := coderepo.NewController(ctx, db, repo)
+			if ctrlErr != nil {
+				return nil, ctrlErr
+			}
+			refs, listErr := controller.ListRefs(ctx, query)
+			if listErr != nil {
+				return nil, errors.Wrapf(listErr, "list %s of repository %s", query.Kind, alias)
+			}
+			return refs, nil
+		case !errors.Is(err, coderepo.ErrRepositoryNotFound):
+			return nil, err
+		}
+	}
+	return listRefsViaBkCI(ctx, db, workspaceID, repositoryID, repositoryType, query)
+}
+
+// Touch 通过列出分支校验能否访问
+func (c *managedController) Touch(ctx context.Context) error {
+	_, err := c.ListRefs(ctx, coderepo.RefsQuery{Kind: coderepo.RefKindBranch, Page: 1, PageSize: 1})
+	return err
+}
+
+// ListRefs 按别名通过蓝盾接口列出分支或 Tag
+func (c *managedController) ListRefs(ctx context.Context, query coderepo.RefsQuery) ([]coderepo.Ref, error) {
+	return listRefsViaBkCI(ctx, c.db, c.repo.WorkspaceID, c.repo.Alias, RepositoryIdentityTypeName, query)
 }
 
 func newRepositorySyncer(ctx context.Context, db *mongo.Database, workspaceID string) (*repositorySyncer, error) {
@@ -215,12 +263,14 @@ func (s *repositorySyncer) createOrReuse(ctx context.Context, opts bkci.CreateRe
 		return "", errors.Wrapf(err, "list bkci repositories for project %s", s.project.Code)
 	}
 	// 蓝盾别名忽略大小写
-	for _, r := range repositories {
-		if strings.EqualFold(r.Alias, opts.Alias) {
-			return r.ID, nil
-		}
+	existing, ok := lo.Find(
+		repositories,
+		func(r bkci.Repository) bool { return strings.EqualFold(r.Alias, opts.Alias) },
+	)
+	if !ok {
+		return "", errors.Errorf("repository with alias %s not found in bkci project %s", opts.Alias, s.project.Code)
 	}
-	return "", errors.Errorf("repository with alias %s not found in bkci project %s", opts.Alias, s.project.Code)
+	return existing.ID, nil
 }
 
 // upsertCredential 用 bkms 的账号密码覆盖蓝盾凭证，不存在时创建
@@ -250,69 +300,12 @@ func repositoryCredentialID(alias string) string {
 	return repoCredentialIDPrefix + hex.EncodeToString(sum[:digestLen/2])
 }
 
-// ListWorkspaceRepositoryRefs 列出代码库分支或 Tag：bkms 中有记录的按接入方式查询，否则走蓝盾接口
-func ListWorkspaceRepositoryRefs(
-	ctx context.Context,
-	db *mongo.Database,
-	workspaceID, repositoryID, repositoryType string,
-	query coderepo.RefsQuery,
-) ([]coderepo.Ref, error) {
-	alias := repositoryID
-	if repositoryType == RepositoryIdentityTypeID {
-		record, err := store.Of(db, RepositoryMeta).Get(ctx, ByWorkspaceAndRepositoryID(workspaceID, repositoryID))
-		switch {
-		case err == nil:
-			alias = record.Alias
-		case errors.Is(err, ErrRepositoryNotFound):
-			alias = ""
-		default:
-			return nil, errors.Wrapf(err, "get workspace %s bkci repository %s", workspaceID, repositoryID)
-		}
-	}
-
-	if alias != "" {
-		repo, err := coderepo.Get(ctx, db, workspaceID, alias)
-		switch {
-		case err == nil:
-			controller, ctrlErr := coderepo.NewController(ctx, db, repo)
-			if ctrlErr != nil {
-				return nil, ctrlErr
-			}
-			refs, listErr := controller.ListRefs(ctx, query)
-			if listErr != nil {
-				return nil, errors.Wrapf(listErr, "list %s of repository %s", query.Kind, alias)
-			}
-			return refs, nil
-		case !errors.Is(err, coderepo.ErrRepositoryNotFound):
-			return nil, err
-		}
-	}
-	return listRefsViaBkCI(ctx, db, workspaceID, repositoryID, repositoryType, query)
-}
-
-// managedController 蓝盾托管方式的 Controller，通过蓝盾接口访问代码库
-type managedController struct {
-	db   *mongo.Database
-	repo *coderepo.CodeRepository
-}
-
 func newManagedController(
 	_ context.Context,
 	db *mongo.Database,
 	repo *coderepo.CodeRepository,
 ) (coderepo.Controller, error) {
 	return &managedController{db: db, repo: repo}, nil
-}
-
-// Touch 通过列出分支校验能否访问
-func (c *managedController) Touch(ctx context.Context) error {
-	_, err := c.ListRefs(ctx, coderepo.RefsQuery{Kind: coderepo.RefKindBranch, Page: 1, PageSize: 1})
-	return err
-}
-
-// ListRefs 按别名通过蓝盾接口列出分支或 Tag
-func (c *managedController) ListRefs(ctx context.Context, query coderepo.RefsQuery) ([]coderepo.Ref, error) {
-	return listRefsViaBkCI(ctx, c.db, c.repo.WorkspaceID, c.repo.Alias, RepositoryIdentityTypeName, query)
 }
 
 // listRefsViaBkCI 通过蓝盾接口列出分支或 Tag
@@ -338,9 +331,7 @@ func listRefsViaBkCI(
 	if err != nil {
 		return nil, errors.Wrapf(err, "list %s of repository %s via bkci", query.Kind, repositoryID)
 	}
-	result := make([]coderepo.Ref, 0, len(refs))
-	for _, ref := range refs {
-		result = append(result, coderepo.Ref{Name: ref.Name, Path: ref.Path, SHA: ref.SHA, LinkURL: ref.LinkURL})
-	}
-	return result, nil
+	return lo.Map(refs, func(ref bkci.RepositoryRef, _ int) coderepo.Ref {
+		return coderepo.Ref{Name: ref.Name, Path: ref.Path, SHA: ref.SHA, LinkURL: ref.LinkURL}
+	}), nil
 }

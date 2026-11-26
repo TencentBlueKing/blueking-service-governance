@@ -43,12 +43,6 @@ func useSourceTypes(types ...config.RepoSourceTypeConfig) {
 }
 
 var _ = Describe("SourceType", func() {
-	It("uses the bkci managed TGit as the default source type when not configured", func() {
-		useSourceTypes()
-		Expect(coderepo.SourceTypes()).To(Equal(config.DefaultRepoSourceTypes))
-		Expect(coderepo.DefaultSourceType().Name).To(Equal(config.DefaultRepoSourceTypeName))
-	})
-
 	It("lists enabled source types only", func() {
 		disabled := gitSourceType
 		disabled.Name, disabled.Enabled = "Disabled", false

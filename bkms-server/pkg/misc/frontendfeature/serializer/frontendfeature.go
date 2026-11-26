@@ -20,8 +20,6 @@
 package serializer
 
 import (
-	"slices"
-
 	"github.com/samber/lo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
@@ -79,14 +77,12 @@ type FrontendFeaturesResponse struct {
 
 // newRepoSourceTypesOutput 已启用的接入方式，默认接入方式在前
 func newRepoSourceTypesOutput(cfg config.CodeRepositoryConfig) []*RepoSourceTypeOutput {
-	types := lo.Filter(
-		cfg.EffectiveSourceTypes(),
-		func(t config.RepoSourceTypeConfig, _ int) bool { return t.Enabled },
-	)
-	if i := slices.IndexFunc(types, func(t config.RepoSourceTypeConfig) bool {
+	types := lo.Filter(cfg.SourceTypes, func(t config.RepoSourceTypeConfig, _ int) bool { return t.Enabled })
+	// 默认接入方式（第一个蓝盾托管方式）排在最前
+	if _, i, ok := lo.FindIndexOf(types, func(t config.RepoSourceTypeConfig) bool {
 		return t.Spec == config.RepoSourceSpecBkCIManaged
-	}); i > 0 {
-		types = append([]config.RepoSourceTypeConfig{types[i]}, slices.Delete(slices.Clone(types), i, i+1)...)
+	}); ok && i > 0 {
+		types = append([]config.RepoSourceTypeConfig{types[i]}, lo.DropByIndex(types, i)...)
 	}
 	return lo.Map(types, func(t config.RepoSourceTypeConfig, _ int) *RepoSourceTypeOutput {
 		return &RepoSourceTypeOutput{Name: t.Name, Spec: t.Spec, Label: t.Label}

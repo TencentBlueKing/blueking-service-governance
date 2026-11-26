@@ -832,17 +832,6 @@ func (c *ApiClient) GetRepository(
 	}, nil
 }
 
-// repoAuthTypeOf 无凭证为 OAuth，有凭证按地址协议取 HTTP / HTTPS
-func repoAuthTypeOf(opts CreateRepositoryOptions) string {
-	if opts.CredentialID == "" {
-		return repoAuthTypeOAuth
-	}
-	if strings.HasPrefix(strings.ToLower(opts.URL), "http://") {
-		return repoAuthTypeHTTP
-	}
-	return repoAuthTypeHTTPS
-}
-
 // CreateRepository 创建蓝盾代码库，返回代码库 Hash ID。
 func (c *ApiClient) CreateRepository(
 	ctx context.Context, projectCode string, opts CreateRepositoryOptions,
@@ -1175,4 +1164,15 @@ func (c *ApiClient) handleStreamOperation(
 func (c *ApiClient) handleOperationWithoutResult(ctx context.Context, apiOperation define.Operation) error {
 	_, err := c.handleOperation(ctx, apiOperation)
 	return err
+}
+
+// repoAuthTypeOf 无凭证为 OAuth，有凭证按地址协议取 HTTP / HTTPS
+func repoAuthTypeOf(opts CreateRepositoryOptions) string {
+	if opts.CredentialID == "" {
+		return repoAuthTypeOAuth
+	}
+	if strings.HasPrefix(strings.ToLower(opts.URL), "http://") {
+		return repoAuthTypeHTTP
+	}
+	return repoAuthTypeHTTPS
 }

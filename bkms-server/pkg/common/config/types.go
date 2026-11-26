@@ -437,17 +437,13 @@ const (
 	RepoSourceSpecOAuth = "oauth"
 )
 
-const (
-	// DefaultRepoSourceTypeName 默认接入方式名，沿用 type 的历史取值
-	DefaultRepoSourceTypeName = "TGit"
-	// DefaultRepoSourceTypeLabel 默认接入方式展示名
-	DefaultRepoSourceTypeLabel = "工蜂"
-)
+// DefaultRepoSourceTypeName 历史数据中代码库配置 type 的取值
+const DefaultRepoSourceTypeName = "TGit"
 
 // CodeRepositoryConfig 代码库配置
 type CodeRepositoryConfig struct {
-	// SourceTypes 接入方式，未配置时用 DefaultRepoSourceTypes
-	SourceTypes []RepoSourceTypeConfig `validate:"dive"`
+	// SourceTypes 接入方式
+	SourceTypes []RepoSourceTypeConfig `validate:"required,min=1,dive"`
 }
 
 // RepoSourceTypeConfig 代码库接入方式
@@ -460,22 +456,6 @@ type RepoSourceTypeConfig struct {
 	Label string `validate:"required,max=64"`
 	// Enabled 是否启用
 	Enabled bool
-}
-
-// DefaultRepoSourceTypes 默认接入方式：蓝盾托管的工蜂
-var DefaultRepoSourceTypes = []RepoSourceTypeConfig{{
-	Name:    DefaultRepoSourceTypeName,
-	Spec:    RepoSourceSpecBkCIManaged,
-	Label:   DefaultRepoSourceTypeLabel,
-	Enabled: true,
-}}
-
-// EffectiveSourceTypes 生效的接入方式，未配置时为默认值
-func (c CodeRepositoryConfig) EffectiveSourceTypes() []RepoSourceTypeConfig {
-	if len(c.SourceTypes) == 0 {
-		return DefaultRepoSourceTypes
-	}
-	return c.SourceTypes
 }
 
 // --------------------------- 开发环境专用 ---------------------------

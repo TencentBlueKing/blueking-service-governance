@@ -28,6 +28,7 @@ import (
 
 	"github.com/go-playground/validator/v10"
 	"github.com/pkg/errors"
+	"github.com/samber/lo"
 	"github.com/spf13/viper"
 )
 
@@ -181,22 +182,15 @@ func validateCodeRepository(cfg CodeRepositoryConfig) error {
 	if err := validate.Struct(cfg); err != nil {
 		return errors.Wrap(err, "validate struct")
 	}
-	if len(cfg.SourceTypes) == 0 {
-		return nil
+	if dup := lo.FindDuplicatesBy(cfg.SourceTypes, func(t RepoSourceTypeConfig) string { return t.Name }); len(
+		dup,
+	) > 0 {
+		return errors.Errorf("duplicated source type name %s", dup[0].Name)
 	}
-	seen := make(map[string]struct{}, len(cfg.SourceTypes))
-	enabled := false
-	for _, t := range cfg.SourceTypes {
-		if _, ok := seen[t.Name]; ok {
-			return errors.Errorf("duplicated source type name %s", t.Name)
-		}
-		seen[t.Name] = struct{}{}
-		if t.Spec == RepoSourceSpecOAuth {
-			return errors.Errorf("source type %s: spec oauth is not implemented", t.Name)
-		}
-		enabled = enabled || t.Enabled
+	if t, ok := lo.Find(cfg.SourceTypes, func(t RepoSourceTypeConfig) bool { return t.Spec == RepoSourceSpecOAuth }); ok {
+		return errors.Errorf("source type %s: spec oauth is not implemented", t.Name)
 	}
-	if !enabled {
+	if !lo.SomeBy(cfg.SourceTypes, func(t RepoSourceTypeConfig) bool { return t.Enabled }) {
 		return errors.New("at least one enabled source type is required")
 	}
 	return nil

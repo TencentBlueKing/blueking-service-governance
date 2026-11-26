@@ -25,32 +25,20 @@ import (
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/pkg/errors"
+	"github.com/samber/lo"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/repoutil/git"
 )
 
-func init() {
-	RegisterControllerFactory(config.RepoSourceSpecBasic, newBasicController)
-}
-
 // basicController basic 方式的 Controller，用账号密码通过 git 协议访问
 type basicController struct {
 	client *git.Client
 }
 
-func newBasicController(_ context.Context, _ *mongo.Database, repo *CodeRepository) (Controller, error) {
-	if repo.BasicAuth == nil || repo.BasicAuth.Username == "" || repo.BasicAuth.Password == "" {
-		return nil, errors.Wrapf(ErrCredentialRequired, "repository %s", repo.URL)
-	}
-	client, err := git.NewClient(repo.URL, git.Credential{
-		Username: repo.BasicAuth.Username, Password: repo.BasicAuth.Password,
-	})
-	if err != nil {
-		return nil, convertGitErr(err, repo.URL)
-	}
-	return &basicController{client: client}, nil
+func init() {
+	RegisterControllerFactory(config.RepoSourceSpecBasic, newBasicController)
 }
 
 // Touch 校验账号密码能否访问
@@ -74,21 +62,31 @@ func (c *basicController) ListRefs(ctx context.Context, query RefsQuery) ([]Ref,
 		sortBranches(items, refs.DefaultBranch)
 	}
 	if search := strings.ToLower(strings.TrimSpace(query.Search)); search != "" {
-		items = slices.DeleteFunc(slices.Clone(items), func(ref git.Ref) bool {
-			return !strings.Contains(strings.ToLower(ref.Name), search)
+		items = lo.Filter(items, func(ref git.Ref, _ int) bool {
+			return strings.Contains(strings.ToLower(ref.Name), search)
 		})
 	}
 
-	start := (query.Page - 1) * query.PageSize
-	if query.Page < 1 || query.PageSize < 1 || start >= int64(len(items)) {
+	if query.Page < 1 || query.PageSize < 1 {
 		return []Ref{}, nil
 	}
-	end := min(start+query.PageSize, int64(len(items)))
-	result := make([]Ref, 0, end-start)
-	for _, ref := range items[start:end] {
-		result = append(result, Ref{Name: ref.Name, Path: ref.Path, SHA: ref.SHA})
+	page := lo.Subset(items, int((query.Page-1)*query.PageSize), uint(query.PageSize))
+	return lo.Map(page, func(ref git.Ref, _ int) Ref {
+		return Ref{Name: ref.Name, Path: ref.Path, SHA: ref.SHA}
+	}), nil
+}
+
+func newBasicController(_ context.Context, _ *mongo.Database, repo *CodeRepository) (Controller, error) {
+	if repo.BasicAuth == nil || repo.BasicAuth.Username == "" || repo.BasicAuth.Password == "" {
+		return nil, errors.Wrapf(ErrCredentialRequired, "repository %s", repo.URL)
 	}
-	return result, nil
+	client, err := git.NewClient(repo.URL, git.Credential{
+		Username: repo.BasicAuth.Username, Password: repo.BasicAuth.Password,
+	})
+	if err != nil {
+		return nil, convertGitErr(err, repo.URL)
+	}
+	return &basicController{client: client}, nil
 }
 
 // convertGitErr 转换 git 错误

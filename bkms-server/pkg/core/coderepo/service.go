@@ -125,6 +125,33 @@ func Get(ctx context.Context, db *mongo.Database, workspaceID, alias string) (*C
 	return repo, nil
 }
 
+// Probe 按未保存的代码库配置创建 Controller，basic 方式未传密码时沿用已保存的
+func Probe(ctx context.Context, db *mongo.Database, spec SaveSpec) (Controller, error) {
+	sourceType, err := ResolveSourceType(spec.Type)
+	if err != nil {
+		return nil, err
+	}
+	alias, err := ResolveAlias(sourceType, spec.URL, spec.Alias)
+	if err != nil {
+		return nil, err
+	}
+	repo := &CodeRepository{WorkspaceID: spec.WorkspaceID, Alias: alias, URL: spec.URL, SourceType: sourceType.Name}
+	if sourceType.Spec == config.RepoSourceSpecBasic {
+		var current *BasicAuth
+		existing, getErr := store.Of(db, CodeRepositoryMeta).Get(ctx, ByWorkspaceAndAlias(spec.WorkspaceID, alias))
+		switch {
+		case getErr == nil && existing.SourceType == sourceType.Name:
+			current = existing.BasicAuth
+		case getErr != nil && !errors.Is(getErr, ErrRepositoryNotFound):
+			return nil, errors.Wrapf(getErr, "get workspace %s repository %s", spec.WorkspaceID, alias)
+		}
+		if repo.BasicAuth, _, err = mergeBasicAuth(current, spec.Username, spec.Password); err != nil {
+			return nil, errors.Wrapf(err, "repository %s", alias)
+		}
+	}
+	return NewController(ctx, db, repo)
+}
+
 // mergeBasicAuth 合并已保存与传入的账号密码，返回结果及是否变化
 func mergeBasicAuth(current *BasicAuth, username, password string) (*BasicAuth, bool, error) {
 	if password == "" {
@@ -158,31 +185,4 @@ func touchIfBasic(ctx context.Context, db *mongo.Database, sourceType SourceType
 		return err
 	}
 	return controller.Touch(ctx)
-}
-
-// Probe 按未保存的代码库配置创建 Controller，basic 方式未传密码时沿用已保存的
-func Probe(ctx context.Context, db *mongo.Database, spec SaveSpec) (Controller, error) {
-	sourceType, err := ResolveSourceType(spec.Type)
-	if err != nil {
-		return nil, err
-	}
-	alias, err := ResolveAlias(sourceType, spec.URL, spec.Alias)
-	if err != nil {
-		return nil, err
-	}
-	repo := &CodeRepository{WorkspaceID: spec.WorkspaceID, Alias: alias, URL: spec.URL, SourceType: sourceType.Name}
-	if sourceType.Spec == config.RepoSourceSpecBasic {
-		var current *BasicAuth
-		existing, getErr := store.Of(db, CodeRepositoryMeta).Get(ctx, ByWorkspaceAndAlias(spec.WorkspaceID, alias))
-		switch {
-		case getErr == nil && existing.SourceType == sourceType.Name:
-			current = existing.BasicAuth
-		case getErr != nil && !errors.Is(getErr, ErrRepositoryNotFound):
-			return nil, errors.Wrapf(getErr, "get workspace %s repository %s", spec.WorkspaceID, alias)
-		}
-		if repo.BasicAuth, _, err = mergeBasicAuth(current, spec.Username, spec.Password); err != nil {
-			return nil, errors.Wrapf(err, "repository %s", alias)
-		}
-	}
-	return NewController(ctx, db, repo)
 }
