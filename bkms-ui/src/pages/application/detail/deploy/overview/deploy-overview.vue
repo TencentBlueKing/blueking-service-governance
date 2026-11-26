@@ -88,7 +88,10 @@
             class="bg-[#fff]"
             @click="emit('create-feature-env')"
           >
-            <Plus class="text-[18px]" />
+            <Plus
+              :height="24"
+              :width="24"
+            />
             {{ $t('新建环境') }}
           </Button>
           <Button
