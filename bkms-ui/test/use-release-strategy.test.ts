@@ -114,8 +114,8 @@ function setup(options: SetupOptions = {}) {
 }
 
 const REPLICAS_CHANGED_REASON = '分批更新时不能修改实例数，请将实例数先改回 20';
-const REPLICAS_LOCKED_HINT = '分批更新时不能修改实例数。如需调整，请选择「一次更新全部实例」，或发布完成后再扩缩容。';
-const ENV_UNSUPPORTED_MESSAGE = '当前环境不支持分批发布，已重置为一次更新全部实例';
+const REPLICAS_LOCKED_HINT = '分批更新时不能修改实例数。如需调整，请选择「单批发布」，或发布完成后再扩缩容。';
+const ENV_UNSUPPORTED_MESSAGE = '当前环境不支持分批发布，已重置为单批发布';
 
 describe('useReleaseStrategy：实例数锁定与同步', () => {
   const wrappers: ReturnType<typeof mount>[] = [];
@@ -175,7 +175,7 @@ describe('useReleaseStrategy：实例数锁定与同步', () => {
     expect(model.replicas).toBe(7);
   });
 
-  it('当分批期间实例数被改成与生效值不同时，应静默回落为一次更新全部实例', async () => {
+  it('当分批期间实例数被改成与生效值不同时，应静默回落为单批发布', async () => {
     const { api, model } = await mountStrategy({ currentReplicas: ref(20), replicas: 20 });
     api.handleChangeReleaseMode('canary');
     await flushPromises();

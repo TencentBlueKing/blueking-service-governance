@@ -18,15 +18,15 @@
 /**
  * 场景级测试：部署表单发布策略选择（ROUTES 未收录，本头即场景说明）
  *
- * 覆盖十八条用户可感知路径 → V = 18：
- *   1. 默认「一次更新全部」提交：部署参数不带 releaseStrategyID
- *   2. 切「按策略分批更新」：展开策略下拉，下拉底部有「新建策略」、右侧有「查看」
+ * 覆盖二十一条用户可感知路径 → V = 21：
+ *   1. 默认「单批发布」提交：部署参数不带 releaseStrategyID
+ *   2. 切「分批发布」：展开策略下拉，下拉底部有「新建策略」、右侧有「查看」
  *   3. 分批发布未选策略提交：表单校验拦截，不发起部署
  *   4. 选中策略：发布预览出现（策略说明 + 摘要四项 + 批次时间线 + 进度方块 + 暂停标签）
  *   5. 分批发布已选策略提交：部署参数携带 releaseStrategyID
- *   6. 切回「一次更新全部」：预览收起、策略清空，提交不带 releaseStrategyID
+ *   6. 切回「单批发布」：预览收起、策略清空，提交不带 releaseStrategyID
  *   7. 联邦集群环境：分批发布按钮禁用
- *   8. 从源码构建：分批发布按钮禁用，且 canary 自动回落为一次更新全部
+ *   8. 从源码构建：分批发布按钮禁用，且 canary 自动回落为单批发布
  *   9. Helm 应用：分批发布按钮禁用（仅应用模型应用支持）
  *   10. 主工作负载为 Deployment：分批发布按钮禁用（仅 GameDeployment 支持）
  *   11. 主工作负载为 GameDeployment：分批发布可用
@@ -35,11 +35,16 @@
  *   14. 策略末批未到全量：提示收尾为「最后自动全量」，预览不补齐全量批、底部提示剩余实例自动更新
  *   15. 两批策略（25% → 100%）：提示保留首批灰度阶段，不误判为单批全量
  *   16. 主工作负载资格检查完成前：分批发布禁用；返回 Deployment 后仍禁用
- *   17. 首次部署（无记录 / 只有构建记录 / 已下线）：分批发布禁用，仍可一次更新全部
+ *   17. 首次部署（无记录 / 只有构建记录 / 已下线）：分批发布禁用，仍可单批发布
  *   18. 切「从源码构建」：默认分支回填到修订选择器（验证模板 ref 真实挂载，prepare 不被静默跳过）
+ *   19. 发布方式展示单批/分批说明：默认单批选中，切换时两项始终互斥
+ *   20. 键盘选择：方向键切换焦点与选中状态，Tab 和空格可操作单选项
+ *   21. 分批不可用：方向键及 Tab 跳过禁用项，保留单批选中状态
+ *
+ * 变异验证：固定选择为单批、移除分批禁用、移除方向键选中更新均被捕获（各 1 条失败，bail=1），已精确还原。
  *
  * stub/mock：
- *   - bkui-vue 真实渲染（Form/Button/Select/Input/Tag）；嵌套的新建策略抽屉同样真实渲染
+ *   - bkui-vue 真实渲染（Form/Button/Radio/Select/Input/Tag）；嵌套的新建策略抽屉同样真实渲染
  *   - ReleaseStrategiesService.listReleaseStrategies → harness 假数据（4 批：1 个 → 25% 暂停 600s → 50% 永久暂停 → 100%）
  *   - ReleaseStrategiesService.createReleaseStrategy → harness 返回新建结果（含 id，供「自动选中」断言）
  *   - use-deploy 的 useDeployAPIs → harness.createDeployDirectly / buildAndCreateDeploy / listDeployRecords（断言部署参数与主工作负载）/ listLatestDeployRecords（首次部署判定）
@@ -336,7 +341,7 @@ async function chooseStrategy(namePattern: RegExp) {
 
 /** 等主工作负载资格检查完成（默认无部署记录，不因负载禁用）后切到分批发布 */
 async function enableCanaryMode() {
-  const button = screen.getByRole('button', { name: '按策略分批更新' });
+  const button = screen.getByRole('radio', { name: /^分批发布/ });
   await waitFor(() => expect(button).not.toBeDisabled());
   await userEvent.click(button);
 }
@@ -392,7 +397,61 @@ beforeEach(() => {
 });
 
 describe('部署表单：发布策略选择', () => {
-  it('当用户保持默认「一次更新全部」提交时，部署参数不应携带发布策略', async () => {
+  it('当用户选择发布方式时，应展示单批与分批说明并保持单选状态', async () => {
+    await renderForm();
+    const releaseModes = within(screen.getByRole('radiogroup', { name: '发布方式' }));
+    const singleBatch = releaseModes.getByRole('radio', { name: /^单批发布/ });
+    const batchRelease = releaseModes.getByRole('radio', { name: /^分批发布/ });
+
+    expect(singleBatch).toBeChecked();
+    expect(batchRelease).not.toBeChecked();
+    expect(releaseModes.getByText('中途不暂停，适合日常发布')).toBeVisible();
+    expect(
+      releaseModes.getByText('按发布策略分批更新，每批完成后可暂停确认，适合需要先小范围验证的发布'),
+    ).toBeVisible();
+
+    await enableCanaryMode();
+    expect(batchRelease).toBeChecked();
+    expect(singleBatch).not.toBeChecked();
+    await userEvent.click(singleBatch);
+    expect(singleBatch).toBeChecked();
+    expect(batchRelease).not.toBeChecked();
+  });
+
+  it('当用户用方向键切换发布方式时，应移动焦点并更新选中状态', async () => {
+    await renderForm();
+    await enableCanaryMode();
+    const singleBatch = screen.getByRole('radio', { name: /^单批发布/ });
+    const batchRelease = screen.getByRole('radio', { name: /^分批发布/ });
+
+    singleBatch.focus();
+    await userEvent.keyboard('{ArrowDown}');
+    expect(batchRelease).toHaveFocus();
+    expect(batchRelease).toBeChecked();
+    await userEvent.keyboard('{ArrowUp}');
+    expect(singleBatch).toHaveFocus();
+    expect(singleBatch).toBeChecked();
+    await userEvent.tab();
+    expect(batchRelease).toHaveFocus();
+    await userEvent.keyboard(' ');
+    expect(batchRelease).toBeChecked();
+  });
+
+  it('当用户通过键盘选择发布方式且分批不可用时，应跳过禁用项', async () => {
+    await renderForm(true);
+    const singleBatch = screen.getByRole('radio', { name: /^单批发布/ });
+    const batchRelease = screen.getByRole('radio', { name: /^分批发布/ });
+
+    singleBatch.focus();
+    await userEvent.keyboard('{ArrowDown}');
+    expect(singleBatch).toHaveFocus();
+    expect(singleBatch).toBeChecked();
+    await userEvent.tab();
+    expect(screen.getByTestId('submit-trigger')).toHaveFocus();
+    expect(batchRelease).not.toBeChecked();
+  });
+
+  it('当用户保持默认「单批发布」提交时，部署参数不应携带发布策略', async () => {
     await renderForm();
     await fillBaseForm();
     await submitForm();
@@ -407,7 +466,7 @@ describe('部署表单：发布策略选择', () => {
     expect(harness.createDeployDirectly.mock.calls[0][0]).not.toHaveProperty('releaseStrategyID');
   });
 
-  it('当用户切换到「按策略分批更新」时，应展开策略下拉并展示「新建策略」与「查看」入口', async () => {
+  it('当用户切换到「分批发布」时，应展开策略下拉并展示「新建策略」与「查看」入口', async () => {
     await renderForm();
     await enableCanaryMode();
 
@@ -532,14 +591,14 @@ describe('部署表单：发布策略选择', () => {
     );
   });
 
-  it('当用户切回「一次更新全部」时，应收起预览并清空已选策略，提交不带发布策略', async () => {
+  it('当用户切回「单批发布」时，应收起预览并清空已选策略，提交不带发布策略', async () => {
     await renderForm();
     await fillBaseForm();
     await enableCanaryMode();
     await chooseStrategy(/生产谨慎发布/);
     await screen.findByText('发布预览');
 
-    await userEvent.click(screen.getByRole('button', { name: '一次更新全部实例' }));
+    await userEvent.click(screen.getByRole('radio', { name: /^单批发布/ }));
     expect(screen.queryByText('发布预览')).not.toBeInTheDocument();
 
     await submitForm();
@@ -547,17 +606,17 @@ describe('部署表单：发布策略选择', () => {
     expect(harness.createDeployDirectly.mock.calls[0][0]).not.toHaveProperty('releaseStrategyID');
   });
 
-  it('当目标环境为联邦集群时，应禁用「按策略分批更新」按钮', async () => {
+  it('当目标环境为联邦集群时，应禁用「分批发布」按钮', async () => {
     await renderForm(true);
     await fillBaseForm();
 
-    expect(screen.getByRole('button', { name: '按策略分批更新' })).toBeDisabled();
-    // 一次更新全部仍可用，提交链路不受影响
+    expect(screen.getByRole('radio', { name: /^分批发布/ })).toBeDisabled();
+    // 单批发布仍可用，提交链路不受影响
     await submitForm();
     await waitFor(() => expect(harness.createDeployDirectly).toHaveBeenCalledTimes(1));
   });
 
-  it('当用户切换到从源码构建时，应禁用分批发布，且已选的 canary 自动回落为一次更新全部', async () => {
+  it('当用户切换到从源码构建时，应禁用分批发布，且已选的 canary 自动回落为单批发布', async () => {
     await renderForm();
     await fillBaseForm();
     await enableCanaryMode();
@@ -568,7 +627,7 @@ describe('部署表单：发布策略选择', () => {
 
     // 回落：预览收起，分批按钮进入禁用态
     await waitFor(() => expect(screen.queryByText('发布预览')).not.toBeInTheDocument());
-    expect(screen.getByRole('button', { name: '按策略分批更新' })).toBeDisabled();
+    expect(screen.getByRole('radio', { name: /^分批发布/ })).toBeDisabled();
   });
 
   it('当用户切换到从源码构建时，应把默认分支回填给修订选择器', async () => {
@@ -581,25 +640,25 @@ describe('部署表单：发布策略选择', () => {
     await waitFor(() => expect(codeRevisionCalls.prepare).toHaveBeenCalledWith('master'));
   });
 
-  it('当应用为 Helm 应用时，应禁用「按策略分批更新」按钮（仅应用模型应用支持）', async () => {
+  it('当应用为 Helm 应用时，应禁用「分批发布」按钮（仅应用模型应用支持）', async () => {
     appState.appType = 'helm';
     await renderForm();
     await fillBaseForm();
 
-    expect(screen.getByRole('button', { name: '按策略分批更新' })).toBeDisabled();
-    // 一次更新全部仍可用，提交链路不受影响
+    expect(screen.getByRole('radio', { name: /^分批发布/ })).toBeDisabled();
+    // 单批发布仍可用，提交链路不受影响
     await submitForm();
     await waitFor(() => expect(harness.createDeployDirectly).toHaveBeenCalledTimes(1));
   });
 
-  it('当主工作负载为 Deployment 时，应禁用「按策略分批更新」按钮（仅 GameDeployment 支持）', async () => {
+  it('当主工作负载为 Deployment 时，应禁用「分批发布」按钮（仅 GameDeployment 支持）', async () => {
     harness.listDeployRecords.mockResolvedValue({ count: 1, results: [{ workloadKind: 'Deployment' }] });
     await renderForm();
     await fillBaseForm();
 
     await waitFor(() => expect(harness.listDeployRecords).toHaveBeenCalled());
-    expect(screen.getByRole('button', { name: '按策略分批更新' })).toBeDisabled();
-    // 分批发布已失效时提交不应透传 releaseStrategyID（当前为一次更新全部，正常部署）
+    expect(screen.getByRole('radio', { name: /^分批发布/ })).toBeDisabled();
+    // 分批发布已失效时提交不应透传 releaseStrategyID（当前为单批发布，正常部署）
     await submitForm();
     await waitFor(() => expect(harness.createDeployDirectly).toHaveBeenCalledTimes(1));
     expect(harness.createDeployDirectly.mock.calls[0][0]).not.toHaveProperty('releaseStrategyID');
@@ -616,15 +675,15 @@ describe('部署表单：发布策略选择', () => {
     await fillBaseForm();
 
     // 资格未知时不允许先选分批再被回退：检查完成前直接禁用
-    expect(screen.getByRole('button', { name: '按策略分批更新' })).toBeDisabled();
+    expect(screen.getByRole('radio', { name: /^分批发布/ })).toBeDisabled();
     expect(screen.queryByText('发布预览')).not.toBeInTheDocument();
 
     resolveRecords({ count: 1, results: [{ workloadKind: 'Deployment' }] });
     await waitFor(() => expect(harness.listDeployRecords).toHaveBeenCalled());
-    expect(screen.getByRole('button', { name: '按策略分批更新' })).toBeDisabled();
+    expect(screen.getByRole('radio', { name: /^分批发布/ })).toBeDisabled();
   });
 
-  it('当主工作负载为 GameDeployment 时，应允许「按策略分批更新」', async () => {
+  it('当主工作负载为 GameDeployment 时，应允许「分批发布」', async () => {
     harness.listDeployRecords.mockResolvedValue({ count: 1, results: [{ workloadKind: 'GameDeployment' }] });
     await renderForm();
     await fillBaseForm();
@@ -639,7 +698,7 @@ describe('部署表单：发布策略选择', () => {
     ['无部署 / 构建记录（data 为 null）', null],
     ['只有构建记录（hasDeployRecord=false）', { hasDeployRecord: false, status: 'failed' }],
     ['工作负载已下线（status=uninstalled）', { hasDeployRecord: true, status: 'uninstalled' }],
-  ])('当目标环境为首次部署（%s）时，应禁用「按策略分批更新」', async (_name, latest) => {
+  ])('当目标环境为首次部署（%s）时，应禁用「分批发布」', async (_name, latest) => {
     harness.listLatestDeployRecords.mockResolvedValue(latest);
     await renderForm();
     await fillBaseForm();
@@ -653,9 +712,9 @@ describe('部署表单：发布策略选择', () => {
     });
     // 等检查结果落地（promise 微任务），确认不是仅因「检查中」而禁用
     await new Promise(resolve => setTimeout(resolve, 0));
-    expect(screen.getByRole('button', { name: '按策略分批更新' })).toBeDisabled();
+    expect(screen.getByRole('radio', { name: /^分批发布/ })).toBeDisabled();
 
-    // 一次更新全部仍可用，提交链路不受影响
+    // 单批发布仍可用，提交链路不受影响
     await submitForm();
     await waitFor(() => expect(harness.createDeployDirectly).toHaveBeenCalledTimes(1));
     expect(harness.createDeployDirectly.mock.calls[0][0]).not.toHaveProperty('releaseStrategyID');
@@ -697,7 +756,7 @@ describe('部署表单：抽屉内新建发布策略', () => {
     // 标题：新建策略（与下拉里的同名入口区分，限定在抽屉头内断言）
     expect(within(header).getByText('新建策略')).toBeInTheDocument();
     // 部署表单仍在抽屉之下保持可交互（叠加而非替换）
-    expect(screen.getByRole('button', { name: '一次更新全部实例' })).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: /^单批发布/ })).toBeInTheDocument();
     expect(screen.getByPlaceholderText('请选择发布策略')).toBeInTheDocument();
   });
 
