@@ -31,7 +31,6 @@ import (
 	imagebuild "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/revision"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
-	deploypkg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/taskq"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/taskqtask/buildpoll"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
@@ -88,7 +87,6 @@ func StartAndScheduleBuild(
 		}); err != nil {
 			return nil, errors.Wrap(err, "create build auto deploy record")
 		}
-		deploypkg.TrackEnvAddApp(ctx, opts.DB, app.WorkspaceID, opts.AutoDeploy.EnvName, app.ID)
 	}
 
 	err = taskq.Enqueue(

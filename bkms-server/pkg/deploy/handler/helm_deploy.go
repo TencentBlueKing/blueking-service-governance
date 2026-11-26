@@ -221,7 +221,6 @@ func (h *Handler) CreateHelmDeploy(c *gin.Context) {
 		return
 	}
 
-	deploypkg.TrackEnvAddApp(ctx, h.registry.DB, app.WorkspaceID, uriInput.EnvName, app.ID)
 	// 执行部署的若干步骤
 	deployID, err := h.execHelmAppDeploySteps(
 		ctx, app, env, input.TrafficLaneName, input.ChartVersion, input.ValuesFileID, input.ImageTag,

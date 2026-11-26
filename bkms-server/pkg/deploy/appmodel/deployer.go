@@ -153,16 +153,11 @@ func (d *Deployer) Deploy(
 		}
 	}()
 
-	// 确保待部署环境中已经存在对应的 ImagePullSecret
-	if err = d.syncImagePullSecret(ctx, env); err != nil {
-		return "", err
+	// 登记须晚于创建部署记录（环境中登记的应用都有部署记录），早于下发资源（集群中有应用资源时环境不能被删除）
+	if err = bkmsenv.AddApp(ctx, d.db, env.ID, d.app.ID); err != nil {
+		return "", errors.Wrap(err, "track app in env")
 	}
-	// 先下发额外资源（如 ConfigMap 等）到集群中
-	if err = d.upsertExtraObjects(ctx, clusterID, namespace, extraObjs); err != nil {
-		return "", errors.Wrap(err, "upsert extra objects")
-	}
-	// 按发布方式处理 Rollout 并下发主工作负载
-	if err = d.applyMainWorkload(ctx, clusterID, namespace, deployID, buildResult, rollout); err != nil {
+	if err = d.applyResources(ctx, env, deployID, buildResult, rollout); err != nil {
 		return "", err
 	}
 
@@ -189,6 +184,26 @@ func (d *Deployer) Deploy(
 
 	d.reconcileEnvStates(ctx, env, buildResult)
 	return deployID, nil
+}
+
+// applyResources 将本次部署的资源下发到集群：ImagePullSecret、额外资源（如 ConfigMap 等）、主工作负载
+func (d *Deployer) applyResources(
+	ctx context.Context,
+	env *bkmsenv.Environment,
+	deployID string,
+	buildResult *workload.BuildResult,
+	rollout *workloadRollout,
+) error {
+	if err := d.syncImagePullSecret(ctx, env); err != nil {
+		return err
+	}
+	clusterID, namespace := env.Cluster.ClusterID, env.Cluster.Namespace
+	// 额外资源须先于主工作负载下发
+	if err := d.upsertExtraObjects(ctx, clusterID, namespace, buildResult.ExtraObjects); err != nil {
+		return errors.Wrap(err, "upsert extra objects")
+	}
+	// 按发布方式处理 Rollout 并下发主工作负载
+	return d.applyMainWorkload(ctx, clusterID, namespace, deployID, buildResult, rollout)
 }
 
 // Uninstall 执行卸载操作，将最新部署的相关资源从集群中删除

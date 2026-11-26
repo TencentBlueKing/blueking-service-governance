@@ -24,8 +24,10 @@ import (
 
 	tkex "github.com/Tencent/bk-bcs/bcs-scenarios/kourse/pkg/apis/tkex/v1alpha1"
 	"github.com/TencentBlueKing/gopkg/stringx"
+	"github.com/bytedance/mockey"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	corev1 "k8s.io/api/core/v1"
@@ -34,8 +36,10 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/autodeploy"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
+	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	k8skind "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/kind"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/workload"
 )
 
@@ -224,5 +228,60 @@ var _ = Describe("syncBuildAutoDeployStatus", func() {
 		Expect(got.Stage).To(Equal(autodeploy.StageDeploy))
 		Expect(got.Message).To(Equal("done"))
 		Expect(got.EndedAt).To(BeTemporally("==", deployRecord.EndedAt))
+	})
+})
+
+var _ = Describe("Deploy tracks app in env", func() {
+	var (
+		ctx      context.Context
+		db       *mongo.Database
+		env      *bkmsenv.Environment
+		deployer *Deployer
+	)
+
+	BeforeEach(func() {
+		ctx = testutil.NewDefaultTenantContext()
+		db = testutil.NewDB(GinkgoT())
+		envs := store.Of(db, bkmsenv.EnvMeta)
+		env = &bkmsenv.Environment{WorkspaceID: "ws-" + stringx.Random(6), Name: "feat-" + stringx.Random(6)}
+		Expect(envs.Create(ctx, env)).To(Succeed())
+		DeferCleanup(func() { _ = envs.Delete(ctx, store.ByID(env.ID)) })
+		deployer = &Deployer{db: db, app: &bkmsapp.Application{ID: "app-" + stringx.Random(6)}}
+	})
+
+	deploy := func() error {
+		_, err := deployer.Deploy(ctx, &appmodel.AppModel{}, env, nil, "", "v1", "", 1, nil, nil)
+		return err
+	}
+	trackedAppIDs := func() []string {
+		got, err := store.Of(db, bkmsenv.EnvMeta).Get(ctx, store.ByID(env.ID))
+		Expect(err).NotTo(HaveOccurred())
+		return got.AppIDs
+	}
+
+	It("does not track the app when deploy fails before creating the deploy record", func() {
+		mockey.PatchConvey("build fails", GinkgoT(), func() {
+			mockey.Mock((*Deployer).buildWorkload).Return(nil, errors.New("components not supported")).Build()
+
+			Expect(deploy()).To(MatchError(ContainSubstring("components not supported")))
+			Expect(trackedAppIDs()).NotTo(ContainElement(deployer.app.ID))
+		})
+	})
+
+	It("tracks the app once the deploy record is created, even if applying resources fails", func() {
+		mockey.PatchConvey("apply fails", GinkgoT(), func() {
+			mockey.Mock((*Deployer).buildWorkload).Return(&workload.BuildResult{
+				MainWorkload: newGameDeploy(nil, nil), WorkloadKind: k8skind.GameDeploy,
+			}, nil).Build()
+			mockey.Mock(newWorkloadRollout).Return(&workloadRollout{}, nil).Build()
+			mockey.Mock((*Deployer).claimOwnership).Return(nil).Build()
+			mockey.Mock((*Deployer).getExpiredResources).Return(nil, nil).Build()
+			mockey.Mock((*Deployer).createDeployRecord).Return(bson.NewObjectID().Hex(), nil).Build()
+			mockey.Mock((*Deployer).markRecordFailed).To(func(*Deployer, context.Context, string, error) {}).Build()
+			mockey.Mock((*Deployer).syncImagePullSecret).Return(errors.New("sync secret failed")).Build()
+
+			Expect(deploy()).To(MatchError(ContainSubstring("sync secret failed")))
+			Expect(trackedAppIDs()).To(ContainElement(deployer.app.ID))
+		})
 	})
 })
