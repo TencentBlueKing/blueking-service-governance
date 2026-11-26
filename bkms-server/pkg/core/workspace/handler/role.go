@@ -389,9 +389,9 @@ func (h *Handler) RemoveWorkspaceRoleUser(c *gin.Context) {
 	ginutils.OK(c, serializer.EmptyOutput{})
 }
 
-// AddWorkspaceUser 授予用户工作空间下角色身份。
+// AddWorkspaceRoleUser 授予用户工作空间下角色身份。
 //
-//	@ID				AddWorkspaceUser
+//	@ID				AddWorkspaceRoleUser
 //	@Summary		授予用户工作空间下角色身份
 //	@Tags			workspace
 //	@Accept			json
@@ -400,13 +400,13 @@ func (h *Handler) RemoveWorkspaceRoleUser(c *gin.Context) {
 //	@Security		BkUserCredential
 //	@Param			workspaceID	path		string							true	"工作空间 ID"
 //	@Param			roleCode	path		string							true	"内置角色为角色 Code，自定义角色为角色 ID"
-//	@Param			body		body		serializer.AddWorkspaceUserInput	true	"添加用户请求"
+//	@Param			body		body		serializer.AddWorkspaceRoleUserInput	true	"添加用户请求"
 //	@Success		200			{object}	serializer.EmptyOutput
 //	@Failure		400			{object}	bkerrs.GinErrorOutput
 //	@Router			/workspaces/{workspaceID}/roles/{roleCode}/users [post]
-func (h *Handler) AddWorkspaceUser(c *gin.Context) {
+func (h *Handler) AddWorkspaceRoleUser(c *gin.Context) {
 	var uriInput serializer.WorkspaceRoleKeyURIInput
-	var input serializer.AddWorkspaceUserInput
+	var input serializer.AddWorkspaceRoleUserInput
 	if err := ginutils.BindURIJSON(c, &uriInput, &input); err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return
@@ -617,19 +617,19 @@ func (h *Handler) ListWorkspaceUsers(c *gin.Context) {
 	ginutils.OK(c, serializer.ListWorkspaceUsersOutput{Data: outputs})
 }
 
-// ListEnvDeployers 列出各标准环境的可部署人员。
+// ListWorkspaceEnvDeployers 列出各标准环境的可部署人员。
 //
-//	@ID				ListEnvDeployers
+//	@ID				ListWorkspaceEnvDeployers
 //	@Summary		列出空间内各标准环境能部署的人，以及每人来自哪些角色、能部署哪些应用
 //	@Tags			workspace
 //	@Produce		json
 //	@Security		BkUserInfo
 //	@Security		BkUserCredential
 //	@Param			workspaceID	path		string	true	"工作空间 ID"
-//	@Success		200			{object}	serializer.ListEnvDeployersOutput
+//	@Success		200			{object}	serializer.ListWorkspaceEnvDeployersOutput
 //	@Failure		400			{object}	bkerrs.GinErrorOutput
 //	@Router			/workspaces/{workspaceID}/env-deployers [get]
-func (h *Handler) ListEnvDeployers(c *gin.Context) {
+func (h *Handler) ListWorkspaceEnvDeployers(c *gin.Context) {
 	var uriInput serializer.WorkspaceURIInput
 	if err := ginutils.BindURI(c, &uriInput); err != nil {
 		bkerrs.AbortWithErr(c, err)
@@ -682,7 +682,7 @@ func (h *Handler) ListEnvDeployers(c *gin.Context) {
 			EnvID: env.ID.Hex(), EnvName: env.Name, Deployers: deployers,
 		})
 	}
-	ginutils.OK(c, serializer.ListEnvDeployersOutput{Data: outputs})
+	ginutils.OK(c, serializer.ListWorkspaceEnvDeployersOutput{Data: outputs})
 }
 
 // listMembersByRole 并发拉取各角色的成员列表，返回 roleID → 成员用户名列表

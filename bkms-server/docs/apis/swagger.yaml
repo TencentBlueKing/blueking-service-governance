@@ -1456,7 +1456,7 @@ definitions:
         description: 北极星鉴权 Token；显式传空字符串表示清除
         type: string
     type: object
-  serializer.AddWorkspaceUserInput:
+  serializer.AddWorkspaceRoleUserInput:
     properties:
       userIDs:
         description: 用户列表
@@ -6971,13 +6971,6 @@ definitions:
           $ref: '#/definitions/serializer.BgEnvVarOutputObj'
         type: array
     type: object
-  serializer.ListEnvDeployersOutput:
-    properties:
-      data:
-        items:
-          $ref: '#/definitions/serializer.EnvDeployersOutputObj'
-        type: array
-    type: object
   serializer.ListEnvTrafficLanesOutput:
     properties:
       data:
@@ -7189,6 +7182,13 @@ definitions:
       data:
         items:
           $ref: '#/definitions/serializer.WorkspaceComponentOutputObj'
+        type: array
+    type: object
+  serializer.ListWorkspaceEnvDeployersOutput:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/serializer.EnvDeployersOutputObj'
         type: array
     type: object
   serializer.ListWorkspaceRoleMemberGroupsOutput:
@@ -23787,7 +23787,7 @@ paths:
       - depservice-redis
   /workspaces/{workspaceID}/env-deployers:
     get:
-      operationId: ListEnvDeployers
+      operationId: ListWorkspaceEnvDeployers
       parameters:
       - description: 工作空间 ID
         in: path
@@ -23800,7 +23800,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/serializer.ListEnvDeployersOutput'
+            $ref: '#/definitions/serializer.ListWorkspaceEnvDeployersOutput'
         "400":
           description: Bad Request
           schema:
@@ -24866,7 +24866,7 @@ paths:
     post:
       consumes:
       - application/json
-      operationId: AddWorkspaceUser
+      operationId: AddWorkspaceRoleUser
       parameters:
       - description: 工作空间 ID
         in: path
@@ -24883,7 +24883,7 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/serializer.AddWorkspaceUserInput'
+          $ref: '#/definitions/serializer.AddWorkspaceRoleUserInput'
       produces:
       - application/json
       responses:

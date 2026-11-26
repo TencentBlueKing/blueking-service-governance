@@ -19779,7 +19779,7 @@ const docTemplate = `{
                     "workspace"
                 ],
                 "summary": "列出空间内各标准环境能部署的人，以及每人来自哪些角色、能部署哪些应用",
-                "operationId": "ListEnvDeployers",
+                "operationId": "ListWorkspaceEnvDeployers",
                 "parameters": [
                     {
                         "type": "string",
@@ -19793,7 +19793,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/serializer.ListEnvDeployersOutput"
+                            "$ref": "#/definitions/serializer.ListWorkspaceEnvDeployersOutput"
                         }
                     },
                     "400": {
@@ -21494,7 +21494,7 @@ const docTemplate = `{
                     "workspace"
                 ],
                 "summary": "授予用户工作空间下角色身份",
-                "operationId": "AddWorkspaceUser",
+                "operationId": "AddWorkspaceRoleUser",
                 "parameters": [
                     {
                         "type": "string",
@@ -21516,7 +21516,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/serializer.AddWorkspaceUserInput"
+                            "$ref": "#/definitions/serializer.AddWorkspaceRoleUserInput"
                         }
                     }
                 ],
@@ -24240,7 +24240,7 @@ const docTemplate = `{
                 }
             }
         },
-        "serializer.AddWorkspaceUserInput": {
+        "serializer.AddWorkspaceRoleUserInput": {
             "type": "object",
             "required": [
                 "userIDs"
@@ -32301,17 +32301,6 @@ const docTemplate = `{
                 }
             }
         },
-        "serializer.ListEnvDeployersOutput": {
-            "type": "object",
-            "properties": {
-                "data": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/serializer.EnvDeployersOutputObj"
-                    }
-                }
-            }
-        },
         "serializer.ListEnvTrafficLanesOutput": {
             "type": "object",
             "properties": {
@@ -32651,6 +32640,17 @@ const docTemplate = `{
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/serializer.WorkspaceComponentOutputObj"
+                    }
+                }
+            }
+        },
+        "serializer.ListWorkspaceEnvDeployersOutput": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/serializer.EnvDeployersOutputObj"
                     }
                 }
             }

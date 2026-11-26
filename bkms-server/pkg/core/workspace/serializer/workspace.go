@@ -428,11 +428,11 @@ type UpdateWorkspaceInfoInput struct {
 }
 
 // -----------------------------------------------------------------------------
-// AddWorkspaceUser
+// AddWorkspaceRoleUser
 // -----------------------------------------------------------------------------
 
-// AddWorkspaceUserInput is the JSON body for adding workspace users.
-type AddWorkspaceUserInput struct {
+// AddWorkspaceRoleUserInput is the JSON body for adding users to a workspace role.
+type AddWorkspaceRoleUserInput struct {
 	// 用户列表
 	UserIDs []string `json:"userIDs" binding:"required,min=1"`
 }

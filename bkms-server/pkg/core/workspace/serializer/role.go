@@ -258,7 +258,7 @@ type EnvDeployersOutputObj struct {
 	Deployers []*EnvDeployerOutputObj `json:"deployers"`
 }
 
-// ListEnvDeployersOutput is the JSON response for listing env deployers.
-type ListEnvDeployersOutput struct {
+// ListWorkspaceEnvDeployersOutput is the JSON response for listing env deployers.
+type ListWorkspaceEnvDeployersOutput struct {
 	Data []*EnvDeployersOutputObj `json:"data"`
 }
