@@ -77,6 +77,9 @@ type FrontendFeaturesResponse struct {
 
 // newRepoSourceTypesOutput 已启用的接入方式，默认接入方式在前
 func newRepoSourceTypesOutput(cfg config.CodeRepositoryConfig) []*RepoSourceTypeOutput {
+	if len(cfg.SourceTypes) == 0 {
+		return nil
+	}
 	types := lo.Filter(cfg.SourceTypes, func(t config.RepoSourceTypeConfig, _ int) bool { return t.Enabled })
 	// 默认接入方式（第一个蓝盾托管方式）排在最前
 	if _, i, ok := lo.FindIndexOf(types, func(t config.RepoSourceTypeConfig) bool {
