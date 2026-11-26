@@ -406,6 +406,7 @@
       :mismatches="federationMismatches"
       :missing-required-cluster-addons="missingRequiredClusterAddons"
       :undefined-vars="undefinedVars"
+      :unsupported-components="unsupportedComponents"
       @cancel="cancelDeploy"
       @go-modify="cancelDeploy"
       @still-deploy="continueDeploy"
@@ -518,6 +519,7 @@
     federationMismatches,
     isShowPrecheckDialog,
     missingRequiredClusterAddons,
+    unsupportedComponents,
     precheck,
     precheckEnvName,
     precheckEnvId,
@@ -1266,17 +1268,17 @@
     router.push({ query: { ...query, view: FEATURE_ENV_PAGE_QUERY } });
   }
 
-  /** 首次部署特性环境：完成环境变量预检查后切到实例页并打开快速部署侧栏。 */
+  /** 首次部署特性环境：先切到该环境的实例页，再做部署预检，通过后打开快速部署侧栏。 */
   async function handleDeployFeatureEnv(env: EnvOutput) {
     if (!env.name || precheckLoading.value) return;
 
     precheckLoading.value = true;
     try {
-      const precheckPassed = await precheck(env);
-      if (!precheckPassed) return;
-
+      // 预检弹窗挂在当前部署页上。先离开特性环境列表并选中目标环境，弹窗才出现在实例页上。
       if (isFeatureEnvPage.value) await leaveFeatureEnvPage();
-      envSelectRefreshKey.value += 1;
+      // 先写入目标环境再重建选择器，实例页和后续部署侧栏都选中刚创建的特性环境。
+      isMultiEnvMode.value = false;
+      curEnvs.value = [env.name];
       envStore.updateCurrentEnv(env.name);
       trpcDeployStore.updateCurEnvItem(env);
       activeTab.value = TAB_NAMES.instance;
@@ -1284,6 +1286,14 @@
       effectiveDeploySpec.value = undefined;
       initLoading.value = true;
       overviewDeployTargets.value = undefined;
+      envSelectRefreshKey.value += 1;
+      await nextTick();
+
+      const precheckPassed = await precheck(env);
+      if (!precheckPassed) return;
+      // 预检等待期间用户可能已切走环境，避免把部署侧栏开到另一个环境上。
+      if (trpcDeployStore.curEnvItem?.name !== env.name) return;
+
       isShowQuicklyDeploy.value = true;
     } catch (error) {
       console.warn(error);

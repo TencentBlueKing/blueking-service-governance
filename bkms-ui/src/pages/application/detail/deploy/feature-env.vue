@@ -63,9 +63,9 @@
       <div class="flex-1 min-h-0 p-[24px] flex flex-col gap-[16px] overflow-hidden">
         <Alert theme="info">
           <div class="text-[12px] leading-[20px]">
-            <div>{{ $t('特性环境只属于当前应用，其他应用无法使用。来源环境仅为创建时快照，之后互不影响。') }}</div>
-            <div>{{ $t('环境变量不会从来源环境复制，可在列表中单独配置。') }}</div>
-            <div>{{ $t('环境创建后不会自动部署，需要单独执行部署；销毁前需先移除部署。') }}</div>
+            <div>1. {{ $t('特性环境只属于当前应用，其他应用无法使用。来源环境仅为创建时快照，之后互不影响。') }}</div>
+            <div>2. {{ $t('环境变量不会从来源环境复制，可在列表中单独配置。') }}</div>
+            <div>3. {{ $t('环境创建后不会自动部署，需要单独执行部署；销毁前需先移除部署。') }}</div>
           </div>
         </Alert>
 
@@ -130,6 +130,20 @@
               <HoverCopy
                 :copy-value="row.name"
                 :text="row.name"
+              />
+            </template>
+          </TableColumn>
+
+          <TableColumn
+            field="namespace"
+            :label="$t('命名空间')"
+            min-width="160"
+            show-overflow-tooltip
+          >
+            <template #default="{ row }: { row: FeatureEnvRow }">
+              <HoverCopy
+                :copy-value="row.namespace"
+                :text="row.namespace"
               />
             </template>
           </TableColumn>
@@ -275,9 +289,9 @@
         </div>
       </template>
       <div class="mb-[16px] px-[16px] py-[12px] bg-[#F5F6FA] rounded-[2px]">
-        {{ $t('将永久删除特性环境及其命名空间，并清理应用配置 / 北极星 / 组件中的引用。') }}
+        {{ $t('将永久删除特性环境，并清理应用配置 / 北极星 / 组件中的引用。') }}
       </div>
-      <i18n-t keypath="该操作不可恢复，请输入特性环境命名空间：{0} 进行确认">
+      <i18n-t keypath="该操作不可恢复，请输入特性环境名称：{0} 进行确认">
         <span
           class="font-bold text-[#EA3636] px-[3px] cursor-pointer hover:bg-[#FFEBEB]"
           @click="copyText(destroyTargetRow?.name || '')"

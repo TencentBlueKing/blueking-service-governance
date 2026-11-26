@@ -299,14 +299,12 @@ function buttonLabelsOf(banner: HTMLElement) {
 }
 
 /**
- * 写操作统一带 { interceptorErr: false }，并携带确认时捕获的 deployID（后端据此核对目标），
+ * 写操作统一带 { interceptorErr: false }。
+ * 确认时的部署记录是否仍有效由调用方在发请求前本地核对，请求体只含操作参数。
  * 错误由横幅自己提示。
  */
 function expectOperateCalledWith(action: string) {
-  expect(mocks.operate).toHaveBeenCalledWith(
-    { action, appID: 'app-a', deployID: 'deploy-1', envName: 'prod' },
-    { interceptorErr: false },
-  );
+  expect(mocks.operate).toHaveBeenCalledWith({ action, appID: 'app-a', envName: 'prod' }, { interceptorErr: false });
 }
 
 /** 挂载后等待首轮「最新部署状态 + 进度」返回，再返回横幅节点。 */

@@ -35,7 +35,7 @@
     <div
       v-if="hasResourceBlocker"
       class="overflow-hidden rounded-[2px] border border-[#F8B4B4]"
-      :class="{ 'mb-[16px]': hasMissingRequiredClusterAddons || hasUndefinedVars }"
+      :class="{ 'mb-[16px]': hasMissingRequiredClusterAddons || hasUnsupportedComponents || hasUndefinedVars }"
     >
       <div
         class="flex cursor-pointer items-center justify-between bg-[#FEEBEA] px-[12px] py-[8px]"
@@ -100,7 +100,7 @@
     <div
       v-if="hasMissingRequiredClusterAddons"
       class="overflow-hidden rounded-[2px] border border-[#F8B4B4]"
-      :class="{ 'mb-[16px]': hasUndefinedVars }"
+      :class="{ 'mb-[16px]': hasUnsupportedComponents || hasUndefinedVars }"
     >
       <div
         class="flex cursor-pointer items-center justify-between bg-[#FEEBEA] px-[12px] py-[8px]"
@@ -144,6 +144,70 @@
           <div class="flex flex-wrap gap-[8px]">
             <span
               v-for="(name, index) in clusterAddonNames"
+              :key="`${name}:${index}`"
+              class="rounded-[2px] bg-[#F0F1F5] px-[16px] py-[4px] text-[14px] leading-[24px] text-[#63656E]"
+            >
+              {{ name }}
+            </span>
+          </div>
+        </div>
+      </transition>
+    </div>
+
+    <!-- 沿用来源环境不支持组件 -->
+    <div
+      v-if="hasUnsupportedComponents"
+      class="overflow-hidden rounded-[2px] border border-[#F8B4B4]"
+      :class="{ 'mb-[16px]': hasUndefinedVars }"
+    >
+      <div
+        class="flex cursor-pointer items-center justify-between bg-[#FEEBEA] px-[12px] py-[8px]"
+        @click="unsupportedCollapsed = !unsupportedCollapsed"
+      >
+        <div class="flex items-center">
+          <i class="bkms-icon bkms-icon-close-circle-shape text-[14px] text-[#EA3636]" />
+          <span class="mx-[8px] text-base font-bold text-[#EA3636]">{{ $t('沿用来源环境不支持组件') }}</span>
+          <span class="rounded-[2px] bg-[#FCD5D3] px-[8px] py-[2px] text-[12px] text-[#EA3636]">
+            <i18n-t keypath="{0} 个组件">
+              <span class="pl-[2px]">{{ unsupportedComponents.length }}</span>
+            </i18n-t>
+          </span>
+        </div>
+        <AngleDown
+          class="text-[22px] text-[#979BA5] transition-transform duration-200"
+          :class="{ 'rotate-180': !unsupportedCollapsed }"
+        />
+      </div>
+
+      <transition name="collapse">
+        <div
+          v-show="!unsupportedCollapsed"
+          class="border-t border-[#F8B4B4] bg-[#FFF5F4] px-[12px] py-[8px]"
+        >
+          <p class="text-[12px] leading-[20px] text-[#4D4F56]">
+            {{ $t('这些组件会部署到来源环境的命名空间，影响来源环境。') }}
+          </p>
+          <i18n-t
+            class="mb-[8px] text-[12px] leading-[20px] text-[#4D4F56]"
+            keypath="建议前往 {0} 确认是否都需要；仍要使用时，前往 {1} 选择「独立创建」。"
+            tag="p"
+          >
+            <span
+              class="cursor-pointer text-[#3A84FF]"
+              @click="handleGoComponentConfig"
+            >
+              「{{ $t('组件配置') }}」
+            </span>
+            <span
+              class="cursor-pointer text-[#3A84FF]"
+              @click="handleGoFeatureEnv"
+            >
+              「{{ $t('部署管理') }} / {{ $t('特性环境') }}」
+            </span>
+          </i18n-t>
+          <div class="flex flex-wrap gap-[8px]">
+            <span
+              v-for="(name, index) in unsupportedComponentNames"
               :key="`${name}:${index}`"
               class="rounded-[2px] bg-[#F0F1F5] px-[16px] py-[4px] text-[14px] leading-[24px] text-[#63656E]"
             >
@@ -328,6 +392,7 @@
     mismatches: FederationResourceMismatch[];
     missingRequiredClusterAddons: ClusterAddonReferenceOutput[];
     undefinedVars: UndefinedEnvVarOutput[];
+    unsupportedComponents: string[];
   }>();
   const emit = defineEmits<{
     cancel: [];
@@ -341,6 +406,7 @@
   const router = useRouter();
   const resourceCollapsed = ref(false);
   const clusterAddonCollapsed = ref(false);
+  const unsupportedCollapsed = ref(false);
   const envVarCollapsed = ref(false);
   const current = ref(1);
   const limit = ref(10);
@@ -349,14 +415,23 @@
   const hasResourceBlocker = computed(() => props.mismatches.length > 0);
   // 是否缺少必选集群组件
   const hasMissingRequiredClusterAddons = computed(() => props.missingRequiredClusterAddons.length > 0);
-  // 是否存在阻断部署的问题（资源规格不一致 / 缺组件）
-  const hasBlockingIssue = computed(() => hasResourceBlocker.value || hasMissingRequiredClusterAddons.value);
+  // 沿用来源环境不支持组件
+  const hasUnsupportedComponents = computed(() => props.unsupportedComponents.length > 0);
+  // 是否存在阻断部署的问题（资源规格不一致 / 缺组件 / 沿用来源环境不支持组件）
+  const hasBlockingIssue = computed(
+    () => hasResourceBlocker.value || hasMissingRequiredClusterAddons.value || hasUnsupportedComponents.value,
+  );
   // 是否存在未定义环境变量
   const hasUndefinedVars = computed(() => props.undefinedVars.length > 0);
   // 问题类型总数（用于标题展示）
   const problemCount = computed(
     () =>
-      [hasResourceBlocker.value, hasMissingRequiredClusterAddons.value, hasUndefinedVars.value].filter(Boolean).length,
+      [
+        hasResourceBlocker.value,
+        hasMissingRequiredClusterAddons.value,
+        hasUnsupportedComponents.value,
+        hasUndefinedVars.value,
+      ].filter(Boolean).length,
   );
 
   const sourceTypeMap: Record<string, { className: string; label: string }> = {
@@ -410,6 +485,8 @@
     props.missingRequiredClusterAddons.map(item => item.displayName || item.name || '--'),
   );
 
+  const unsupportedComponentNames = computed(() => props.unsupportedComponents.map(name => name || '--'));
+
   // 未定义环境变量的表格行数据
   const envVarRows = computed<DisplayRow[]>(() =>
     props.undefinedVars.map(item => ({
@@ -454,6 +531,16 @@
     closeAfterModify();
   }
 
+  /** 新窗口打开「组件配置」，确认沿用来源环境时不支持的组件 */
+  function handleGoComponentConfig() {
+    const resolved = router.resolve({
+      name: 'detail',
+      params: { ...route.params, menuName: 'module' },
+    });
+    window.open(resolved.href, '_blank');
+    closeAfterModify();
+  }
+
   /** 新窗口打开「环境管理 / 环境变量」页，引导补充变量配置 */
   function handleGoEnvVarModify() {
     const resolved = router.resolve(
@@ -465,6 +552,17 @@
             query: { active: props.envName, activeTab: 'setting' },
           },
     );
+    window.open(resolved.href, '_blank');
+    closeAfterModify();
+  }
+
+  /** 新窗口打开「部署管理 / 特性环境」，引导改为独立创建 */
+  function handleGoFeatureEnv() {
+    const resolved = router.resolve({
+      name: 'detail',
+      params: { ...route.params, menuName: 'deployment' },
+      query: { view: 'feature-envs' },
+    });
     window.open(resolved.href, '_blank');
     closeAfterModify();
   }
@@ -510,6 +608,7 @@
     if (show) {
       resourceCollapsed.value = false;
       clusterAddonCollapsed.value = false;
+      unsupportedCollapsed.value = false;
       envVarCollapsed.value = false;
       current.value = 1;
       limit.value = 10;

@@ -28,7 +28,7 @@ export const PolarisAccessPointsService = {
   /**
    * 创建北极星接入点
    *
-   * 保存前服务端重新执行连通测试，失败或北极星开启了客户端鉴权时拒绝；Token 选填，加密存储。
+   * 保存前服务端重新执行连通测试，失败时拒绝；Token 选填，加密存储。
    * 传入 clusterIDs 时同时把这些集群绑定到该接入点
    *
    * @method POST
@@ -47,7 +47,7 @@ export const PolarisAccessPointsService = {
    * 测试北极星接入点连通性
    *
    * 依次检查网络、鉴权开关、Token，返回失败的原因与北极星上的命名空间，整体 10 秒超时。
-   * 传入已有接入点 ID 且 token 为空时使用已保存的 Token，并记录本次结果
+   * 传入已有接入点 ID 时记录本次结果；此时 token 缺省时使用已保存的 Token，显式传空字符串表示不带 Token
    *
    * @method POST
    * @path /workspaces/{workspaceID}/polaris-access-points/connectivity-test

@@ -594,6 +594,26 @@ describe('可见环境下拉交互', () => {
     expect(view.emitted()['update:modelValue']).toContainEqual([expected]);
   });
 
+  it('当环境列表返回前选择器已卸载时，不应改写当前环境', async () => {
+    const pending = deferred<EnvOutput[]>();
+    mocks.list.mockReturnValue(pending.promise);
+    useDeployEnvStore().updateCurrentEnv('prod');
+    const view = render(EnvSelectPanel, {
+      props: { modelValue: 'prod', syncEnvStore: true, initFirstEnvWhenEmpty: true },
+      global: {
+        mocks: {
+          $t: (text: string) => text,
+        },
+        stubs: { Popover: PopoverStub, Select: true, StatusDotIcon: true, ColorIcon: true, OverflowTags: true },
+      },
+    });
+    useDeployEnvStore().updateCurrentEnv('feature-a');
+    view.unmount();
+    pending.resolve(environments);
+    await flushPromises();
+    expect(useDeployEnvStore().currentEnv).toBe('feature-a');
+  });
+
   it('总览下钻到隐藏环境时保留查看目标，部署候选仍按名单过滤', async () => {
     useAppDetail().appDetail = detail(['test']);
     const view = await openPanel({ modelValue: 'prod', preserveMissingModelValue: true });

@@ -523,11 +523,6 @@ export interface OperateBatchReleaseInput {
    */
   action: Action;
   /**
-   * 预期操作的部署记录 ID（用户确认弹窗打开时的目标）。
-   * 后端据此核对最新部署记录，不一致时拒绝执行，避免确认后目标被替换。
-   */
-  deployID?: string;
-  /**
    * 部署的泳道名称（空字符串表示不使用泳道）
    */
   trafficLaneName?: string;
@@ -569,6 +564,10 @@ export interface DeployPreCheckOutput {
    */
   missingRequiredClusterAddons?: ClusterAddonReferenceOutput[];
   undefinedVars?: UndefinedEnvVarOutput[];
+  /**
+   * 环境与其他环境共用命名空间时不支持使用组件，列出应用在该环境下生效的组件名；非空时不能部署
+   */
+  unsupportedComponents?: string[];
 }
 
 export interface ListAppModelResourceSnapshotsOutput {

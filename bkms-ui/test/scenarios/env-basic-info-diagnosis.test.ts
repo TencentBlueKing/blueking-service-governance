@@ -115,7 +115,9 @@ vi.mock('bkui-vue/lib/icon', async () => {
 });
 
 vi.mock('~/pages/env/cluster-components/cluster-components.vue', () => ({ default: { template: '<div />' } }));
-vi.mock('~/pages/env/components/delete-env-action.vue', () => ({ default: { template: '<div />' } }));
+vi.mock('~/pages/env/components/delete-env-action.vue', () => ({
+  default: { template: '<div />', methods: { reset: vi.fn() } },
+}));
 vi.mock('~/pages/env/components/env-category-description.vue', () => ({ default: { template: '<span />' } }));
 vi.mock('~/pages/env/components/project-selector/deployed-apps-warning.vue', () => ({
   default: { template: '<div />' },

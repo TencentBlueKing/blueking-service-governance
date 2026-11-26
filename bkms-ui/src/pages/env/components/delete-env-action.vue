@@ -70,17 +70,25 @@
     }
   }
 
+  function reset() {
+    ++sequence;
+    selectedEnv.value = undefined;
+    showConfirm.value = false;
+    showDeployedWarning.value = false;
+  }
+
   async function show(env: EnvOutput) {
     if (!env.id || deleting.value) return;
     const current = ++sequence;
     selectedEnv.value = env;
     showConfirm.value = false;
     showDeployedWarning.value = false;
+    deployedApps.value = [];
     try {
       const detail = await EnvService.getEnv({ envID: env.id });
       if (current !== sequence) return;
-      if (detail.appDeployStatuses?.length) {
-        deployedApps.value = detail.appDeployStatuses;
+      deployedApps.value = detail.appDeployStatuses || [];
+      if (deployedApps.value.length) {
         showDeployedWarning.value = true;
       } else {
         showConfirm.value = true;
@@ -93,5 +101,5 @@
   onBeforeUnmount(() => {
     ++sequence;
   });
-  defineExpose({ show });
+  defineExpose({ show, reset });
 </script>
