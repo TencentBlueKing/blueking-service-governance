@@ -229,7 +229,7 @@ func (h *Handler) UpdateAppConfigFile(c *gin.Context) {
 
 	def, err := h.configFileDefs().GetByID(ctx, acf.DefID)
 	if err != nil {
-		bkerrs.AbortInternal(c, err, "get config file def")
+		bkerrs.AbortInternal(c, pkgerrors.Wrap(err, "get config file def"))
 		return
 	}
 
@@ -249,7 +249,7 @@ func (h *Handler) UpdateAppConfigFile(c *gin.Context) {
 			bkerrs.AbortWithErr(c, bkerrs.WrapAppConfigFileVersionConflict(err, app.ID, acf.ID.Hex()))
 			return
 		}
-		bkerrs.AbortInternal(c, err, "create app config file version")
+		bkerrs.AbortInternal(c, pkgerrors.Wrap(err, "create app config file version"))
 		return
 	}
 
@@ -309,7 +309,7 @@ func (h *Handler) ListAppConfigFiles(c *gin.Context) {
 		appcfg.DefFilterConfigKind(appcfg.ConfigKindFramework),
 	)
 	if err != nil {
-		bkerrs.AbortInternal(c, err, "listing framework defs")
+		bkerrs.AbortInternal(c, pkgerrors.Wrap(err, "listing framework defs"))
 		return
 	}
 	frameworkDefIDs := make([]bson.ObjectID, 0, len(frameworkDefs))
@@ -326,7 +326,7 @@ func (h *Handler) ListAppConfigFiles(c *gin.Context) {
 
 	appConfigFiles, err := appcfg.ListFiles(ctx, h.configFiles(), app.ID, opts...)
 	if err != nil {
-		bkerrs.AbortInternal(c, err, "listing app config files")
+		bkerrs.AbortInternal(c, pkgerrors.Wrap(err, "listing app config files"))
 		return
 	}
 
@@ -463,12 +463,12 @@ func (h *Handler) GetAppConfigFileDetails(c *gin.Context) {
 		acf,
 	)
 	if err != nil {
-		bkerrs.AbortInternal(c, err, "creating values file editor")
+		bkerrs.AbortInternal(c, pkgerrors.Wrap(err, "creating values file editor"))
 		return
 	}
 	info, err := provider.GetInfo(ctx)
 	if err != nil && !pkgerrors.Is(err, appcfg.ErrBaseContentEmpty) {
-		bkerrs.AbortInternal(c, err, "getting base content info")
+		bkerrs.AbortInternal(c, pkgerrors.Wrap(err, "getting base content info"))
 		return
 	}
 
@@ -485,7 +485,7 @@ func (h *Handler) GetAppConfigFileDetails(c *gin.Context) {
 
 	editor, err := appcfg.NewAppConfigFileEditor(h.registry.DB, acf)
 	if err != nil {
-		bkerrs.AbortInternal(c, err, "creating values file editor")
+		bkerrs.AbortInternal(c, pkgerrors.Wrap(err, "creating values file editor"))
 		return
 	}
 
@@ -644,12 +644,12 @@ func (h *Handler) PreviewOverlayMerge(c *gin.Context) {
 		virtualConfig,
 	)
 	if err != nil {
-		bkerrs.AbortInternal(c, err, "create editor")
+		bkerrs.AbortInternal(c, pkgerrors.Wrap(err, "create editor"))
 		return
 	}
 	compiledContent, err := editor.GetCompiledContent(ctx)
 	if err != nil {
-		bkerrs.AbortInternal(c, err, "compile content")
+		bkerrs.AbortInternal(c, pkgerrors.Wrap(err, "compile content"))
 		return
 	}
 

@@ -313,9 +313,10 @@ var _ = Describe("Abort shortcuts", func() {
 
 	It("should wrap the error as internal even if it declares a store category", func() {
 		cause := &testStoreError{notFound: true}
-		bkErr := recorded(func(c *gin.Context) { AbortInternal(c, cause, "lookup dependency") })
+		bkErr := recorded(func(c *gin.Context) { AbortInternal(c, pkgerrors.Wrap(cause, "lookup dependency")) })
 
 		Expect(bkErr.Code()).To(Equal(ErrCodeInternalServerError))
 		Expect(bkErr).To(MatchError(cause))
+		Expect(bkErr.Error()).To(Equal("internal error: lookup dependency: document not found: collection widgets"))
 	})
 })

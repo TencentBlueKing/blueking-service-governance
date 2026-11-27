@@ -55,7 +55,7 @@ var _ = Describe("GlobalErrorRules", func() {
 		noPermission := errors.Wrap(bscp.ErrNoPermission, "call bscp api")
 
 		status, _ := request(func(c *gin.Context) {
-			bkerrs.AbortInternal(c, noPermission, "render config content")
+			bkerrs.AbortInternal(c, errors.Wrap(noPermission, "render config content"))
 		})
 		Expect(status).To(Equal(http.StatusInternalServerError))
 
@@ -80,7 +80,7 @@ var _ = Describe("GlobalErrorRules", func() {
 
 	It("should leave other errors to the handler", func() {
 		status, out := request(func(c *gin.Context) {
-			bkerrs.AbortInternal(c, errors.New("connection refused"), "list bscp user bizs")
+			bkerrs.AbortInternal(c, errors.Wrap(errors.New("connection refused"), "list bscp user bizs"))
 		})
 
 		Expect(status).To(Equal(http.StatusInternalServerError))

@@ -50,7 +50,7 @@ func (h *Handler) ListBSCPBizs(c *gin.Context) {
 	client, err := bscp.New(auth.MustGetUser(ctx))
 	if err != nil {
 		// internal 错误 i18n 处理时使用默认文案，不暴露具体信息
-		bkerrs.AbortInternal(c, err, "initial bscp client")
+		bkerrs.AbortInternal(c, errors.Wrap(err, "initial bscp client"))
 		return
 	}
 
@@ -90,7 +90,7 @@ func (h *Handler) ListBSCPServices(c *gin.Context) {
 	ctx := c.Request.Context()
 	client, err := bscp.New(auth.MustGetUser(ctx))
 	if err != nil {
-		bkerrs.AbortInternal(c, err, "initial bscp client")
+		bkerrs.AbortInternal(c, errors.Wrap(err, "initial bscp client"))
 		return
 	}
 
@@ -134,7 +134,7 @@ func (h *Handler) ListBSCPConfigs(c *gin.Context) {
 	ctx := c.Request.Context()
 	client, err := bscp.New(auth.MustGetUser(ctx))
 	if err != nil {
-		bkerrs.AbortInternal(c, err, "initial bscp client")
+		bkerrs.AbortInternal(c, errors.Wrap(err, "initial bscp client"))
 		return
 	}
 
@@ -196,7 +196,7 @@ func (h *Handler) GetBSCPConfig(c *gin.Context) {
 	ctx := c.Request.Context()
 	client, err := bscp.New(auth.MustGetUser(ctx))
 	if err != nil {
-		bkerrs.AbortInternal(c, err, "initial bscp client")
+		bkerrs.AbortInternal(c, errors.Wrap(err, "initial bscp client"))
 		return
 	}
 

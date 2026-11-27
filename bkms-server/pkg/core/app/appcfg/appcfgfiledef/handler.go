@@ -106,7 +106,7 @@ func (h *Handler) ListDefaultFilesWithDef(c *gin.Context) {
 
 	defs, err := appcfg.ListDefsByApp(ctx, store.Of(h.registry.DB, appcfg.AppConfigFileDefMeta), app.ID)
 	if err != nil {
-		bkerrs.AbortInternal(c, err, "listing defs")
+		bkerrs.AbortInternal(c, errors.Wrap(err, "listing defs"))
 		return
 	}
 
@@ -121,7 +121,7 @@ func (h *Handler) ListDefaultFilesWithDef(c *gin.Context) {
 		appcfg.AcfFilterEnvName(appcfg.EnvNameDefault),
 	)
 	if err != nil {
-		bkerrs.AbortInternal(c, err, "listing default files")
+		bkerrs.AbortInternal(c, errors.Wrap(err, "listing default files"))
 		return
 	}
 	fileByDefID := make(map[string]*appcfg.AppConfigFile, len(defaultFiles))
@@ -389,7 +389,7 @@ func (h *Handler) UpdateHelmFile(c *gin.Context) {
 	svc := h.newAppCfgFileDefService()
 	defaultFile, err := svc.GetDefaultFileWithDef(ctx, def.ID)
 	if err != nil {
-		bkerrs.AbortInternal(c, err, "loading default file")
+		bkerrs.AbortInternal(c, errors.Wrap(err, "loading default file"))
 		return
 	}
 
@@ -485,11 +485,11 @@ func (h *Handler) DeleteAppCfgFileDef(c *gin.Context) {
 	svc := h.newAppCfgFileDefService()
 	defaultFile, fErr := h.configFiles().Get(ctx, appcfg.FileByDefEnv(def.ID, appcfg.EnvNameDefault))
 	if fErr != nil {
-		bkerrs.AbortInternal(c, fErr, "loading default file for deletion")
+		bkerrs.AbortInternal(c, errors.Wrap(fErr, "loading default file for deletion"))
 		return
 	}
 	if _, err = svc.DeleteFile(ctx, def.AppID, defaultFile.ID); err != nil {
-		bkerrs.AbortInternal(c, err, "deleting def")
+		bkerrs.AbortInternal(c, errors.Wrap(err, "deleting def"))
 		return
 	}
 
@@ -533,7 +533,7 @@ func (h *Handler) ListEnvInstances(c *gin.Context) {
 	ctx := c.Request.Context()
 	files, err := h.configFiles().List(ctx, appcfg.FilesByDef(def.ID))
 	if err != nil {
-		bkerrs.AbortInternal(c, err, "listing env instances")
+		bkerrs.AbortInternal(c, errors.Wrap(err, "listing env instances"))
 		return
 	}
 
@@ -679,7 +679,7 @@ func (h *Handler) ResetEnvToDefault(c *gin.Context) {
 			)
 			return
 		}
-		bkerrs.AbortInternal(c, err, "resetting env to default")
+		bkerrs.AbortInternal(c, errors.Wrap(err, "resetting env to default"))
 		return
 	}
 
@@ -731,7 +731,7 @@ func (h *Handler) GetMountPreview(c *gin.Context) {
 	svc := h.newAppCfgFileDefService()
 	items, err := svc.GetMountPreview(ctx, app.ID, query.EnvName)
 	if err != nil {
-		bkerrs.AbortInternal(c, err, "getting mount preview")
+		bkerrs.AbortInternal(c, errors.Wrap(err, "getting mount preview"))
 		return
 	}
 

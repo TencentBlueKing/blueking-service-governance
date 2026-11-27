@@ -22,6 +22,7 @@ import (
 	"errors"
 
 	"github.com/gin-gonic/gin"
+	pkgerrors "github.com/pkg/errors"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/i18n"
@@ -77,7 +78,7 @@ func (h *Handler) ListAppConfigFileVersions(c *gin.Context) {
 	acfService := appcfg.NewAppConfigFileService(h.registry.DB)
 	versions, err := acfService.ListVersions(ctx, app.ID, queryInput.Page, queryInput.PageSize, filter)
 	if err != nil {
-		bkerrs.AbortInternal(c, err, "list app config file versions")
+		bkerrs.AbortInternal(c, pkgerrors.Wrap(err, "list app config file versions"))
 		return
 	}
 
@@ -187,7 +188,7 @@ func (h *Handler) CompareAppConfigFileVersions(c *gin.Context) {
 			bkerrs.AbortWithErr(c, bkerrs.New(bkerrs.ErrCodeInvalidArgument, err.Error()))
 			return
 		}
-		bkerrs.AbortInternal(c, err, "compare app config file versions")
+		bkerrs.AbortInternal(c, pkgerrors.Wrap(err, "compare app config file versions"))
 		return
 	}
 	ginutils.OK(c, serializer.CompareAppConfigFileVersionsOutput{
@@ -242,7 +243,7 @@ func (h *Handler) RollbackAppConfigFileVersion(c *gin.Context) {
 	}
 	acf, err := h.configFiles().GetByID(ctx, targetVersion.AppConfigFileID)
 	if err != nil {
-		bkerrs.AbortInternal(c, err, "get app config file")
+		bkerrs.AbortInternal(c, pkgerrors.Wrap(err, "get app config file"))
 		return
 	}
 	oldAcf := *acf
@@ -274,7 +275,7 @@ func (h *Handler) RollbackAppConfigFileVersion(c *gin.Context) {
 			bkerrs.AbortWithErr(c, bkerrs.WrapAppConfigFileVersionConflict(err, app.ID, id.Hex()))
 			return
 		}
-		bkerrs.AbortInternal(c, err, "create rollback version")
+		bkerrs.AbortInternal(c, pkgerrors.Wrap(err, "create rollback version"))
 		return
 	}
 
@@ -338,7 +339,7 @@ func (h *Handler) DeleteAppConfigFileVersion(c *gin.Context) {
 			bkerrs.AbortWithErr(c, bkerrs.New(bkerrs.ErrCodeInvalidArgument, err.Error()))
 			return
 		}
-		bkerrs.AbortInternal(c, err, "delete app config file version")
+		bkerrs.AbortInternal(c, pkgerrors.Wrap(err, "delete app config file version"))
 		return
 	}
 

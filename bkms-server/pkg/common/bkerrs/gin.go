@@ -59,12 +59,15 @@ func AbortInvalidArg(c *gin.Context, err error, msg string) {
 	AbortWithErr(c, Wrap(err, ErrCodeInvalidArgument, msg))
 }
 
-// AbortInternal 把 err 包装为内部错误并中止请求。
-// 内部错误统一返回通用文案，msg 只作为错误链的上下文出现在日志与错误详情中，不需要用 i18n.Msg 标记。
+// AbortInternal 把 err 作为内部错误中止请求，响应统一返回通用文案。
+// 没有 msg 参数：内部错误没有面向用户的文案，开发者上下文与 AbortWithErr 一样用 errors.Wrap 附加：
+//
+//	bkerrs.AbortInternal(c, errors.Wrap(err, "list app config file versions"))
+//
 // 错误链上 store 声明的"不存在 / 已存在"不再自动转换为 404 / 409；需要转换时用 AbortWithErr 交给错误出口分类。
 // 全局规则（如 BSCP 未启用）仍然生效
-func AbortInternal(c *gin.Context, err error, msg string) {
-	AbortWithErr(c, Wrap(err, ErrCodeInternalServerError, msg))
+func AbortInternal(c *gin.Context, err error) {
+	AbortWithErr(c, Wrap(err, ErrCodeInternalServerError, "internal error"))
 }
 
 // AbortNotFound 把 err 包装为资源不存在错误并中止请求，msg 为面向用户的原文

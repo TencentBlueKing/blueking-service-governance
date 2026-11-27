@@ -19,10 +19,10 @@ handler 用 `bkerrs` 决定**错误码**与**给用户看的文案**；`bkerrs.E
 | **默认**：service / store 调用返回的错误 | `AbortWithErr(c, errors.Wrap(err, "<在做什么>"))`，不需要选错误码：store 的"不存在 / 已存在"返回 404 / 409，其余为 500 |
 | 部分领域错误应返回特定的 4xx | 同上再传入规则：`AbortWithErr(c, errors.Wrap(err, "<在做什么>"), rules...)`，见[规则](#规则) |
 | 错误整体表示用户输入不合法 / 用户请求的资源不存在 | `AbortInvalidArg` / `AbortNotFound(c, err, i18n.Msg("<用户文案>"))` |
-| 失败不可能由用户造成，如调用下游接口、按系统生成的 ID 查询 | `AbortInternal(c, err, "<在做什么>")` |
+| 失败不可能由用户造成，如调用下游接口、按系统生成的 ID 查询 | `AbortInternal(c, errors.Wrap(err, "<在做什么>"))` |
 | 同上，但部分领域错误仍要按规则返回 4xx，如系统创建默认环境时命名空间被占用 | `AbortWithErr(c, bkerrs.Wrap(err, ErrCodeInternalServerError, "<在做什么>"), rules...)` |
 
-`errors` 指 `github.com/pkg/errors`。
+`errors` 指 `github.com/pkg/errors`。快捷函数的第三个参数一定是用户文案；`AbortInternal` 没有这个参数，因为内部错误统一返回通用文案，开发者上下文和默认写法一样用 `errors.Wrap` 附加。
 
 判断是否用 `AbortInternal` 时问一句："用户传了错误的 ID 时会不会走到这里？"会的话用默认写法，否则用户会收到 500 而不是 404。
 现有代码中大量 `bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "...")` 是历史写法，新代码不要照抄。
@@ -33,7 +33,7 @@ handler 用 `bkerrs` 决定**错误码**与**给用户看的文案**；`bkerrs.E
 
 | | 用户文案 | 开发者上下文 |
 | - | - | - |
-| 出现在 | `AbortInvalidArg` / `AbortNotFound` 的 `msg`；`WhenIs` / `Errorf` / `Wrapf` 的 `format`；错误码不是内部错误的 `New` / `Wrap` 的 `msg` | `errors.Wrap` / `Wrapf`；`AbortInternal` 的 `msg`；错误码为内部错误的 `New` / `Wrap` |
+| 出现在 | `AbortInvalidArg` / `AbortNotFound` 的 `msg`；`WhenIs` / `Errorf` / `Wrapf` 的 `format`；错误码不是内部错误的 `New` / `Wrap` 的 `msg` | `errors.Wrap` / `Wrapf`；错误码为内部错误的 `New` / `Wrap` |
 | 谁会看到 | 用户（作为响应的 `message`） | 只出现在日志与错误详情中 |
 | 怎么写 | 站在用户角度、完整描述问题的一句话 | 简短说明"在做什么"，用 `Wrapf` 带上标识 |
 | `i18n.Msg` | **必须标记**，并运行 `make i18n` 补充 `zh-cn.po` 译文 | **不要标记** |
