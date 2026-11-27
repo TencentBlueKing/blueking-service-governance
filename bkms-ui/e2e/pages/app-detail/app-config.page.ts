@@ -94,9 +94,11 @@ export default class AppConfigPage extends AppDetailBase {
 
   /** 点击资源规格卡片上的「编辑」按钮 */
   async clickResourceEdit() {
-    await this.getResourceSection().getByRole('button', { name: '编辑' }).click();
-    // 等待编辑表单渲染完成（替代固定 sleep），后续填表操作可立即执行
-    await this.getResourceSection().getByRole('spinbutton').first().waitFor({ state: 'visible', timeout: 10000 });
+    const section = this.getResourceSection();
+    await section.scrollIntoViewIfNeeded();
+    await section.getByRole('button', { name: '编辑' }).click();
+    // CPU/内存已改为下拉；自动扩缩容接管实例数时也不再有 number 输入。以编辑态「保存」作为表单就绪信号。
+    await section.getByRole('button', { name: '保存' }).waitFor({ state: 'visible', timeout: 10000 });
   }
 
   /** 点击资源规格卡片的「恢复默认配置」按钮 */
