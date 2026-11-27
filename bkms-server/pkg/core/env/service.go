@@ -20,6 +20,7 @@ package env
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -38,6 +39,15 @@ var (
 	// ErrEnvHasFeatureEnvs 仍存在派生自该环境的特性环境，不能删除来源环境
 	ErrEnvHasFeatureEnvs = errors.New("environment has derived feature environments")
 )
+
+// EnvHasAppsError 环境下仍部署着应用，不允许修改集群或删除
+type EnvHasAppsError struct {
+	AppCount int
+}
+
+func (e *EnvHasAppsError) Error() string {
+	return fmt.Sprintf("environment has %d apps", e.AppCount)
+}
 
 // EnvService 环境基础配置服务
 type EnvService struct {
@@ -100,7 +110,7 @@ func (s *EnvService) Update(
 		}
 		appCount := len(environment.AppIDs)
 		if appCount != 0 {
-			return errors.Errorf("environment has %d apps, cannot update cluster", appCount)
+			return errors.Wrap(&EnvHasAppsError{AppCount: appCount}, "cannot update cluster")
 		}
 
 		if err = s.checkNoNamespaceSharers(ctx, environment, finalCluster); err != nil {
@@ -198,7 +208,7 @@ func (s *EnvService) Delete(ctx context.Context, envID bson.ObjectID) error {
 
 	appCount := len(environment.AppIDs)
 	if appCount != 0 {
-		return errors.Errorf("environment has %d apps, cannot delete", appCount)
+		return errors.Wrap(&EnvHasAppsError{AppCount: appCount}, "cannot delete")
 	}
 
 	if !environment.IsFeatureEnv() {

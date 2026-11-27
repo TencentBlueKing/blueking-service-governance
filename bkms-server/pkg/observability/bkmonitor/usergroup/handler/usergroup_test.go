@@ -415,7 +415,9 @@ var _ = Describe("Usergroup Handler", func() {
 			var resp bkerrs.GinErrorOutput
 			Expect(json.Unmarshal(rec.Body.Bytes(), &resp)).To(Succeed())
 			Expect(resp.Error.Code).To(Equal(bkerrs.ErrCodeInvalidRequest))
-			Expect(resp.Error.Message).To(ContainSubstring("bind json request"))
+			Expect(resp.Error.Details).To(ContainElement(
+				HaveKeyWithValue("message", ContainSubstring("bind json request")),
+			))
 		})
 
 		It("returns invalid request when group id is malformed", func() {
@@ -429,7 +431,9 @@ var _ = Describe("Usergroup Handler", func() {
 			var resp bkerrs.GinErrorOutput
 			Expect(json.Unmarshal(rec.Body.Bytes(), &resp)).To(Succeed())
 			Expect(resp.Error.Code).To(Equal(bkerrs.ErrCodeInvalidRequest))
-			Expect(resp.Error.Message).To(ContainSubstring("bind uri request"))
+			Expect(resp.Error.Details).To(ContainElement(
+				HaveKeyWithValue("message", ContainSubstring("bind uri request")),
+			))
 		})
 
 		It("maps generic service errors to internal server error", func() {

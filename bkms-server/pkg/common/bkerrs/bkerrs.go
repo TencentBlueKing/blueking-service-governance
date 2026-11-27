@@ -43,6 +43,9 @@ type Error struct {
 	code ErrCode
 	// msg 是错误描述
 	msg string
+	// format、args 是生成 msg 的原文与参数，出口据此按请求语言翻译 msg
+	format string
+	args   []any
 	// details 包含错误详情，主要是面向开发者的错误提示
 	details []Detail
 	// stack 是调用栈，包含原始错误出现的位置
@@ -58,7 +61,7 @@ type Error struct {
 // 返回: [INVALID_ARGUMENT] 用户名不能为空
 // 注：返回值说明中方括号内容为 Code 字面值，在 err.String() 时不会 Format 进去
 func New(code ErrCode, msg string) *Error {
-	return newErr(nil, code, msg)
+	return newErr(nil, code, msg, msg, nil)
 }
 
 // Errorf 新建错误（支持字符串 format）
@@ -70,7 +73,7 @@ func New(code ErrCode, msg string) *Error {
 //
 // 返回: [NOT_FOUND] 用户 admin 不存在
 func Errorf(code ErrCode, format string, args ...any) *Error {
-	return newErr(nil, code, fmt.Sprintf(format, args...))
+	return newErr(nil, code, fmt.Sprintf(format, args...), format, args)
 }
 
 // Wrap 错误包装
@@ -85,7 +88,7 @@ func Errorf(code ErrCode, format string, args ...any) *Error {
 //
 // 返回: [ALREADY_EXISTS] 创建工作空间失败: original db error message
 func Wrap(cause error, code ErrCode, msg string) *Error {
-	return newErr(cause, code, msg)
+	return newErr(cause, code, msg, msg, nil)
 }
 
 // Wrapf 错误包装（支持字符串 format）
@@ -101,15 +104,17 @@ func Wrap(cause error, code ErrCode, msg string) *Error {
 //
 // 返回: [INTERNAL_SERVER_ERROR] 删除工作空间 my-workspace 失败: original db error message
 func Wrapf(cause error, code ErrCode, format string, args ...any) *Error {
-	return newErr(cause, code, fmt.Sprintf(format, args...))
+	return newErr(cause, code, fmt.Sprintf(format, args...), format, args)
 }
 
-// newErr 新建错误
-func newErr(cause error, code ErrCode, msg string) *Error {
+// newErr 新建错误；Errorf、Wrapf 须直接调用 fmt.Sprintf 生成 msg，go vet 才能检查调用处的格式串与参数
+func newErr(cause error, code ErrCode, msg, format string, args []any) *Error {
 	return &Error{
 		cause:   cause,
 		code:    code,
 		msg:     msg,
+		format:  format,
+		args:    args,
 		details: nil,
 		stack:   callers(),
 	}

@@ -30,6 +30,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
+	envapierrs "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/apierrs"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/serializer"
 	deploystatus "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/status"
@@ -121,10 +122,10 @@ func (h *Handler) CreateEnv(c *gin.Context) {
 
 	if err = svc.Create(ctx, envData); err != nil {
 		metrics.CreateEnvFailed(ws.ID, input.Name)
-		if abortIfEnvClusterNamespaceOccupied(c, err) {
-			return
-		}
-		bkerrs.AbortWithErr(c, bkerrs.Wrapf(err, bkerrs.ErrCodeInvalidRequest, "create env %s", input.Name))
+		bkerrs.AbortWithErr(
+			c,
+			bkerrs.Map(errors.Wrapf(err, "create env %s", input.Name), envapierrs.NamespaceOccupied),
+		)
 		return
 	}
 
@@ -238,14 +239,11 @@ func (h *Handler) CreateFeatureEnv(c *gin.Context) {
 		NsType: cmp.Or(input.NsType, bkmsenv.NsTypeIndependent),
 	})
 	if err != nil {
-		if abortIfEnvClusterNamespaceOccupied(c, err) {
-			return
-		}
-		code := bkerrs.ErrCodeInternalServerError
-		if errors.Is(err, bkmsenv.ErrInvalidFeatureEnvInput) {
-			code = bkerrs.ErrCodeInvalidRequest
-		}
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, code, "create feature environment"))
+		bkerrs.AbortWithErr(c, bkerrs.Map(errors.Wrap(err, "create feature environment"),
+			envapierrs.NamespaceOccupied,
+			envapierrs.InvalidFeatureEnvInput,
+			envapierrs.FeatureEnvNameConflict,
+		))
 		return
 	}
 
@@ -468,7 +466,7 @@ func (h *Handler) GetEnvByName(c *gin.Context) {
 
 	env, err := h.envs().Get(ctx, envmodel.ByName(uriInput.WorkspaceID, uriInput.EnvName))
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, "get env by workspace and name"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "get env by workspace and name"))
 		return
 	}
 
@@ -516,7 +514,7 @@ func (h *Handler) UpdateEnvBasicInfo(c *gin.Context) {
 
 	svc := bkmsenv.NewEnvService(h.registry.DB)
 	if err = svc.Update(ctx, env.ID, updateData); err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, "update env basic info"))
+		bkerrs.AbortWithErr(c, errors.Wrap(err, "update env basic info"))
 		return
 	}
 
@@ -577,10 +575,11 @@ func (h *Handler) UpdateEnvCluster(c *gin.Context) {
 
 	svc := bkmsenv.NewEnvService(h.registry.DB)
 	if err = svc.Update(ctx, env.ID, updateData); err != nil {
-		if abortIfEnvClusterNamespaceOccupied(c, err) {
-			return
-		}
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, "update env cluster"))
+		bkerrs.AbortWithErr(c, bkerrs.Map(errors.Wrap(err, "update env cluster"),
+			envapierrs.HasAppsCannotUpdateCluster,
+			envapierrs.HasNamespaceSharersCannotUpdateCluster,
+			envapierrs.NamespaceOccupied,
+		))
 		return
 	}
 
@@ -628,11 +627,10 @@ func (h *Handler) DeleteEnv(c *gin.Context) {
 
 	svc := bkmsenv.NewEnvService(h.registry.DB)
 	if err = svc.Delete(ctx, envID); err != nil {
-		code := bkerrs.ErrCodeInternalServerError
-		if errors.Is(err, bkmsenv.ErrEnvHasFeatureEnvs) {
-			code = bkerrs.ErrCodeInvalidRequest
-		}
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, code, "delete environment"))
+		bkerrs.AbortWithErr(c, bkerrs.Map(errors.Wrap(err, "delete environment"),
+			envapierrs.HasAppsCannotDelete,
+			envapierrs.HasFeatureEnvsCannotDelete,
+		))
 		return
 	}
 
@@ -696,15 +694,4 @@ func (h *Handler) ListEnvTrafficLanes(c *gin.Context) {
 		}),
 	},
 	)
-}
-
-func abortIfEnvClusterNamespaceOccupied(c *gin.Context, err error) bool {
-	info, ok := bkmsenv.GetEnvClusterNamespaceConflictInfo(err)
-	if !ok {
-		return false
-	}
-	bkerrs.AbortWithErr(c, bkerrs.WrapEnvClusterNamespaceOccupied(
-		info.ClusterID, info.Namespace, info.OccupiedByEnvName, info.OccupiedByWorkspaceID,
-	))
-	return true
 }

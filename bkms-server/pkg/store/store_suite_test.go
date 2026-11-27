@@ -27,6 +27,14 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 )
 
+// categorized 是 HTTP 出口识别 store 错误类别与领域错误所依赖的方法集
+type categorized interface {
+	error
+	IsNotFound() bool
+	IsAlreadyExists() bool
+	DomainError() error
+}
+
 func TestStore(t *testing.T) {
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "Generic Store Suite")

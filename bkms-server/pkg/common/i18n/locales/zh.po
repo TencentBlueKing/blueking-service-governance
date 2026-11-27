@@ -1,0 +1,111 @@
+# bkms-server 面向用户文案的中文翻译。
+# msgid 为源码中的英文原文（printf 格式串），msgstr 为译文；参数可用 %[n]s 调整顺序。
+# 运行 `make i18n` 追加未翻译的原文（msgstr 留空），留空的条目运行时回退到英文原文。
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Language: zh\n"
+
+#: pkg/common/bkerrs/gin.go
+msgid "internal server error, please try again later or contact the administrator"
+msgstr "服务内部错误，请稍后重试或联系管理员"
+
+#: pkg/common/bkerrs/gin.go
+msgid "resource not found"
+msgstr "资源不存在"
+
+#: pkg/common/bkerrs/gin.go
+msgid "resource already exists"
+msgstr "资源已存在"
+
+#: pkg/common/bkerrs/gin.go
+msgid "get auth user from request failed"
+msgstr "获取登录用户信息失败，请重新登录"
+
+#: pkg/common/bkerrs/gin.go
+msgid "invalid request parameters"
+msgstr "请求参数不合法"
+
+#: pkg/common/bkerrs/gin.go
+msgid "request does not meet business rules"
+msgstr "请求不符合业务规则"
+
+#: pkg/common/bkerrs/gin.go
+msgid "user is not authenticated, please log in again"
+msgstr "用户未登录或登录已失效，请重新登录"
+
+#: pkg/common/bkerrs/gin.go
+msgid "no permission to perform this operation"
+msgstr "无权限执行该操作"
+
+#: pkg/common/bkerrs/gin.go
+msgid "resource was modified concurrently, please refresh and try again"
+msgstr "资源已被他人修改，请刷新后重试"
+
+#: pkg/common/bkerrs/gin.go
+msgid "too many requests, please try again later"
+msgstr "请求过于频繁，请稍后重试"
+
+#: pkg/common/bkerrs/gin.go
+msgid "resource quota exceeded"
+msgstr "资源配额不足"
+
+#: pkg/common/bkerrs/gin.go
+msgid "not implemented yet"
+msgstr "该功能暂未实现"
+
+#: pkg/core/env/model/env_store.go
+msgid "environment not found"
+msgstr "环境不存在"
+
+#: pkg/core/env/model/env_store.go
+msgid "environment already exists"
+msgstr "环境已存在"
+
+#: pkg/core/env/apierrs/apierrs.go
+msgid "environment has %d deployed apps, cannot update cluster"
+msgstr "环境已部署 %d 个应用，无法修改集群配置"
+
+#: pkg/core/env/apierrs/apierrs.go
+msgid "environment has %d deployed apps, cannot delete"
+msgstr "环境已部署 %d 个应用，无法删除"
+
+#: pkg/core/env/apierrs/apierrs.go
+msgid "environment namespace is shared by feature environments, cannot update cluster or namespace"
+msgstr "环境的命名空间仍被特性环境共用，无法修改集群或命名空间"
+
+#: pkg/core/env/apierrs/apierrs.go
+msgid "environment has derived feature environments, cannot delete"
+msgstr "环境下仍有派生的特性环境，无法删除"
+
+#: pkg/core/env/apierrs/apierrs.go
+msgid "invalid feature environment input"
+msgstr "特性环境参数不符合要求"
+
+#: pkg/core/env/apierrs/apierrs.go
+msgid "cluster %s namespace %s is already bound to environment %q in workspace %s"
+msgstr "集群 %[1]s 的命名空间 %[2]s 已被工作空间 %[4]s 下的环境 %[3]q 绑定"
+
+#: pkg/core/workspace/store.go
+msgid "workspace not found"
+msgstr "工作空间不存在"
+
+#: pkg/platmgt/workspace/cfgswitch/handler/handler.go
+msgid "unknown cfg switch key"
+msgstr "未知的配置开关"
+
+#: pkg/server/ginutils/integration_guard.go
+msgid "bscp is disabled in current environment"
+msgstr "当前环境未启用 BSCP 配置服务"
+
+#: pkg/common/bkerrs/kubeinsight.go
+msgid "kube-insight is disabled in current environment"
+msgstr "当前环境未启用集群诊断（KubeInsight）"
+
+#: pkg/bkintegrations/handler/bscp.go
+msgid "no permission to access bscp resources"
+msgstr "无权访问 BSCP 资源，请先申请对应业务的权限"
+
+#: pkg/bkintegrations/handler/bscp.go
+msgid "no fully released version for service: %s in biz: %s"
+msgstr "业务 %[2]s 下的服务 %[1]s 没有全量发布的版本"

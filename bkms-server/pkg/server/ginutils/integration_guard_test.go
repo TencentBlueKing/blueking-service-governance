@@ -72,7 +72,9 @@ var _ = Describe("RequireBSCP", func() {
 		var out bkerrs.GinErrorOutput
 		Expect(json.Unmarshal(rec.Body.Bytes(), &out)).To(Succeed())
 		Expect(out.Error.Code).To(Equal(bkerrs.ErrCodeNotImplemented))
-		Expect(out.Error.Details).To(HaveLen(1))
+		Expect(out.Error.Message).To(Equal("当前环境未启用 BSCP 配置服务"))
+		// 业务明细保持在首位，翻译后追加的排查明细排在其后
+		Expect(out.Error.Details).To(HaveLen(2))
 		Expect(out.Error.Details[0]["code"]).To(Equal(string(bkerrs.ErrDetailCodeBSCPDisabled)))
 	})
 })
@@ -117,7 +119,8 @@ var _ = Describe("RequireKubeInsight", func() {
 		var out bkerrs.GinErrorOutput
 		Expect(json.Unmarshal(rec.Body.Bytes(), &out)).To(Succeed())
 		Expect(out.Error.Code).To(Equal(bkerrs.ErrCodeNotImplemented))
-		Expect(out.Error.Details).To(HaveLen(1))
+		Expect(out.Error.Message).To(Equal("当前环境未启用集群诊断（KubeInsight）"))
+		Expect(out.Error.Details).To(HaveLen(2))
 		Expect(out.Error.Details[0]["code"]).To(Equal(string(bkerrs.ErrDetailCodeKubeInsightDisabled)))
 	})
 })

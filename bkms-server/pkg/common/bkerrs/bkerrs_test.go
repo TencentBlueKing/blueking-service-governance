@@ -159,39 +159,6 @@ var _ = Describe("Error", func() {
 		})
 	})
 
-	Describe("WrapBSCPNotFullyReleased", func() {
-		It("should wrap not fully released error with detail code", func() {
-			err := bkerrs.WrapBSCPNotFullyReleased(
-				bkerrs.New(bkerrs.ErrCodeNotFound, "no fully released version"),
-				"biz-1",
-				"service-1",
-			)
-
-			var bkErr *bkerrs.Error
-			Expect(errors.As(err, &bkErr)).To(BeTrue())
-			Expect(bkErr.Code()).To(Equal(bkerrs.ErrCodeNotFound))
-			details := bkErr.Details()
-			Expect(details).To(HaveLen(1))
-			Expect((&details).AsMaps()[0]["code"]).To(Equal(bkerrs.ErrDetailCodeNotFullyReleased))
-		})
-	})
-
-	Describe("WrapBSCPNoPermission", func() {
-		It("should wrap BSCP permission error with detail code", func() {
-			err := bkerrs.WrapBSCPNoPermission(
-				errors.New("bscp forbidden"),
-				"list bscp service configs",
-			)
-
-			var bkErr *bkerrs.Error
-			Expect(errors.As(err, &bkErr)).To(BeTrue())
-			Expect(bkErr.Code()).To(Equal(bkerrs.ErrCodeNoPermission))
-			details := bkErr.Details()
-			Expect(details).To(HaveLen(1))
-			Expect((&details).AsMaps()[0]["code"]).To(Equal(bkerrs.ErrDetailCodeBSCPNoPermission))
-		})
-	})
-
 	Describe("Wrapf", func() {
 		It("should wrap an error with formatted message", func() {
 			originalErr := errors.New("timeout")
