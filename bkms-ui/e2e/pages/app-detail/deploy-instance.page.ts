@@ -107,21 +107,50 @@ export default class DeployInstancePage extends AppDetailBase {
   }
 
   /**
-   * 三行差异化数据：行 1 正常（主实例）、行 2 健康状态异常（UnHealthy）、
+   * 三行差异化数据：行 1 正常（主实例）、行 2 北极星异常（UnHealthy）、
    * 行 3 未注册北极星（polarisInfos 为空，展示 --）。
+   * 实例 isHealthy 对应「就绪」列的「是 / 否」，北极星文案来自 polarisInfos。
    */
   private deploymentInstances() {
-    return Array.from({ length: 3 }, (_, index) =>
-      this.deploymentInstance(index + 1, {
+    return Array.from({ length: 3 }, (_, index) => {
+      const instance = this.deploymentInstance(index + 1, {
         ...(index === 0 ? { id: 'e2e-instance-primary', restartCount: '9' } : {}),
-        ...(index === 1 ? { isHealthy: false } : {}),
         ...(index === 2 ? { polarisInfos: [] } : {}),
-      }),
-    );
+      });
+      if (index === 1) {
+        instance.polarisInfos = (instance.polarisInfos ?? []).map(info => ({ ...info, isHealthy: false }));
+      }
+      return instance;
+    });
+  }
+
+  /**
+   * 灰度禁用在两处的标记不同：行内菜单加 is-disabled，批量栏设置 aria-disabled 并带 cursor-not-allowed。
+   */
+  private async expectVisibleMenuItemDisabled(name: string) {
+    const item = this.visibleMenuItem(name);
+    await expect(item).toBeVisible();
+    const className = (await item.getAttribute('class')) ?? '';
+    const ariaDisabled = await item.getAttribute('aria-disabled');
+    const disabled =
+      className.split(/\s+/).includes('is-disabled') ||
+      ariaDisabled === 'true' ||
+      className.includes('cursor-not-allowed');
+    expect(disabled, `${name} 菜单项应处于禁用态`).toBe(true);
+  }
+
+  /** 操作列固定在右侧独立表体，按钮不在含环境名的主行里。 */
+  private async getFeatureEnvActionRow(displayName: string) {
+    const mainRow = this.getFeatureEnvRow(displayName);
+    await expect(mainRow).toBeVisible({ timeout: 10000 });
+    const index = await mainRow.evaluate(row => Array.from(row.parentElement?.children ?? []).indexOf(row));
+    const fixedRows = this.page.locator('.vxe-table--fixed-right-wrapper .vxe-body--row');
+    if (index >= 0 && (await fixedRows.count()) > index) return fixedRows.nth(index);
+    return mainRow;
   }
 
   private getFeatureEnvRow(displayName: string) {
-    return this.page.locator('tr, .bk-table-row').filter({ hasText: displayName }).first();
+    return this.page.locator('.vxe-table--main-wrapper .vxe-body--row').filter({ hasText: displayName }).first();
   }
 
   private getInstanceBatchToolbar() {
@@ -145,6 +174,12 @@ export default class DeployInstancePage extends AppDetailBase {
 
   private getVisibleInstanceRows() {
     return this.getInstanceTable().locator('.vxe-table--main-wrapper .vxe-body--row:visible');
+  }
+
+  private async openFirstRowMoreMenu() {
+    const trigger = this.getInstanceTable().locator('.vxe-table--fixed-right-wrapper .row-more-trigger').first();
+    await trigger.click();
+    await this.visibleMenuItem('灰度').waitFor({ state: 'visible', timeout: 10000 });
   }
 
   private async routeAdminCommands() {
@@ -368,6 +403,13 @@ export default class DeployInstancePage extends AppDetailBase {
     );
   }
 
+  private visibleMenuItem(name: string) {
+    return this.page
+      .locator('.bk-dropdown-item')
+      .filter({ hasText: new RegExp(`^${name}$`), visible: true })
+      .last();
+  }
+
   /** 关闭批量删除实例的 InfoBox 确认弹窗 */
   async closeDeploymentInstanceDeleteDialog() {
     const title = this.page.getByText('确认删除该实例', { exact: false });
@@ -390,9 +432,12 @@ export default class DeployInstancePage extends AppDetailBase {
   async expectDeploymentInstanceBatchToolbarVisible() {
     const toolbar = this.getInstanceBatchToolbar();
     await expect(toolbar).toBeVisible({ timeout: 10000 });
-    for (const action of ['监控', '灰度', '删除', '管理命令']) {
+    for (const action of ['监控', '删除', '管理命令']) {
       await expect(toolbar.getByRole('button', { name: action, exact: true })).toBeVisible();
     }
+    await toolbar.getByRole('button', { name: '更多操作' }).click();
+    await expect(this.visibleMenuItem('灰度')).toBeVisible();
+    await this.page.keyboard.press('Escape');
     // 勾选后表格顶部出现跨页选择信息条（「已选择 “N” 条，」）
     await expect(
       this.getInstanceTable()
@@ -413,38 +458,28 @@ export default class DeployInstancePage extends AppDetailBase {
   async expectDeploymentInstanceListReadonlyVisible() {
     const table = this.getInstanceTable();
     await expect(table).toBeVisible({ timeout: 10000 });
-    for (const column of [
-      '实例',
-      '镜像 Tag',
-      'Pod IP',
-      'Node IP',
-      '实例状态',
-      '健康状态',
-      '北极星状态',
-      'Restart',
-      'Age',
-      '操作',
-    ]) {
+    for (const column of ['实例', '状态', '就绪', '镜像 Tag', 'Pod IP', 'Node IP', 'Restart', 'Age', '操作']) {
       await expect(table.getByText(column, { exact: true }).first()).toBeVisible();
     }
     await expect(this.getVisibleInstanceRows()).toHaveCount(3, { timeout: 10000 });
     await expect(table.getByText('e2e-instance-primary', { exact: true }).first()).toBeVisible();
     await expect(table.getByText('Running', { exact: true }).first()).toBeVisible();
     await expect(table.getByText('Healthy', { exact: true }).first()).toBeVisible();
-    // 差异化数据：行 2 健康状态异常展示 UnHealthy；行 3 未注册北极星展示 --
+    // 差异化数据：行 2 北极星异常展示 UnHealthy；行 3 未注册北极星展示 --
     await expect(table.getByText('UnHealthy', { exact: true }).first()).toBeVisible();
     const unregisteredRow = this.getVisibleInstanceRows().filter({ hasText: 'e2e-instance-03' });
-    await expect(unregisteredRow.locator('.vxe-body--column').nth(7)).toHaveText('--');
-    for (const action of ['灰度', '日志', '监控', '登录', '调整权重']) {
+    await expect(unregisteredRow.locator('.instance-status-col').first()).toContainText('--');
+    for (const action of ['日志', '登录', '调整权重']) {
       await expect(table.getByRole('button', { name: action }).first()).toBeVisible();
     }
+    await expect(table.locator('.row-more-trigger').first()).toBeVisible();
     await expect.poll(() => this.instanceListRequestCount, { timeout: 10000 }).toBeGreaterThanOrEqual(1);
     await expect.poll(() => this.instanceWatchRequestCount, { timeout: 10000 }).toBeGreaterThanOrEqual(1);
   }
 
   /** 断言已部署特性环境销毁入口展示移除部署引导 */
   async expectFeatureEnvDestroyGuardVisible() {
-    const deployedRow = this.getFeatureEnvRow('e2e-feature-deployed');
+    const deployedRow = await this.getFeatureEnvActionRow('e2e-feature-deployed');
     const destroyButton = deployedRow.getByRole('button', { name: '销毁' });
     await expect(destroyButton).toBeDisabled({ timeout: 10000 });
     await destroyButton.hover({ force: true });
@@ -462,14 +497,17 @@ export default class DeployInstancePage extends AppDetailBase {
     }
     const waitingRow = this.getFeatureEnvRow('e2e-feature-waiting');
     const deployedRow = this.getFeatureEnvRow('e2e-feature-deployed');
+    const waitingActions = await this.getFeatureEnvActionRow('e2e-feature-waiting');
+    const deployedActions = await this.getFeatureEnvActionRow('e2e-feature-deployed');
     await expect(waitingRow).toBeVisible();
     await expect(waitingRow.getByText('待部署', { exact: true })).toBeVisible();
-    await expect(waitingRow.getByRole('button', { name: '部署', exact: true })).toHaveCount(0);
-    await expect(waitingRow.getByRole('button', { name: '环境变量', exact: true })).toBeVisible();
-    await expect(waitingRow.getByRole('button', { name: '去配置', exact: true })).toBeVisible();
-    await expect(waitingRow.getByRole('button', { name: '销毁', exact: true })).toBeEnabled();
+    await expect(waitingActions.getByRole('button', { name: '部署', exact: true })).toHaveCount(0);
+    await expect(waitingActions.getByRole('button', { name: '环境变量', exact: true })).toBeVisible();
+    await expect(waitingActions.getByRole('button', { name: '去配置', exact: true })).toBeVisible();
+    await expect(waitingActions.getByRole('button', { name: '销毁', exact: true })).toBeEnabled();
     await expect(deployedRow).toBeVisible();
     await expect(deployedRow.getByText('已部署', { exact: true })).toBeVisible();
+    await expect(deployedActions).toBeVisible();
   }
 
   /** 断言联邦环境实例列表走只读展示，行内与批量操作栏的灰度入口均禁用 */
@@ -479,8 +517,13 @@ export default class DeployInstancePage extends AppDetailBase {
     await expect(this.getVisibleInstanceRows()).toHaveCount(3, { timeout: 10000 });
     await expect.poll(() => this.instanceListRequestCount, { timeout: 10000 }).toBeGreaterThanOrEqual(1);
     expect(this.instanceWatchRequestCount).toBe(0);
-    await expect(this.getInstanceTable().getByRole('button', { name: '灰度' }).first()).toBeDisabled();
-    await expect(this.getInstanceBatchToolbar().getByRole('button', { name: '灰度', exact: true })).toBeDisabled();
+    await this.openFirstRowMoreMenu();
+    await this.expectVisibleMenuItemDisabled('灰度');
+    await this.page.keyboard.press('Escape');
+    const toolbar = this.getInstanceBatchToolbar();
+    await toolbar.getByRole('button', { name: '更多操作' }).click();
+    await this.expectVisibleMenuItemDisabled('灰度');
+    await this.page.keyboard.press('Escape');
   }
 
   /** 断言管理命令侧栏展示已选实例和 mock 命令 */
@@ -520,9 +563,10 @@ export default class DeployInstancePage extends AppDetailBase {
     await expect(this.page.getByText('特性环境', { exact: true })).toBeVisible({ timeout: 10000 });
   }
 
-  /** 打开实例列表首行灰度弹窗 */
+  /** 打开实例列表首行灰度弹窗（灰度收在行内更多菜单） */
   async openFirstInstanceGrayDialog() {
-    await this.getInstanceTable().getByRole('button', { name: '灰度' }).first().click();
+    await this.openFirstRowMoreMenu();
+    await this.visibleMenuItem('灰度').click();
     await expect(this.getDialog().getByText('灰度实例', { exact: true })).toBeVisible({ timeout: 10000 });
   }
 
@@ -594,17 +638,18 @@ export default class DeployInstancePage extends AppDetailBase {
     }
   }
 
-  /** 等待 SSE 推送后实例数精确匹配且每行状态均为 Running/Healthy */
+  /**
+   * 等待 SSE 推送后实例数精确匹配，且每行都是 Running、就绪为「是」。
+   * 「Healthy」是北极星文案，注册可能晚于 Pod 就绪，不作为副本就绪条件。
+   */
   async waitForInstanceReadyCount(expected: number, { timeout = 180000 } = {}) {
     try {
       await expect
         .poll(
           async () => {
             const rowTexts = await this.visibleInstanceRowTexts();
-            return (
-              rowTexts.length === expected &&
-              rowTexts.every(text => text.includes('Running') && text.includes('Healthy'))
-            );
+            const ready = (text: string) => text.includes('Running') && text.includes('是');
+            return rowTexts.length === expected && rowTexts.every(ready);
           },
           { timeout },
         )

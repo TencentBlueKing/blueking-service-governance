@@ -193,9 +193,20 @@ export default class BuildConfigPage extends AppDetailBase {
   async expectBuilderConfigCurrentSourceFormVisible() {
     const sourceType = await this.getBuilderConfigSourceType();
     if (sourceType === 'codeRepository') {
-      for (const label of ['代码库', '默认分支', '构建目录', 'Dockerfile 路径', '构建参数', '推荐版本号']) {
+      for (const label of ['代码库', '默认分支', '构建目录', '构建参数', '推荐版本号']) {
         await this.getBuilderConfigFormItem(label).waitFor({ state: 'visible', timeout: 10000 });
       }
+      // Helm 仍始终展示 Dockerfile；tRPC 按构建方式在「仓库 Dockerfile」和「平台通用构建」之间切换。
+      const buildMode = this.getBuilderConfigFormItem('构建方式');
+      if (await buildMode.isVisible().catch(() => false)) {
+        const dockerfile = this.getBuilderConfigFormItem('Dockerfile 路径');
+        if (!(await dockerfile.isVisible().catch(() => false))) {
+          await this.getBuilderConfigFormItem('运行镜像').waitFor({ state: 'visible', timeout: 10000 });
+          await this.getBuilderConfigFormItem('产物目录').waitFor({ state: 'visible', timeout: 10000 });
+        }
+        return;
+      }
+      await this.getBuilderConfigFormItem('Dockerfile 路径').waitFor({ state: 'visible', timeout: 10000 });
       return;
     }
     if (sourceType === 'imageRegistry') {

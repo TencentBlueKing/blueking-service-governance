@@ -150,6 +150,8 @@ export function useAppSpecSection<
   const { confirmBox, forceCleanDirtyTag } = useLeaveConfirm(formModel);
 
   let defaultCache: null | TModel = null;
+  /** 默认 section 已在服务端落库。未落库时 defaultCache 只作为表单默认值基线。 */
+  let defaultPersisted = false;
   let formSnapshot: null | TModel = null;
 
   const getFieldValue = (field: TFieldKey) => options.fieldAccessors[field].get(formModel.value);
@@ -194,8 +196,15 @@ export function useAppSpecSection<
     if (!appDetailStore.appID) return null;
 
     const result = await options.fetchDefault(appDetailStore.appID);
-    if (result) defaultCache = result;
-    return result ?? null;
+    if (result) {
+      defaultCache = result;
+      defaultPersisted = true;
+    } else {
+      // 默认 section 未落库时接口返回 null。用表单默认值做基线，指定环境的差异才能写入覆盖。
+      defaultCache = { ...options.formDefaults };
+      defaultPersisted = false;
+    }
+    return defaultCache;
   }
 
   /** 用数据填充表单，缺失字段使用默认值兜底 */
@@ -228,9 +237,12 @@ export function useAppSpecSection<
 
     // 默认环境
     if (env.isDefault) {
-      if (defaultSpec) {
+      if (defaultPersisted && defaultSpec) {
         fillFormData(defaultSpec);
         customFields.value = [...options.allFieldKeys];
+      } else {
+        initFormData();
+        customFields.value = [];
       }
       return;
     }
@@ -353,6 +365,7 @@ export function useAppSpecSection<
             .saveDefault(appDetailStore.appID, options.buildDefaultPayload(formModel.value))
             .then(() => {
               defaultCache = options.buildDefaultPayload(formModel.value);
+              defaultPersisted = true;
               return true;
             })
             .catch(() => false)
@@ -389,6 +402,7 @@ export function useAppSpecSection<
     newVal => {
       if (newVal && isAppModelAppType(appDetailStore.appType)) {
         defaultCache = null;
+        defaultPersisted = false;
         fetchDefault();
       }
     },

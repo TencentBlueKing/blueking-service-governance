@@ -65,6 +65,28 @@ export default class DeployPage extends AppDetailBase {
     }
   }
 
+  /**
+   * 部署页不再自动选中环境。未选择时「立即部署」保持禁用，实例列表也不会挂载。
+   * 优先点选配置的环境名，否则点选第一个可用环境。
+   */
+  private async ensureDeployEnvSelected() {
+    const placeholder = this.page.locator('main').getByText('请选择', { exact: true }).first();
+    if (!(await placeholder.isVisible().catch(() => false))) return;
+
+    await placeholder.click();
+    const popover = this.page.locator('.c-env-select-popover').last();
+    await popover.waitFor({ state: 'visible', timeout: 10000 });
+    const options = popover.locator('[class*="cursor-pointer"]:not([class*="cursor-not-allowed"])');
+    const preferred = this.config.env?.trim();
+    const matched = preferred ? options.filter({ hasText: preferred }).first() : options.first();
+    if (preferred && (await matched.count())) {
+      await matched.click();
+    } else {
+      await options.first().click();
+    }
+    await expect(placeholder).toBeHidden({ timeout: 10000 });
+  }
+
   private getAutoScaleCpuInput() {
     const slider = this.getScaleSideslider();
     return slider
@@ -219,6 +241,7 @@ export default class DeployPage extends AppDetailBase {
     await this.expectDeploymentTabActive(tab);
     if (tab === 'instance') {
       await this.expectDeploymentInstanceTabVisible();
+      await this.ensureDeployEnvSelected();
     }
   }
 

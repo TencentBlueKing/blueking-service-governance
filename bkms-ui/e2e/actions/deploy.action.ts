@@ -80,7 +80,7 @@ export async function expectInstanceCount(
   }
 }
 
-/** 等待 SSE 同步后的实例数精确匹配，并要求每个 Pod 都处于 Running/Healthy */
+/** 等待 SSE 同步后的实例数精确匹配，并要求每个 Pod 都处于 Running 且就绪 */
 export async function expectInstanceReadyCount(
   { appDetailPage }: { appDetailPage: AppDetailPage },
   expected: number,
@@ -90,7 +90,7 @@ export async function expectInstanceReadyCount(
     timeout: opts?.timeoutMs ?? 180000,
   });
   if (!ok) {
-    throw new Error(`期望实例数精确达到 ${expected} 且全部 Running/Healthy，等待 SSE 更新超时未满足`);
+    throw new Error(`期望实例数精确达到 ${expected} 且全部 Running、就绪为「是」，等待 SSE 更新超时未满足`);
   }
 }
 
