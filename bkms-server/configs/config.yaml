@@ -280,6 +280,20 @@ featureIntegrations:
   disableBSCP: false
   # 关闭 KubeInsight（集群诊断）对接
   disableKubeInsight: false
+# 代码库接入方式，未配置时仅启用 TGit；每种「仓库类型 + 认证方式」一条
+# name：应用代码库配置的 type，须唯一；spec：bkci_managed 蓝盾托管授权 / basic 仓库账号密码
+codeRepository:
+  sourceTypes:
+    # 工蜂，蓝盾托管授权
+    - name: TGit
+      spec: bkci_managed
+      label: 工蜂
+      enabled: true
+    # 工蜂，仓库账号密码
+    - name: TGitBasic
+      spec: basic
+      label: 工蜂（账号密码）
+      enabled: false
 # ------------------------------ 开发环境专用 ------------------------------
 # 开发环境专用配置
 development:

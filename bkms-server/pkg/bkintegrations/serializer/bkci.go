@@ -23,6 +23,7 @@ import (
 
 	"github.com/samber/lo"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/coderepo"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bkci"
 )
 
@@ -230,7 +231,7 @@ type BkCIRepositoryRefOutput struct {
 }
 
 // FromModel 从领域模型填充输出字段
-func (o *BkCIRepositoryRefOutput) FromModel(ref bkci.RepositoryRef) *BkCIRepositoryRefOutput {
+func (o *BkCIRepositoryRefOutput) FromModel(ref coderepo.Ref) *BkCIRepositoryRefOutput {
 	if o == nil {
 		return nil
 	}

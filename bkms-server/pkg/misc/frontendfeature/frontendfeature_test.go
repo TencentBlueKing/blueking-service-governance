@@ -28,6 +28,7 @@ import (
 	. "github.com/onsi/gomega"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/misc/frontendfeature"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/misc/frontendfeature/handler"
 	slz "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/misc/frontendfeature/serializer"
@@ -83,6 +84,23 @@ var _ = Describe("GetFrontendFeatures", func() {
 			EnableIndependentBkRepo:    true,
 			EnableWeTerm:               true,
 			EnableGoProxyBuildArgsTips: true,
+		}))
+	})
+
+	It("should return enabled source types with the default one first", func() {
+		managed, basic := testutil.BkCIManagedRepoSourceType(), testutil.BasicRepoSourceType()
+		disabled := basic
+		disabled.Name, disabled.Enabled = "Disabled", false
+		features := getFeatures(config.Config{CodeRepository: config.CodeRepositoryConfig{
+			SourceTypes: []config.RepoSourceTypeConfig{
+				basic,
+				disabled,
+				managed,
+			},
+		}})
+		Expect(features.RepoSourceTypes).To(Equal([]*slz.RepoSourceTypeOutput{
+			{Name: managed.Name, Spec: managed.Spec, Label: managed.Label},
+			{Name: basic.Name, Spec: basic.Spec, Label: basic.Label},
 		}))
 	})
 })

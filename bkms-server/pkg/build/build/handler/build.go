@@ -36,6 +36,7 @@ import (
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime/runtimemod/mods"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/coderepo"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/registry"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/misc/audit"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
@@ -169,18 +170,22 @@ func (h *Handler) validatePlatformBuildImages(
 	return bkerrs.New(errCode, err.Error())
 }
 
-// ensureCodeRepositoryRegistered 把代码库来源的构建配置登记到蓝盾，登记幂等，其余来源直接跳过
+// ensureCodeRepositoryRegistered 保存构建配置引用的代码库
 func (h *Handler) ensureCodeRepositoryRegistered(
 	ctx context.Context, workspaceID string, cfg *imagebuild.Config,
 ) error {
 	if cfg == nil || cfg.SourceType != imagebuild.SourceTypeCodeRepository || cfg.CodeRepo == nil {
 		return nil
 	}
-	if err := bkci.EnsureWorkspaceRepositories(ctx, h.registry.DB, workspaceID, []bkci.RepositoryInitSpec{{
-		URL:   cfg.CodeRepo.RepoURL,
-		Alias: cfg.CodeRepo.RepoAlias,
+	if err := bkci.SaveWorkspaceRepositories(ctx, h.registry.DB, []coderepo.SaveSpec{{
+		WorkspaceID: workspaceID,
+		Type:        string(cfg.CodeRepo.Type),
+		URL:         cfg.CodeRepo.RepoURL,
+		Alias:       cfg.CodeRepo.RepoAlias,
+		Username:    cfg.CodeRepo.Username,
+		Password:    cfg.CodeRepo.Password,
 	}}); err != nil {
-		return bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "ensure bkci repositories")
+		return coderepo.ToBkErr(err, "save workspace repositories")
 	}
 	return nil
 }

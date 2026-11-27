@@ -25,6 +25,7 @@ import (
 	bkciproject "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkci"
 	slz "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/serializer"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/coderepo"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bkci"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
@@ -283,41 +284,7 @@ func (h *Handler) GetBkCIPipelineVariables(c *gin.Context) {
 //	@Failure	400			{object}	bkerrs.GinErrorOutput
 //	@Router		/workspaces/{workspaceID}/bkci-repositories/branches [get]
 func (h *Handler) ListBkCIRepositoryBranches(c *gin.Context) {
-	var uriInput slz.BkCIWorkspaceURIInput
-	var queryInput slz.BkCIRepositoryRefsQueryInput
-	if err := ginutils.BindURIQuery(c, &uriInput, &queryInput); err != nil {
-		bkerrs.AbortWithErr(c, err)
-		return
-	}
-
-	ctx := c.Request.Context()
-	project, err := h.bkciProjects().Get(ctx, bkciproject.ByWorkspace(uriInput.WorkspaceID))
-	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get workspace project"))
-		return
-	}
-
-	client, err := bkci.New(auth.MustGetUser(ctx))
-	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "initial bkci client"))
-		return
-	}
-
-	refs, err := client.ListRepositoryBranches(
-		ctx,
-		project.Code,
-		queryInput.RepositoryID,
-		queryInput.RepositoryType,
-		queryInput.Search,
-		queryInput.Page,
-		queryInput.PageSize,
-	)
-	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list bkci repository branches"))
-		return
-	}
-
-	ginutils.OK(c, &slz.ListBkCIRepositoryBranchesOutput{Data: newBkCIRepositoryRefsOutput(refs)})
+	h.listRepositoryRefs(c, coderepo.RefKindBranch)
 }
 
 // ListBkCIRepositoryTags 获取代码仓库标签列表
@@ -338,6 +305,11 @@ func (h *Handler) ListBkCIRepositoryBranches(c *gin.Context) {
 //	@Failure	400			{object}	bkerrs.GinErrorOutput
 //	@Router		/workspaces/{workspaceID}/bkci-repositories/tags [get]
 func (h *Handler) ListBkCIRepositoryTags(c *gin.Context) {
+	h.listRepositoryRefs(c, coderepo.RefKindTag)
+}
+
+// listRepositoryRefs 列出分支或 Tag
+func (h *Handler) listRepositoryRefs(c *gin.Context, kind coderepo.RefKind) {
 	var uriInput slz.BkCIWorkspaceURIInput
 	var queryInput slz.BkCIRepositoryRefsQueryInput
 	if err := ginutils.BindURIQuery(c, &uriInput, &queryInput); err != nil {
@@ -345,38 +317,27 @@ func (h *Handler) ListBkCIRepositoryTags(c *gin.Context) {
 		return
 	}
 
-	ctx := c.Request.Context()
-	project, err := h.bkciProjects().Get(ctx, bkciproject.ByWorkspace(uriInput.WorkspaceID))
-	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get workspace project"))
-		return
-	}
-
-	client, err := bkci.New(auth.MustGetUser(ctx))
-	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "initial bkci client"))
-		return
-	}
-
-	refs, err := client.ListRepositoryTags(
-		ctx,
-		project.Code,
-		queryInput.RepositoryID,
-		queryInput.RepositoryType,
-		queryInput.Search,
-		queryInput.Page,
-		queryInput.PageSize,
+	refs, err := bkciproject.ListWorkspaceRepositoryRefs(
+		c.Request.Context(), h.registry.DB, uriInput.WorkspaceID, queryInput.RepositoryID, queryInput.RepositoryType,
+		coderepo.RefsQuery{
+			Kind: kind, Search: queryInput.Search, Page: queryInput.Page, PageSize: queryInput.PageSize,
+		},
 	)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list bkci repository tags"))
+		bkerrs.AbortWithErr(c, coderepo.ToBkErr(err, "list repository "+string(kind)+"s"))
 		return
 	}
 
-	ginutils.OK(c, &slz.ListBkCIRepositoryTagsOutput{Data: newBkCIRepositoryRefsOutput(refs)})
+	data := newBkCIRepositoryRefsOutput(refs)
+	if kind == coderepo.RefKindTag {
+		ginutils.OK(c, &slz.ListBkCIRepositoryTagsOutput{Data: data})
+		return
+	}
+	ginutils.OK(c, &slz.ListBkCIRepositoryBranchesOutput{Data: data})
 }
 
-func newBkCIRepositoryRefsOutput(refs []bkci.RepositoryRef) []*slz.BkCIRepositoryRefOutput {
-	return lo.Map(refs, func(ref bkci.RepositoryRef, _ int) *slz.BkCIRepositoryRefOutput {
+func newBkCIRepositoryRefsOutput(refs []coderepo.Ref) []*slz.BkCIRepositoryRefOutput {
+	return lo.Map(refs, func(ref coderepo.Ref, _ int) *slz.BkCIRepositoryRefOutput {
 		return new(slz.BkCIRepositoryRefOutput).FromModel(ref)
 	})
 }

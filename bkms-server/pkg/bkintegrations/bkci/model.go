@@ -78,7 +78,7 @@ type Pipeline struct {
 	CreatedAt time.Time `bson:"createdAt"`
 }
 
-// Repository 代码仓库
+// Repository 代码库在蓝盾侧的同步记录
 type Repository struct {
 	// ID 仓库 Hash ID，格式类似于：Zr3Dx
 	ID string `bson:"id"`
@@ -88,12 +88,14 @@ type Repository struct {
 	Alias string `bson:"alias"`
 	// URL 仓库地址，格式类似于：https://git.example.com/bkms/bkms.git
 	URL string `bson:"url"`
-	// Type 仓库类型，目前仅有 codeGit
+	// Type 蓝盾返回的代码库类型
 	Type string `bson:"type"`
 	// WorkspaceID 工作空间 ID
 	WorkspaceID string `bson:"workspaceID"`
 	// ProjectCode 蓝盾项目 Code
 	ProjectCode string `bson:"projectCode"`
+	// CredentialID 蓝盾凭证 ID，OAuth 关联时为空
+	CredentialID string `bson:"credentialID,omitempty"`
 	// Creator 仓库创建人
 	Creator string `bson:"creator"`
 	// CreatedAt 仓库创建时间

@@ -23,9 +23,16 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 )
 
 func TestSerializer(t *testing.T) {
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "app/serializer Suite")
 }
+
+// 构建配置转换依赖代码库接入方式配置
+var _ = BeforeEach(func() {
+	testutil.UseRepoSourceTypes(GinkgoT(), testutil.BkCIManagedRepoSourceType())
+})

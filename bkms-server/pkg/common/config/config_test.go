@@ -30,6 +30,13 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 )
 
+// codeRepositoryConfig 必填的代码库接入方式配置，追加到各用例的配置之后
+const codeRepositoryConfig = `
+codeRepository:
+  sourceTypes:
+    - {name: TGit, spec: bkci_managed, label: 工蜂, enabled: true}
+`
+
 var _ = Describe("Configuration Load", func() {
 	var tempDir string
 	var configFile string
@@ -130,7 +137,7 @@ development:
 featureIntegrations:
   enableIndependentBCSProject: true
 `
-			err := os.WriteFile(configFile, []byte(configContent), 0o644)
+			err := os.WriteFile(configFile, []byte(configContent+codeRepositoryConfig), 0o644)
 			Expect(err).NotTo(HaveOccurred())
 
 			// Load the config
@@ -218,7 +225,7 @@ asynq:
     host: localhost
     port: 6380
 `
-			err := os.WriteFile(configFile, []byte(configContent), 0o644)
+			err := os.WriteFile(configFile, []byte(configContent+codeRepositoryConfig), 0o644)
 			Expect(err).NotTo(HaveOccurred())
 
 			cfg, err := config.Load(ctx, configFile)
@@ -274,7 +281,7 @@ asynq:
     host: localhost
     port: 6380
 `
-			err := os.WriteFile(configFile, []byte(configContent), 0o644)
+			err := os.WriteFile(configFile, []byte(configContent+codeRepositoryConfig), 0o644)
 			Expect(err).NotTo(HaveOccurred())
 
 			cfg, err := config.Load(ctx, configFile)
@@ -310,7 +317,7 @@ asynq:
     host: localhost
     port: 6380
 `
-			err := os.WriteFile(configFile, []byte(configContent), 0o644)
+			err := os.WriteFile(configFile, []byte(configContent+codeRepositoryConfig), 0o644)
 			Expect(err).NotTo(HaveOccurred())
 
 			cfg, err := config.Load(ctx, configFile)
@@ -343,7 +350,7 @@ asynq:
     host: localhost
     port: 6380
 `
-			err := os.WriteFile(configFile, []byte(configContent), 0o644)
+			err := os.WriteFile(configFile, []byte(configContent+codeRepositoryConfig), 0o644)
 			Expect(err).NotTo(HaveOccurred())
 
 			_, err = config.Load(ctx, configFile)
@@ -373,7 +380,7 @@ asynq:
     host: localhost
     port: 6380
 `
-				Expect(os.WriteFile(configFile, []byte(configContent), 0o644)).To(Succeed())
+				Expect(os.WriteFile(configFile, []byte(configContent+codeRepositoryConfig), 0o644)).To(Succeed())
 
 				cfg, err := config.Load(ctx, configFile)
 
@@ -412,7 +419,7 @@ asynq:
     host: localhost
     port: 6380
 `
-			err := os.WriteFile(configFile, []byte(configContent), 0o644)
+			err := os.WriteFile(configFile, []byte(configContent+codeRepositoryConfig), 0o644)
 			Expect(err).NotTo(HaveOccurred())
 
 			cfg, err := config.Load(ctx, configFile)
@@ -440,7 +447,7 @@ httpServer:
   address: 127.0.0.1
   port: 70000
 `
-			err := os.WriteFile(configFile, []byte(configContent), 0o644)
+			err := os.WriteFile(configFile, []byte(configContent+codeRepositoryConfig), 0o644)
 			Expect(err).NotTo(HaveOccurred())
 
 			_, err = config.Load(ctx, configFile)
@@ -463,7 +470,7 @@ httpServer:
   address: 127.0.0.1
   port: 32303
 `
-			err := os.WriteFile(configFile, []byte(configContent), 0o644)
+			err := os.WriteFile(configFile, []byte(configContent+codeRepositoryConfig), 0o644)
 			Expect(err).NotTo(HaveOccurred())
 
 			_, err = config.Load(ctx, configFile)
@@ -484,7 +491,7 @@ httpServer:
   address: 127.0.0.1
   port: 32303
 `
-			err := os.WriteFile(configFile, []byte(configContent), 0o644)
+			err := os.WriteFile(configFile, []byte(configContent+codeRepositoryConfig), 0o644)
 			Expect(err).NotTo(HaveOccurred())
 
 			_, err = config.Load(ctx, configFile)
@@ -507,7 +514,7 @@ metrics:
 httpServer:
   port: 32303
 `
-			err := os.WriteFile(configFile, []byte(configContent), 0o644)
+			err := os.WriteFile(configFile, []byte(configContent+codeRepositoryConfig), 0o644)
 			Expect(err).NotTo(HaveOccurred())
 
 			_, err = config.Load(ctx, configFile)
@@ -543,7 +550,7 @@ asynq:
     host: localhost
     port: 6380
 `
-			err := os.WriteFile(configFile, []byte(configContent), 0o644)
+			err := os.WriteFile(configFile, []byte(configContent+codeRepositoryConfig), 0o644)
 			Expect(err).NotTo(HaveOccurred())
 
 			cfg, err := config.Load(ctx, configFile)
@@ -577,7 +584,7 @@ asynq:
     host: localhost
     port: 6380
 `
-			err := os.WriteFile(configFile, []byte(configContent), 0o644)
+			err := os.WriteFile(configFile, []byte(configContent+codeRepositoryConfig), 0o644)
 			Expect(err).NotTo(HaveOccurred())
 
 			_, err = config.Load(ctx, configFile)
@@ -610,7 +617,7 @@ asynq:
     host: localhost
     port: 6380
 `
-			err := os.WriteFile(configFile, []byte(configContent), 0o644)
+			err := os.WriteFile(configFile, []byte(configContent+codeRepositoryConfig), 0o644)
 			Expect(err).NotTo(HaveOccurred())
 
 			_, err = config.Load(ctx, configFile)
@@ -634,7 +641,7 @@ metrics:
 httpServer:
   address: 127.0.0.1
 `
-			err := os.WriteFile(configFile, []byte(configContent), 0o644)
+			err := os.WriteFile(configFile, []byte(configContent+codeRepositoryConfig), 0o644)
 			Expect(err).NotTo(HaveOccurred())
 
 			_, err = config.Load(ctx, configFile)
@@ -664,13 +671,94 @@ httpServer:
   # 设置为错误的 Mode 来触发验证失败
   mode: invalid-mode
 `
-			err := os.WriteFile(configFile, []byte(configContent), 0o644)
+			err := os.WriteFile(configFile, []byte(configContent+codeRepositoryConfig), 0o644)
 			Expect(err).NotTo(HaveOccurred())
 
 			_, err = config.Load(ctx, configFile)
 
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("'Mode' failed on the 'oneof' tag"))
+		})
+
+		Describe("code repository source types", func() {
+			const baseConfig = `
+bkApp:
+  code: test-app
+  secret: test-secret
+account:
+  authBaseURL: http://auth.example.com
+  loginURL: http://login.example.com
+metrics:
+  port: 8081
+httpServer:
+  address: 127.0.0.1
+  port: 32303
+asynq:
+  redis:
+    host: localhost
+    port: 6380
+`
+			load := func(extra string) (*config.Config, error) {
+				GinkgoHelper()
+				Expect(os.WriteFile(configFile, []byte(baseConfig+extra), 0o644)).To(Succeed())
+				return config.Load(ctx, configFile)
+			}
+
+			It("should require source types", func() {
+				_, err := load("")
+				Expect(err).To(MatchError(ContainSubstring("'SourceTypes' failed on the 'required' tag")))
+			})
+
+			It("should load configured source types", func() {
+				cfg, err := load(`codeRepository:
+  sourceTypes:
+    - {name: TGit, spec: bkci_managed, label: 工蜂, enabled: true}
+    - {name: Git, spec: basic, label: Git 代码库, enabled: true}
+`)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(cfg.CodeRepository.SourceTypes).To(Equal([]config.RepoSourceTypeConfig{
+					{
+						Name:    config.DefaultRepoSourceTypeName,
+						Spec:    config.RepoSourceSpecBkCIManaged,
+						Label:   "工蜂",
+						Enabled: true,
+					},
+					{
+						Name:    "Git",
+						Spec:    config.RepoSourceSpecBasic,
+						Label:   "Git 代码库",
+						Enabled: true,
+					},
+				}))
+			})
+
+			DescribeTable("should reject invalid source types",
+				func(extra, msg string) {
+					_, err := load(extra)
+					Expect(err).To(MatchError(ContainSubstring(msg)))
+				},
+				Entry("unknown spec", `codeRepository:
+  sourceTypes:
+    - {name: Git, spec: ssh, label: Git, enabled: true}
+`, "'Spec' failed on the 'oneof' tag"),
+				Entry("name with slash", `codeRepository:
+  sourceTypes:
+    - {name: a/b, spec: basic, label: Git, enabled: true}
+`, "'Name' failed on the 'excludesall' tag"),
+				Entry("oauth spec", `codeRepository:
+  sourceTypes:
+    - {name: GitLab, spec: oauth, label: GitLab, enabled: true}
+`, "spec oauth is not implemented"),
+				Entry("duplicated name", `codeRepository:
+  sourceTypes:
+    - {name: Git, spec: basic, label: Git, enabled: true}
+    - {name: Git, spec: bkci_managed, label: Git, enabled: true}
+`, "duplicated source type name Git"),
+				Entry("none enabled", `codeRepository:
+  sourceTypes:
+    - {name: Git, spec: basic, label: Git, enabled: false}
+`, "at least one enabled source type is required"),
+			)
 		})
 	})
 })

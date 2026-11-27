@@ -25,7 +25,7 @@ import (
 	. "github.com/onsi/gomega"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/serializer"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bkci"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/coderepo"
 )
 
 var _ = Describe("BkCI Serializer", func() {
@@ -281,7 +281,7 @@ var _ = Describe("BkCI Serializer", func() {
 
 	Describe("BkCIRepositoryRefOutput", func() {
 		It("should map fields from repository ref model", func() {
-			output := new(serializer.BkCIRepositoryRefOutput).FromModel(bkci.RepositoryRef{
+			output := new(serializer.BkCIRepositoryRefOutput).FromModel(coderepo.Ref{
 				Name:    "release",
 				Path:    "refs/heads/release",
 				SHA:     "abc123",

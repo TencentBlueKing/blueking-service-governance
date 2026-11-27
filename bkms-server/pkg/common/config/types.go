@@ -427,6 +427,37 @@ type FeatureIntegrationsConfig struct {
 	DisableKubeInsight bool
 }
 
+// 代码库接入方式的实现类型（spec）
+const (
+	// RepoSourceSpecBkCIManaged 蓝盾托管授权，凭证由蓝盾持有
+	RepoSourceSpecBkCIManaged = "bkci_managed"
+	// RepoSourceSpecBasic 仓库账号密码，凭证由 bkms 持有
+	RepoSourceSpecBasic = "basic"
+	// RepoSourceSpecOAuth bkms 侧 OAuth，暂未实现
+	RepoSourceSpecOAuth = "oauth"
+)
+
+// DefaultRepoSourceTypeName 历史数据中代码库配置 type 的取值
+const DefaultRepoSourceTypeName = "TGit"
+
+// CodeRepositoryConfig 代码库配置
+type CodeRepositoryConfig struct {
+	// SourceTypes 接入方式
+	SourceTypes []RepoSourceTypeConfig `validate:"required,min=1,dive"`
+}
+
+// RepoSourceTypeConfig 代码库接入方式
+type RepoSourceTypeConfig struct {
+	// Name 接入方式名，唯一，即代码库配置的 type
+	Name string `validate:"required,max=32,excludesall= /"`
+	// Spec 实现类型
+	Spec string `validate:"required,oneof=bkci_managed basic oauth"`
+	// Label 展示名
+	Label string `validate:"required,max=64"`
+	// Enabled 是否启用
+	Enabled bool
+}
+
 // --------------------------- 开发环境专用 ---------------------------
 
 // DevConfig 包含开发相关的配置项
@@ -524,6 +555,8 @@ type Config struct {
 	Tenant TenantConfig
 	// FeatureIntegrations 可选平台集成与功能特性开关
 	FeatureIntegrations FeatureIntegrationsConfig
+	// CodeRepository 代码库配置
+	CodeRepository CodeRepositoryConfig
 
 	// --------------------------- 开发环境专用 ---------------------------
 	// Development 包含与项目开发相关的各种配置项，仅供开发时使用

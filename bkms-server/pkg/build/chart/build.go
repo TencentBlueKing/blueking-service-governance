@@ -93,11 +93,11 @@ func (s *ChartBuildService) prepare(ctx context.Context, app *bkmsapp.Applicatio
 		return errors.Wrapf(err, "ensure helm-git-build pipeline for workspace %s", app.WorkspaceID)
 	}
 
-	// 2. 确保代码库已关联到蓝盾
-	if _, err := bkci.NewRepositoryManager(s.db, app.WorkspaceID).Initialize(
-		ctx, gitRepoConfig.RepoURL, gitRepoConfig.RepoAlias,
+	// 2. 确保代码库已同步到蓝盾
+	if _, err := bkci.SyncBuildRepository(
+		ctx, s.db, app.WorkspaceID, string(gitRepoConfig.Type), gitRepoConfig.RepoURL, gitRepoConfig.RepoAlias,
 	); err != nil {
-		return errors.Wrapf(err, "ensure bkci repository for app %s", appInfo)
+		return errors.Wrapf(err, "sync repository to bkci for app %s", appInfo)
 	}
 
 	// 3. 确保 Helm 仓库凭证已初始化（兜底检查）

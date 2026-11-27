@@ -38,6 +38,10 @@ import (
 const (
 	// envGitServerURLVar overrides the Git server URL used in tests.
 	envGitServerURLVar = "FOR_TEST_GIT_SERVER_URL"
+	// envGitServerUsernameVar overrides the Git server admin username used in tests.
+	envGitServerUsernameVar = "FOR_TEST_GIT_SERVER_USERNAME"
+	// envGitServerPasswordVar overrides the Git server admin password used in tests.
+	envGitServerPasswordVar = "FOR_TEST_GIT_SERVER_PASSWORD" // #nosec G101
 	// envHelmRegistryURLVar overrides the Helm registry URL used in tests.
 	envHelmRegistryURLVar = "FOR_TEST_HELM_REGISTRY_URL"
 	// envContainerRegistryURLVar overrides the container registry URL used in tests.
@@ -58,7 +62,10 @@ const (
 
 const (
 	// The default URLs for various test dependencies
-	defaultGitServerURL         = "http://localhost:28010"
+	defaultGitServerURL = "http://localhost:28010"
+	// 同 tests/utdeps/docker-compose.yml 中的 GIT_HTTP_USER / GIT_HTTP_PASS
+	defaultGitServerUsername    = "ufoo"
+	defaultGitServerPassword    = "easy_pass" // #nosec G101
 	defaultHelmRegistryURL      = "http://localhost:28020"
 	defaultContainerRegistryURL = "http://localhost:28030"
 )
@@ -69,6 +76,22 @@ func GitServerURL() string {
 		return val
 	}
 	return defaultGitServerURL
+}
+
+// GitServerUsername 代码库服务管理员账号
+func GitServerUsername() string {
+	if val := os.Getenv(envGitServerUsernameVar); val != "" {
+		return val
+	}
+	return defaultGitServerUsername
+}
+
+// GitServerPassword 代码库服务管理员密码
+func GitServerPassword() string {
+	if val := os.Getenv(envGitServerPasswordVar); val != "" {
+		return val
+	}
+	return defaultGitServerPassword
 }
 
 // HelmRegistryURL helm repo 仓库 URL
