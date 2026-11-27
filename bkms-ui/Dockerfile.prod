@@ -18,6 +18,7 @@ WORKDIR /app
 RUN corepack enable
 
 COPY .npmrc package.json pnpm-lock.yaml ./
+COPY patches/ ./patches/
 # 不使用 RUN --mount=type=cache：部分流水线 Docker 未启用 BuildKit，会报 Unknown flag: mount
 RUN pnpm install --frozen-lockfile
 
