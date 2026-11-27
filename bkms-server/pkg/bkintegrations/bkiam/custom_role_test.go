@@ -95,18 +95,25 @@ var _ = Describe("custom role auth scopes", func() {
 		Expect(allActions(scopes)).NotTo(ContainElement("edit_app"))
 	})
 
-	It("grants edit_app only to roles covering all envs", func() {
+	It("composes app-env view and edit actions from app and env permissions", func() {
 		data := CustomRoleData{
 			WorkspaceID: "ws",
 			Permissions: []role.Permission{role.Perm.AppView, role.Perm.AppEdit},
 			AppScope:    role.AppScope{Mode: role.AppScopeAll},
 			EnvScope:    role.EnvScope{Mode: role.EnvScopeTypes, EnvTypes: []string{"test"}},
 		}
-		// 部分环境只能编辑范围内环境的配置，不能修改作用于所有环境的应用级数据
-		partial := allActions(GenCustomRoleAuthScopes(data))
-		Expect(partial).To(ContainElement("edit_app_in_env"))
-		Expect(partial).NotTo(ContainElement("edit_app"))
+		// 仅有 app 侧权限时，不授予 app-env 联合 action，部分环境也不授予 edit_app
+		Expect(allActions(GenCustomRoleAuthScopes(data))).To(ConsistOf("view_app"))
 
+		// 同时具备 app 和 env 权限时，组合授予 view_app_in_env 和 edit_app_in_env
+		data.Permissions = []role.Permission{
+			role.Perm.AppView, role.Perm.EnvView, role.Perm.AppEdit, role.Perm.EnvEdit,
+		}
+		Expect(allActions(GenCustomRoleAuthScopes(data))).To(ConsistOf(
+			"view_app", "view_env", "edit_env", "view_app_in_env", "edit_app_in_env",
+		))
+
+		// 覆盖全部环境时，才额外授予应用级的 edit_app
 		data.EnvScope = role.EnvScope{Mode: role.EnvScopeAll}
 		Expect(allActions(GenCustomRoleAuthScopes(data))).To(ContainElements("edit_app", "edit_app_in_env"))
 	})
@@ -114,7 +121,7 @@ var _ = Describe("custom role auth scopes", func() {
 	It("uses the workspace node for all apps and all envs", func() {
 		scopes := GenCustomRoleAuthScopes(CustomRoleData{
 			WorkspaceID: "ws",
-			Permissions: []role.Permission{role.Perm.AppEdit},
+			Permissions: []role.Permission{role.Perm.AppEdit, role.Perm.EnvEdit},
 			AppScope:    role.AppScope{Mode: role.AppScopeAll},
 			EnvScope:    role.EnvScope{Mode: role.EnvScopeAll},
 		})

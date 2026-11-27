@@ -139,6 +139,7 @@ func GenCustomRoleAuthScopes(data CustomRoleData) []cloudapiiamtypes.Authorizati
 	}
 
 	var wsActions, appActions, envActions, appEnvActions []string
+	var hasAppView, hasEnvView, hasAppEdit, hasEnvEdit bool
 	for _, p := range data.Permissions {
 		switch p {
 		case role.Perm.SpaceView:
@@ -152,19 +153,21 @@ func GenCustomRoleAuthScopes(data CustomRoleData) []cloudapiiamtypes.Authorizati
 		case role.Perm.EnvCreate:
 			wsActions = append(wsActions, actions.EnvAction.Create)
 		case role.Perm.AppView:
+			hasAppView = true
 			appActions = append(appActions, actions.AppAction.View)
-			appEnvActions = append(appEnvActions, actions.AppEnvAction.View)
 		case role.Perm.AppEdit:
+			hasAppEdit = true
 			// edit_app 修改的是作用于所有环境的应用级数据，只授予覆盖全部环境的角色
 			if data.EnvScope.IsAll() {
 				appActions = append(appActions, actions.AppAction.Edit)
 			}
-			appEnvActions = append(appEnvActions, actions.AppEnvAction.Edit)
 		case role.Perm.AppDelete:
 			appActions = append(appActions, actions.AppAction.Delete)
 		case role.Perm.EnvView:
+			hasEnvView = true
 			envActions = append(envActions, actions.EnvAction.View)
 		case role.Perm.EnvEdit:
+			hasEnvEdit = true
 			envActions = append(envActions, actions.EnvAction.Edit)
 		case role.Perm.EnvDelete:
 			envActions = append(envActions, actions.EnvAction.Delete)
@@ -172,6 +175,12 @@ func GenCustomRoleAuthScopes(data CustomRoleData) []cloudapiiamtypes.Authorizati
 			// 部署依赖在同一范围内编辑应用的环境配置，但不带上应用级的编辑权限
 			appEnvActions = append(appEnvActions, actions.AppEnvAction.Edit, actions.AppEnvAction.Deploy)
 		}
+	}
+	if hasAppView && hasEnvView {
+		appEnvActions = append(appEnvActions, actions.AppEnvAction.View)
+	}
+	if hasAppEdit && hasEnvEdit {
+		appEnvActions = append(appEnvActions, actions.AppEnvAction.Edit)
 	}
 	appEnvActions = lo.Uniq(appEnvActions)
 

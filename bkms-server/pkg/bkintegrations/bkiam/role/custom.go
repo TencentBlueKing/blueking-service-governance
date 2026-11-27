@@ -119,7 +119,7 @@ func (s EnvScope) IsAll() bool { return s.Mode == EnvScopeAll }
 // ErrInvalidCustomRole 自定义角色的权限或范围不合法
 var ErrInvalidCustomRole = errors.New("invalid custom role")
 
-// NormalizePermissions 校验并补齐权限项：所有角色都带上查看空间，修改或部署类权限带上对应的查看权限。
+// NormalizePermissions 校验并补齐权限项：所有角色默认带上查看空间、查看应用、查看环境。
 //
 // 返回按 AllPermissions 顺序排列、去重后的权限项。
 func NormalizePermissions(perms []Permission, appScope AppScope, envScope EnvScope) ([]Permission, error) {
@@ -137,29 +137,8 @@ func NormalizePermissions(perms []Permission, appScope AppScope, envScope EnvSco
 
 	set := lo.SliceToMap(perms, func(p Permission) (Permission, struct{}) { return p, struct{}{} })
 	set[Perm.SpaceView] = struct{}{}
-	for _, p := range []Permission{Perm.AppObservationView, Perm.AppEdit, Perm.AppDelete, Perm.EnvDeploy} {
-		if _, ok := set[p]; ok {
-			set[Perm.AppView] = struct{}{}
-		}
-	}
-	for _, p := range []Permission{Perm.EnvDeploy, Perm.EnvEdit, Perm.EnvDelete} {
-		if _, ok := set[p]; ok {
-			set[Perm.EnvView] = struct{}{}
-		}
-	}
-
-	// 编辑、删除环境作用于环境下的全部应用，编辑、删除空间作用于整个空间，范围不是全部时授不出任何权限。
-	// 创建应用、创建环境挂在空间上，删除应用不涉及环境，都不看范围
-	requireAllApps := []Permission{Perm.EnvEdit, Perm.EnvDelete}
-	requireAll := []Permission{Perm.SpaceEdit, Perm.SpaceDelete}
-	for p := range set {
-		if lo.Contains(requireAllApps, p) && !appScope.IsAll() {
-			return nil, errors.Wrapf(ErrInvalidCustomRole, "permission %s requires all apps", p)
-		}
-		if lo.Contains(requireAll, p) && (!appScope.IsAll() || !envScope.IsAll()) {
-			return nil, errors.Wrapf(ErrInvalidCustomRole, "permission %s requires all apps and all envs", p)
-		}
-	}
+	set[Perm.AppView] = struct{}{}
+	set[Perm.EnvView] = struct{}{}
 
 	return lo.Filter(AllPermissions, func(p Permission, _ int) bool {
 		_, ok := set[p]

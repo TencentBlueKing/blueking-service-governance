@@ -30,7 +30,7 @@ var _ = Describe("NormalizePermissions", func() {
 	someApps := AppScope{Mode: AppScopeApps, AppIDs: []string{"app-a"}}
 	nonProd := EnvScope{Mode: EnvScopeTypes, EnvTypes: []string{"development", "test", "staging"}}
 
-	It("adds view workspace and the view permissions implied by edit or deploy", func() {
+	It("always includes base view permissions in canonical order", func() {
 		perms, err := NormalizePermissions([]Permission{Perm.EnvDeploy}, allApps, nonProd)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(perms).To(Equal([]Permission{
@@ -38,40 +38,34 @@ var _ = Describe("NormalizePermissions", func() {
 		}))
 	})
 
-	It("adds view app for the observation permission", func() {
-		perms, err := NormalizePermissions([]Permission{Perm.AppObservationView}, someApps, nonProd)
-		Expect(err).NotTo(HaveOccurred())
-		Expect(perms).To(Equal([]Permission{Perm.SpaceView, Perm.AppView, Perm.AppObservationView}))
-	})
-
-	It("returns only view workspace for a blank role", func() {
+	It("returns the three base view permissions for a blank role", func() {
 		perms, err := NormalizePermissions(nil, allApps, allEnvs)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(perms).To(Equal([]Permission{Perm.SpaceView}))
+		Expect(perms).To(Equal([]Permission{Perm.SpaceView, Perm.AppView, Perm.EnvView}))
 	})
 
-	DescribeTable("allows permissions that do not depend on the other scope",
+	DescribeTable("allows all workspace-scoped permissions regardless of partial scopes",
 		func(p Permission, appScope AppScope, envScope EnvScope) {
 			_, err := NormalizePermissions([]Permission{p}, appScope, envScope)
 			Expect(err).NotTo(HaveOccurred())
 		},
-		Entry("edit app with partial envs", Perm.AppEdit, someApps, nonProd),
-		Entry("delete app with partial envs", Perm.AppDelete, someApps, nonProd),
-		Entry("create app with specified apps", Perm.AppCreate, someApps, nonProd),
+		Entry("edit space with partial scopes", Perm.SpaceEdit, someApps, nonProd),
+		Entry("delete space with partial scopes", Perm.SpaceDelete, someApps, nonProd),
+		Entry("create app with partial scopes", Perm.AppCreate, someApps, nonProd),
+		Entry("edit app with partial scopes", Perm.AppEdit, someApps, nonProd),
+		Entry("delete app with partial scopes", Perm.AppDelete, someApps, nonProd),
 		Entry("create env with partial scopes", Perm.EnvCreate, someApps, nonProd),
+		Entry("edit env with partial scopes", Perm.EnvEdit, someApps, nonProd),
+		Entry("delete env with partial scopes", Perm.EnvDelete, someApps, nonProd),
 	)
 
-	DescribeTable("rejects permissions that require broader scopes",
-		func(p Permission, appScope AppScope, envScope EnvScope) {
-			_, err := NormalizePermissions([]Permission{p}, appScope, envScope)
+	DescribeTable("rejects invalid permissions",
+		func(p Permission) {
+			_, err := NormalizePermissions([]Permission{p}, allApps, allEnvs)
 			Expect(errors.Is(err, ErrInvalidCustomRole)).To(BeTrue())
 		},
-		Entry("edit env with specified apps", Perm.EnvEdit, someApps, allEnvs),
-		Entry("delete env with specified apps", Perm.EnvDelete, someApps, allEnvs),
-		Entry("edit workspace with partial envs", Perm.SpaceEdit, allApps, nonProd),
-		Entry("delete workspace with specified apps", Perm.SpaceDelete, someApps, allEnvs),
-		Entry("create workspace", Perm.SpaceCreate, allApps, allEnvs),
-		Entry("unknown permission", Permission("app.unknown"), allApps, allEnvs),
+		Entry("create workspace", Perm.SpaceCreate),
+		Entry("unknown permission", Permission("app.unknown")),
 	)
 
 	DescribeTable("rejects invalid scopes",
