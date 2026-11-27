@@ -454,6 +454,36 @@ describe('配置编辑：资源规格多态切换', () => {
     expect(mocks.setDefault).not.toHaveBeenCalled();
   });
 
+  it('当默认资源规格尚未保存时，指定环境的修改应写入覆盖而不是空字段', async () => {
+    const env: ExtendedEnv = { name: 'prod', isDefault: false, isModified: false };
+    mocks.getDefault.mockResolvedValue(null);
+    mocks.setEnv.mockResolvedValue({});
+    renderResourcesForm();
+    await loadEnv(env, '1');
+    await enterEditMode();
+    const replicasInput = getReplicasInput();
+    await userEvent.clear(replicasInput);
+    await userEvent.type(replicasInput, '3');
+    await setCustomQuantity('CPU 预留 (Requests)', '1');
+    await setCustomQuantity('CPU 限制 (Limits)', '2');
+    await setCustomQuantity('内存预留 (Requests)', '1');
+    await setCustomQuantity('内存限制 (Limits)', '2');
+    await userEvent.click(screen.getByRole('button', { name: '保存' }));
+    await waitFor(() =>
+      expect(mocks.setEnv).toHaveBeenCalledWith({
+        appID: 'app-1',
+        envName: 'prod',
+        appSpecResources: {
+          replicas: 3,
+          cpuRequests: '1',
+          cpuLimits: '2',
+          memoryRequests: '1Gi',
+          memoryLimits: '2Gi',
+        },
+      }),
+    );
+  });
+
   it('当用户在普通环境点击恢复默认配置时，应删除该环境的覆盖配置', async () => {
     mocks.getDefault.mockResolvedValue(DEFAULT_SPEC);
     mocks.getEnvEffective.mockResolvedValue({ ...DEFAULT_SPEC, replicas: 4 });
