@@ -27,6 +27,7 @@ import (
 	"github.com/samber/lo"
 
 	imagebuild "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/coderepo"
 	_ "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils/validators" // register global validators
 )
 
@@ -67,14 +68,18 @@ type TagConfigInput struct {
 
 // RepositoryBuildConfigInput is the JSON representation of source repo build config.
 type RepositoryBuildConfigInput struct {
-	// 代码仓库类型：TGit 或 GitHub
-	Type string `json:"type" binding:"required,oneof=TGit GitHub"`
+	// 代码库接入方式名，取值见前端开关 repoSourceTypes
+	Type string `json:"type" binding:"required,max=32"`
 	// 默认构建分支
 	DefaultBranch string `json:"defaultBranch" binding:"required,min=1,max=255"`
-	// 蓝盾侧仓库别名
-	RepoAlias string `json:"repoAlias" binding:"required,min=1,max=256"`
+	// 代码库别名，仅蓝盾托管方式使用
+	RepoAlias string `json:"repoAlias" binding:"omitempty,max=256"`
 	// 代码仓库地址
 	RepoURL string `json:"repoURL" binding:"required,min=1,max=512,url"`
+	// 仓库账号，仅 basic 方式使用
+	Username string `json:"username" binding:"omitempty,max=128"`
+	// 仓库密码，仅 basic 方式使用，不传时沿用已保存的
+	Password string `json:"password" binding:"omitempty,max=256"`
 	// 构建目录，空表示仓库根目录；非空时必须是仓库内相对路径，不能以 / 开头，也不能包含 .. 路径段
 	SourceDir string `json:"sourceDir" binding:"omitempty,max=64"`
 	// Dockerfile 路径，空表示默认路径。仅 imageBuildMode=repositoryDockerfile 时有效
@@ -142,15 +147,25 @@ func (r *RepositoryBuildConfigInput) ToModel() (*imagebuild.RepositoryConfig, er
 	if err := r.ValidatePlatformBuildConfig(); err != nil {
 		return nil, err
 	}
+	sourceType, err := coderepo.ResolveSourceType(r.Type)
+	if err != nil {
+		return nil, errors.Wrapf(err, "resolve source type of code repository %s", r.RepoURL)
+	}
+	repoAlias, err := coderepo.ResolveAlias(sourceType, r.RepoURL, r.RepoAlias)
+	if err != nil {
+		return nil, errors.Wrapf(err, "resolve alias of code repository %s", r.RepoURL)
+	}
 	imageBuildMode := r.EffectiveImageBuildMode()
 	var platformBuildConfig *imagebuild.PlatformBuildConfig
 	if r.PlatformBuildConfig != nil {
 		platformBuildConfig = r.PlatformBuildConfig.ToModel()
 	}
 	cfg := &imagebuild.RepositoryConfig{
-		Type:                imagebuild.RepositoryType(r.Type),
-		RepoAlias:           r.RepoAlias,
+		Type:                imagebuild.RepositoryType(sourceType.Name),
+		RepoAlias:           repoAlias,
 		RepoURL:             r.RepoURL,
+		Username:            r.Username,
+		Password:            r.Password,
 		SourceDir:           r.SourceDir,
 		Dockerfile:          r.Dockerfile,
 		DockerBuildArgs:     r.DockerBuildArgs,

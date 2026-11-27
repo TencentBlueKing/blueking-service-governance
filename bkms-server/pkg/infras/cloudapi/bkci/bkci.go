@@ -25,6 +25,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/TencentBlueKing/bk-apigateway-sdks/core/bkapi"
@@ -176,7 +177,7 @@ func (c *ApiClient) GetProject(ctx context.Context, projectCode string) (*Projec
 }
 
 // CreateProject 创建蓝盾项目
-// 注意：社区版不需要 obsProductID & obsProductName
+// 注意：obsProductID & obsProductName 为可选参数
 func (c *ApiClient) CreateProject(
 	ctx context.Context,
 	projectCode, obsProductID, obsProductName string,
@@ -191,7 +192,7 @@ func (c *ApiClient) CreateProject(
 		"projectType": "5",
 		"description": "蓝鲸服务治理",
 	}
-	// 仅当运营产品 ID 与名称均非空时才设置（社区版无这些信息）
+	// 仅当运营产品 ID 与名称均非空时才设置
 	if obsProductID != "" && obsProductName != "" {
 		body["productId"] = obsProductID
 		body["productName"] = obsProductName
@@ -218,7 +219,7 @@ func (c *ApiClient) CreateProject(
 
 // ------------------------------------------ 蓝盾代码库 & OAuth API ------------------------------------------
 
-// ListOAuthGitProjects 获取用户有 OAuth 授权给蓝盾的 Git 项目列表
+// ListOAuthGitProjects 获取用户有 OAuth 授权给蓝盾的 Git 项目列表。
 func (c *ApiClient) ListOAuthGitProjects(ctx context.Context, projectCode, keyword string) ([]GitProject, error) {
 	params := map[string]string{"projectId": projectCode}
 	if keyword != "" {
@@ -253,7 +254,7 @@ func (c *ApiClient) ListOAuthGitProjects(ctx context.Context, projectCode, keywo
 	return projects, nil
 }
 
-// GetOAuthUrl 获取用户授权 Git 项目给蓝盾的 OAuth 授权地址
+// GetOAuthUrl 获取用户授权 Git 项目给蓝盾的 OAuth 授权地址。
 func (c *ApiClient) GetOAuthUrl(ctx context.Context, projectCode string) (string, error) {
 	apiOperation := c.NewOperation(
 		// 与 ListOAuthGitProjects 共用一个 API，但是获取的不同数据字段（当 Git 项目列表为空时，会提示用户进行授权）
@@ -440,6 +441,7 @@ func (c *ApiClient) ListPipelines(
 	if keyword != "" {
 		params["pipelineName"] = keyword
 	}
+
 	apiOperation := c.NewOperation(
 		bkapi.OperationConfig{
 			Name:   "v4_user_pipeline_paging_search_by_name",
@@ -769,7 +771,7 @@ func (c *ApiClient) ListRepository(
 	return total, repositories, nil
 }
 
-// GetRepository 获取蓝盾代码库详情
+// GetRepository 获取蓝盾代码库详情。
 func (c *ApiClient) GetRepository(
 	ctx context.Context, projectCode, repoHashID string,
 ) (*Repository, error) {
@@ -800,19 +802,20 @@ func (c *ApiClient) GetRepository(
 	}, nil
 }
 
-// CreateRepository 创建蓝盾代码库，返回代码库 Hash ID（目前只支持 codeGit + OAuth）
+// CreateRepository 创建蓝盾代码库，返回代码库 Hash ID。
 func (c *ApiClient) CreateRepository(
-	ctx context.Context, projectCode, repoURL, repoAlias string,
+	ctx context.Context, projectCode string, opts CreateRepositoryOptions,
 ) (string, error) {
 	body := map[string]any{
-		"@type":       "codeGit",
-		"aliasName":   repoAlias,
-		"url":         repoURL,
-		"authType":    "OAUTH",
-		"projectName": repoAlias,
+		"@type":       opts.RepoType,
+		"aliasName":   opts.Alias,
+		"url":         opts.URL,
+		"projectName": opts.Alias,
 		"userName":    c.user.ID,
-		// OAUTH 是不需要指定凭证的，但是蓝盾 API 有做检查
-		"credentialId": "",
+		"authType":    repoAuthTypeOf(opts),
+		"scmCode":     opts.RepoType,
+		// OAUTH 不需要指定凭证，但蓝盾 API 有做检查
+		"credentialId": opts.CredentialID,
 	}
 
 	apiOperation := c.NewOperation(
@@ -837,7 +840,7 @@ func (c *ApiClient) CreateRepository(
 	return repoID, nil
 }
 
-// ListRepositoryBranches 获取代码库分支列表
+// ListRepositoryBranches 获取代码库分支列表。
 func (c *ApiClient) ListRepositoryBranches(
 	ctx context.Context, projectCode, repositoryID, repositoryType, search string, page, pageSize int64,
 ) ([]RepositoryRef, error) {
@@ -870,7 +873,7 @@ func (c *ApiClient) ListRepositoryBranches(
 	return parseRepositoryRefs(mapx.GetList(result, "data"))
 }
 
-// ListRepositoryTags 获取代码库标签列表
+// ListRepositoryTags 获取代码库标签列表。
 func (c *ApiClient) ListRepositoryTags(
 	ctx context.Context, projectCode, repositoryID, repositoryType, search string, page, pageSize int64,
 ) ([]RepositoryRef, error) {
@@ -1131,4 +1134,15 @@ func (c *ApiClient) handleStreamOperation(
 func (c *ApiClient) handleOperationWithoutResult(ctx context.Context, apiOperation define.Operation) error {
 	_, err := c.handleOperation(ctx, apiOperation)
 	return err
+}
+
+// repoAuthTypeOf 无凭证为 OAuth，有凭证按地址协议取 HTTP / HTTPS
+func repoAuthTypeOf(opts CreateRepositoryOptions) string {
+	if opts.CredentialID == "" {
+		return repoAuthTypeOAuth
+	}
+	if strings.HasPrefix(strings.ToLower(opts.URL), "http://") {
+		return repoAuthTypeHTTP
+	}
+	return repoAuthTypeHTTPS
 }

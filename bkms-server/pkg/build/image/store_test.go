@@ -62,7 +62,7 @@ var _ = Describe("ConfigStore", func() {
 			SourceType:   SourceTypeCodeRepository,
 			PipelineType: "Dockerfile",
 			CodeRepo: &RepositoryConfig{
-				Type:          RepositoryTypeGitHub,
+				Type:          RepositoryTypeTGit,
 				RepoAlias:     "octocat/hello-world",
 				RepoURL:       "https://github.com/octocat/hello-world",
 				DefaultBranch: "main",

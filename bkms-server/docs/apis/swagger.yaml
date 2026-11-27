@@ -5526,6 +5526,11 @@ definitions:
           是否允许空间自建北极星接入点并按集群绑定。为 false 时前端隐藏接入点管理、集群绑定、组件安装等入口，
           所有集群都使用平台托管接入点
         type: boolean
+      repoSourceTypes:
+        description: 已启用的代码库接入方式，第一个为默认
+        items:
+          $ref: '#/definitions/serializer.RepoSourceTypeOutput'
+        type: array
     type: object
   serializer.FrontendFeaturesResponse:
     properties:
@@ -6198,8 +6203,13 @@ definitions:
     type: object
   serializer.HelmGitRepoConfigInput:
     properties:
+      password:
+        description: 仓库密码，仅 basic 方式使用，不传时沿用已保存的
+        maxLength: 256
+        type: string
       repoAlias:
-        description: 代码库别名
+        description: 代码库别名，仅蓝盾托管方式使用
+        maxLength: 256
         type: string
       repoURL:
         description: 代码库地址
@@ -6211,13 +6221,14 @@ definitions:
         description: Helm Chart 目录
         type: string
       type:
-        description: 代码库类型
-        enum:
-        - TGit
-        - GitHub
+        description: 代码库接入方式名，取值见前端开关 repoSourceTypes
+        maxLength: 32
+        type: string
+      username:
+        description: 仓库账号，仅 basic 方式使用
+        maxLength: 128
         type: string
     required:
-    - repoAlias
     - repoURL
     - revision
     - sourceDir
@@ -9166,15 +9177,18 @@ definitions:
         - platform
         - repositoryDockerfile
         type: string
+      password:
+        description: 仓库密码，仅 basic 方式使用，不传时沿用已保存的
+        maxLength: 256
+        type: string
       platformBuildConfig:
         allOf:
         - $ref: '#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_build_build_serializer.PlatformBuildConfigInput'
         description: PlatformBuildConfig 平台通用构建配置，仅 imageBuildMode=platform 时有效；Dockerfile
           是流水线内部中间产物
       repoAlias:
-        description: 蓝盾侧仓库别名
+        description: 代码库别名，仅蓝盾托管方式使用
         maxLength: 256
-        minLength: 1
         type: string
       repoURL:
         description: 代码仓库地址
@@ -9186,14 +9200,15 @@ definitions:
         maxLength: 64
         type: string
       type:
-        description: 代码仓库类型：TGit 或 GitHub
-        enum:
-        - TGit
-        - GitHub
+        description: 代码库接入方式名，取值见前端开关 repoSourceTypes
+        maxLength: 32
+        type: string
+      username:
+        description: 仓库账号，仅 basic 方式使用
+        maxLength: 128
         type: string
     required:
     - defaultBranch
-    - repoAlias
     - repoURL
     - type
     type: object
@@ -9231,6 +9246,21 @@ definitions:
         description: 代码库类型
         type: string
     type: object
+  serializer.RepoSourceTypeOutput:
+    properties:
+      label:
+        description: 展示名
+        type: string
+      name:
+        description: 接入方式名，即代码库配置的 type
+        type: string
+      spec:
+        description: 实现类型：bkci_managed 蓝盾托管授权 / basic 仓库账号密码
+        enum:
+        - bkci_managed
+        - basic
+        type: string
+    type: object
   serializer.RepositoryBuildConfigInput:
     properties:
       defaultBranch:
@@ -9254,15 +9284,18 @@ definitions:
         - platform
         - repositoryDockerfile
         type: string
+      password:
+        description: 仓库密码，仅 basic 方式使用，不传时沿用已保存的
+        maxLength: 256
+        type: string
       platformBuildConfig:
         allOf:
         - $ref: '#/definitions/github_com_TencentBlueKing_blueking-service-governance_bkms-server_pkg_build_build_serializer.PlatformBuildConfigInput'
         description: PlatformBuildConfig 平台通用构建配置，仅 imageBuildMode=platform 时有效；Dockerfile
           是流水线内部中间产物
       repoAlias:
-        description: 蓝盾侧仓库别名
+        description: 代码库别名，仅蓝盾托管方式使用
         maxLength: 256
-        minLength: 1
         type: string
       repoURL:
         description: 代码仓库地址
@@ -9274,14 +9307,15 @@ definitions:
         maxLength: 64
         type: string
       type:
-        description: 代码仓库类型：TGit 或 GitHub
-        enum:
-        - TGit
-        - GitHub
+        description: 代码库接入方式名，取值见前端开关 repoSourceTypes
+        maxLength: 32
+        type: string
+      username:
+        description: 仓库账号，仅 basic 方式使用
+        maxLength: 128
         type: string
     required:
     - defaultBranch
-    - repoAlias
     - repoURL
     - type
     type: object

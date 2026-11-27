@@ -30063,6 +30063,13 @@ const docTemplate = `{
                 "polarisWorkspaceAccessPoint": {
                     "description": "是否允许空间自建北极星接入点并按集群绑定。为 false 时前端隐藏接入点管理、集群绑定、组件安装等入口，\n所有集群都使用平台托管接入点",
                     "type": "boolean"
+                },
+                "repoSourceTypes": {
+                    "description": "已启用的代码库接入方式，第一个为默认",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/serializer.RepoSourceTypeOutput"
+                    }
                 }
             }
         },
@@ -31028,16 +31035,21 @@ const docTemplate = `{
         "serializer.HelmGitRepoConfigInput": {
             "type": "object",
             "required": [
-                "repoAlias",
                 "repoURL",
                 "revision",
                 "sourceDir",
                 "type"
             ],
             "properties": {
+                "password": {
+                    "description": "仓库密码，仅 basic 方式使用，不传时沿用已保存的",
+                    "type": "string",
+                    "maxLength": 256
+                },
                 "repoAlias": {
-                    "description": "代码库别名",
-                    "type": "string"
+                    "description": "代码库别名，仅蓝盾托管方式使用",
+                    "type": "string",
+                    "maxLength": 256
                 },
                 "repoURL": {
                     "description": "代码库地址",
@@ -31052,12 +31064,14 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "type": {
-                    "description": "代码库类型",
+                    "description": "代码库接入方式名，取值见前端开关 repoSourceTypes",
                     "type": "string",
-                    "enum": [
-                        "TGit",
-                        "GitHub"
-                    ]
+                    "maxLength": 32
+                },
+                "username": {
+                    "description": "仓库账号，仅 basic 方式使用",
+                    "type": "string",
+                    "maxLength": 128
                 }
             }
         },
@@ -35350,7 +35364,6 @@ const docTemplate = `{
             "type": "object",
             "required": [
                 "defaultBranch",
-                "repoAlias",
                 "repoURL",
                 "type"
             ],
@@ -35381,6 +35394,11 @@ const docTemplate = `{
                         "repositoryDockerfile"
                     ]
                 },
+                "password": {
+                    "description": "仓库密码，仅 basic 方式使用，不传时沿用已保存的",
+                    "type": "string",
+                    "maxLength": 256
+                },
                 "platformBuildConfig": {
                     "description": "PlatformBuildConfig 平台通用构建配置，仅 imageBuildMode=platform 时有效；Dockerfile 是流水线内部中间产物",
                     "allOf": [
@@ -35390,10 +35408,9 @@ const docTemplate = `{
                     ]
                 },
                 "repoAlias": {
-                    "description": "蓝盾侧仓库别名",
+                    "description": "代码库别名，仅蓝盾托管方式使用",
                     "type": "string",
-                    "maxLength": 256,
-                    "minLength": 1
+                    "maxLength": 256
                 },
                 "repoURL": {
                     "description": "代码仓库地址",
@@ -35407,12 +35424,14 @@ const docTemplate = `{
                     "maxLength": 64
                 },
                 "type": {
-                    "description": "代码仓库类型：TGit 或 GitHub",
+                    "description": "代码库接入方式名，取值见前端开关 repoSourceTypes",
                     "type": "string",
-                    "enum": [
-                        "TGit",
-                        "GitHub"
-                    ]
+                    "maxLength": 32
+                },
+                "username": {
+                    "description": "仓库账号，仅 basic 方式使用",
+                    "type": "string",
+                    "maxLength": 128
                 }
             }
         },
@@ -35464,11 +35483,31 @@ const docTemplate = `{
                 }
             }
         },
+        "serializer.RepoSourceTypeOutput": {
+            "type": "object",
+            "properties": {
+                "label": {
+                    "description": "展示名",
+                    "type": "string"
+                },
+                "name": {
+                    "description": "接入方式名，即代码库配置的 type",
+                    "type": "string"
+                },
+                "spec": {
+                    "description": "实现类型：bkci_managed 蓝盾托管授权 / basic 仓库账号密码",
+                    "type": "string",
+                    "enum": [
+                        "bkci_managed",
+                        "basic"
+                    ]
+                }
+            }
+        },
         "serializer.RepositoryBuildConfigInput": {
             "type": "object",
             "required": [
                 "defaultBranch",
-                "repoAlias",
                 "repoURL",
                 "type"
             ],
@@ -35499,6 +35538,11 @@ const docTemplate = `{
                         "repositoryDockerfile"
                     ]
                 },
+                "password": {
+                    "description": "仓库密码，仅 basic 方式使用，不传时沿用已保存的",
+                    "type": "string",
+                    "maxLength": 256
+                },
                 "platformBuildConfig": {
                     "description": "PlatformBuildConfig 平台通用构建配置，仅 imageBuildMode=platform 时有效；Dockerfile 是流水线内部中间产物",
                     "allOf": [
@@ -35508,10 +35552,9 @@ const docTemplate = `{
                     ]
                 },
                 "repoAlias": {
-                    "description": "蓝盾侧仓库别名",
+                    "description": "代码库别名，仅蓝盾托管方式使用",
                     "type": "string",
-                    "maxLength": 256,
-                    "minLength": 1
+                    "maxLength": 256
                 },
                 "repoURL": {
                     "description": "代码仓库地址",
@@ -35525,12 +35568,14 @@ const docTemplate = `{
                     "maxLength": 64
                 },
                 "type": {
-                    "description": "代码仓库类型：TGit 或 GitHub",
+                    "description": "代码库接入方式名，取值见前端开关 repoSourceTypes",
                     "type": "string",
-                    "enum": [
-                        "TGit",
-                        "GitHub"
-                    ]
+                    "maxLength": 32
+                },
+                "username": {
+                    "description": "仓库账号，仅 basic 方式使用",
+                    "type": "string",
+                    "maxLength": 128
                 }
             }
         },

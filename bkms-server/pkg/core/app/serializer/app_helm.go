@@ -67,12 +67,16 @@ type BCSRepoConfigInput struct {
 
 // HelmGitRepoConfigInput is the Helm Git repo config input.
 type HelmGitRepoConfigInput struct {
-	// 代码库类型
-	Type string `json:"type" binding:"required,oneof=TGit GitHub"`
-	// 代码库别名
-	RepoAlias string `json:"repoAlias" binding:"required"`
+	// 代码库接入方式名，取值见前端开关 repoSourceTypes
+	Type string `json:"type" binding:"required,max=32"`
+	// 代码库别名，仅蓝盾托管方式使用
+	RepoAlias string `json:"repoAlias" binding:"omitempty,max=256"`
 	// 代码库地址
 	RepoURL string `json:"repoURL" binding:"required,url"`
+	// 仓库账号，仅 basic 方式使用
+	Username string `json:"username" binding:"omitempty,max=128"`
+	// 仓库密码，仅 basic 方式使用，不传时沿用已保存的
+	Password string `json:"password" binding:"omitempty,max=256"`
 	// 代码库分支
 	Revision string `json:"revision" binding:"required"`
 	// Helm Chart 目录
@@ -115,6 +119,8 @@ func (input *HelmSpecInput) ToModel() *bkmsapp.HelmSpec {
 			Type:      bkmsapp.GitRepoType(src.GitRepoConfig.Type),
 			RepoAlias: src.GitRepoConfig.RepoAlias,
 			RepoURL:   src.GitRepoConfig.RepoURL,
+			Username:  src.GitRepoConfig.Username,
+			Password:  src.GitRepoConfig.Password,
 			Revision:  src.GitRepoConfig.Revision,
 			SourceDir: src.GitRepoConfig.SourceDir,
 		}

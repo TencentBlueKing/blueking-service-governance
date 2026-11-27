@@ -19,41 +19,75 @@
 package handler
 
 import (
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkci"
 	build "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/coderepo"
 )
 
-func collectBKCIRepositoriesForCreateApp(
+// collectRepositoriesForCreateApp 创建应用时要保存的代码库
+func collectRepositoriesForCreateApp(
+	workspaceID string,
 	appType string,
 	helmSpec *bkmsapp.HelmSpec,
 	buildConfig *build.Config,
-) []bkci.RepositoryInitSpec {
-	var repos []bkci.RepositoryInitSpec
+) []coderepo.SaveSpec {
+	var repos []coderepo.SaveSpec
 
 	if buildConfig != nil && buildConfig.SourceType == build.SourceTypeCodeRepository && buildConfig.CodeRepo != nil {
-		repos = append(repos, bkci.RepositoryInitSpec{
-			URL:   buildConfig.CodeRepo.RepoURL,
-			Alias: buildConfig.CodeRepo.RepoAlias,
+		repos = append(repos, coderepo.SaveSpec{
+			WorkspaceID: workspaceID,
+			Type:        string(buildConfig.CodeRepo.Type),
+			URL:         buildConfig.CodeRepo.RepoURL,
+			Alias:       buildConfig.CodeRepo.RepoAlias,
+			Username:    buildConfig.CodeRepo.Username,
+			Password:    buildConfig.CodeRepo.Password,
 		})
 	}
 
 	if appruntime.IsHelmBasedType(appType) && helmSpec != nil {
-		repos = append(repos, helmSourceRepositoriesToBind(helmSpec.HelmSource)...)
+		repos = append(repos, helmSourceRepositoriesToSave(workspaceID, helmSpec.HelmSource)...)
 	}
 
 	return repos
 }
 
-func helmSourceRepositoriesToBind(helmSource *bkmsapp.HelmSource) []bkci.RepositoryInitSpec {
+// helmSourceRepositoriesToSave Helm Git 来源要保存的代码库
+func helmSourceRepositoriesToSave(workspaceID string, helmSource *bkmsapp.HelmSource) []coderepo.SaveSpec {
 	if helmSource == nil ||
 		helmSource.RepoType != bkmsapp.HelmSourceRepoTypeGit ||
 		helmSource.GitRepoConfig == nil {
 		return nil
 	}
-	return []bkci.RepositoryInitSpec{{
-		URL:   helmSource.GitRepoConfig.RepoURL,
-		Alias: helmSource.GitRepoConfig.RepoAlias,
+	return []coderepo.SaveSpec{{
+		WorkspaceID: workspaceID,
+		Type:        string(helmSource.GitRepoConfig.Type),
+		URL:         helmSource.GitRepoConfig.RepoURL,
+		Alias:       helmSource.GitRepoConfig.RepoAlias,
+		Username:    helmSource.GitRepoConfig.Username,
+		Password:    helmSource.GitRepoConfig.Password,
 	}}
+}
+
+// resolveHelmGitRepo 确定 Helm Git 来源的接入方式与别名
+func resolveHelmGitRepo(helmSource *bkmsapp.HelmSource) error {
+	if helmSource == nil || helmSource.RepoType != bkmsapp.HelmSourceRepoTypeGit || helmSource.GitRepoConfig == nil {
+		return nil
+	}
+	gitRepo := helmSource.GitRepoConfig
+	sourceType, err := coderepo.ResolveSourceType(string(gitRepo.Type))
+	if err != nil {
+		return coderepo.ToBkErr(err, "resolve source type of helm git repository")
+	}
+	alias, err := coderepo.ResolveAlias(sourceType, gitRepo.RepoURL, gitRepo.RepoAlias)
+	if err != nil {
+		return coderepo.ToBkErr(err, "resolve alias of helm git repository")
+	}
+	gitRepo.Type, gitRepo.RepoAlias = bkmsapp.GitRepoType(sourceType.Name), alias
+	return nil
+}
+
+// toRepositoryBkErr 保存代码库失败的接口错误
+func toRepositoryBkErr(err error) error {
+	return coderepo.ToBkErr(err, "save workspace repositories")
 }

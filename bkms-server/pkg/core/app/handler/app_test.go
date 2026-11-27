@@ -25,10 +25,10 @@ import (
 	. "github.com/onsi/gomega"
 	"go.mongodb.org/mongo-driver/v2/bson"
 
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkci"
 	build "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/image"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/coderepo"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 )
 
@@ -40,11 +40,12 @@ var _ = Describe("newAppIDSuffix", func() {
 	})
 })
 
-var _ = Describe("collectBKCIRepositoriesForCreateApp", func() {
+var _ = Describe("collectRepositoriesForCreateApp", func() {
 	It("collects both build and helm git repositories for helm-based apps", func() {
 		buildConfig := &build.Config{
 			SourceType: build.SourceTypeCodeRepository,
 			CodeRepo: &build.RepositoryConfig{
+				Type:      build.RepositoryTypeTGit,
 				RepoURL:   "https://git.example.com/build.git",
 				RepoAlias: "build-repo",
 			},
@@ -53,17 +54,28 @@ var _ = Describe("collectBKCIRepositoriesForCreateApp", func() {
 			HelmSource: &bkmsapp.HelmSource{
 				RepoType: bkmsapp.HelmSourceRepoTypeGit,
 				GitRepoConfig: &bkmsapp.GitRepoConfig{
+					Type:      bkmsapp.GitRepoTypeTGit,
 					RepoURL:   "https://git.example.com/chart.git",
 					RepoAlias: "chart-repo",
+					Username:  "user",
+					Password:  "pass",
 				},
 			},
 		}
 
-		repos := collectBKCIRepositoriesForCreateApp(bkmsapp.AppTypeAgones, helmSpec, buildConfig)
+		repos := collectRepositoriesForCreateApp("ws", bkmsapp.AppTypeAgones, helmSpec, buildConfig)
 
-		Expect(repos).To(Equal([]bkci.RepositoryInitSpec{
-			{URL: "https://git.example.com/build.git", Alias: "build-repo"},
-			{URL: "https://git.example.com/chart.git", Alias: "chart-repo"},
+		Expect(repos).To(Equal([]coderepo.SaveSpec{
+			{
+				WorkspaceID: "ws",
+				Type:        string(build.RepositoryTypeTGit),
+				URL:         "https://git.example.com/build.git",
+				Alias:       "build-repo",
+			},
+			{
+				WorkspaceID: "ws", Type: string(build.RepositoryTypeTGit), URL: "https://git.example.com/chart.git", Alias: "chart-repo",
+				Username: "user", Password: "pass",
+			},
 		}))
 	})
 
@@ -78,7 +90,7 @@ var _ = Describe("collectBKCIRepositoriesForCreateApp", func() {
 			},
 		}
 
-		repos := collectBKCIRepositoriesForCreateApp(bkmsapp.AppTypeTRPC, helmSpec, nil)
+		repos := collectRepositoriesForCreateApp("ws", bkmsapp.AppTypeTRPC, helmSpec, nil)
 
 		Expect(repos).To(BeNil())
 	})

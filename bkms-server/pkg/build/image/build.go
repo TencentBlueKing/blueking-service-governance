@@ -75,12 +75,12 @@ func ExecuteBKCIPipelineBuild(
 		if cfg.CodeRepo == nil {
 			return nil, nil, errors.Errorf("code repo config not found")
 		}
-		// 构建来源是代码库时，需要在蓝盾上初始化代码仓库
-		_, err := bkci.NewRepositoryManager(db, app.WorkspaceID).Initialize(
-			ctx, cfg.CodeRepo.RepoURL, cfg.CodeRepo.RepoAlias,
+		// 同步代码库到蓝盾
+		_, err := bkci.SyncBuildRepository(
+			ctx, db, app.WorkspaceID, string(cfg.CodeRepo.Type), cfg.CodeRepo.RepoURL, cfg.CodeRepo.RepoAlias,
 		)
 		if err != nil {
-			return nil, nil, errors.Wrapf(err, "ensure bkci repository")
+			return nil, nil, errors.Wrapf(err, "sync repository to bkci")
 		}
 		// 虽然工作空间创建时候就会初始化 dockerfile 通用构建流水线，但是这里还是需要重新初始化，因为可能会有模板版本更新
 		_, err = bkci.NewPipelineManager(db, app.WorkspaceID).Initialize(ctx, string(bkci.PipelineTypeDockerfile))
