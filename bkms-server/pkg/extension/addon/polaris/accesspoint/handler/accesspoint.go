@@ -450,13 +450,17 @@ func (h *Handler) BindCluster(c *gin.Context) {
 
 // ListOperatorValues 获取已绑定接入点的集群上 bcs-polaris-operator 应使用的北极星 values。
 //
-// TODO(北极星组件安装子需求): 已安装组件的集群暂不展示期望 values 与 release 当前 values 的差异，
-// 交互形态待与产品确认。倾向的方案是前端对比本接口返回的期望 values 与集群插件列表返回的 currentValues，
-// 展示差异，由用户选择是否覆盖。
+// TODO: 已安装组件的集群暂不展示期望 values 与 release 当前 values 的差异，交互形态待与产品确认。
+// 倾向的方案是前端对比本接口返回的期望 values 与集群插件列表返回的 currentValues，展示差异，由用户选择是否覆盖。
 //
 //	@ID				ListPolarisOperatorValues
 //	@Summary		获取北极星组件的期望 values
-//	@Description	返回由接入点推导出的北极星相关 values
+//	@Description	返回已绑定接入点的集群上由接入点推导出的北极星相关 values，按集群 ID 排序。
+//	@Description	不读取集群内的 release，也不返回安装状态。
+//	@Description	values 只含 args[name=polaris_api_type]、env 中的北极星地址、鉴权方式与集群、BCS 项目标识，
+//	@Description	以及 authProxy.bcsPolarisPlatformID，不含 Token。
+//	@Description	安装或更新时以集群插件接口返回的 currentValues 为基础覆盖这些键（args 按 name 合并），
+//	@Description	再调用集群插件安装接口
 //	@Tags			polaris-access-points
 //	@Produce		json
 //	@Security		BkUserInfo
@@ -473,11 +477,19 @@ func (h *Handler) ListOperatorValues(c *gin.Context) {
 		bkerrs.AbortWithErr(c, err)
 		return
 	}
-	if _, err := perm.ValidateWorkspaceByID(c.Request.Context(), h.registry, uri.WorkspaceID, perm.TypeView); err != nil {
+	ctx := c.Request.Context()
+	ws, err := perm.ValidateWorkspaceByID(ctx, h.registry, uri.WorkspaceID, perm.TypeView)
+	if err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return
 	}
-	abortNotImplemented(c, "list polaris operator values")
+
+	views, err := h.bindings().ListOperatorValues(ctx, ws, query.AccessPointID)
+	if err != nil {
+		bkerrs.AbortWithErr(c, accesspoint.APIError(err, "list polaris operator values"))
+		return
+	}
+	ginutils.OK(c, slz.PolarisOperatorValuesListResponse{Data: slz.NewPolarisOperatorValuesListOutput(views)})
 }
 
 // auditData 审计记录接入点的地址等信息，不写入 Token
@@ -489,9 +501,4 @@ func auditData(p *accesspoint.PolarisAccessPoint) map[string]any {
 		"clientHosts": p.ClientHosts,
 		"hasToken":    p.Token != "",
 	}
-}
-
-// abortNotImplemented 契约已冻结、业务逻辑尚未实现的接口统一返回 NOT_IMPLEMENTED
-func abortNotImplemented(c *gin.Context, api string) {
-	bkerrs.AbortWithErr(c, bkerrs.Errorf(bkerrs.ErrCodeNotImplemented, "%s is not implemented yet", api))
 }

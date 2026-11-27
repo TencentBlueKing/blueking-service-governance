@@ -496,4 +496,73 @@ var _ = Describe("Service", func() {
 			Expect(svc.ValidateEnvClusterChange(ctx, *envA, clusterB)).To(Succeed())
 		})
 	})
+
+	Describe("ListOperatorValues", func() {
+		var first, second *accesspoint.PolarisAccessPoint
+
+		apiPathOf := func(v binding.OperatorValuesView) any {
+			return v.Values["env"].(map[string]any)["BK_BCS_polaris_api_path"]
+		}
+
+		BeforeEach(func() {
+			first = dbfactory.PolarisAccessPoint(ctx, apStore, ws.ID)
+			second = dbfactory.PolarisAccessPoint(ctx, apStore, ws.ID)
+			Expect(apStore.Update(ctx, map[string]any{"clientHosts": []string{"10.0.0.2", "10.0.0.3"}},
+				store.ByID(second.ID))).To(Succeed())
+			dbfactory.PolarisClusterBinding(ctx, bindStore, ws.ID, clusterB, first.ID.Hex())
+			dbfactory.PolarisClusterBinding(ctx, bindStore, ws.ID, clusterA, second.ID.Hex())
+			dbfactory.PolarisClusterBinding(ctx, bindStore, ws.ID, clusterC, first.ID.Hex())
+			// 其他空间绑定同一个集群，不应出现在结果中
+			otherAP := dbfactory.PolarisAccessPoint(ctx, apStore, "ws-other")
+			dbfactory.PolarisClusterBinding(ctx, bindStore, "ws-other", clusterA, otherAP.ID.Hex())
+		})
+
+		It("should list the values of all bound clusters in the workspace ordered by cluster id", func() {
+			views, err := svc.ListOperatorValues(ctx, ws, "")
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(lo.Map(views, func(v binding.OperatorValuesView, _ int) string { return v.ClusterID })).
+				To(Equal([]string{clusterA, clusterB, clusterC}))
+			Expect(views[0].AccessPoint.ID).To(Equal(second.ID))
+			Expect(apiPathOf(views[0])).To(Equal("10.0.0.2:8090"))
+			Expect(views[1].AccessPoint.ID).To(Equal(first.ID))
+			Expect(views[1].AccessPoint.Name).To(Equal(first.Name))
+			Expect(views[1].Values).
+				To(Equal(accesspoint.GetOperatorValues(first.ToAccessPoint(), clusterB, bcsProjectID)))
+			// 只读取数据库，不查询 BCS
+			Expect(bcsQueried).To(BeEmpty())
+		})
+
+		It("should only list clusters bound to the given access point", func() {
+			views, err := svc.ListOperatorValues(ctx, ws, strings.ToUpper(first.ID.Hex()))
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(lo.Map(views, func(v binding.OperatorValuesView, _ int) string { return v.ClusterID })).
+				To(Equal([]string{clusterB, clusterC}))
+			Expect(views).To(HaveEach(HaveField("AccessPoint.ID", first.ID)))
+		})
+
+		It("should return an empty list when the access point has no bound clusters", func() {
+			p := dbfactory.PolarisAccessPoint(ctx, apStore, ws.ID)
+
+			views, err := svc.ListOperatorValues(ctx, ws, p.ID.Hex())
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(views).To(BeEmpty())
+		})
+
+		DescribeTable("should reject an access point that is not a workspace access point of this workspace",
+			func(getID func() string) {
+				_, err := svc.ListOperatorValues(ctx, ws, getID())
+
+				Expect(err).To(MatchError(accesspoint.ErrAccessPointNotFound))
+				apiErr := accesspoint.APIError(err, "list polaris operator values").(*bkerrs.Error)
+				Expect(apiErr.Code()).To(Equal(bkerrs.ErrCodeNotFound))
+			},
+			Entry("platform", func() string { return accesspoint.PlatformID }),
+			Entry("other workspace", func() string {
+				return dbfactory.PolarisAccessPoint(ctx, apStore, "ws-other").ID.Hex()
+			}),
+		)
+	})
 })

@@ -16,7 +16,8 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
-// Package binding 管理集群与北极星接入点的绑定，提供绑定变更、集群绑定视图查询，以及环境切换集群前的校验。
+// Package binding 管理集群与北极星接入点的绑定，提供绑定变更、集群绑定视图查询、已绑定集群上组件的期望 values，
+// 以及环境切换集群前的校验。
 //
 // 候选集群为空间 BCS 项目下的全部非共享集群，不按集群状态过滤，包含没有环境的集群；
 // 集群上有环境（含特性环境）被北极星配置使用时，集群不能解绑或换绑。

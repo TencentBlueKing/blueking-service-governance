@@ -103,7 +103,7 @@ type ConnectivityTestInput struct {
 
 // OperatorValuesQueryInput 组件期望 values 的查询参数
 type OperatorValuesQueryInput struct {
-	// 接入点 ID
+	// 只返回绑定到该接入点的集群，缺省时返回空间内全部已绑定的集群
 	AccessPointID string `form:"accessPointID"`
 }
 
@@ -274,8 +274,23 @@ type PolarisOperatorValuesOutput struct {
 type PolarisOperatorValuesListOutput struct {
 	// 组件对应的集群插件名称，安装与状态查询使用集群插件接口
 	AddonName string `json:"addonName"`
-	// 已绑定接入点的集群
+	// 已绑定接入点的集群，按集群 ID 排序
 	Clusters []PolarisOperatorValuesOutput `json:"clusters"`
+}
+
+// NewPolarisOperatorValuesListOutput 由已绑定集群的期望 values 构造输出
+func NewPolarisOperatorValuesListOutput(views []binding.OperatorValuesView) *PolarisOperatorValuesListOutput {
+	return &PolarisOperatorValuesListOutput{
+		AddonName: accesspoint.OperatorAddonName,
+		Clusters: lo.Map(views, func(v binding.OperatorValuesView, _ int) PolarisOperatorValuesOutput {
+			return PolarisOperatorValuesOutput{
+				ClusterID:       v.ClusterID,
+				AccessPointID:   v.AccessPoint.ID.Hex(),
+				AccessPointName: v.AccessPoint.Name,
+				Values:          v.Values,
+			}
+		}),
+	}
 }
 
 // AccessPointListResponse 接入点列表的响应
