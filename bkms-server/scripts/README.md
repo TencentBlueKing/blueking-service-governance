@@ -21,6 +21,7 @@ uv run scripts/<category>/<script-name>.py [参数...]
 - 单一脚本、暂无同类其它脚本的场景，可以直接放在 `scripts/` 根目录；一旦出现第二个同类脚本，应新建子目录收纳
 - 目前已有的分类子目录：
     - `platform-build/`：与"平台构建"相关的脚本，例如准备构建所需的运行时基础镜像清单、将镜像同步到内部仓库等
+    - `bkmsapp-migration/`：存量 trpc / taf 应用迁移为 bkmsApp 的 mongosh 脚本
 
 后续如需引入其他分类（例如数据迁移、故障排查等），请沿用此规则，并在下方"脚本清单"章节补充说明。
 
@@ -88,3 +89,8 @@ uv run scripts/<category>/<script-name>.py [参数...]
 2. 人工 review 该清单文件的 diff，确认新增/剔除的 tag 符合预期
 3. 运行 `platform-build/sync-runtime-images.py` 将清单中的镜像同步到内部仓库
 4. 提交清单文件的变更
+
+### `bkmsapp-migration/` —— bkmsApp 存量迁移
+
+mongosh 脚本，按"备份 → 迁移 → 检查"把存量 trpc / taf 应用迁移为 bkmsApp，另有回滚与旧字段清理脚本。
+用法、参数与执行顺序见 [`bkmsapp-migration/README.md`](./bkmsapp-migration/README.md)。

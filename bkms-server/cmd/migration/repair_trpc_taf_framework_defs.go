@@ -34,6 +34,7 @@ import (
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
 	storereg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
@@ -258,7 +259,7 @@ func listTrpcTafAppsForRepair(
 		workspaceOpt = bkmsapp.InWorkspace(opts.WorkspaceID)
 	}
 	var apps []*bkmsapp.Application
-	for _, appType := range []string{bkmsapp.AppTypeTRPC, bkmsapp.AppTypeTAF} {
+	for _, appType := range []string{appruntime.AppTypeTRPC, appruntime.AppTypeTAF} { //nolint:staticcheck // bkmsApp 迁移兼容：修复存量旧类型应用
 		listed, err := appStore.List(ctx, workspaceOpt, bkmsapp.OfType(appType), store.TenantAll())
 		if err != nil {
 			return nil, errors.Wrapf(err, "list %s apps", appType)
@@ -291,7 +292,8 @@ func buildRepairTrpcTafFrameworkDefsAppPlan(
 		Conflicts: []repairFrameworkDefConflict{},
 		Leftovers: []repairFrameworkDefLeftover{},
 	}
-	if app.Type != bkmsapp.AppTypeTRPC && app.Type != bkmsapp.AppTypeTAF {
+	// bkmsApp 迁移兼容：修复存量旧类型应用
+	if app.Type != appruntime.AppTypeTRPC && app.Type != appruntime.AppTypeTAF { //nolint:staticcheck // 迁移兼容
 		plan.Skipped = true
 		plan.SkipReason = skipReasonNotTrpcOrTaf
 		return plan, nil

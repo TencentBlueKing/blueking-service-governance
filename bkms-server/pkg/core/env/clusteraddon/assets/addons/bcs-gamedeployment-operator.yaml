@@ -11,7 +11,7 @@ chartInfo:
       - --concurrent-gamedeployment-syncs=5
     DeleteProtectEnable: true
 requiredForAppTypes:
-  # trpc / taf 为旧登记值，待废弃（M9 删除）
+  # trpc / taf 为旧登记值，已废弃
   - trpc
   - taf
   - bkmsApp

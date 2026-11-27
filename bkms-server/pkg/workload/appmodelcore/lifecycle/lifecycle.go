@@ -16,9 +16,9 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
-// Package lifecycle 编排 bkmsApp 应用的创建与修改，供新 API 使用，只写新模型字段。
+// Package lifecycle 编排 bkmsApp 应用的创建与修改，只写新模型字段。
 //
-// 旧 trpc / taf 应用仍由 framework/{trpc,taf} 的服务创建，存量数据由回填统一。
+// 新 API 与兼容运行的旧 API（创建、trpc-spec / taf-spec）都使用本包。
 package lifecycle
 
 import (
