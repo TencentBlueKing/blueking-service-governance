@@ -192,6 +192,11 @@ featureIntegrations:
   # 测试配置显式关闭：创建空间时 BCS 复用蓝盾项目，不单独创建 BCS 项目。
   enableIndependentBCSProject: false
   disableBSCP: false                 # 关闭 BSCP 对接
+# 代码库接入方式
+codeRepository:
+  sourceTypes:
+    - {name: TGit, spec: bkci_managed, label: 工蜂, enabled: true}
+    - {name: TGitBasic, spec: basic, label: 工蜂（账号密码）, enabled: true}
 # ------------------------------ 开发环境专用 ------------------------------
 # 重要：测试环境下不启用真实的外部依赖组件，使用 Stub 组件代替
 development:

@@ -144,6 +144,11 @@ taskPoller:
     timeout: 1200
     # 轮询间隔（单位：秒）
     interval: 15
+# 代码库接入方式
+codeRepository:
+  sourceTypes:
+    - {name: TGit, spec: bkci_managed, label: 工蜂, enabled: true}
+    - {name: TGitBasic, spec: basic, label: 工蜂（账号密码）, enabled: true}
 # ------------------------------ 开发环境专用 ------------------------------
 development:
   allowSetUserInHeader: false
