@@ -47,27 +47,6 @@ var _ = Describe("Resolver", func() {
 		workspaceID string
 	)
 
-	// createAccessPoint 在 wsID 下创建一个自建接入点
-	createAccessPoint := func(wsID string) *accesspoint.PolarisAccessPoint {
-		p := &accesspoint.PolarisAccessPoint{
-			WorkspaceID: wsID,
-			Name:        "tse-" + stringx.Random(6),
-			ConsoleURL:  "http://console.example.com",
-			ClientHosts: []string{"10.0.0.1", "polaris.example.com"},
-			Token:       "secret-token",
-		}
-		Expect(apStore.Create(ctx, p)).To(Succeed())
-		return p
-	}
-
-	bindCluster := func(wsID, clusterID, accessPointID string) {
-		Expect(bindStore.Create(ctx, &accesspoint.PolarisClusterBinding{
-			WorkspaceID:   wsID,
-			ClusterID:     clusterID,
-			AccessPointID: accessPointID,
-		})).To(Succeed())
-	}
-
 	BeforeEach(func() {
 		ctx = testutil.NewDefaultTenantContext()
 		app := fxtest.New(GinkgoT(), accesspoint.FxModule, fx.Populate(&resolver))
@@ -130,7 +109,14 @@ var _ = Describe("Resolver", func() {
 		})
 
 		It("should resolve a workspace access point with the decrypted token", func() {
-			p := createAccessPoint(workspaceID)
+			p := &accesspoint.PolarisAccessPoint{
+				WorkspaceID: workspaceID,
+				Name:        "tse",
+				ConsoleURL:  "http://console.example.com",
+				ClientHosts: []string{"10.0.0.1", "polaris.example.com"},
+				Token:       "secret-token",
+			}
+			Expect(apStore.Create(ctx, p)).To(Succeed())
 
 			ap, err := resolver.ResolveByID(ctx, workspaceID, p.ID.Hex())
 
@@ -139,7 +125,7 @@ var _ = Describe("Resolver", func() {
 				ID:             p.ID.Hex(),
 				Kind:           accesspoint.KindWorkspace,
 				WorkspaceID:    workspaceID,
-				Name:           p.Name,
+				Name:           "tse",
 				ConsoleURL:     "http://console.example.com",
 				OpenAPIBaseURL: "http://10.0.0.1:8090",
 				SDKAddresses:   []string{"10.0.0.1:8091", "polaris.example.com:8091"},
@@ -150,7 +136,7 @@ var _ = Describe("Resolver", func() {
 		})
 
 		It("should not resolve an access point of another workspace", func() {
-			p := createAccessPoint("ws-other-" + stringx.Random(6))
+			p := dbfactory.PolarisAccessPoint(ctx, apStore, "ws-other-"+stringx.Random(6))
 
 			_, err := resolver.ResolveByID(ctx, workspaceID, p.ID.Hex())
 
@@ -179,8 +165,8 @@ var _ = Describe("Resolver", func() {
 
 		It("should ignore bindings and return the platform when workspace access points are disabled", func() {
 			setPolarisConfig(config.PolarisConfig{AllowWorkspaceAccessPoints: false})
-			p := createAccessPoint(workspaceID)
-			bindCluster(workspaceID, "BCS-K8S-00001", p.ID.Hex())
+			p := dbfactory.PolarisAccessPoint(ctx, apStore, workspaceID)
+			dbfactory.PolarisClusterBinding(ctx, bindStore, workspaceID, "BCS-K8S-00001", p.ID.Hex())
 
 			ap, err := resolver.ResolveByCluster(ctx, workspaceID, "BCS-K8S-00001")
 
@@ -195,8 +181,8 @@ var _ = Describe("Resolver", func() {
 		})
 
 		It("should not use a binding of the same cluster in another workspace", func() {
-			p := createAccessPoint("ws-other-" + stringx.Random(6))
-			bindCluster(p.WorkspaceID, "BCS-K8S-00001", p.ID.Hex())
+			p := dbfactory.PolarisAccessPoint(ctx, apStore, "ws-other-"+stringx.Random(6))
+			dbfactory.PolarisClusterBinding(ctx, bindStore, p.WorkspaceID, "BCS-K8S-00001", p.ID.Hex())
 
 			_, err := resolver.ResolveByCluster(ctx, workspaceID, "BCS-K8S-00001")
 
@@ -204,8 +190,8 @@ var _ = Describe("Resolver", func() {
 		})
 
 		It("should resolve the workspace access point bound to the cluster", func() {
-			p := createAccessPoint(workspaceID)
-			bindCluster(workspaceID, "BCS-K8S-00001", p.ID.Hex())
+			p := dbfactory.PolarisAccessPoint(ctx, apStore, workspaceID)
+			dbfactory.PolarisClusterBinding(ctx, bindStore, workspaceID, "BCS-K8S-00001", p.ID.Hex())
 
 			ap, err := resolver.ResolveByCluster(ctx, workspaceID, "BCS-K8S-00001")
 
@@ -215,11 +201,41 @@ var _ = Describe("Resolver", func() {
 		})
 
 		It("should fail when the bound access point has been deleted", func() {
-			bindCluster(workspaceID, "BCS-K8S-00001", bson.NewObjectID().Hex())
+			dbfactory.PolarisClusterBinding(ctx, bindStore, workspaceID, "BCS-K8S-00001", bson.NewObjectID().Hex())
 
 			_, err := resolver.ResolveByCluster(ctx, workspaceID, "BCS-K8S-00001")
 
 			Expect(err).To(MatchError(accesspoint.ErrAccessPointNotFound))
+		})
+	})
+
+	Context("ResolveIDsByClusters", func() {
+		It("should map every cluster to the platform when workspace access points are disabled", func() {
+			p := dbfactory.PolarisAccessPoint(ctx, apStore, workspaceID)
+			dbfactory.PolarisClusterBinding(ctx, bindStore, workspaceID, "BCS-K8S-00001", p.ID.Hex())
+
+			ids, err := resolver.ResolveIDsByClusters(ctx, workspaceID, []string{"BCS-K8S-00001", "BCS-K8S-00002"})
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ids).To(Equal(map[string]string{
+				"BCS-K8S-00001": accesspoint.PlatformID,
+				"BCS-K8S-00002": accesspoint.PlatformID,
+			}))
+		})
+
+		It("should map only bound clusters of the workspace when workspace access points are allowed", func() {
+			setPolarisConfig(config.PolarisConfig{AllowWorkspaceAccessPoints: true})
+			p := dbfactory.PolarisAccessPoint(ctx, apStore, workspaceID)
+			dbfactory.PolarisClusterBinding(ctx, bindStore, workspaceID, "BCS-K8S-00001", p.ID.Hex())
+			other := dbfactory.PolarisAccessPoint(ctx, apStore, "ws-other-"+stringx.Random(6))
+			dbfactory.PolarisClusterBinding(ctx, bindStore, other.WorkspaceID, "BCS-K8S-00002", other.ID.Hex())
+
+			ids, err := resolver.ResolveIDsByClusters(
+				ctx, workspaceID, []string{"BCS-K8S-00001", "BCS-K8S-00002", "BCS-K8S-00001"},
+			)
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ids).To(Equal(map[string]string{"BCS-K8S-00001": p.ID.Hex()}))
 		})
 	})
 
@@ -247,18 +263,17 @@ var _ = Describe("Resolver", func() {
 		})
 
 		It("should resolve the access point fixed on the config", func() {
-			p := createAccessPoint(workspaceID)
+			p := dbfactory.PolarisAccessPoint(ctx, apStore, workspaceID)
 			cfg := &polaris.PolarisConfig{AppID: app.ID, AccessPointID: p.ID.Hex()}
 
 			ap, err := resolver.ResolveForPolarisConfig(ctx, cfg)
 
 			Expect(err).NotTo(HaveOccurred())
 			Expect(ap.ID).To(Equal(p.ID.Hex()))
-			Expect(ap.Token).To(Equal("secret-token"))
 		})
 
 		It("should not resolve an access point outside the app's workspace", func() {
-			p := createAccessPoint("ws-other-" + stringx.Random(6))
+			p := dbfactory.PolarisAccessPoint(ctx, apStore, "ws-other-"+stringx.Random(6))
 			cfg := &polaris.PolarisConfig{AppID: app.ID, AccessPointID: p.ID.Hex()}
 
 			_, err := resolver.ResolveForPolarisConfig(ctx, cfg)

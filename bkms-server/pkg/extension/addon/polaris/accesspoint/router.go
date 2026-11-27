@@ -29,7 +29,9 @@ type Handler interface {
 	TestConnectivity(c *gin.Context)
 	ListNamespaces(c *gin.Context)
 
+	ReplaceClusters(c *gin.Context)
 	ListClusters(c *gin.Context)
+	BindCluster(c *gin.Context)
 	ListOperatorValues(c *gin.Context)
 }
 
@@ -50,8 +52,12 @@ func Register(rg *gin.RouterGroup, h Handler) {
 	rg.POST("/workspaces/:workspaceID/polaris-access-points/connectivity-test", h.TestConnectivity)
 	// 接入点上可选的北极星命名空间
 	rg.GET("/workspaces/:workspaceID/polaris-access-points/:accessPointID/namespaces", h.ListNamespaces)
+	// 绑定接入点的集群（全量替换）
+	rg.PUT("/workspaces/:workspaceID/polaris-access-points/:accessPointID/clusters", h.ReplaceClusters)
 	// 集群绑定视图
 	rg.GET("/workspaces/:workspaceID/polaris-clusters", h.ListClusters)
+	// 绑定单个集群的接入点，accessPointID 为空表示解绑
+	rg.PUT("/workspaces/:workspaceID/polaris-clusters/:clusterID", h.BindCluster)
 	// 已绑定集群上 bcs-polaris-operator 的期望 values；安装与状态查询使用集群插件接口
 	rg.GET("/workspaces/:workspaceID/polaris-operator-values", h.ListOperatorValues)
 }

@@ -25,8 +25,10 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
+	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 
+	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/extension/addon/polaris/accesspoint"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 )
@@ -124,6 +126,29 @@ func ListConfigUsagesByAccessPoint(
 	return lo.Map(configs, func(c PolarisConfig, _ int) accesspoint.ConfigUsage {
 		return accesspoint.ConfigUsage{AppID: c.AppID, ConfigName: c.Name}
 	}), nil
+}
+
+// ListByScopeEnvs 列出空间内生效环境包含 envNames 中任一环境的北极星配置，按应用 ID、配置名称排序
+func ListByScopeEnvs(
+	ctx context.Context, db *mongo.Database, workspaceID string, envNames []string,
+) ([]PolarisConfig, error) {
+	apps, err := store.Of(db, bkmsapp.AppMeta).List(ctx, bkmsapp.InWorkspace(workspaceID), store.SelectFields("id"))
+	if err != nil {
+		return nil, errors.Wrapf(err, "list apps of workspace %s", workspaceID)
+	}
+	if len(apps) == 0 {
+		return []PolarisConfig{}, nil
+	}
+	appIDs := lo.Map(apps, func(app bkmsapp.Application, _ int) string { return app.ID })
+	configs, err := store.Of(db, ConfigMeta).List(ctx,
+		store.Where("appID", bson.M{"$in": appIDs}),
+		store.Where("scopeEnvNames", bson.M{"$in": envNames}),
+		store.Asc("appID"), store.Asc("name"),
+	)
+	if err != nil {
+		return nil, errors.Wrapf(err, "list polaris configs of workspace %s scoped to envs %v", workspaceID, envNames)
+	}
+	return configs, nil
 }
 
 // UpdateConfig 根据应用 ID 和配置名称更新 updateData 中给出的字段；没有待更新的字段时直接返回，

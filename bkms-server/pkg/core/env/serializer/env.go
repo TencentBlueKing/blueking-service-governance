@@ -200,6 +200,8 @@ type EnvOutput struct {
 	SourceEnvID string `json:"sourceEnvID,omitempty"`
 	// 命名空间共享信息，仅与其他环境共用命名空间时返回
 	NsSharing *EnvNsSharingOutput `json:"nsSharing,omitempty"`
+	// 环境所在集群使用的北极星接入点 ID：未开启空间自建接入点时固定为 platform；开启后为集群绑定的接入点 ID，未绑定则为空
+	PolarisAccessPointID string `json:"polarisAccessPointID"`
 }
 
 // EnvNsSharingOutput is the JSON representation of an environment's namespace sharing configuration.
@@ -208,8 +210,8 @@ type EnvNsSharingOutput struct {
 	ResPrefix string `json:"resPrefix"`
 }
 
-// FromModel fills output fields from an environment model.
-func (o *EnvOutput) FromModel(env envmodel.Environment) *EnvOutput {
+// FromModel fills output fields from an environment model and the polaris access point of its cluster.
+func (o *EnvOutput) FromModel(env envmodel.Environment, polarisAccessPointID string) *EnvOutput {
 	sourceEnvID := lo.Ternary(env.SourceEnvID.IsZero(), "", env.SourceEnvID.Hex())
 	var nsSharing *EnvNsSharingOutput
 	if env.SharesNamespace() {
@@ -240,6 +242,8 @@ func (o *EnvOutput) FromModel(env envmodel.Environment) *EnvOutput {
 		OwnerAppID:  env.OwnerAppID,
 		SourceEnvID: sourceEnvID,
 		NsSharing:   nsSharing,
+
+		PolarisAccessPointID: polarisAccessPointID,
 	}
 	return o
 }
@@ -431,12 +435,16 @@ type EnvDetailOutput struct {
 	Description string `json:"description"`
 	// 当前环境已部署应用及其部署状态
 	AppDeployStatuses []*EnvAppDeployStatusOutput `json:"appDeployStatuses"`
+	// 环境所在集群使用的北极星接入点 ID：未开启空间自建接入点时固定为 platform；开启后为集群绑定的接入点 ID，未绑定则为空
+	PolarisAccessPointID string `json:"polarisAccessPointID"`
 }
 
-// FromModel fills output fields from an environment model and its deploy statuses.
+// FromModel fills output fields from an environment model, its deploy statuses
+// and the polaris access point of its cluster.
 func (o *EnvDetailOutput) FromModel(
 	env envmodel.Environment,
 	deployStatuses []status.AppDeployStatus,
+	polarisAccessPointID string,
 ) *EnvDetailOutput {
 	*o = EnvDetailOutput{
 		ID:          env.ID.Hex(),
@@ -468,6 +476,7 @@ func (o *EnvDetailOutput) FromModel(
 				}
 			},
 		),
+		PolarisAccessPointID: polarisAccessPointID,
 	}
 	return o
 }

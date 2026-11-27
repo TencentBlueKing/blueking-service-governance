@@ -71,6 +71,7 @@ OpenAPI 只用第一个地址（`http://{clientHosts[0]}:8090`），SDK 使用�
 | --- | --- | --- |
 | `ResolveByID(ctx, ws, id)` | `platform` 返回平台托管接入点（不可用时 `ErrAccessPointNotFound`，见 4.1）；其余 ID 查库且必须属于该空间，否则 `ErrAccessPointNotFound` | 02、04 |
 | `ResolveByCluster(ctx, ws, clusterID)` | `allowWorkspaceAccessPoints=false` 返回平台托管；否则查集群绑定，未绑定返回 `ErrClusterNotBound`，不回退平台托管（见 4.2） | 03、04、05 |
+| `ResolveIDsByClusters(ctx, ws, clusterIDs)` | 规则同 `ResolveByCluster` 的批量版本，只返回集群 ID 到接入点 ID 的映射，未绑定的集群不在结果中；用于环境输出的 `polarisAccessPointID` | 03 |
 | `ResolveForPolarisConfig(ctx, cfg)` | `cfg.AccessPointID` 为空（内部版存量数据）或为 `platform` 按平台托管处理；其余按配置所属应用的空间调用 `ResolveByID` | 05、06 |
 
 - 解析结果里的 Token 是明文，只在服务端内部使用，不能出现在接口响应、日志与审计记录中。
@@ -138,18 +139,20 @@ OpenAPI 只用第一个地址（`http://{clientHosts[0]}:8090`），SDK 使用�
 ## 6. REST API 契约
 
 路由注册在 `accesspoint/router.go`，handler 在 `accesspoint/handler`，请求与响应结构在 `accesspoint/serializer`。
-接入点管理的 6 个接口已实现，业务逻辑在 `accesspoint.Manager`；其余接口的 handler 目前只做参数绑定与权限校验，
-然后返回 `NOT_IMPLEMENTED`，由对应子需求补齐。
+接入点管理的 6 个接口已实现，业务逻辑在 `accesspoint.Manager`；集群绑定的 3 个接口在 `accesspoint/binding`。
+组件期望 values 接口的 handler 目前只做参数绑定与权限校验，然后返回 `NOT_IMPLEMENTED`，由 04 补齐。
 
 | 接口 | 路由 | 权限 | 实现方 |
 | --- | --- | --- | --- |
 | 接入点列表 | `GET /workspaces/{ws}/polaris-access-points` | 空间查看 | 已实现 |
-| 创建接入点 | `POST /workspaces/{ws}/polaris-access-points` | 空间编辑 | 已实现（`clusterIDs` 由 03） |
-| 更新接入点 | `PATCH /workspaces/{ws}/polaris-access-points/{accessPointID}` | 空间编辑 | 已实现（`clusterIDs` 由 03） |
+| 创建接入点 | `POST /workspaces/{ws}/polaris-access-points` | 空间编辑 | 已实现 |
+| 更新接入点 | `PATCH /workspaces/{ws}/polaris-access-points/{accessPointID}` | 空间编辑 | 已实现 |
 | 删除接入点 | `DELETE /workspaces/{ws}/polaris-access-points/{accessPointID}` | 空间编辑 | 已实现 |
 | 连通测试 | `POST /workspaces/{ws}/polaris-access-points/connectivity-test` | 空间编辑 | 已实现 |
 | 命名空间 | `GET /workspaces/{ws}/polaris-access-points/{accessPointID}/namespaces` | 空间查看 | 已实现 |
-| 集群绑定视图 | `GET /workspaces/{ws}/polaris-clusters` | 空间查看 | 03 |
+| 替换绑定集群 | `PUT /workspaces/{ws}/polaris-access-points/{accessPointID}/clusters` | 空间编辑 | 已实现 |
+| 集群绑定视图 | `GET /workspaces/{ws}/polaris-clusters` | 空间查看 | 已实现 |
+| 绑定单个集群 | `PUT /workspaces/{ws}/polaris-clusters/{clusterID}` | 空间编辑 | 已实现 |
 | 组件期望 values | `GET /workspaces/{ws}/polaris-operator-values?accessPointID=` | 空间查看 | 04 |
 
 以上接口只在 `allowWorkspaceAccessPoints=true` 时注册，此时平台托管接入点不可用，因此接口只处理空间自建接入点：
@@ -157,7 +160,8 @@ OpenAPI 只用第一个地址（`http://{clientHosts[0]}:8090`），SDK 使用�
 
 另有全局接口 `GET /frontend-features`（登录即可访问，已实现）向前端下发 `polarisWorkspaceAccessPoint`，见第 3 节。
 
-更新接口的字段都是指针：缺省表示不修改；`token` 显式传空字符串表示清除；`clusterIDs` 显式传空数组表示解除全部绑定。
+更新接口的字段都是指针：缺省表示不修改；`token` 显式传空字符串表示清除。
+创建与更新接口只处理接入点本身，不携带绑定的集群，绑定集群使用替换绑定集群或绑定单个集群接口。
 
 serializer 只用 binding 校验必填。地址格式、数量上限、名称重复由领域逻辑校验。
 
@@ -174,16 +178,18 @@ serializer 只用 binding 校验必填。地址格式、数量上限、名称重
 | `ErrAccessPointConflict` | `ABORTED` | 无 | 修改地址或 Token 时，连通测试期间接入点被其他请求修改或删除 |
 | `ErrAccessPointInvalid` | `INVALID_ARGUMENT` | 无 | 地址格式错误、数量越界、集群不在候选范围内 |
 | `ErrConnectivityFailed` | `INVALID_REQUEST` | 无 | 保存前重跑连通测试未通过（网络不通、Token 无效），失败原因写在错误信息里 |
-| `ErrClusterNotBound` | `INVALID_REQUEST` | 无 | 允许自建接入点时，北极星配置选择了未绑定集群上的环境 |
-| `ErrAccessPointInUse` | `INVALID_REQUEST` | `POLARIS_ACCESS_POINT_IN_USE` | 删除仍绑定集群、或仍有北极星配置固定使用的接入点 |
+| `ErrClusterNotBound` | `INVALID_REQUEST` | 无 | 允许自建接入点时，北极星配置选择了未绑定集群上的环境，或将被使用的环境改到未绑定集群 |
+| `ErrAccessPointInUse` | `INVALID_REQUEST` | `POLARIS_ACCESS_POINT_IN_USE` | 删除仍绑定集群、或仍有北极星配置锁定使用的接入点 |
 | `ErrClusterInUse` | `INVALID_REQUEST` | `POLARIS_CLUSTER_IN_USE` | 解绑或换绑的集群上有环境被北极星配置使用 |
+| `ErrAccessPointMismatch` | `INVALID_REQUEST` | 无 | 允许自建接入点时，修改被北极星配置使用的环境的集群，新集群解析出的接入点与配置锁定的接入点不一致 |
 | `ErrAccessPointUnreachable` | `INVALID_REQUEST` | 无 | 实时读取自建北极星的命名空间失败 |
 
 - 结构化的连通失败原因由连通测试接口的 `reason` 返回，前端在保存前调用它展示；保存失败时展示错误信息即可。
 - 前端可以通过 `/frontend-features` 隐藏入口、通过环境的 `polarisAccessPointID` 过滤可选环境，
   因此 `CLUSTER_NOT_BOUND` 不需要详情码。
 - 两个 `IN_USE` 详情码在 `extras` 中列出占用方（集群、北极星配置）供前端展示。领域错误实现 `Extras()`，
-  由 `APIError` 统一附加，03 的 `POLARIS_CLUSTER_IN_USE` 照此实现。
+  由 `APIError` 统一附加。`POLARIS_CLUSTER_IN_USE` 的 `extras` 为
+  `{"clusterIDs": [...], "configs": [{"clusterID", "envName", "appID", "configName"}]}`（`ClusterInUseError`）。
 
 ## 7. SDK 适配层
 

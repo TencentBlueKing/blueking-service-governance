@@ -74,7 +74,7 @@ var _ = Describe("Env output serializers", func() {
 				Status:      envmodel.EnvStatusReady,
 			}
 
-			output := new(serializer.EnvOutput).FromModel(env)
+			output := new(serializer.EnvOutput).FromModel(env, "ap-1")
 
 			Expect(output.ID).To(Equal(envIDHex))
 			Expect(output.Name).To(Equal("dev"))
@@ -94,6 +94,7 @@ var _ = Describe("Env output serializers", func() {
 			Expect(output.OwnerAppID).To(Equal("app-1"))
 			Expect(output.SourceEnvID).To(Equal("507f1f77bcf86cd799439012"))
 			Expect(output.NsSharing).To(Equal(&serializer.EnvNsSharingOutput{ResPrefix: "fab12"}))
+			Expect(output.PolarisAccessPointID).To(Equal("ap-1"))
 		})
 
 		It("marshals to correct JSON", func() {
@@ -114,7 +115,7 @@ var _ = Describe("Env output serializers", func() {
 				Status: envmodel.EnvStatusNotReady,
 			}
 
-			output := new(serializer.EnvOutput).FromModel(env)
+			output := new(serializer.EnvOutput).FromModel(env, "")
 			payload, err := json.Marshal(output)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(payload).To(MatchJSON(`{
@@ -133,7 +134,8 @@ var _ = Describe("Env output serializers", func() {
 				},
 				"status": "NotReady",
 				"appIDs": [],
-				"kind": "standard"
+				"kind": "standard",
+				"polarisAccessPointID": ""
 			}`))
 		})
 	})
@@ -328,10 +330,11 @@ var _ = Describe("Env output serializers", func() {
 				},
 			}
 
-			output := new(serializer.EnvDetailOutput).FromModel(env, deployStatuses)
+			output := new(serializer.EnvDetailOutput).FromModel(env, deployStatuses, "platform")
 
 			Expect(output.ID).To(Equal(envIDHex))
 			Expect(output.Creator).To(Equal("admin"))
+			Expect(output.PolarisAccessPointID).To(Equal("platform"))
 			Expect(output.Description).To(Equal("生产描述"))
 			Expect(output.AppDeployStatuses).To(HaveLen(1))
 			Expect(output.AppDeployStatuses[0].AppID).To(Equal("app-1"))
@@ -356,7 +359,7 @@ var _ = Describe("Env output serializers", func() {
 				AppIDs:      []string{},
 			}
 
-			output := new(serializer.EnvDetailOutput).FromModel(env, nil)
+			output := new(serializer.EnvDetailOutput).FromModel(env, nil, "")
 			Expect(output.AppDeployStatuses).To(BeEmpty())
 		})
 	})
