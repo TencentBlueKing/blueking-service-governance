@@ -20,7 +20,9 @@
 package handler
 
 import (
+	"cmp"
 	"context"
+	"fmt"
 	"log/slog"
 	"net/http"
 
@@ -860,6 +862,10 @@ func (h *Handler) RemoveWorkspaceUser(c *gin.Context) {
 
 // SetWorkspaceState 设置工作空间状态。
 //
+// 停用空间时可一并停用 linkedProjects 指定的关联项目：空间照常停用，单个项目停用失败不影响空间。
+// 从停用恢复启用时，已停用的关联项目会全部一并启用，任一项目启用失败则空间保持停用并返回错误，
+// 错误 details 中每条对应一个启用失败的项目。
+//
 //	@ID				SetWorkspaceState
 //	@Summary		设置工作空间状态
 //	@Tags			workspace
@@ -869,7 +875,7 @@ func (h *Handler) RemoveWorkspaceUser(c *gin.Context) {
 //	@Security		BkUserCredential
 //	@Param			workspaceID	path		string							true	"工作空间 ID"
 //	@Param			body		body		serializer.SetWorkspaceStateInput	true	"设置工作空间状态请求"
-//	@Success		200			{object}	serializer.EmptyOutput
+//	@Success		200			{object}	serializer.SetWorkspaceStateOutput
 //	@Failure		400			{object}	bkerrs.GinErrorOutput
 //	@Router			/workspaces/{workspaceID}/state [patch]
 func (h *Handler) SetWorkspaceState(c *gin.Context) {
@@ -881,38 +887,26 @@ func (h *Handler) SetWorkspaceState(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	ws, err := ginperm.ValidateWorkspaceByID(ctx, h.registry, uriInput.WorkspaceID, ginperm.TypeEdit)
+	if _, err := ginperm.ValidateWorkspaceByID(ctx, h.registry, uriInput.WorkspaceID, ginperm.TypeEdit); err != nil {
+		bkerrs.AbortWithErr(c, err)
+		return
+	}
+	ws, release, err := h.lockWorkspaceState(ctx, uriInput.WorkspaceID)
 	if err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return
 	}
+	defer release()
 	rawWs := *ws
 
-	// 更新字段
-	ws.State = workspace.State(input.State)
-	ws.Updater = auth.MustGetUser(ctx).ID
-
-	// 停用工作空间时，检查是否存在活跃的部署
+	var results []workspace.LinkedProjectResult
 	if workspace.State(input.State) == workspace.StateDisabled {
-		hasActive, checkErr := h.hasActiveDeploymentsInWorkspace(ctx, ws.ID)
-		if checkErr != nil {
-			bkerrs.AbortWithErr(
-				c,
-				bkerrs.Wrap(checkErr, bkerrs.ErrCodeInternalServerError, "check active deployments"),
-			)
-			return
-		}
-		if hasActive {
-			bkerrs.AbortWithErr(c,
-				bkerrs.New(bkerrs.ErrCodeInvalidRequest,
-					"workspace has active deployments, please remove them first"))
-			return
-		}
+		results, err = h.disableWorkspace(ctx, ws, serializer.ToLinkedProjectSystems(input.LinkedProjects))
+	} else {
+		results, err = h.enableWorkspace(ctx, ws)
 	}
-
-	// 保存更新
-	if err = workspace.Update(ctx, h.workspaces(), ws); err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "update workspace in DB"))
+	if err != nil {
+		bkerrs.AbortWithErr(c, err)
 		return
 	}
 
@@ -924,10 +918,194 @@ func (h *Handler) SetWorkspaceState(c *gin.Context) {
 		ws.ID,
 		audit.WithDataBefore(rawWs),
 		audit.WithDataAfter(ws),
+		audit.WithExtras(map[string]any{"linkedProjects": results}),
 		audit.WithWorkspaceID(ws.ID),
 	)
 
-	ginutils.OK(c, serializer.EmptyOutput{})
+	ginutils.OK(c, serializer.SetWorkspaceStateOutput{Data: &serializer.SetWorkspaceStateOutputObj{
+		State:          string(ws.State),
+		LinkedProjects: serializer.NewLinkedProjectResultOutputObjs(results),
+	}})
+}
+
+// disableWorkspace 停用工作空间，再停用指定的关联项目。返回的 error 为 bkerrs 错误。
+//
+// 关联项目在空间停用前校验，校验不通过时空间保持原状
+func (h *Handler) disableWorkspace(
+	ctx context.Context, ws *workspace.Workspace, systems []workspace.LinkedSystem,
+) ([]workspace.LinkedProjectResult, error) {
+	// 停用工作空间时，检查是否存在活跃的部署
+	hasActive, err := h.hasActiveDeploymentsInWorkspace(ctx, ws.ID)
+	if err != nil {
+		return nil, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "check active deployments")
+	}
+	if hasActive {
+		return nil, bkerrs.New(bkerrs.ErrCodeInvalidRequest,
+			"workspace has active deployments, please remove them first")
+	}
+
+	var targets []workspace.LinkedProject
+	if len(systems) > 0 {
+		projects := workspace.ListLinkedProjects(ctx, ws)
+		if targets, err = workspace.SelectLinkedProjectsToDisable(projects, systems); err != nil {
+			return nil, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, "select linked projects to disable")
+		}
+	}
+
+	ws.State = workspace.StateDisabled
+	ws.Updater = auth.MustGetUser(ctx).ID
+	if err = workspace.Update(ctx, h.workspaces(), ws); err != nil {
+		return nil, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "update workspace in DB")
+	}
+	return workspace.SetLinkedProjectsEnabled(ctx, targets, false), nil
+}
+
+// enableWorkspace 启用工作空间。返回的 error 为 bkerrs 错误。
+//
+// 空间依赖关联项目，从停用恢复时先启用全部已停用的关联项目，任一项目启用失败则空间保持停用
+func (h *Handler) enableWorkspace(
+	ctx context.Context, ws *workspace.Workspace,
+) ([]workspace.LinkedProjectResult, error) {
+	var results []workspace.LinkedProjectResult
+	if ws.State == workspace.StateDisabled {
+		targets := workspace.SelectLinkedProjectsToEnable(workspace.ListLinkedProjects(ctx, ws))
+		results = workspace.SetLinkedProjectsEnabled(ctx, targets, true)
+		failed := lo.Reject(results, func(r workspace.LinkedProjectResult, _ int) bool { return r.Success })
+		if len(failed) > 0 {
+			return nil, newLinkedProjectsEnableFailedErr(failed)
+		}
+	}
+
+	ws.State = workspace.StateReady
+	ws.Updater = auth.MustGetUser(ctx).ID
+	if err := workspace.Update(ctx, h.workspaces(), ws); err != nil {
+		return nil, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "update workspace in DB")
+	}
+	return results, nil
+}
+
+// lockWorkspaceState 获取工作空间启停锁，并在持锁后重新读取空间。返回的 error 为 bkerrs 错误。
+//
+// 加锁前读到的空间可能已被并发请求修改，持锁后的判断须基于重新读取的空间
+func (h *Handler) lockWorkspaceState(
+	ctx context.Context, workspaceID string,
+) (ws *workspace.Workspace, release func(), err error) {
+	stateLock, err := workspace.NewStateLock(ctx, workspaceID)
+	if err != nil {
+		return nil, nil, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "build workspace state lock")
+	}
+	if !stateLock.Acquire(ctx) {
+		return nil, nil, bkerrs.New(bkerrs.ErrCodeAborted,
+			"workspace state is being changed by another request, please retry later")
+	}
+	// 请求取消后仍须释放锁，否则锁会残留到超时
+	release = func() { stateLock.Release(context.WithoutCancel(ctx)) }
+
+	if ws, err = h.workspaces().Get(ctx, workspace.ByWorkspaceID(workspaceID)); err != nil {
+		release()
+		return nil, nil, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get workspace")
+	}
+	return ws, release, nil
+}
+
+// ListWorkspaceLinkedProjects 获取工作空间的关联项目。
+//
+// 按蓝盾、监控、容器排序，未关联的平台不返回。查询平台失败时项目状态为 Unknown
+//
+//	@ID				ListWorkspaceLinkedProjects
+//	@Summary		获取工作空间的关联项目
+//	@Tags			workspace
+//	@Produce		json
+//	@Security		BkUserInfo
+//	@Security		BkUserCredential
+//	@Param			workspaceID	path		string	true	"工作空间 ID"
+//	@Success		200			{object}	serializer.ListWorkspaceLinkedProjectsOutput
+//	@Failure		400			{object}	bkerrs.GinErrorOutput
+//	@Router			/workspaces/{workspaceID}/linked-projects [get]
+func (h *Handler) ListWorkspaceLinkedProjects(c *gin.Context) {
+	var uriInput serializer.WorkspaceURIInput
+	if err := ginutils.BindURI(c, &uriInput); err != nil {
+		bkerrs.AbortWithErr(c, err)
+		return
+	}
+
+	ctx := c.Request.Context()
+	ws, err := ginperm.ValidateWorkspaceByID(ctx, h.registry, uriInput.WorkspaceID, ginperm.TypeView)
+	if err != nil {
+		bkerrs.AbortWithErr(c, err)
+		return
+	}
+
+	ginutils.OK(c, serializer.ListWorkspaceLinkedProjectsOutput{
+		Data: serializer.NewLinkedProjectOutputObjs(workspace.ListLinkedProjects(ctx, ws)),
+	})
+}
+
+// DisableWorkspaceLinkedProjects 停用已停用工作空间的关联项目（补停）。
+//
+// 单个项目停用失败不影响其他项目，结果中返回每个项目的停用结果
+//
+//	@ID				DisableWorkspaceLinkedProjects
+//	@Summary		停用已停用工作空间的关联项目
+//	@Tags			workspace
+//	@Accept			json
+//	@Produce		json
+//	@Security		BkUserInfo
+//	@Security		BkUserCredential
+//	@Param			workspaceID	path		string										true	"工作空间 ID"
+//	@Param			body		body		serializer.DisableWorkspaceLinkedProjectsInput	true	"停用关联项目请求"
+//	@Success		200			{object}	serializer.DisableWorkspaceLinkedProjectsOutput
+//	@Failure		400			{object}	bkerrs.GinErrorOutput
+//	@Router			/workspaces/{workspaceID}/linked-projects/disable [post]
+func (h *Handler) DisableWorkspaceLinkedProjects(c *gin.Context) {
+	var uriInput serializer.WorkspaceURIInput
+	var input serializer.DisableWorkspaceLinkedProjectsInput
+	if err := ginutils.BindURIJSON(c, &uriInput, &input); err != nil {
+		bkerrs.AbortWithErr(c, err)
+		return
+	}
+
+	ctx := c.Request.Context()
+	if _, err := ginperm.ValidateWorkspaceByID(ctx, h.registry, uriInput.WorkspaceID, ginperm.TypeEdit); err != nil {
+		bkerrs.AbortWithErr(c, err)
+		return
+	}
+	ws, release, err := h.lockWorkspaceState(ctx, uriInput.WorkspaceID)
+	if err != nil {
+		bkerrs.AbortWithErr(c, err)
+		return
+	}
+	defer release()
+	if ws.State != workspace.StateDisabled {
+		bkerrs.AbortWithErr(c, bkerrs.New(bkerrs.ErrCodeInvalidRequest,
+			"linked projects can only be disabled separately after the workspace is disabled"))
+		return
+	}
+
+	targets, err := workspace.SelectLinkedProjectsToDisable(
+		workspace.ListLinkedProjects(ctx, ws), serializer.ToLinkedProjectSystems(input.LinkedProjects),
+	)
+	if err != nil {
+		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, "select linked projects to disable"))
+		return
+	}
+	results := workspace.SetLinkedProjectsEnabled(ctx, targets, false)
+
+	// 添加操作审计
+	go audit.AddOperationRecordAsync(
+		ctx,
+		audit.OperationTypeUpdate,
+		audit.ResourceTypeWorkspace,
+		ws.ID,
+		audit.WithExtras(map[string]any{"linkedProjects": results}),
+		audit.WithWorkspaceID(ws.ID),
+	)
+
+	ginutils.OK(c, serializer.DisableWorkspaceLinkedProjectsOutput{
+		Data: &serializer.DisableWorkspaceLinkedProjectsOutputObj{
+			LinkedProjects: serializer.NewLinkedProjectResultOutputObjs(results),
+		},
+	})
 }
 
 // DeleteWorkspace 删除工作空间。
@@ -1050,4 +1228,38 @@ func abortIfEnvClusterNamespaceOccupied(c *gin.Context, err error) bool {
 		info.ClusterID, info.Namespace, info.OccupiedByEnvName, info.OccupiedByWorkspaceID,
 	))
 	return true
+}
+
+// newLinkedProjectsEnableFailedErr 生成关联项目启用失败的错误，每个失败的项目对应一条 detail
+func newLinkedProjectsEnableFailedErr(failed []workspace.LinkedProjectResult) error {
+	details := lo.Map(failed, func(r workspace.LinkedProjectResult, _ int) bkerrs.Detail {
+		return bkerrs.NewDetail(
+			bkerrs.ErrDetailCodeLinkedProjectEnableFailed,
+			fmt.Sprintf("enable %s project %s failed: %s", r.System, r.ProjectID, cmp.Or(r.Detail, string(r.Reason))),
+			bkerrs.WithSystem(bkerrs.SystemName),
+			bkerrs.WithModule(string(r.System)),
+			bkerrs.WithExtras(map[string]string{
+				"projectID":   r.ProjectID,
+				"projectName": r.ProjectName,
+				"reason":      string(r.Reason),
+				"requestID":   r.RequestID,
+			}),
+		)
+	})
+	return bkerrs.New(linkedProjectsEnableFailedCode(failed),
+		"enable linked projects failed, workspace stays disabled").SetDetails(details...)
+}
+
+// linkedProjectsEnableFailedCode 按失败原因选择错误码。
+//
+// 平台不可用或无法识别的错误不是请求本身的问题，返回 500，避免被当成调用方错误告警。
+// 项目不存在、无权限仍返回 400。混合失败时只要有平台侧故障就返回 500。
+func linkedProjectsEnableFailedCode(failed []workspace.LinkedProjectResult) bkerrs.ErrCode {
+	for _, r := range failed {
+		switch r.Reason {
+		case workspace.LinkedProjectFailureUnavailable, workspace.LinkedProjectFailureUnknown:
+			return bkerrs.ErrCodeInternalServerError
+		}
+	}
+	return bkerrs.ErrCodeInvalidRequest
 }

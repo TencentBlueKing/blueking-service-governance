@@ -28,6 +28,8 @@ const (
 	projectNameExistStatus = 2119002
 	// 蓝盾代码库别名已存在
 	repoAliasExistStatus = 2115014
+	// ProjectNotExistStatus 蓝盾项目不存在
+	ProjectNotExistStatus = 2119001
 )
 
 const (
@@ -44,6 +46,8 @@ type Project struct {
 	Name          string
 	Creator       string
 	HasManagePerm bool
+	// Enabled 项目是否启用，false 表示项目已停用，nil 表示蓝盾未返回启停状态
+	Enabled *bool
 }
 
 // GitProject git 项目

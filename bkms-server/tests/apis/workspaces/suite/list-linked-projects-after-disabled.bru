@@ -1,0 +1,28 @@
+meta {
+  name: list-linked-projects-after-disabled
+  type: http
+  seq: 10
+}
+
+get {
+  url: {{serviceURL}}/workspaces/{{imageRegistryWsID}}/linked-projects
+  body: none
+  auth: inherit
+}
+
+assert {
+  res.status: eq 200
+  res.body: isJson
+}
+
+tests {
+  test("should report disabled bkci project", () => {
+    const bkci = res.body.data.find((p) => p.system === "bkci");
+    expect(bkci.state).to.equal("Disabled");
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 10000
+}

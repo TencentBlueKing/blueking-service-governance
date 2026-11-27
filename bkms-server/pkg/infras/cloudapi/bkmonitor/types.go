@@ -28,6 +28,15 @@ import (
 // SpaceUIDFormat 空间 UID 格式
 const SpaceUIDFormat = "bkci__%s"
 
+const (
+	// SpaceStatusNormal 空间正常
+	SpaceStatusNormal = "normal"
+	// SpaceStatusDisabled 空间已停用
+	SpaceStatusDisabled = "disabled"
+	// BkmsSpaceIDPrefix 监控允许 BKMS 启停的空间 ID 前缀
+	BkmsSpaceIDPrefix = "bkms-"
+)
+
 var (
 	// ErrApmAppDuplicate APM 中 app 已经存在
 	ErrApmAppDuplicate = errors.New("APM app duplicate name error")

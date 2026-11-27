@@ -33,6 +33,8 @@ type Client interface {
 	ListProjects(ctx context.Context) ([]Project, error)
 	// GetProject 获取蓝盾项目（通过项目 Code）
 	GetProject(ctx context.Context, projectCode string) (*Project, error)
+	// SetProjectEnabled 启用或停用蓝盾项目（通过项目 Code）
+	SetProjectEnabled(ctx context.Context, projectCode string, enabled bool) error
 	// CreateProject 创建蓝盾项目
 	CreateProject(
 		ctx context.Context,

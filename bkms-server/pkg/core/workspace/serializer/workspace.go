@@ -445,4 +445,20 @@ type AddWorkspaceUserInput struct {
 type SetWorkspaceStateInput struct {
 	// 工作空间状态
 	State string `json:"state" binding:"required,oneof=Ready Disabled"`
+	// 停用空间时一并停用的关联项目所属平台，可选值：bkci、bkmonitor。
+	// 启用空间时忽略该字段，已停用的关联项目会全部一并启用
+	LinkedProjects []string `json:"linkedProjects" binding:"omitempty,unique,dive,oneof=bkci bkmonitor"`
+}
+
+// SetWorkspaceStateOutput is the JSON response for setting workspace state.
+type SetWorkspaceStateOutput struct {
+	Data *SetWorkspaceStateOutputObj `json:"data"`
+}
+
+// SetWorkspaceStateOutputObj is the result of setting workspace state.
+type SetWorkspaceStateOutputObj struct {
+	// 操作后的工作空间状态
+	State string `json:"state"`
+	// 本次一并启停的关联项目结果。启用时任一项目启用失败会返回错误，不会返回该结果
+	LinkedProjects []LinkedProjectResultOutputObj `json:"linkedProjects"`
 }

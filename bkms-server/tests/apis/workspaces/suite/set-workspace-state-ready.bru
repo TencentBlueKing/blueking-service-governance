@@ -1,0 +1,35 @@
+meta {
+  name: set-workspace-state-ready
+  type: http
+  seq: 13
+}
+
+patch {
+  url: {{serviceURL}}/workspaces/{{imageRegistryWsID}}/state
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "state": "Ready"
+  }
+}
+
+assert {
+  res.status: eq 200
+  res.body: isJson
+}
+
+tests {
+  test("should enable workspace with its disabled linked projects", () => {
+    expect(res.body.data.state).to.equal("Ready");
+    const bkci = res.body.data.linkedProjects.find((p) => p.system === "bkci");
+    expect(bkci.success).to.equal(true);
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 10000
+}

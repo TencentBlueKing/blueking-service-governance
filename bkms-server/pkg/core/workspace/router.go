@@ -37,6 +37,9 @@ type WorkspaceHandler interface {
 	// 状态与删除
 	SetWorkspaceState(c *gin.Context)
 	DeleteWorkspace(c *gin.Context)
+	// 关联项目
+	ListWorkspaceLinkedProjects(c *gin.Context)
+	DisableWorkspaceLinkedProjects(c *gin.Context)
 
 	// 组件管理
 	CreateWorkspaceComponent(c *gin.Context)
@@ -65,6 +68,10 @@ func Register(rg *gin.RouterGroup, h WorkspaceHandler) {
 	// 状态与删除
 	rg.PATCH("/workspaces/:workspaceID/state", h.SetWorkspaceState)
 	rg.DELETE("/workspaces/:workspaceID", h.DeleteWorkspace)
+
+	// 关联项目
+	rg.GET("/workspaces/:workspaceID/linked-projects", h.ListWorkspaceLinkedProjects)
+	rg.POST("/workspaces/:workspaceID/linked-projects/disable", h.DisableWorkspaceLinkedProjects)
 
 	// 组件管理
 	// 添加工作空间组件
