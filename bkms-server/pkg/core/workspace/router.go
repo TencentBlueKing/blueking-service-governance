@@ -36,7 +36,6 @@ type WorkspaceHandler interface {
 	UpdateWorkspaceRole(c *gin.Context)
 	DeleteWorkspaceRole(c *gin.Context)
 	// 成员管理
-	ListWorkspaceRoleMemberGroups(c *gin.Context)
 	ListWorkspaceRoleUsers(c *gin.Context)
 	AddWorkspaceRoleUser(c *gin.Context)
 	RemoveWorkspaceRoleUser(c *gin.Context)
@@ -66,14 +65,13 @@ func Register(rg *gin.RouterGroup, h WorkspaceHandler) {
 	rg.POST("/workspaces", h.CreateWorkspace)
 	rg.PUT("/workspaces/:workspaceID/info", h.UpdateWorkspaceInfo)
 
-	// 角色管理；:roleCode 对内置角色为角色 Code，对自定义角色为角色 ID
+	// 角色管理
 	rg.GET("/workspaces/:workspaceID/roles", h.ListWorkspaceRoles)
 	rg.POST("/workspaces/:workspaceID/roles", h.CreateWorkspaceRole)
 	rg.PUT("/workspaces/:workspaceID/roles/:roleCode", h.UpdateWorkspaceRole)
 	rg.DELETE("/workspaces/:workspaceID/roles/:roleCode", h.DeleteWorkspaceRole)
 
 	// 成员管理
-	rg.GET("/workspaces/:workspaceID/role-member-groups", h.ListWorkspaceRoleMemberGroups)
 	rg.GET("/workspaces/:workspaceID/roles/:roleCode/users", h.ListWorkspaceRoleUsers)
 	rg.POST("/workspaces/:workspaceID/roles/:roleCode/users", h.AddWorkspaceRoleUser)
 	rg.DELETE("/workspaces/:workspaceID/roles/:roleCode/users/:userID", h.RemoveWorkspaceRoleUser)

@@ -30,7 +30,7 @@ type WorkspacePath struct {
 // RoleStatusQuery is the query input for checking whether a user has a workspace role.
 type RoleStatusQuery struct {
 	// 角色 Code
-	RoleCode string `form:"roleCode" binding:"required"`
+	RoleCode string `form:"roleCode" binding:"required,uri_slug"`
 	// 用户名
 	Username string `form:"username" binding:"required"`
 }

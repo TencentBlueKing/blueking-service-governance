@@ -168,57 +168,6 @@ func (h *Handler) GetUserStatistics(c *gin.Context) {
 	})
 }
 
-// ListWorkspaceRoleMemberGroups 获取工作空间下角色成员组列表。
-//
-//	@ID				ListWorkspaceRoleMemberGroups
-//	@Summary		获取工作空间下角色成员组列表
-//	@Tags			workspace
-//	@Produce		json
-//	@Security		BkUserInfo
-//	@Security		BkUserCredential
-//	@Param			workspaceID	path		string	true	"工作空间 ID"
-//	@Success		200			{object}	serializer.ListWorkspaceRoleMemberGroupsOutput
-//	@Failure		400			{object}	bkerrs.GinErrorOutput
-//	@Router			/workspaces/{workspaceID}/role-member-groups [get]
-func (h *Handler) ListWorkspaceRoleMemberGroups(c *gin.Context) {
-	var uriInput serializer.WorkspaceURIInput
-	if err := ginutils.BindURI(c, &uriInput); err != nil {
-		bkerrs.AbortWithErr(c, err)
-		return
-	}
-
-	ctx := c.Request.Context()
-	ws, err := ginperm.ValidateWorkspaceByID(ctx, h.registry, uriInput.WorkspaceID, ginperm.TypeView)
-	if err != nil {
-		bkerrs.AbortWithErr(c, err)
-		return
-	}
-
-	client := perm.NewManager()
-	roles, err := client.ListRoles(ctx, ws.ID)
-	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "list roles"))
-		return
-	}
-	membersByRole, err := listMembersByRole(ctx, client, roles)
-	if err != nil {
-		bkerrs.AbortWithErr(c, err)
-		return
-	}
-	groups := make([]*serializer.RoleMemberGroupOutputObj, 0, len(roles))
-	for _, r := range roles {
-		groups = append(groups, &serializer.RoleMemberGroupOutputObj{
-			RoleID:      r.ID,
-			RoleName:    r.Name,
-			RoleCode:    r.RoleCode,
-			UserGroupID: int64(r.UserGroupID),
-			Members:     membersByRole[r.ID],
-		})
-	}
-
-	ginutils.OK(c, serializer.ListWorkspaceRoleMemberGroupsOutput{Data: groups})
-}
-
 // GetWorkspace 获取指定工作空间。
 //
 //	@ID				GetWorkspace

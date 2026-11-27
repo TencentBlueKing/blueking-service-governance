@@ -448,6 +448,8 @@ var _ = Describe("IAMService", func() {
 			r, err := svc.CreateCustomRole(ctx, "non-prod", "desc", data, nil)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(r.IsCustom()).To(BeTrue())
+			Expect(r.RoleCode).To(MatchRegexp(`^custom-[0-9a-z]{1,6}$`))
+			Expect(r.Name).To(Equal(role.GenWorkspaceRoleName(workspaceID, r.RoleCode)))
 			Expect(client.gotGrantedScopes).To(Equal(GenCustomRoleAuthScopes(data)))
 			// 新建时没有旧授权，不需要撤销
 			Expect(client.gotRevokedActions).To(BeEmpty())
@@ -455,6 +457,7 @@ var _ = Describe("IAMService", func() {
 			got, err := svc.GetRole(ctx, r.ID)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(got.DisplayName).To(Equal("non-prod"))
+			Expect(got.RoleCode).To(Equal(r.RoleCode))
 		})
 
 		It("revokes old policies before granting new ones on update", func() {

@@ -86,3 +86,12 @@ var _ = Describe("NormalizePermissions", func() {
 		Entry("unknown app scope mode", AppScope{Mode: "some"}, allEnvs),
 	)
 })
+
+var _ = Describe("GenCustomRoleCode", func() {
+	It("generates base36 custom role codes recognized as custom", func() {
+		code := GenCustomRoleCode()
+		Expect(code).To(MatchRegexp(`^custom-[0-9a-z]{1,6}$`))
+		Expect((&Role{RoleCode: code}).IsCustom()).To(BeTrue())
+		Expect((&Role{RoleCode: BuiltinRoleCode.Admin}).IsCustom()).To(BeFalse())
+	})
+})

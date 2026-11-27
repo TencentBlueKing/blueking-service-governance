@@ -190,9 +190,6 @@ var _ = Describe("Workspace serializer", func() {
 			Entry("UserStatisticsOutputObj envCount",
 				serializer.UserStatisticsOutputObj{EnvCount: 30},
 				"envCount", `"30"`),
-			Entry("RoleMemberGroupOutputObj userGroupID",
-				serializer.RoleMemberGroupOutputObj{UserGroupID: 1234567890123},
-				"userGroupID", `"1234567890123"`),
 		)
 
 		It("deserializes JSON string to int64 for CreateWorkspaceInput bkCCBizID", func() {

@@ -229,11 +229,6 @@ func (f *fakeIAMServicer) AppEnvPairsActionAllowed(
 	return f.batchPairsAllowed, f.returnedErr
 }
 
-func (f *fakeIAMServicer) GetRole(_ context.Context, roleID string) (*role.Role, error) {
-	f.gotRoleID = roleID
-	return f.customRoleResp, f.returnedErr
-}
-
 func (f *fakeIAMServicer) CreateCustomRole(
 	_ context.Context, _, _ string, data bkiam.CustomRoleData, _ []string,
 ) (*role.Role, error) {
@@ -501,12 +496,6 @@ var _ = Describe("LocalManager", func() {
 		It("returns role.ErrRoleNotFound when no role matches", func() {
 			fake.listRolesResp = []*role.Role{{ID: "r1", RoleCode: RoleCodeAdmin}}
 			_, err := mgr.GetRole(ctx, testWS, RoleCodeOperator)
-			Expect(errors.Is(err, role.ErrRoleNotFound)).To(BeTrue())
-		})
-
-		It("returns role.ErrRoleNotFound when GetRoleByID finds a role in another workspace", func() {
-			fake.customRoleResp = &role.Role{ID: "r-other", WorkspaceID: "other-ws"}
-			_, err := mgr.GetRoleByID(ctx, testWS, "r-other")
 			Expect(errors.Is(err, role.ErrRoleNotFound)).To(BeTrue())
 		})
 	})

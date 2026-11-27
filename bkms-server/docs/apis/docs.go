@@ -21177,49 +21177,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/workspaces/{workspaceID}/role-member-groups": {
-            "get": {
-                "security": [
-                    {
-                        "BkUserInfo": []
-                    },
-                    {
-                        "BkUserCredential": []
-                    }
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "workspace"
-                ],
-                "summary": "获取工作空间下角色成员组列表",
-                "operationId": "ListWorkspaceRoleMemberGroups",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "工作空间 ID",
-                        "name": "workspaceID",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/serializer.ListWorkspaceRoleMemberGroupsOutput"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
-                        }
-                    }
-                }
-            }
-        },
         "/workspaces/{workspaceID}/roles": {
             "get": {
                 "security": [
@@ -21347,7 +21304,7 @@ const docTemplate = `{
                     },
                     {
                         "type": "string",
-                        "description": "自定义角色 ID",
+                        "description": "自定义角色 Code",
                         "name": "roleCode",
                         "in": "path",
                         "required": true
@@ -21404,7 +21361,7 @@ const docTemplate = `{
                     },
                     {
                         "type": "string",
-                        "description": "自定义角色 ID",
+                        "description": "自定义角色 Code",
                         "name": "roleCode",
                         "in": "path",
                         "required": true
@@ -21454,7 +21411,7 @@ const docTemplate = `{
                     },
                     {
                         "type": "string",
-                        "description": "内置角色为角色 Code，自定义角色为角色 ID",
+                        "description": "角色 Code",
                         "name": "roleCode",
                         "in": "path",
                         "required": true
@@ -21505,7 +21462,7 @@ const docTemplate = `{
                     },
                     {
                         "type": "string",
-                        "description": "内置角色为角色 Code，自定义角色为角色 ID",
+                        "description": "角色 Code",
                         "name": "roleCode",
                         "in": "path",
                         "required": true
@@ -21564,7 +21521,7 @@ const docTemplate = `{
                     },
                     {
                         "type": "string",
-                        "description": "内置角色为角色 Code，自定义角色为角色 ID",
+                        "description": "角色 Code",
                         "name": "roleCode",
                         "in": "path",
                         "required": true
@@ -22097,7 +22054,7 @@ const docTemplate = `{
                     },
                     {
                         "type": "string",
-                        "description": "只返回该角色的成员，内置角色为角色 Code，自定义角色为角色 ID",
+                        "description": "按角色 Code 筛选",
                         "name": "roleCode",
                         "in": "query"
                     }
@@ -28591,7 +28548,7 @@ const docTemplate = `{
                     ]
                 },
                 "cloneFrom": {
-                    "description": "克隆来源，内置角色为角色 Code，自定义角色为角色 ID；指定时复制其权限与范围，不复制成员，忽略下列字段",
+                    "description": "克隆来源角色 Code；指定时复制其权限与范围，不复制成员，忽略下列字段",
                     "type": "string"
                 },
                 "description": {
@@ -32665,17 +32622,6 @@ const docTemplate = `{
                 }
             }
         },
-        "serializer.ListWorkspaceRoleMemberGroupsOutput": {
-            "type": "object",
-            "properties": {
-                "data": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/serializer.RoleMemberGroupOutputObj"
-                    }
-                }
-            }
-        },
         "serializer.ListWorkspaceRoleUsersOutput": {
             "type": "object",
             "properties": {
@@ -35961,35 +35907,6 @@ const docTemplate = `{
                 }
             }
         },
-        "serializer.RoleMemberGroupOutputObj": {
-            "type": "object",
-            "properties": {
-                "members": {
-                    "description": "用户组成员",
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "roleCode": {
-                    "description": "角色 Code",
-                    "type": "string"
-                },
-                "roleID": {
-                    "description": "角色 ID",
-                    "type": "string"
-                },
-                "roleName": {
-                    "description": "角色名称",
-                    "type": "string"
-                },
-                "userGroupID": {
-                    "description": "用户组 ID",
-                    "type": "string",
-                    "example": "0"
-                }
-            }
-        },
         "serializer.RoleOutput": {
             "type": "object",
             "properties": {
@@ -36061,7 +35978,7 @@ const docTemplate = `{
                     }
                 },
                 "roleCode": {
-                    "description": "角色 Code，内置角色为 admin / developer / sre / operator，自定义角色为 custom",
+                    "description": "角色 Code，内置角色为 admin / developer / sre / operator，自定义角色为 custom-\u003cxxxxxx\u003e",
                     "type": "string"
                 }
             }
@@ -38062,7 +37979,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "roleCode": {
-                    "description": "角色 Code，自定义角色为 custom",
+                    "description": "角色 Code",
                     "type": "string"
                 }
             }

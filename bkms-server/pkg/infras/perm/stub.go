@@ -246,11 +246,15 @@ func stubBuiltinRoles(workspaceID string) []*role.Role {
 	}
 }
 
-// GetRole 返回预设角色信息
+// GetRole 返回工作空间下指定角色码的角色信息
 func (m *StubAllowAnyManager) GetRole(
-	_ context.Context, workspaceID, roleCode string,
+	ctx context.Context, workspaceID, roleCode string,
 ) (*role.Role, error) {
-	for _, r := range stubBuiltinRoles(workspaceID) {
+	roles, err := m.ListRoles(ctx, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	for _, r := range roles {
 		if r.RoleCode == roleCode {
 			return r, nil
 		}
@@ -286,32 +290,17 @@ func defaultStubRoleMembers(roleID string) []string {
 	return nil
 }
 
-// GetRoleByID 返回预设的内置角色或进程内的自定义角色
-func (m *StubAllowAnyManager) GetRoleByID(_ context.Context, workspaceID, roleID string) (*role.Role, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	for _, r := range stubBuiltinRoles(workspaceID) {
-		if r.ID == roleID {
-			return r, nil
-		}
-	}
-	for _, r := range m.customRoles {
-		if r.WorkspaceID == workspaceID && r.ID == roleID {
-			return r, nil
-		}
-	}
-	return nil, errors.Wrapf(role.ErrRoleNotFound, "role %s in workspace %s", roleID, workspaceID)
-}
-
 // CreateCustomRole 在进程内创建自定义角色并加入初始成员
 func (m *StubAllowAnyManager) CreateCustomRole(
 	_ context.Context, displayName, description string, data bkiam.CustomRoleData, members []string,
 ) (*role.Role, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	roleCode := role.GenCustomRoleCode()
 	r := &role.Role{
 		ID:          uuid.NewString(),
-		RoleCode:    role.CustomRoleCode,
+		Name:        role.GenWorkspaceRoleName(data.WorkspaceID, roleCode),
+		RoleCode:    roleCode,
 		Description: description,
 		WorkspaceID: data.WorkspaceID,
 		Scope:       role.PermissionScope{ResourceType: role.WorkspaceResourceType, ResourceID: data.WorkspaceID},

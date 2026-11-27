@@ -51,7 +51,6 @@ type iamServicer interface {
 	ListRoleMembers(ctx context.Context, roleID string) ([]string, error)
 	DeleteAllRolesByWorkspaceID(ctx context.Context, workspaceID string) error
 
-	GetRole(ctx context.Context, roleID string) (*role.Role, error)
 	CreateCustomRole(
 		ctx context.Context, displayName, description string, data bkiam.CustomRoleData, members []string,
 	) (*role.Role, error)
@@ -425,18 +424,6 @@ func (m *LocalManager) ListRoleMembers(ctx context.Context, roleID string) ([]st
 		members = lo.Without(members, account.ID)
 	}
 	return members, nil
-}
-
-// GetRoleByID 获取工作空间下指定 ID 的角色，不存在或不属于该工作空间时返回 role.ErrRoleNotFound
-func (m *LocalManager) GetRoleByID(ctx context.Context, workspaceID, roleID string) (*role.Role, error) {
-	r, err := m.svc.GetRole(ctx, roleID)
-	if err != nil {
-		return nil, errors.Wrap(err, "get role")
-	}
-	if r.WorkspaceID != workspaceID {
-		return nil, errors.Wrapf(role.ErrRoleNotFound, "role %s in workspace %s", roleID, workspaceID)
-	}
-	return r, nil
 }
 
 // CreateCustomRole 创建自定义角色、授权并加入初始成员

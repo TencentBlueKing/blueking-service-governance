@@ -139,7 +139,7 @@ func (h *Handler) CreateWorkspaceRole(c *gin.Context) {
 	name := strings.TrimSpace(input.Name)
 	perms, appScope, envScope := input.Permissions, input.AppScope.ToModel(), input.EnvScope.ToModel()
 	if input.CloneFrom != "" {
-		source, gErr := getRoleByKey(ctx, permMgr, ws.ID, input.CloneFrom)
+		source, gErr := getRoleByCode(ctx, permMgr, ws.ID, input.CloneFrom)
 		if gErr != nil {
 			bkerrs.AbortWithErr(c, gErr)
 			return
@@ -189,7 +189,7 @@ func (h *Handler) CreateWorkspaceRole(c *gin.Context) {
 //	@Security		BkUserInfo
 //	@Security		BkUserCredential
 //	@Param			workspaceID	path		string								true	"工作空间 ID"
-//	@Param			roleCode	path		string								true	"自定义角色 ID"
+//	@Param			roleCode	path		string								true	"自定义角色 Code"
 //	@Param			body		body		serializer.UpdateWorkspaceRoleInput	true	"修改角色请求"
 //	@Success		200			{object}	serializer.WorkspaceRoleOutput
 //	@Failure		400			{object}	bkerrs.GinErrorOutput
@@ -260,7 +260,7 @@ func (h *Handler) UpdateWorkspaceRole(c *gin.Context) {
 //	@Security		BkUserInfo
 //	@Security		BkUserCredential
 //	@Param			workspaceID	path		string	true	"工作空间 ID"
-//	@Param			roleCode	path		string	true	"自定义角色 ID"
+//	@Param			roleCode	path		string	true	"自定义角色 Code"
 //	@Success		200			{object}	serializer.EmptyOutput
 //	@Failure		400			{object}	bkerrs.GinErrorOutput
 //	@Router			/workspaces/{workspaceID}/roles/{roleCode} [delete]
@@ -300,7 +300,7 @@ func (h *Handler) DeleteWorkspaceRole(c *gin.Context) {
 //	@Security		BkUserInfo
 //	@Security		BkUserCredential
 //	@Param			workspaceID	path		string	true	"工作空间 ID"
-//	@Param			roleCode	path		string	true	"内置角色为角色 Code，自定义角色为角色 ID"
+//	@Param			roleCode	path		string	true	"角色 Code"
 //	@Success		200			{object}	serializer.ListWorkspaceRoleUsersOutput
 //	@Failure		400			{object}	bkerrs.GinErrorOutput
 //	@Router			/workspaces/{workspaceID}/roles/{roleCode}/users [get]
@@ -318,7 +318,7 @@ func (h *Handler) ListWorkspaceRoleUsers(c *gin.Context) {
 		return
 	}
 	permMgr := perm.NewManager()
-	r, err := getRoleByKey(ctx, permMgr, ws.ID, uriInput.RoleCode)
+	r, err := getRoleByCode(ctx, permMgr, ws.ID, uriInput.RoleCode)
 	if err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return
@@ -340,7 +340,7 @@ func (h *Handler) ListWorkspaceRoleUsers(c *gin.Context) {
 //	@Security		BkUserInfo
 //	@Security		BkUserCredential
 //	@Param			workspaceID	path		string	true	"工作空间 ID"
-//	@Param			roleCode	path		string	true	"内置角色为角色 Code，自定义角色为角色 ID"
+//	@Param			roleCode	path		string	true	"角色 Code"
 //	@Param			userID		path		string	true	"用户 ID"
 //	@Success		200			{object}	serializer.EmptyOutput
 //	@Failure		400			{object}	bkerrs.GinErrorOutput
@@ -359,7 +359,7 @@ func (h *Handler) RemoveWorkspaceRoleUser(c *gin.Context) {
 		return
 	}
 	permMgr := perm.NewManager()
-	r, err := getRoleByKey(ctx, permMgr, ws.ID, uriInput.RoleCode)
+	r, err := getRoleByCode(ctx, permMgr, ws.ID, uriInput.RoleCode)
 	if err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return
@@ -389,7 +389,12 @@ func (h *Handler) RemoveWorkspaceRoleUser(c *gin.Context) {
 		audit.ResourceTypeWorkspace,
 		ws.ID,
 		audit.WithAttribute(audit.AttributeUserRole),
-		audit.WithDataBefore(map[string]any{"workspaceID": ws.ID, "roleID": r.ID, "userID": uriInput.UserID}),
+		audit.WithDataBefore(map[string]any{
+			"workspaceID": ws.ID,
+			"roleCode":    r.RoleCode,
+			"roleID":      r.ID,
+			"userID":      uriInput.UserID,
+		}),
 		audit.WithWorkspaceID(ws.ID),
 	)
 	ginutils.OK(c, serializer.EmptyOutput{})
@@ -404,8 +409,8 @@ func (h *Handler) RemoveWorkspaceRoleUser(c *gin.Context) {
 //	@Produce		json
 //	@Security		BkUserInfo
 //	@Security		BkUserCredential
-//	@Param			workspaceID	path		string							true	"工作空间 ID"
-//	@Param			roleCode	path		string							true	"内置角色为角色 Code，自定义角色为角色 ID"
+//	@Param			workspaceID	path		string								true	"工作空间 ID"
+//	@Param			roleCode	path		string								true	"角色 Code"
 //	@Param			body		body		serializer.AddWorkspaceRoleUserInput	true	"添加用户请求"
 //	@Success		200			{object}	serializer.EmptyOutput
 //	@Failure		400			{object}	bkerrs.GinErrorOutput
@@ -426,7 +431,7 @@ func (h *Handler) AddWorkspaceRoleUser(c *gin.Context) {
 	}
 
 	permMgr := perm.NewManager()
-	r, err := getRoleByKey(ctx, permMgr, ws.ID, uriInput.RoleCode)
+	r, err := getRoleByCode(ctx, permMgr, ws.ID, uriInput.RoleCode)
 	if err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return
@@ -562,7 +567,7 @@ func (h *Handler) RemoveWorkspaceUser(c *gin.Context) {
 //	@Security		BkUserInfo
 //	@Security		BkUserCredential
 //	@Param			workspaceID	path		string	true	"工作空间 ID"
-//	@Param			roleCode	query		string	false	"只返回该角色的成员，内置角色为角色 Code，自定义角色为角色 ID"
+//	@Param			roleCode	query		string	false	"按角色 Code 筛选"
 //	@Success		200			{object}	serializer.ListWorkspaceUsersOutput
 //	@Failure		400			{object}	bkerrs.GinErrorOutput
 //	@Router			/workspaces/{workspaceID}/users [get]
@@ -582,7 +587,7 @@ func (h *Handler) ListWorkspaceUsers(c *gin.Context) {
 	}
 	permMgr := perm.NewManager()
 	if queryInput.RoleCode != "" {
-		if _, err = getRoleByKey(ctx, permMgr, ws.ID, queryInput.RoleCode); err != nil {
+		if _, err = getRoleByCode(ctx, permMgr, ws.ID, queryInput.RoleCode); err != nil {
 			bkerrs.AbortWithErr(c, err)
 			return
 		}
@@ -602,7 +607,7 @@ func (h *Handler) ListWorkspaceUsers(c *gin.Context) {
 	for _, username := range sortedKeys(rolesByUser) {
 		roles := rolesByUser[username]
 		if queryInput.RoleCode != "" && !lo.ContainsBy(roles, func(r *role.Role) bool {
-			return r.ID == queryInput.RoleCode || (!r.IsCustom() && r.RoleCode == queryInput.RoleCode)
+			return r.RoleCode == queryInput.RoleCode
 		}) {
 			continue
 		}
@@ -757,7 +762,10 @@ func toUserRoleOutputs(roles []*role.Role) []*serializer.UserRoleOutputObj {
 // toUserRoleOutput 转换角色为成员视角中的角色信息
 func toUserRoleOutput(r *role.Role) *serializer.UserRoleOutputObj {
 	return &serializer.UserRoleOutputObj{
-		ID: r.ID, RoleCode: r.RoleCode, Name: roleDisplayName(r), Builtin: !r.IsCustom(),
+		ID:       r.ID,
+		RoleCode: r.RoleCode,
+		Name:     roleDisplayName(r),
+		Builtin:  !r.IsCustom(),
 	}
 }
 
@@ -792,29 +800,21 @@ func isWorkspaceAdmin(ctx context.Context, permMgr perm.Manager, workspaceID str
 	return lo.Contains(admins, auth.MustGetUser(ctx).ID), nil
 }
 
-// getRoleByKey 按角色 Code（内置角色）或角色 ID（自定义角色）获取工作空间下的角色
-func getRoleByKey(ctx context.Context, permMgr perm.Manager, workspaceID, key string) (*role.Role, error) {
-	var (
-		r   *role.Role
-		err error
-	)
-	if lo.Contains(perm.RoleCodes(), key) {
-		r, err = permMgr.GetRole(ctx, workspaceID, key)
-	} else {
-		r, err = permMgr.GetRoleByID(ctx, workspaceID, key)
-	}
+// getRoleByCode 按角色 Code 获取工作空间下的角色
+func getRoleByCode(ctx context.Context, permMgr perm.Manager, workspaceID, roleCode string) (*role.Role, error) {
+	r, err := permMgr.GetRole(ctx, workspaceID, roleCode)
 	if err != nil {
 		if errors.Is(err, role.ErrRoleNotFound) {
-			return nil, bkerrs.Wrapf(err, bkerrs.ErrCodeNotFound, "role %s not found", key)
+			return nil, bkerrs.Wrapf(err, bkerrs.ErrCodeNotFound, "role %s not found", roleCode)
 		}
-		return nil, bkerrs.Wrapf(err, bkerrs.ErrCodeInternalServerError, "get role %s", key)
+		return nil, bkerrs.Wrapf(err, bkerrs.ErrCodeInternalServerError, "get role %s", roleCode)
 	}
 	return r, nil
 }
 
 // getCustomRole 获取工作空间下的自定义角色，内置角色返回错误
-func getCustomRole(ctx context.Context, permMgr perm.Manager, workspaceID, key string) (*role.Role, error) {
-	r, err := getRoleByKey(ctx, permMgr, workspaceID, key)
+func getCustomRole(ctx context.Context, permMgr perm.Manager, workspaceID, roleCode string) (*role.Role, error) {
+	r, err := getRoleByCode(ctx, permMgr, workspaceID, roleCode)
 	if err != nil {
 		return nil, err
 	}
@@ -960,7 +960,7 @@ func (h *Handler) addRoleAudit(
 			return nil
 		}
 		return map[string]any{
-			"roleID": r.ID, "name": r.DisplayName, "permissions": r.Permissions,
+			"roleID": r.ID, "roleCode": r.RoleCode, "name": r.DisplayName, "permissions": r.Permissions,
 			"appScope": r.AppScope, "envScope": r.EnvScope,
 		}
 	}

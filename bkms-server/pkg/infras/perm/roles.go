@@ -30,13 +30,3 @@ const (
 	// RoleCodeOperator 运营者
 	RoleCodeOperator = "operator"
 )
-
-// RoleCodes return all valid role codes
-func RoleCodes() []string {
-	return []string{
-		RoleCodeAdmin,
-		RoleCodeSre,
-		RoleCodeDeveloper,
-		RoleCodeOperator,
-	}
-}

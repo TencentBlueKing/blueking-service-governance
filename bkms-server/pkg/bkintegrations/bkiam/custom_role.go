@@ -322,8 +322,9 @@ func (s *IAMService) CreateCustomRole(
 		return nil, errors.Wrap(err, "create custom role: get grade manager id")
 	}
 
+	roleCode := role.GenCustomRoleCode()
 	id := uuid.NewString()
-	groupName := role.GenWorkspaceRoleName(data.WorkspaceID, role.CustomRoleCode+"-"+id[:8])
+	groupName := role.GenWorkspaceRoleName(data.WorkspaceID, roleCode)
 	userGroups, err := s.iamClient.CreateUserGroups(
 		ctx, gradeManagerID,
 		cloudapiiamtypes.UserGroupParam{Name: groupName, Description: description, Readonly: true},
@@ -339,7 +340,7 @@ func (s *IAMService) CreateCustomRole(
 	r := &role.Role{
 		ID:          id,
 		Name:        groupName,
-		RoleCode:    role.CustomRoleCode,
+		RoleCode:    roleCode,
 		Description: description,
 		WorkspaceID: data.WorkspaceID,
 		Scope:       role.PermissionScope{ResourceType: role.WorkspaceResourceType, ResourceID: data.WorkspaceID},

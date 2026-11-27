@@ -156,7 +156,7 @@ var _ = Describe("custom role scope maintenance", func() {
 
 		It("removes a deleted app from specified apps and regrants", func() {
 			Expect(PruneApp(ctx, db, mgr, ws.ID, appA.ID)).To(Succeed())
-			got, err := mgr.GetRoleByID(ctx, ws.ID, r.ID)
+			got, err := mgr.GetRole(ctx, ws.ID, r.RoleCode)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(got.AppScope.AppIDs).To(Equal([]string{appB.ID}))
 			Expect(mgr.updates).To(HaveLen(1))
@@ -174,7 +174,7 @@ var _ = Describe("custom role scope maintenance", func() {
 		It("keeps an emptied scope empty instead of treating it as all", func() {
 			Expect(PruneEnv(ctx, db, mgr, testEnv)).To(Succeed())
 			Expect(PruneEnv(ctx, db, mgr, prodEnv)).To(Succeed())
-			got, err := mgr.GetRoleByID(ctx, ws.ID, r.ID)
+			got, err := mgr.GetRole(ctx, ws.ID, r.RoleCode)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(got.EnvScope.Mode).To(Equal(role.EnvScopeEnvs))
 			Expect(got.EnvScope.EnvIDs).To(BeEmpty())
@@ -330,12 +330,12 @@ var _ = Describe("custom role scope maintenance", func() {
 		It("merges scopes of multiple roles for display", func() {
 			merged := MergeScopes([]*role.Role{
 				{
-					RoleCode: role.CustomRoleCode,
+					RoleCode: "custom-aaa111",
 					AppScope: &role.AppScope{Mode: role.AppScopeApps, AppIDs: []string{"a"}},
 					EnvScope: &role.EnvScope{Mode: role.EnvScopeTypes, EnvTypes: []string{"test"}},
 				},
 				{
-					RoleCode: role.CustomRoleCode,
+					RoleCode: "custom-bbb222",
 					AppScope: &role.AppScope{Mode: role.AppScopeApps, AppIDs: []string{"b", "a"}},
 					EnvScope: &role.EnvScope{Mode: role.EnvScopeTypes, EnvTypes: []string{"development"}},
 				},

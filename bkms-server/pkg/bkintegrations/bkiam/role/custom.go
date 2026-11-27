@@ -19,14 +19,25 @@
 package role
 
 import (
+	"math/rand/v2"
 	"slices"
+	"strings"
 
+	"github.com/martinlindhe/base36"
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
 )
 
-// CustomRoleCode 自定义角色的角色码
-const CustomRoleCode = "custom"
+// CustomRoleCodePrefix 自定义角色的角色码前缀
+const CustomRoleCodePrefix = "custom-"
+
+// GenCustomRoleCode 生成自定义角色码，格式为 custom-<xxxxxx>（最多 6 位小写 base36）。
+func GenCustomRoleCode() string {
+	// 6 字符 base36 最大值 zzzzzz 对应十进制 2176782335，与 app.newAppIDSuffix 对齐。
+	val := rand.IntN(2_176_782_335) + 1              // nolint: gosec
+	s := strings.ToLower(base36.Encode(uint64(val))) // nolint
+	return CustomRoleCodePrefix + s
+}
 
 // Permission 页面上可勾选的权限项，与内置权限矩阵一致
 type Permission = string

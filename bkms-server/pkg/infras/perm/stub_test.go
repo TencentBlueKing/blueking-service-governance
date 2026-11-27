@@ -136,14 +136,15 @@ var _ = Describe("StubAllowAnyManager", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(updated.DisplayName).To(Equal("renamed"))
 
-			got, err := stub.GetRoleByID(ctx, "ws-1", created.ID)
+			got, err := stub.GetRole(ctx, "ws-1", created.RoleCode)
 			Expect(err).NotTo(HaveOccurred())
+			Expect(got.ID).To(Equal(created.ID))
 			Expect(got.DisplayName).To(Equal("renamed"))
-			_, err = stub.GetRoleByID(ctx, "ws-2", created.ID)
+			_, err = stub.GetRole(ctx, "ws-2", created.RoleCode)
 			Expect(errors.Is(err, role.ErrRoleNotFound)).To(BeTrue())
 
 			Expect(stub.DeleteCustomRole(ctx, created.ID)).To(Succeed())
-			_, err = stub.GetRoleByID(ctx, "ws-1", created.ID)
+			_, err = stub.GetRole(ctx, "ws-1", created.RoleCode)
 			Expect(errors.Is(err, role.ErrRoleNotFound)).To(BeTrue())
 		})
 	})

@@ -32,16 +32,16 @@ import (
 type WorkspaceRoleKeyURIInput struct {
 	// 工作空间 ID
 	WorkspaceID string `uri:"workspaceID" binding:"required,uri_slug"`
-	// 内置角色为角色 Code（admin / developer / sre / operator），自定义角色为角色 ID
-	RoleCode string `uri:"roleCode" binding:"required"`
+	// 角色 Code
+	RoleCode string `uri:"roleCode" binding:"required,uri_slug"`
 }
 
 // WorkspaceRoleUserURIInput is the path input for removing a user from a role.
 type WorkspaceRoleUserURIInput struct {
 	// 工作空间 ID
 	WorkspaceID string `uri:"workspaceID" binding:"required,uri_slug"`
-	// 内置角色为角色 Code，自定义角色为角色 ID
-	RoleCode string `uri:"roleCode" binding:"required"`
+	// 角色 Code
+	RoleCode string `uri:"roleCode" binding:"required,uri_slug"`
 	// 用户 ID
 	UserID string `uri:"userID" binding:"required,uri_slug"`
 }
@@ -86,7 +86,7 @@ type CreateWorkspaceRoleInput struct {
 	Name string `json:"name" binding:"max=64"`
 	// 角色描述
 	Description string `json:"description" binding:"max=256"`
-	// 克隆来源，内置角色为角色 Code，自定义角色为角色 ID；指定时复制其权限与范围，不复制成员，忽略下列字段
+	// 克隆来源角色 Code；指定时复制其权限与范围，不复制成员，忽略下列字段
 	CloneFrom string `json:"cloneFrom"`
 	// 权限项，见 GET /workspaces/{workspaceID}/roles 返回的 permissions；为空表示空白角色
 	Permissions []string `json:"permissions"`
@@ -144,7 +144,7 @@ type RoleEnvScopeOutputObj struct {
 type RoleOutputObj struct {
 	// 角色 ID
 	ID string `json:"id"`
-	// 角色 Code，内置角色为 admin / developer / sre / operator，自定义角色为 custom
+	// 角色 Code，内置角色为 admin / developer / sre / operator，自定义角色为 custom-<xxxxxx>
 	RoleCode string `json:"roleCode"`
 	// 角色名称
 	Name string `json:"name"`
@@ -187,7 +187,7 @@ type ListWorkspaceRoleUsersOutput struct {
 
 // ListWorkspaceUsersQueryInput is the query input for listing workspace users.
 type ListWorkspaceUsersQueryInput struct {
-	// 只返回该角色的成员；内置角色为角色 Code，自定义角色为角色 ID，为空返回全部成员
+	// 按角色 Code 筛选，为空返回全部成员
 	RoleCode string `form:"roleCode"`
 }
 
@@ -195,7 +195,7 @@ type ListWorkspaceUsersQueryInput struct {
 type UserRoleOutputObj struct {
 	// 角色 ID
 	ID string `json:"id"`
-	// 角色 Code，自定义角色为 custom
+	// 角色 Code
 	RoleCode string `json:"roleCode"`
 	// 角色名称
 	Name string `json:"name"`

@@ -40,14 +40,6 @@ type WorkspaceURIInput struct {
 	WorkspaceID string `uri:"workspaceID" binding:"required,uri_slug"`
 }
 
-// WorkspaceRoleURIInput is the path input for workspace role APIs.
-type WorkspaceRoleURIInput struct {
-	// 工作空间 ID
-	WorkspaceID string `uri:"workspaceID" binding:"required,uri_slug"`
-	// 角色 Code
-	RoleCode string `uri:"roleCode" binding:"required,oneof=admin sre developer operator"`
-}
-
 // WorkspaceUserURIInput is the path input for workspace user APIs.
 type WorkspaceUserURIInput struct {
 	// 工作空间 ID
@@ -364,29 +356,6 @@ type UserWorkspaceStatisticsOutputObj struct {
 	AppCount int64 `json:"appCount,string"`
 	// 用户某工作空间下的环境数量
 	EnvCount int64 `json:"envCount,string"`
-}
-
-// -----------------------------------------------------------------------------
-// ListWorkspaceRoleMemberGroups
-// -----------------------------------------------------------------------------
-
-// ListWorkspaceRoleMemberGroupsOutput is the JSON response for ListWorkspaceRoleMemberGroups.
-type ListWorkspaceRoleMemberGroupsOutput struct {
-	Data []*RoleMemberGroupOutputObj `json:"data"`
-}
-
-// RoleMemberGroupOutputObj is the JSON representation of a role member group.
-type RoleMemberGroupOutputObj struct {
-	// 角色 ID
-	RoleID string `json:"roleID"`
-	// 角色 Code
-	RoleCode string `json:"roleCode"`
-	// 角色名称
-	RoleName string `json:"roleName"`
-	// 用户组 ID
-	UserGroupID int64 `json:"userGroupID,string"`
-	// 用户组成员
-	Members []string `json:"members"`
 }
 
 // -----------------------------------------------------------------------------

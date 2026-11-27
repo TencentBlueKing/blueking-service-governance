@@ -97,8 +97,6 @@ type Manager interface {
 	// GetRole 获取角色信息
 	GetRole(ctx context.Context, workspaceID, roleCode string) (*role.Role, error)
 
-	// GetRoleByID 获取工作空间下指定 ID 的角色（内置或自定义）
-	GetRoleByID(ctx context.Context, workspaceID, roleID string) (*role.Role, error)
 	// CreateCustomRole 创建自定义角色、授权并加入初始成员，data 中的权限须已经过 role.NormalizePermissions
 	CreateCustomRole(
 		ctx context.Context, displayName, description string, data bkiam.CustomRoleData, members []string,

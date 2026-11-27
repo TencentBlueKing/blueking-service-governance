@@ -4444,7 +4444,7 @@ definitions:
         - $ref: '#/definitions/serializer.AppScopeInput'
         description: 应用范围，为空表示全部应用
       cloneFrom:
-        description: 克隆来源，内置角色为角色 Code，自定义角色为角色 ID；指定时复制其权限与范围，不复制成员，忽略下列字段
+        description: 克隆来源角色 Code；指定时复制其权限与范围，不复制成员，忽略下列字段
         type: string
       description:
         description: 角色描述
@@ -7198,13 +7198,6 @@ definitions:
           $ref: '#/definitions/serializer.EnvDeployersOutputObj'
         type: array
     type: object
-  serializer.ListWorkspaceRoleMemberGroupsOutput:
-    properties:
-      data:
-        items:
-          $ref: '#/definitions/serializer.RoleMemberGroupOutputObj'
-        type: array
-    type: object
   serializer.ListWorkspaceRoleUsersOutput:
     properties:
       data:
@@ -9500,27 +9493,6 @@ definitions:
         description: 范围类型：all、types、envs
         type: string
     type: object
-  serializer.RoleMemberGroupOutputObj:
-    properties:
-      members:
-        description: 用户组成员
-        items:
-          type: string
-        type: array
-      roleCode:
-        description: 角色 Code
-        type: string
-      roleID:
-        description: 角色 ID
-        type: string
-      roleName:
-        description: 角色名称
-        type: string
-      userGroupID:
-        description: 用户组 ID
-        example: "0"
-        type: string
-    type: object
   serializer.RoleOutput:
     properties:
       name:
@@ -9567,7 +9539,7 @@ definitions:
           type: string
         type: array
       roleCode:
-        description: 角色 Code，内置角色为 admin / developer / sre / operator，自定义角色为 custom
+        description: 角色 Code，内置角色为 admin / developer / sre / operator，自定义角色为 custom-<xxxxxx>
         type: string
     type: object
   serializer.RoleResourceOutputObj:
@@ -10948,7 +10920,7 @@ definitions:
         description: 角色名称
         type: string
       roleCode:
-        description: 角色 Code，自定义角色为 custom
+        description: 角色 Code
         type: string
     type: object
   serializer.UserStatisticsOutputObj:
@@ -24693,32 +24665,6 @@ paths:
       summary: 修改发布策略
       tags:
       - release-strategies
-  /workspaces/{workspaceID}/role-member-groups:
-    get:
-      operationId: ListWorkspaceRoleMemberGroups
-      parameters:
-      - description: 工作空间 ID
-        in: path
-        name: workspaceID
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/serializer.ListWorkspaceRoleMemberGroupsOutput'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/bkerrs.GinErrorOutput'
-      security:
-      - BkUserInfo: []
-      - BkUserCredential: []
-      summary: 获取工作空间下角色成员组列表
-      tags:
-      - workspace
   /workspaces/{workspaceID}/roles:
     get:
       operationId: ListWorkspaceRoles
@@ -24787,7 +24733,7 @@ paths:
         name: workspaceID
         required: true
         type: string
-      - description: 自定义角色 ID
+      - description: 自定义角色 Code
         in: path
         name: roleCode
         required: true
@@ -24819,7 +24765,7 @@ paths:
         name: workspaceID
         required: true
         type: string
-      - description: 自定义角色 ID
+      - description: 自定义角色 Code
         in: path
         name: roleCode
         required: true
@@ -24856,7 +24802,7 @@ paths:
         name: workspaceID
         required: true
         type: string
-      - description: 内置角色为角色 Code，自定义角色为角色 ID
+      - description: 角色 Code
         in: path
         name: roleCode
         required: true
@@ -24888,7 +24834,7 @@ paths:
         name: workspaceID
         required: true
         type: string
-      - description: 内置角色为角色 Code，自定义角色为角色 ID
+      - description: 角色 Code
         in: path
         name: roleCode
         required: true
@@ -24925,7 +24871,7 @@ paths:
         name: workspaceID
         required: true
         type: string
-      - description: 内置角色为角色 Code，自定义角色为角色 ID
+      - description: 角色 Code
         in: path
         name: roleCode
         required: true
@@ -25257,7 +25203,7 @@ paths:
         name: workspaceID
         required: true
         type: string
-      - description: 只返回该角色的成员，内置角色为角色 Code，自定义角色为角色 ID
+      - description: 按角色 Code 筛选
         in: query
         name: roleCode
         type: string
