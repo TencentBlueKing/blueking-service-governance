@@ -203,7 +203,11 @@ type envPods struct {
 
 // listEnvPods 根据主部署记录拉取该环境全部 Pod，提取 podIP 集合与权重覆盖数量。
 func listEnvPods(ctx context.Context, record *appmodeldeploy.Record) (*envPods, error) {
-	client := k8sclient.NewWithGVR(cluster.NewConfig(record.ClusterID), gvr.Po)
+	clusterCfg, err := cluster.NewConfigForWorkspace(ctx, record.WorkspaceID, record.ClusterID)
+	if err != nil {
+		return nil, errors.Wrap(err, "build cluster config")
+	}
+	client := k8sclient.NewWithGVR(clusterCfg, gvr.Po)
 	labelSelector := labels.SelectorFromSet(record.LabelSelector).String()
 	pods, err := client.List(ctx, record.Namespace, metav1.ListOptions{LabelSelector: labelSelector})
 	if err != nil {

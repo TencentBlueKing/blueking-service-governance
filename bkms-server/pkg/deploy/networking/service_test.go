@@ -59,10 +59,11 @@ var _ = Describe("Test ServiceSyncer", func() {
 			// Set up the mocker to make the syncer always use the test config.
 			mocker = mockey.Mock(cluster.NewConfig).Return(cfg).Build()
 
-			syncer = NewServiceSyncer(&envmodel.Environment{Cluster: envmodel.BizCluster{
+			syncer, err = NewServiceSyncer(context.Background(), &envmodel.Environment{Cluster: envmodel.BizCluster{
 				ClusterID: cfg.ClusterID,
 				Namespace: "default",
 			}})
+			Expect(err).NotTo(HaveOccurred())
 
 			clientSet, err = kubernetes.NewForConfig(cfg.Rest)
 			Expect(err).NotTo(HaveOccurred())

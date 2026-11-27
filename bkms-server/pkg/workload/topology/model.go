@@ -32,21 +32,23 @@ import (
 type ResourceSnapshot struct {
 	ID bson.ObjectID `bson:"_id,omitempty"`
 	// TenantID 所属租户，由 store 层自动写入
-	TenantID        string             `json:"-" bson:"tenantID"`
-	AppID           string             `bson:"appID"`
-	EnvName         string             `bson:"envName"`
-	TrafficLaneName string             `bson:"trafficLaneName"`
-	ClusterID       string             `bson:"clusterID"`
-	Namespace       string             `bson:"namespace"`
-	ReleaseName     string             `bson:"releaseName,omitempty"`
-	DataVersion     int64              `bson:"dataVersion"`
-	RefreshStatus   string             `bson:"refreshStatus"`
-	RefreshedAt     time.Time          `bson:"refreshedAt,omitempty"`
-	WarningSummary  string             `bson:"warningSummary,omitempty"`
-	Resources       []ResourceEntry    `bson:"resources"`
-	Relations       []ResourceRelation `bson:"relations"`
-	CreatedAt       time.Time          `bson:"createdAt"`
-	UpdatedAt       time.Time          `bson:"updatedAt"`
+	TenantID        string `json:"-" bson:"tenantID"`
+	AppID           string `bson:"appID"`
+	EnvName         string `bson:"envName"`
+	TrafficLaneName string `bson:"trafficLaneName"`
+	// WorkspaceID 应用所属工作空间，用于获取集群连接配置；早期快照中可能为空
+	WorkspaceID    string             `bson:"workspaceID,omitempty"`
+	ClusterID      string             `bson:"clusterID"`
+	Namespace      string             `bson:"namespace"`
+	ReleaseName    string             `bson:"releaseName,omitempty"`
+	DataVersion    int64              `bson:"dataVersion"`
+	RefreshStatus  string             `bson:"refreshStatus"`
+	RefreshedAt    time.Time          `bson:"refreshedAt,omitempty"`
+	WarningSummary string             `bson:"warningSummary,omitempty"`
+	Resources      []ResourceEntry    `bson:"resources"`
+	Relations      []ResourceRelation `bson:"relations"`
+	CreatedAt      time.Time          `bson:"createdAt"`
+	UpdatedAt      time.Time          `bson:"updatedAt"`
 }
 
 // ResourceEntry 资源条目，表示资源范围内的单个 Kubernetes 资源身份
@@ -103,6 +105,7 @@ type ResourceKeyEntry struct {
 
 // RefreshArgs 刷新任务参数
 type RefreshArgs struct {
+	WorkspaceID     string
 	AppID           string
 	EnvName         string
 	TrafficLaneName string

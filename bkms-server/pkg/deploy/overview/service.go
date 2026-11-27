@@ -110,10 +110,10 @@ func (s *Service) GetOverview(ctx context.Context, application *bkmsapp.Applicat
 		wg                  sync.WaitGroup
 	)
 	wg.Go(func() {
-		clusterData = queryEnvClusterData(ctx, sem, recordsForInstances)
+		clusterData = queryEnvClusterData(ctx, sem, application.WorkspaceID, recordsForInstances)
 	})
 	wg.Go(func() {
-		autoscalingStatuses = s.queryAutoscalingStatuses(ctx, sem, sources.trackedEnvs, rows)
+		autoscalingStatuses = s.queryAutoscalingStatuses(ctx, sem, application.WorkspaceID, sources.trackedEnvs, rows)
 	})
 	wg.Go(func() {
 		clusterNames = queryClusterNames(ctx, rows)

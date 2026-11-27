@@ -168,6 +168,9 @@ type EnvClusterOutput struct {
 	ProjectCode string `json:"projectCode"`
 	// 是否为 BCS 联邦 Host 集群
 	IsFederation bool `json:"isFederation"`
+	// 是否为共享集群。仅在由空间接入集群时，由环境列表接口按空间的集群接入记录返回，其余情况为 false。
+	// 空间的集群 Token 不能在共享集群上新建命名空间，特性环境只能沿用来源环境的命名空间
+	IsShared bool `json:"isShared"`
 }
 
 // EnvOutput is the JSON representation of an environment.

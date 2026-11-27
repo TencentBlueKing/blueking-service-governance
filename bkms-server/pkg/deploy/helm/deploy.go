@@ -107,7 +107,7 @@ func PreviewHelmRelease(
 
 	// 初始化 Helm SDK
 	debugLog := helm.NewHelmDebugLogger(ctx, spec.ReleaseName, "preview")
-	cfg, err := helm.NewActionConfiguration(spec.ClusterID, spec.Namespace, debugLog)
+	cfg, err := helm.NewActionConfiguration(ctx, spec.WorkspaceID, spec.ClusterID, spec.Namespace, debugLog)
 	if err != nil {
 		return nil, errors.Wrapf(err, "init action configuration for preview %s", spec.ReleaseName)
 	}
@@ -189,7 +189,7 @@ func UpgradeOrInstallHelmChart(
 
 	// 初始化 Helm SDK
 	debugLog := helm.NewHelmDebugLogger(ctx, spec.ReleaseName, "deploy")
-	cfg, err := helm.NewActionConfiguration(spec.ClusterID, spec.Namespace, debugLog)
+	cfg, err := helm.NewActionConfiguration(ctx, spec.WorkspaceID, spec.ClusterID, spec.Namespace, debugLog)
 	if err != nil {
 		return nil, errors.Wrapf(err, "init action configuration for deploy %s", spec.ReleaseName)
 	}
@@ -241,7 +241,7 @@ func ListHelmReleases(
 
 	// 初始化 Helm SDK
 	debugLog := helm.NewHelmDebugLogger(ctx, spec.ReleaseName, "history")
-	cfg, err := helm.NewActionConfiguration(spec.ClusterID, spec.Namespace, debugLog)
+	cfg, err := helm.NewActionConfiguration(ctx, spec.WorkspaceID, spec.ClusterID, spec.Namespace, debugLog)
 	if err != nil {
 		return nil, errors.Wrapf(err, "init action configuration for list releases %s", spec.ReleaseName)
 	}
@@ -285,7 +285,7 @@ func ListHelmReleases(
 func PreviewRollbackHelmRelease(ctx context.Context, record *Record) (*PreviewResult, error) {
 	// 初始化 Helm SDK
 	debugLog := helm.NewHelmDebugLogger(ctx, record.ReleaseName, "preview-rollback")
-	cfg, err := helm.NewActionConfiguration(record.ClusterID, record.Namespace, debugLog)
+	cfg, err := helm.NewActionConfiguration(ctx, record.WorkspaceID, record.ClusterID, record.Namespace, debugLog)
 	if err != nil {
 		return nil, errors.Wrapf(err, "init action configuration for preview rollback %s", record.ReleaseName)
 	}
@@ -321,7 +321,7 @@ func PreviewRollbackHelmRelease(ctx context.Context, record *Record) (*PreviewRe
 func RollbackHelmRelease(ctx context.Context, record *Record) (*DeployResult, error) {
 	// 初始化 Helm SDK
 	debugLog := helm.NewHelmDebugLogger(ctx, record.ReleaseName, "rollback")
-	cfg, err := helm.NewActionConfiguration(record.ClusterID, record.Namespace, debugLog)
+	cfg, err := helm.NewActionConfiguration(ctx, record.WorkspaceID, record.ClusterID, record.Namespace, debugLog)
 	if err != nil {
 		return nil, errors.Wrapf(err, "init action configuration for rollback %s", record.ReleaseName)
 	}
@@ -359,7 +359,7 @@ func RollbackHelmRelease(ctx context.Context, record *Record) (*DeployResult, er
 func UninstallHelmRelease(ctx context.Context, record *Record) error {
 	// 初始化 Helm SDK
 	debugLog := helm.NewHelmDebugLogger(ctx, record.ReleaseName, "uninstall")
-	cfg, err := helm.NewActionConfiguration(record.ClusterID, record.Namespace, debugLog)
+	cfg, err := helm.NewActionConfiguration(ctx, record.WorkspaceID, record.ClusterID, record.Namespace, debugLog)
 	if err != nil {
 		return errors.Wrapf(err, "init action configuration for uninstall %s", record.ReleaseName)
 	}
@@ -471,7 +471,8 @@ func genHelmReleaseSpec(
 
 	// 生成部署需要的配置
 	return &ReleaseSpec{
-		// 项目，集群，命名空间信息
+		// 工作空间，项目，集群，命名空间信息
+		WorkspaceID: env.WorkspaceID,
 		ProjectCode: env.Cluster.ProjectCode,
 		ClusterID:   env.Cluster.ClusterID,
 		Namespace:   env.Cluster.Namespace,

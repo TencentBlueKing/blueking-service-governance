@@ -129,7 +129,8 @@ var _ = Describe("Env output serializers", func() {
 					"clusterType": "single",
 					"namespace": "default",
 					"projectCode": "proj-code",
-					"isFederation": false
+					"isFederation": false,
+					"isShared": false
 				},
 				"status": "NotReady",
 				"appIDs": [],

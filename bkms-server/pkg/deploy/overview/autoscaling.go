@@ -81,12 +81,14 @@ type autoscalingTargetsByCluster map[string][]autoscalingTarget
 //
 // Args:
 //   - sem 本次请求内所有集群回查共享的在途请求闸门
+//   - workspaceID 应用所属工作空间 ID，用于获取集群连接配置
 //
 // Returns:
 //   - envName -> GPA 运行状态
 func (s *Service) queryAutoscalingStatuses(
 	ctx context.Context,
 	sem *semaphore.Weighted,
+	workspaceID string,
 	trackedEnvs []envmodel.Environment,
 	rows []EnvRow,
 ) autoscalingStatusByEnv {
@@ -99,7 +101,7 @@ func (s *Service) queryAutoscalingStatuses(
 	)
 	for clusterID, targets := range byCluster {
 		wg.Go(func() {
-			statuses := s.queryAutoscalingStatusesForCluster(ctx, sem, clusterID, targets)
+			statuses := s.queryAutoscalingStatusesForCluster(ctx, sem, workspaceID, clusterID, targets)
 			mu.Lock()
 			defer mu.Unlock()
 			maps.Copy(out, statuses)
@@ -146,11 +148,11 @@ func groupAutoscalingTargetsByCluster(
 func (s *Service) queryAutoscalingStatusesForCluster(
 	ctx context.Context,
 	sem *semaphore.Weighted,
-	clusterID string,
+	workspaceID, clusterID string,
 	targets []autoscalingTarget,
 ) autoscalingStatusByEnv {
 	out := make(autoscalingStatusByEnv, len(targets))
-	clusterClient, err := s.gpaService.NewClusterClient(clusterID)
+	clusterClient, err := s.gpaService.NewClusterClient(ctx, workspaceID, clusterID)
 	if err != nil {
 		// 集群未安装 GPA 组件属预期状态（配置可能建于组件卸载之前），不计入错误日志
 		if errors.Is(err, gpa.ErrComponentNotInstalled) {

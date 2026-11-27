@@ -134,8 +134,8 @@ var _ = Describe("Non-shared clusters", func() {
 
 		DescribeTable("detects federation clusters from config",
 			func(clusterID string, isFederation bool) {
-				Expect(clusteraddon.TargetFromClusterID(clusterID)).To(Equal(clusteraddon.ClusterTarget{
-					ClusterID: clusterID, IsFederation: isFederation,
+				Expect(clusteraddon.TargetFromClusterID("ws", clusterID)).To(Equal(clusteraddon.ClusterTarget{
+					WorkspaceID: "ws", ClusterID: clusterID, IsFederation: isFederation,
 				}))
 			},
 			Entry("federation host", "BCS-K8S-FED01", true),

@@ -94,7 +94,7 @@ var _ = Describe("FeatureEnvNamespaceInitializer against a real cluster", Label(
 			bkmsenv.FeatureEnvNSLabelController:  bkmsenv.FeatureEnvNSControllerValue,
 		}
 
-		Expect(initializer.Initialize(ctx, clusterCfg.ClusterID, namespace, ownerLabels)).To(Succeed())
+		Expect(initializer.Initialize(ctx, workspaceID, clusterCfg.ClusterID, namespace, ownerLabels)).To(Succeed())
 
 		ns, err := clientSet.CoreV1().Namespaces().Get(ctx, namespace, metav1.GetOptions{})
 		Expect(err).NotTo(HaveOccurred())
@@ -106,7 +106,7 @@ var _ = Describe("FeatureEnvNamespaceInitializer against a real cluster", Label(
 		))
 
 		// 再次创建同名 namespace：AlreadyExists 应被视为成功。
-		Expect(initializer.Initialize(ctx, clusterCfg.ClusterID, namespace, ownerLabels)).To(Succeed())
+		Expect(initializer.Initialize(ctx, workspaceID, clusterCfg.ClusterID, namespace, ownerLabels)).To(Succeed())
 
 		_, err = clientSet.CoreV1().Namespaces().Get(ctx, namespace, metav1.GetOptions{})
 		Expect(err).NotTo(HaveOccurred())

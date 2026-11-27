@@ -69,7 +69,10 @@ func (a *CRApplier) Apply(
 	}
 
 	wanted := applyKinds(config)
-	clusterCfg := cluster.NewConfig(env.Cluster.ClusterID)
+	clusterCfg, err := cluster.NewConfigForWorkspace(ctx, env.WorkspaceID, env.Cluster.ClusterID)
+	if err != nil {
+		return errors.Wrap(err, "build cluster config")
+	}
 	owner, err := ownership.ForApp(ctx, a.db, env, app.ID)
 	if err != nil {
 		return err
@@ -125,7 +128,10 @@ func (a *CRApplier) DeleteResources(
 		{corev1.SchemeGroupVersion.String(), k8skind.SVC, serviceName},
 	}
 
-	clusterCfg := cluster.NewConfig(env.Cluster.ClusterID)
+	clusterCfg, err := cluster.NewConfigForWorkspace(ctx, env.WorkspaceID, env.Cluster.ClusterID)
+	if err != nil {
+		return errors.Wrap(err, "build cluster config")
+	}
 	for _, target := range targets {
 		k8sClient, err := newK8sClientForObject(clusterCfg, target.apiVersion, target.kind)
 		if err != nil {
@@ -176,9 +182,11 @@ func (a *CRApplier) PatchWeight(
 		return errors.Wrap(err, "build polaris CR weight patch")
 	}
 
-	k8sClient, err := newK8sClientForObject(
-		cluster.NewConfig(env.Cluster.ClusterID), polarisConfigCRAPIVersion, polarisConfigCRKind,
-	)
+	clusterCfg, err := cluster.NewConfigForWorkspace(ctx, env.WorkspaceID, env.Cluster.ClusterID)
+	if err != nil {
+		return errors.Wrap(err, "build cluster config")
+	}
+	k8sClient, err := newK8sClientForObject(clusterCfg, polarisConfigCRAPIVersion, polarisConfigCRKind)
 	if err != nil {
 		return errors.Wrap(err, "create k8s client for polaris CR")
 	}

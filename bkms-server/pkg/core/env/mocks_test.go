@@ -16,10 +16,19 @@ func NewMockFeatureEnvNamespaceInitializer(t interface {
 	mock.TestingT
 	Cleanup(func())
 }) *MockFeatureEnvNamespaceInitializer {
+	if helper, ok := t.(interface{ Helper() }); ok {
+		helper.Helper()
+	}
+
 	mock := &MockFeatureEnvNamespaceInitializer{}
 	mock.Mock.Test(t)
 
-	t.Cleanup(func() { mock.AssertExpectations(t) })
+	t.Cleanup(func() {
+		if helper, ok := t.(interface{ Helper() }); ok {
+			helper.Helper()
+		}
+		mock.AssertExpectations(t)
+	})
 
 	return mock
 }
@@ -38,16 +47,16 @@ func (_m *MockFeatureEnvNamespaceInitializer) EXPECT() *MockFeatureEnvNamespaceI
 }
 
 // Initialize provides a mock function for the type MockFeatureEnvNamespaceInitializer
-func (_mock *MockFeatureEnvNamespaceInitializer) Initialize(ctx context.Context, clusterID string, namespace string, ownerLabels map[string]string) error {
-	ret := _mock.Called(ctx, clusterID, namespace, ownerLabels)
+func (_mock *MockFeatureEnvNamespaceInitializer) Initialize(ctx context.Context, workspaceID string, clusterID string, namespace string, ownerLabels map[string]string) error {
+	ret := _mock.Called(ctx, workspaceID, clusterID, namespace, ownerLabels)
 
 	if len(ret) == 0 {
 		panic("no return value specified for Initialize")
 	}
 
 	var r0 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, map[string]string) error); ok {
-		r0 = returnFunc(ctx, clusterID, namespace, ownerLabels)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, string, map[string]string) error); ok {
+		r0 = returnFunc(ctx, workspaceID, clusterID, namespace, ownerLabels)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -61,14 +70,15 @@ type MockFeatureEnvNamespaceInitializer_Initialize_Call struct {
 
 // Initialize is a helper method to define mock.On call
 //   - ctx context.Context
+//   - workspaceID string
 //   - clusterID string
 //   - namespace string
 //   - ownerLabels map[string]string
-func (_e *MockFeatureEnvNamespaceInitializer_Expecter) Initialize(ctx interface{}, clusterID interface{}, namespace interface{}, ownerLabels interface{}) *MockFeatureEnvNamespaceInitializer_Initialize_Call {
-	return &MockFeatureEnvNamespaceInitializer_Initialize_Call{Call: _e.mock.On("Initialize", ctx, clusterID, namespace, ownerLabels)}
+func (_e *MockFeatureEnvNamespaceInitializer_Expecter) Initialize(ctx any, workspaceID any, clusterID any, namespace any, ownerLabels any) *MockFeatureEnvNamespaceInitializer_Initialize_Call {
+	return &MockFeatureEnvNamespaceInitializer_Initialize_Call{Call: _e.mock.On("Initialize", ctx, workspaceID, clusterID, namespace, ownerLabels)}
 }
 
-func (_c *MockFeatureEnvNamespaceInitializer_Initialize_Call) Run(run func(ctx context.Context, clusterID string, namespace string, ownerLabels map[string]string)) *MockFeatureEnvNamespaceInitializer_Initialize_Call {
+func (_c *MockFeatureEnvNamespaceInitializer_Initialize_Call) Run(run func(ctx context.Context, workspaceID string, clusterID string, namespace string, ownerLabels map[string]string)) *MockFeatureEnvNamespaceInitializer_Initialize_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -82,15 +92,20 @@ func (_c *MockFeatureEnvNamespaceInitializer_Initialize_Call) Run(run func(ctx c
 		if args[2] != nil {
 			arg2 = args[2].(string)
 		}
-		var arg3 map[string]string
+		var arg3 string
 		if args[3] != nil {
-			arg3 = args[3].(map[string]string)
+			arg3 = args[3].(string)
+		}
+		var arg4 map[string]string
+		if args[4] != nil {
+			arg4 = args[4].(map[string]string)
 		}
 		run(
 			arg0,
 			arg1,
 			arg2,
 			arg3,
+			arg4,
 		)
 	})
 	return _c
@@ -101,7 +116,7 @@ func (_c *MockFeatureEnvNamespaceInitializer_Initialize_Call) Return(err error) 
 	return _c
 }
 
-func (_c *MockFeatureEnvNamespaceInitializer_Initialize_Call) RunAndReturn(run func(ctx context.Context, clusterID string, namespace string, ownerLabels map[string]string) error) *MockFeatureEnvNamespaceInitializer_Initialize_Call {
+func (_c *MockFeatureEnvNamespaceInitializer_Initialize_Call) RunAndReturn(run func(ctx context.Context, workspaceID string, clusterID string, namespace string, ownerLabels map[string]string) error) *MockFeatureEnvNamespaceInitializer_Initialize_Call {
 	_c.Call.Return(run)
 	return _c
 }

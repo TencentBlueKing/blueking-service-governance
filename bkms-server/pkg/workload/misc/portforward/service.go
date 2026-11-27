@@ -44,8 +44,8 @@ type PodClient interface {
 	List(ctx context.Context, namespace string, opts metav1.ListOptions) (*unstructured.UnstructuredList, error)
 }
 
-// PodClientFactory 基于集群 ID 创建 PodClient。
-type PodClientFactory func(clusterID string) PodClient
+// PodClientFactory 基于工作空间 ID、集群 ID 创建 PodClient。
+type PodClientFactory func(ctx context.Context, workspaceID, clusterID string) (PodClient, error)
 
 // StreamOpener 打开目标 Pod 端口转发字节流。
 type StreamOpener func(ctx context.Context, target Target) (io.ReadWriteCloser, error)
@@ -98,8 +98,12 @@ func WithStreamOpener(opener StreamOpener) Option {
 func NewService(db *mongo.Database, opts ...Option) *Service {
 	s := &Service{
 		db: db,
-		podClientFactory: func(clusterID string) PodClient {
-			return k8sclient.NewPodClient(cluster.NewConfig(clusterID))
+		podClientFactory: func(ctx context.Context, workspaceID, clusterID string) (PodClient, error) {
+			clusterCfg, err := cluster.NewConfigForWorkspace(ctx, workspaceID, clusterID)
+			if err != nil {
+				return nil, errors.Wrap(err, "build cluster config")
+			}
+			return k8sclient.NewPodClient(clusterCfg), nil
 		},
 		streamOpener: DefaultStreamOpener,
 	}
@@ -118,7 +122,11 @@ func (s *Service) GetDeployedPod(
 		return nil, nil, errors.Wrap(err, "deploy record not found")
 	}
 
-	pod, err := s.podClientFactory(record.ClusterID).Get(ctx, record.Namespace, instanceID, metav1.GetOptions{})
+	podClient, err := s.podClientFactory(ctx, record.WorkspaceID, record.ClusterID)
+	if err != nil {
+		return nil, nil, err
+	}
+	pod, err := podClient.Get(ctx, record.Namespace, instanceID, metav1.GetOptions{})
 	if err != nil {
 		return nil, nil, errors.Wrapf(err, "get pod '%s' in namespace '%s'", instanceID, record.Namespace)
 	}

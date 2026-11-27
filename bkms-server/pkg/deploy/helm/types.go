@@ -22,6 +22,7 @@ import "time"
 
 // ReleaseSpec Helm Chart Release 相关配置
 type ReleaseSpec struct {
+	WorkspaceID     string
 	ProjectCode     string
 	ClusterID       string
 	Namespace       string

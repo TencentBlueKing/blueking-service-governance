@@ -189,7 +189,11 @@ func NewAdminService(
 	s.AppModel = appModel
 	s.ClusterID = env.Cluster.ClusterID
 	s.Namespace = env.Cluster.Namespace
-	s.PodClient = k8sclient.NewPodClient(cluster.NewConfig(env.Cluster.ClusterID))
+	clusterCfg, err := cluster.NewConfigForWorkspace(ctx, env.WorkspaceID, env.Cluster.ClusterID)
+	if err != nil {
+		return nil, errors.Wrap(err, "build cluster config")
+	}
+	s.PodClient = k8sclient.NewPodClient(clusterCfg)
 
 	if s.PodIPMap, err = s.GetPodIPMap(ctx); err != nil {
 		return nil, err

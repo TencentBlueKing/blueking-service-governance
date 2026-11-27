@@ -123,7 +123,11 @@ func (h *Handler) execHelmAppDeploySteps(
 	if err != nil {
 		return "", errors.Wrapf(err, "list app services for %s", deployInfo)
 	}
-	if err = networkingdeploy.NewServiceSyncer(env).Sync(ctx, app.ID, services); err != nil {
+	syncer, err := networkingdeploy.NewServiceSyncer(ctx, env)
+	if err != nil {
+		return "", errors.Wrapf(err, "create service syncer for %s", deployInfo)
+	}
+	if err = syncer.Sync(ctx, app.ID, services); err != nil {
 		return "", errors.Wrapf(err, "sync app services for %s", deployInfo)
 	}
 

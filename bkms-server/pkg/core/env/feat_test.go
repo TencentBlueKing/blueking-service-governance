@@ -33,9 +33,11 @@ import (
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil/dbfactory"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/clustertoken"
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/resname"
@@ -124,8 +126,9 @@ var _ = Describe("FeatureEnvService", func() {
 		sourceEnv.Cluster.IsFederation = true
 		firstNamespace := fmt.Sprintf("feat-%s-1", app.ID)
 		nsInitializer.EXPECT().Initialize(
-			ctx, sourceEnv.Cluster.ClusterID, firstNamespace, expectedOwnerLabels(app, firstNamespace),
-		).Return(nil).Once()
+			ctx, app.WorkspaceID, sourceEnv.Cluster.ClusterID, firstNamespace, expectedOwnerLabels(app, firstNamespace),
+		).
+			Return(nil).Once()
 
 		featEnv, err := service.Create(ctx, bkmsenv.CreateFeatureEnvInput{
 			App:         app,
@@ -160,8 +163,9 @@ var _ = Describe("FeatureEnvService", func() {
 		// Create another feat env and check
 		secondNamespace := fmt.Sprintf("feat-%s-2", app.ID)
 		nsInitializer.EXPECT().Initialize(
-			ctx, sourceEnv.Cluster.ClusterID, secondNamespace, expectedOwnerLabels(app, secondNamespace),
-		).Return(nil).Once()
+			ctx, app.WorkspaceID, sourceEnv.Cluster.ClusterID, secondNamespace, expectedOwnerLabels(app, secondNamespace),
+		).
+			Return(nil).Once()
 		nextEnv, err := service.Create(ctx, bkmsenv.CreateFeatureEnvInput{
 			App:         app,
 			SourceEnv:   sourceEnv,
@@ -215,7 +219,7 @@ var _ = Describe("FeatureEnvService", func() {
 		}
 		namespace := fmt.Sprintf("feat-%s-1", app.ID)
 		nsInitializer.EXPECT().Initialize(
-			ctx, sourceEnv.Cluster.ClusterID, namespace, expectedOwnerLabels(app, namespace),
+			ctx, app.WorkspaceID, sourceEnv.Cluster.ClusterID, namespace, expectedOwnerLabels(app, namespace),
 		).Return(nil).Once()
 
 		featureEnv, err := service.Create(ctx, bkmsenv.CreateFeatureEnvInput{
@@ -366,7 +370,7 @@ var _ = Describe("FeatureEnvService", func() {
 		namespace := fmt.Sprintf("feat-%s-1", app.ID)
 		initErr := errors.New("namespace initialization failed")
 		nsInitializer.EXPECT().Initialize(
-			ctx, sourceEnv.Cluster.ClusterID, namespace, expectedOwnerLabels(app, namespace),
+			ctx, app.WorkspaceID, sourceEnv.Cluster.ClusterID, namespace, expectedOwnerLabels(app, namespace),
 		).Return(initErr).Once()
 
 		featEnv, err := service.Create(ctx, bkmsenv.CreateFeatureEnvInput{
@@ -485,6 +489,72 @@ var _ = Describe("FeatureEnvService", func() {
 			NsType:      bkmsenv.NsTypeIndependent,
 		})
 		Expect(err).To(MatchError(ContainSubstring("DisplayName must not be blank")))
+	})
+
+	Describe("when clusters are accessed by workspace", func() {
+		var (
+			app       *bkmsapp.Application
+			sourceEnv *model.Environment
+		)
+
+		BeforeEach(func() {
+			origin := config.G.BCS.AllowWorkspaceClusterTokens
+			config.G.BCS.AllowWorkspaceClusterTokens = true
+			DeferCleanup(func() { config.G.BCS.AllowWorkspaceClusterTokens = origin })
+
+			app = dbfactory.Application(ctx, appStore)
+			sourceEnv = dbfactory.Env(ctx, envSvc, app.WorkspaceID)
+			app.VisibleEnvNames = []string{sourceEnv.Name}
+		})
+
+		accessSourceCluster := func(isShared bool) {
+			wcStore := testutil.NewStore(GinkgoT(), clustertoken.WorkspaceClusterMeta)
+			Expect(wcStore.CreateMany(ctx, []*clustertoken.WorkspaceCluster{{
+				WorkspaceID: app.WorkspaceID,
+				ClusterID:   sourceEnv.Cluster.ClusterID,
+				IsShared:    isShared,
+				TokenID:     "token-id",
+			}})).To(Succeed())
+		}
+
+		createWithNsType := func(nsType bkmsenv.NsType) (*model.Environment, error) {
+			return service.Create(ctx, bkmsenv.CreateFeatureEnvInput{
+				App: app, SourceEnv: sourceEnv, DisplayName: "联调", NsType: nsType,
+			})
+		}
+
+		It("rejects independent namespaces on a shared cluster", func() {
+			accessSourceCluster(true)
+
+			_, err := createWithNsType(bkmsenv.NsTypeIndependent)
+			Expect(errors.Is(err, bkmsenv.ErrInvalidFeatureEnvInput)).To(BeTrue())
+			Expect(err).To(MatchError(ContainSubstring("nsType must be shared")))
+		})
+
+		It("allows sharing the source namespace on a shared cluster", func() {
+			accessSourceCluster(true)
+
+			featEnv, err := createWithNsType(bkmsenv.NsTypeShared)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(featEnv.SharesNamespace()).To(BeTrue())
+		})
+
+		It("allows independent namespaces on a non-shared cluster", func() {
+			accessSourceCluster(false)
+			namespace := fmt.Sprintf("feat-%s-1", app.ID)
+			nsInitializer.EXPECT().Initialize(
+				ctx, app.WorkspaceID, sourceEnv.Cluster.ClusterID, namespace, expectedOwnerLabels(app, namespace),
+			).Return(nil).Once()
+
+			_, err := createWithNsType(bkmsenv.NsTypeIndependent)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("rejects independent namespaces when the source cluster is not accessed", func() {
+			_, err := createWithNsType(bkmsenv.NsTypeIndependent)
+			Expect(errors.Is(err, bkmsenv.ErrInvalidFeatureEnvInput)).To(BeTrue())
+			Expect(err).To(MatchError(ContainSubstring(clustertoken.ErrClusterNotAccessed.Error())))
+		})
 	})
 
 	Describe("sharing the source namespace", func() {

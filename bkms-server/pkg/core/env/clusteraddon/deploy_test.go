@@ -124,7 +124,7 @@ var _ = Describe("UninstallClusterAddon", func() {
 				}).
 				Build()
 			Expect(
-				clusteraddon.UninstallClusterAddon(context.Background(), def, "cluster", "bcs-system"),
+				clusteraddon.UninstallClusterAddon(context.Background(), def, "ws", "cluster", "bcs-system"),
 			).To(Succeed())
 		})
 	})
@@ -190,7 +190,7 @@ var _ = Describe("Deploy", func() {
 
 		if namespace != "" {
 			// 先尝试卸载 release（忽略错误，可能测试中已卸载）
-			_ = clusteraddon.UninstallClusterAddon(ctx, addonDef, clusterID, namespace)
+			_ = clusteraddon.UninstallClusterAddon(ctx, addonDef, "", clusterID, namespace)
 			// 回收命名空间
 			clientSet, err := kubernetes.NewForConfig(clusterCfg.Rest)
 			if err == nil {
@@ -256,7 +256,7 @@ var _ = Describe("Deploy", func() {
 			Expect(addon.InstallInfo.CurrentValues).To(ContainSubstring("updatedValue"))
 
 			By("6. 卸载 addon")
-			err = clusteraddon.UninstallClusterAddon(ctx, addonDef, clusterID, namespace)
+			err = clusteraddon.UninstallClusterAddon(ctx, addonDef, "", clusterID, namespace)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("7. 查询卸载后状态，验证回到未安装")

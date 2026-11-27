@@ -100,7 +100,11 @@ func (h *Handler) listMatchingAppInstancePods(
 	record *appmodeldeploy.Record,
 ) ([]unstructured.Unstructured, string, error) {
 	// 集群与命名空间以部署记录为准，不从请求参数推断
-	client := k8sclient.NewPodClient(cluster.NewConfig(record.ClusterID))
+	clusterCfg, err := cluster.NewConfigForWorkspace(ctx, record.WorkspaceID, record.ClusterID)
+	if err != nil {
+		return nil, "", bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "build cluster config")
+	}
+	client := k8sclient.NewPodClient(clusterCfg)
 
 	// 只拉该次部署写入的 LabelSelector 匹配的 Pod，后续再按全量/分页窗口投影
 	labelSelector := labels.SelectorFromSet(record.LabelSelector).String()

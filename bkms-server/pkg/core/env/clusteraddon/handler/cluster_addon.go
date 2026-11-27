@@ -25,6 +25,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/clustertoken"
 	clusteraddon "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/clusteraddon"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/clusteraddon/serializer"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
@@ -64,7 +65,9 @@ func (h *Handler) ListClusterAddons(c *gin.Context) {
 		return
 	}
 
-	h.respondAddonList(c, clusteraddon.TargetFromClusterID(uriInput.ClusterID), queryInput.Namespace)
+	h.respondAddonList(
+		c, clusteraddon.TargetFromClusterID(uriInput.WorkspaceID, uriInput.ClusterID), queryInput.Namespace,
+	)
 }
 
 // UpsertClusterAddon 在空间集群上部署/更新集群插件。
@@ -102,7 +105,7 @@ func (h *Handler) UpsertClusterAddon(c *gin.Context) {
 	}
 
 	if err = h.upsertAddon(
-		ctx, clusteraddon.TargetFromClusterID(uriInput.ClusterID), uriInput.AddonName, jsonInput,
+		ctx, clusteraddon.TargetFromClusterID(ws.ID, uriInput.ClusterID), uriInput.AddonName, jsonInput,
 	); err != nil {
 		bkerrs.AbortWithErr(c, err)
 		return
@@ -124,7 +127,8 @@ func (h *Handler) UpsertClusterAddon(c *gin.Context) {
 	ginutils.JSON(c, 201, nil)
 }
 
-// validateCluster 校验空间权限，并校验集群是空间绑定的 BCS 项目下的非共享集群，返回的错误已包装为 API 错误
+// validateCluster 校验空间权限，并校验集群是空间绑定的 BCS 项目下的非共享集群；
+// 由空间接入集群时（bcs.allowWorkspaceClusterTokens）还须已接入空间。返回的错误已包装为 API 错误
 func (h *Handler) validateCluster(
 	ctx context.Context,
 	workspaceID, clusterID string,
@@ -141,6 +145,9 @@ func (h *Handler) validateCluster(
 		}
 		return nil, bkerrs.Wrapf(err, bkerrs.ErrCodeInternalServerError, "get cluster %s of workspace %s",
 			clusterID, workspaceID)
+	}
+	if err = clustertoken.NewResolver(h.registry.DB).CheckAccessed(ctx, ws.ID, clusterID); err != nil {
+		return nil, clustertoken.APIError(err, "check cluster accessed by workspace")
 	}
 	return ws, nil
 }

@@ -42,7 +42,21 @@ import (
 )
 
 // podManager Pod 管理器，负责 Pod 的查询、分类和删除操作
-type podManager struct{}
+type podManager struct {
+	// workspaceID 所属工作空间，用于获取集群连接配置
+	workspaceID string
+	// clusterConfigs 所属部署器的集群配置缓存
+	clusterConfigs *cluster.ConfigCache
+}
+
+// newPodClient 获取指定集群的 Pod 客户端
+func (m *podManager) newPodClient(ctx context.Context, clusterID string) (*k8sclient.Client, error) {
+	clusterCfg, err := m.clusterConfigs.Get(ctx, m.workspaceID, clusterID)
+	if err != nil {
+		return nil, errors.Wrap(err, "build cluster config")
+	}
+	return k8sclient.NewWithGVR(clusterCfg, gvr.Po), nil
+}
 
 // SetPodDeletionCost 批量设置 Pod 的 deletion cost 值
 // deletion cost 值较小的 Pod 会被优先更新/删除
@@ -66,7 +80,10 @@ func (m *podManager) SetPodDeletionCost(
 	}
 
 	// 批量 Patch Pod
-	client := k8sclient.NewWithGVR(cluster.NewConfig(clusterID), gvr.Po)
+	client, err := m.newPodClient(ctx, clusterID)
+	if err != nil {
+		return err
+	}
 	for _, podName := range podNames {
 		if _, err = client.Patch(
 			ctx, namespace, podName, types.JSONPatchType, patchesByte, metav1.PatchOptions{},
@@ -98,7 +115,10 @@ func (m *podManager) SetPodPolarisAnnotations(
 		return errors.Wrap(err, "marshal polaris annotation patches")
 	}
 
-	client := k8sclient.NewWithGVR(cluster.NewConfig(clusterID), gvr.Po)
+	client, err := m.newPodClient(ctx, clusterID)
+	if err != nil {
+		return err
+	}
 	for _, podName := range podNames {
 		if _, err = client.Patch(
 			ctx, namespace, podName, types.MergePatchType, patchBytes, metav1.PatchOptions{},
@@ -155,7 +175,10 @@ func (m *podManager) ListPods(
 	clusterID, namespace string,
 	labelSelector map[string]string,
 ) ([]unstructured.Unstructured, error) {
-	client := k8sclient.NewWithGVR(cluster.NewConfig(clusterID), gvr.Po)
+	client, err := m.newPodClient(ctx, clusterID)
+	if err != nil {
+		return nil, err
+	}
 	pods, err := client.List(ctx, namespace, metav1.ListOptions{
 		LabelSelector: labels.SelectorFromSet(labelSelector).String(),
 	})
@@ -178,9 +201,12 @@ func (m *podManager) BatchDeleteTerminatedPods(
 	clusterID, namespace string,
 	podNames []string,
 ) error {
-	client := k8sclient.NewWithGVR(cluster.NewConfig(clusterID), gvr.Po)
+	client, err := m.newPodClient(ctx, clusterID)
+	if err != nil {
+		return err
+	}
 	for _, podName := range podNames {
-		if err := client.Delete(ctx, namespace, podName, metav1.DeleteOptions{}); err != nil {
+		if err = client.Delete(ctx, namespace, podName, metav1.DeleteOptions{}); err != nil {
 			return errors.Wrapf(err, "delete terminated pod %s/%s", namespace, podName)
 		}
 		log.Infof(ctx, "successfully deleted terminated pod %s/%s", namespace, podName)

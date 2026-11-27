@@ -102,7 +102,7 @@ func BuildAddonInfoList(
 	// 每个 namespace 只查询一次；填充原列表中的对象，保持组件定义的顺序。
 	addonsByNamespace := lo.GroupBy(addons, func(info *ClusterAddonInfo) string { return info.InstallInfo.Namespace })
 	for ns, infos := range addonsByNamespace {
-		releases, err := queryAddonReleases(ctx, target.ClusterID, ns)
+		releases, err := queryAddonReleases(ctx, target, ns)
 		if err != nil {
 			log.Warnf(ctx, "query addon status: %v", err)
 			for _, info := range infos {
@@ -164,7 +164,7 @@ func InspectRequiredAddons(
 		releases, ok := releasesByNamespace[ns]
 		if !ok {
 			var err error
-			releases, err = queryAddonReleases(ctx, env.Cluster.ClusterID, ns)
+			releases, err = queryAddonReleases(ctx, TargetFromEnv(env), ns)
 			if err != nil {
 				return nil, errors.Wrapf(err, "inspect required addon %s", def.Name)
 			}
@@ -185,9 +185,10 @@ func InspectRequiredAddons(
 	return missing, nil
 }
 
-func queryAddonReleases(ctx context.Context, clusterID, namespace string) ([]*helm.Release, error) {
+func queryAddonReleases(ctx context.Context, target ClusterTarget, namespace string) ([]*helm.Release, error) {
+	clusterID := target.ClusterID
 	debugLog := helm.NewHelmDebugLogger(ctx, "", "query-addon-status")
-	cfg, err := helm.NewActionConfiguration(clusterID, namespace, debugLog)
+	cfg, err := helm.NewActionConfiguration(ctx, target.WorkspaceID, clusterID, namespace, debugLog)
 	if err != nil {
 		return nil, errors.Wrapf(err, "init helm configuration in cluster %s namespace %s", clusterID, namespace)
 	}

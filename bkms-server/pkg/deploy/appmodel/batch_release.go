@@ -235,7 +235,11 @@ func OperateBatchRelease(
 		)
 	}
 
-	rollouts := batchrelease.NewRolloutClient(cluster.NewConfig(record.ClusterID))
+	clusterCfg, err := cluster.NewConfigForWorkspace(ctx, record.WorkspaceID, record.ClusterID)
+	if err != nil {
+		return nil, errors.Wrap(err, "build cluster config")
+	}
+	rollouts := batchrelease.NewRolloutClient(clusterCfg)
 	// 不能操作上一次发布的 Rollout：批次数等都与最新记录对不上
 	rollout, status, err := getOwnedRollout(ctx, rollouts, record.Namespace, name, record.ID.Hex())
 	if err != nil {

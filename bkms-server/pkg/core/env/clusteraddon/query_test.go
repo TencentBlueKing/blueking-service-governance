@@ -181,11 +181,12 @@ var _ = Describe("Query", func() {
 				mockey.PatchConvey("applicable addon queries", GinkgoT(), func() {
 					var queried []string
 					mockey.Mock(helm.NewActionConfiguration).To(
-						func(_, namespace string, _ action.DebugLog) (*action.Configuration, error) {
+						func(_ context.Context, _, _, namespace string, _ action.DebugLog) (*action.Configuration, error) {
 							queried = append(queried, namespace)
 							return &action.Configuration{}, nil
 						},
-					).Build()
+					).
+						Build()
 					mockey.Mock(helm.ListReleases).Return(nil, nil).Build()
 					defs := []*clusteraddon.ClusterAddonDef{
 						{Name: "supported", ChartInfo: clusteraddon.HelmChartInfo{DefaultNamespace: "supported"}},
@@ -334,7 +335,9 @@ var _ = Describe("Query", func() {
 					defs[1].ChartInfo.DefaultNamespace = hookNamespace
 					var namespaces []string
 					mockey.Mock(helm.NewActionConfiguration).To(
-						func(clusterID, namespace string, _ action.DebugLog) (*action.Configuration, error) {
+						func(
+							_ context.Context, _, clusterID, namespace string, _ action.DebugLog,
+						) (*action.Configuration, error) {
 							Expect(clusterID).To(Equal("cluster"))
 							namespaces = append(namespaces, namespace)
 							return &action.Configuration{}, nil

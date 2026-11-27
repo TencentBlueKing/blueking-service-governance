@@ -73,8 +73,13 @@ type clusterQuerier struct {
 }
 
 // newClusterQuerier 创建单集群查询器；集群配置只解析一次，Pod 与各类主工作负载客户端共用。
-func newClusterQuerier(clusterID string, sem *semaphore.Weighted) *clusterQuerier {
-	clusterCfg := cluster.NewConfig(clusterID)
+func newClusterQuerier(
+	ctx context.Context, workspaceID, clusterID string, sem *semaphore.Weighted,
+) (*clusterQuerier, error) {
+	clusterCfg, err := cluster.NewConfigForWorkspace(ctx, workspaceID, clusterID)
+	if err != nil {
+		return nil, errors.Wrap(err, "build cluster config")
+	}
 	workloads := make(map[string]*k8sclient.Client)
 	for _, driver := range k8sworkload.MainDrivers() {
 		workloads[driver.Kind()] = k8sclient.NewWithGVR(clusterCfg, driver.GVR())
@@ -84,7 +89,7 @@ func newClusterQuerier(clusterID string, sem *semaphore.Weighted) *clusterQuerie
 		pods:      k8sclient.NewPodClient(clusterCfg),
 		workloads: workloads,
 		sem:       sem,
-	}
+	}, nil
 }
 
 // queryEnvClusterData 按集群并发查询各环境实例数与主容器资源规格。
@@ -95,6 +100,7 @@ func newClusterQuerier(clusterID string, sem *semaphore.Weighted) *clusterQuerie
 //
 // Args:
 //   - sem 本次请求内所有集群回查共享的在途请求闸门
+//   - workspaceID 应用所属工作空间 ID，用于获取集群连接配置
 //   - records 已过滤到表格行内、且含 AppModel 部署记录的环境
 //
 // Returns:
@@ -102,6 +108,7 @@ func newClusterQuerier(clusterID string, sem *semaphore.Weighted) *clusterQuerie
 func queryEnvClusterData(
 	ctx context.Context,
 	sem *semaphore.Weighted,
+	workspaceID string,
 	records []deployRecordForEnv,
 ) envClusterDataByEnv {
 	out := make(envClusterDataByEnv, len(records))
@@ -116,7 +123,7 @@ func queryEnvClusterData(
 	)
 	for clusterID, items := range byCluster {
 		wg.Go(func() {
-			data := queryEnvClusterDataForCluster(ctx, sem, clusterID, items)
+			data := queryEnvClusterDataForCluster(ctx, sem, workspaceID, clusterID, items)
 			mu.Lock()
 			defer mu.Unlock()
 			maps.Copy(out, data)
@@ -147,6 +154,7 @@ func groupDeployRecordsByCluster(records []deployRecordForEnv) deployRecordsByCl
 //
 // Args:
 //   - sem 本次请求内所有集群回查共享的在途请求闸门
+//   - workspaceID 应用所属工作空间 ID
 //   - clusterID BCS / 本地集群 ID
 //   - items 同属于该集群的环境部署记录（约定 namespace 互不重复）
 //
@@ -155,7 +163,7 @@ func groupDeployRecordsByCluster(records []deployRecordForEnv) deployRecordsByCl
 func queryEnvClusterDataForCluster(
 	ctx context.Context,
 	sem *semaphore.Weighted,
-	clusterID string,
+	workspaceID, clusterID string,
 	items []deployRecordForEnv,
 ) envClusterDataByEnv {
 	out := make(envClusterDataByEnv, len(items))
@@ -163,7 +171,14 @@ func queryEnvClusterDataForCluster(
 		return out
 	}
 
-	querier := newClusterQuerier(clusterID, sem)
+	querier, err := newClusterQuerier(ctx, workspaceID, clusterID, sem)
+	if err != nil {
+		log.ErrorAttrs(ctx, "create deploy overview cluster querier failed",
+			slog.String("cluster_id", clusterID),
+			slog.Any("error", err),
+		)
+		return out
+	}
 
 	var (
 		mu sync.Mutex

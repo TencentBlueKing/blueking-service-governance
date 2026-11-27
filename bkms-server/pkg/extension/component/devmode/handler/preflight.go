@@ -250,7 +250,11 @@ func (h *Handler) resolveInstanceIDs(
 	}
 
 	// 通过 LabelSelector 拉取匹配的 Pod 列表
-	podClient := k8sclient.NewPodClient(cluster.NewConfig(record.ClusterID))
+	clusterCfg, err := cluster.NewConfigForWorkspace(ctx, record.WorkspaceID, record.ClusterID)
+	if err != nil {
+		return nil, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "build cluster config")
+	}
+	podClient := k8sclient.NewPodClient(clusterCfg)
 	labelSelector := labels.SelectorFromSet(record.LabelSelector).String()
 	pods, err := podClient.List(ctx, record.Namespace, metav1.ListOptions{LabelSelector: labelSelector})
 	if err != nil {

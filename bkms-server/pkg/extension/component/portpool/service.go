@@ -80,7 +80,7 @@ func (s *PortPoolService) Create(ctx context.Context, config *PortPoolConfig, en
 		return errors.Wrap(err, "validate portpool")
 	}
 
-	k8sClient, err := s.newK8sClient(env.Cluster.ClusterID)
+	k8sClient, err := s.newK8sClient(ctx, env.WorkspaceID, env.Cluster.ClusterID)
 	if err != nil {
 		return errors.Wrap(err, "create k8s client for portpool")
 	}
@@ -109,7 +109,7 @@ func buildEnvPortPoolManifest(env *bkmsenv.Environment, config *PortPoolConfig) 
 
 // Get 获取端口池配置
 func (s *PortPoolService) Get(ctx context.Context, env *bkmsenv.Environment, name string) (*PortPoolConfig, error) {
-	k8sClient, err := s.newK8sClient(env.Cluster.ClusterID)
+	k8sClient, err := s.newK8sClient(ctx, env.WorkspaceID, env.Cluster.ClusterID)
 	if err != nil {
 		return nil, errors.Wrap(err, "create k8s client for portpool")
 	}
@@ -139,7 +139,7 @@ func getLive(
 
 // ListByEnv 获取指定环境下的端口池配置列表
 func (s *PortPoolService) ListByEnv(ctx context.Context, env *bkmsenv.Environment) ([]*PortPoolConfig, error) {
-	k8sClient, err := s.newK8sClient(env.Cluster.ClusterID)
+	k8sClient, err := s.newK8sClient(ctx, env.WorkspaceID, env.Cluster.ClusterID)
 	if err != nil {
 		return nil, errors.Wrap(err, "create k8s client for portpool")
 	}
@@ -177,7 +177,7 @@ type UpdateResult struct {
 func (s *PortPoolService) Update(
 	ctx context.Context, env *bkmsenv.Environment, name string, newItems []PoolItem,
 ) (*UpdateResult, error) {
-	k8sClient, err := s.newK8sClient(env.Cluster.ClusterID)
+	k8sClient, err := s.newK8sClient(ctx, env.WorkspaceID, env.Cluster.ClusterID)
 	if err != nil {
 		return nil, errors.Wrap(err, "create k8s client for portpool")
 	}
@@ -233,7 +233,7 @@ func (s *PortPoolService) Update(
 
 // Delete 删除端口池
 func (s *PortPoolService) Delete(ctx context.Context, env *bkmsenv.Environment, name string) error {
-	k8sClient, err := s.newK8sClient(env.Cluster.ClusterID)
+	k8sClient, err := s.newK8sClient(ctx, env.WorkspaceID, env.Cluster.ClusterID)
 	if err != nil {
 		return errors.Wrap(err, "create k8s client for portpool")
 	}
@@ -250,8 +250,13 @@ func (s *PortPoolService) Delete(ctx context.Context, env *bkmsenv.Environment, 
 }
 
 // newK8sClient 创建 PortPool CR 的 K8s 客户端
-func (s *PortPoolService) newK8sClient(clusterID string) (*k8sclient.Client, error) {
-	clusterCfg := cluster.NewConfig(clusterID)
+func (s *PortPoolService) newK8sClient(
+	ctx context.Context, workspaceID, clusterID string,
+) (*k8sclient.Client, error) {
+	clusterCfg, err := cluster.NewConfigForWorkspace(ctx, workspaceID, clusterID)
+	if err != nil {
+		return nil, errors.Wrap(err, "build cluster config")
+	}
 
 	resGVR, err := discovery.GetGroupVersionResource(clusterCfg, portPoolKind, portPoolGroupVersion)
 	if err != nil {
