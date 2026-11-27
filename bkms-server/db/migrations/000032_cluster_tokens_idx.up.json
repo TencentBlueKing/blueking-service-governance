@@ -1,0 +1,58 @@
+[
+  {
+    "createIndexes": "cluster_tokens",
+    "indexes": [
+      {
+        "key": {
+          "workspaceID": 1,
+          "fingerprint": 1
+        },
+        "name": "idx_workspaceID_fingerprint",
+        "unique": true
+      },
+      {
+        "key": {
+          "workspaceID": 1,
+          "isDefault": 1
+        },
+        "name": "idx_workspaceID_isDefault",
+        "unique": true,
+        "partialFilterExpression": {
+          "isDefault": true
+        }
+      },
+      {
+        "key": {
+          "tenantID": 1
+        },
+        "name": "tenantID_1"
+      }
+    ]
+  },
+  {
+    "createIndexes": "workspace_clusters",
+    "indexes": [
+      {
+        "key": {
+          "workspaceID": 1,
+          "clusterID": 1
+        },
+        "name": "idx_workspaceID_clusterID",
+        "unique": true
+      },
+      {
+        "key": {
+          "workspaceID": 1,
+          "tokenID": 1
+        },
+        "name": "idx_workspaceID_tokenID"
+      },
+      {
+        "key": {
+          "tenantID": 1
+        },
+        "name": "tenantID_1"
+      }
+    ]
+  }
+]

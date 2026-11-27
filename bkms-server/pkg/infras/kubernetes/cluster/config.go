@@ -38,13 +38,14 @@ type Config struct {
 	ClusterID string
 }
 
-// NewConfig 创建集群配置，clusterID 为 BCS 集群 ID。
+// NewConfig 创建使用平台 Token 的集群配置，clusterID 为 BCS 集群 ID。
+// bcs.allowWorkspaceClusterTokens 打开时不使用平台 Token（请求会被 BCS 网关拒绝），应使用 NewConfigForWorkspace。
 //
 // 函数也可以被配置为返回本地集群（开发时适用）：
 // - 修改配置文件中的 UseKubeConfigCluster / StubKubeConfigPath
 func NewConfig(clusterID string) *Config {
 	// 全局配置未初始化 / 特别指定时，使用本地 kubeConfig 指向的集群
-	if config.G == nil || config.G.Development.UseKubeConfigCluster {
+	if useLocalCluster() {
 		var kubeCfgPath string
 		if config.G != nil && config.G.Development.StubKubeConfigPath != "" {
 			kubeCfgPath = config.G.Development.StubKubeConfigPath
@@ -59,10 +60,14 @@ func NewConfig(clusterID string) *Config {
 	}
 
 	// 默认使用 BCS 集群
+	return newBCSConfig(clusterID, lo.Ternary(workspaceTokensEnabled(), "", config.G.BCS.Token))
+}
+
+func newBCSConfig(clusterID, token string) *Config {
 	return &Config{
 		Rest: &rest.Config{
 			Host:            fmt.Sprintf("%s/clusters/%s", config.G.BCS.BaseUrl, clusterID),
-			BearerToken:     config.G.BCS.Token,
+			BearerToken:     token,
 			TLSClientConfig: rest.TLSClientConfig{Insecure: true},
 		},
 		ClusterID: clusterID,
@@ -95,4 +100,8 @@ func (c *Config) IsFederation() bool {
 		return false
 	}
 	return lo.Contains(config.G.BCS.FederationClusterIDs, c.ClusterID)
+}
+
+func useLocalCluster() bool {
+	return config.G == nil || config.G.Development.UseKubeConfigCluster
 }

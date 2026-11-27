@@ -23,7 +23,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/pkg/errors"
 
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil/kubetest"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/cluster"
 	k8sgvr "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/gvr"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/redis"
@@ -39,8 +39,8 @@ var _ = Describe("Discovery", func() {
 	BeforeEach(func() {
 		redis.InitClientForTest()
 		clusterID = "test-cluster"
-		cfg, err = testutil.TestClusterConfig(clusterID)
-		if errors.Is(err, testutil.ErrKubeConfigNotFound) {
+		cfg, err = kubetest.TestClusterConfig(clusterID)
+		if errors.Is(err, kubetest.ErrKubeConfigNotFound) {
 			Skip(err.Error())
 		}
 		Expect(err).NotTo(HaveOccurred())

@@ -35,6 +35,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil/kubetest"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
@@ -109,8 +110,8 @@ var _ = Describe("Service", func() {
 		err = appmodel.CreateAppModel(testCtx, db, &appmodel.AppModel{AppID: testApp.ID})
 		Expect(err).NotTo(HaveOccurred())
 
-		cfg, err := testutil.TestClusterConfig("BCS-K8S-00000")
-		if errors.Is(err, testutil.ErrKubeConfigNotFound) {
+		cfg, err := kubetest.TestClusterConfig("BCS-K8S-00000")
+		if errors.Is(err, kubetest.ErrKubeConfigNotFound) {
 			Skip(err.Error())
 		}
 		Expect(err).NotTo(HaveOccurred())

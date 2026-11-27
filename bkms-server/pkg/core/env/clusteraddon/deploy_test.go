@@ -35,6 +35,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil/kubetest"
 	clusteraddon "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/clusteraddon"
 	helmdeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/helm"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/helm"
@@ -148,8 +149,8 @@ var _ = Describe("Deploy", func() {
 
 		// 获取测试集群配置，mock cluster.NewConfig 使所有 k8s/helm 操作走测试集群
 		var err error
-		clusterCfg, err = testutil.TestClusterConfig("")
-		if errors.Is(err, testutil.ErrKubeConfigNotFound) {
+		clusterCfg, err = kubetest.TestClusterConfig("")
+		if errors.Is(err, kubetest.ErrKubeConfigNotFound) {
 			Skip(err.Error())
 		}
 		Expect(err).NotTo(HaveOccurred())

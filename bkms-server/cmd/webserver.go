@@ -36,8 +36,10 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/clustertoken"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/clusteraddon"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/cluster"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/perm"
 	polarisInfra "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/polaris"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/redis"
@@ -98,6 +100,8 @@ func NewWebServerCmd() *cobra.Command {
 			// 初始化所有 store 实例（必须在 database 初始化之后）
 			storereg.Init(ctx)
 			reg := storereg.G()
+			// 集群 API 按空间解析集群 Token（必须在 store 初始化之后）
+			cluster.SetTokenResolver(clustertoken.NewResolver(reg.DB).ResolveToken)
 			router, err := server.RegisterRouter(ctx, *cfg, cmd.Name())
 			if err != nil {
 				return err

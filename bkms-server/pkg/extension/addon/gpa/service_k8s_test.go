@@ -29,6 +29,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil/kubetest"
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/cluster"
 )
@@ -60,8 +61,8 @@ var _ = Describe("GPAService against a real cluster", Label("k8s"), func() {
 
 	BeforeEach(func() {
 		var err error
-		clusterCfg, err = testutil.TestClusterConfig("")
-		if errors.Is(err, testutil.ErrKubeConfigNotFound) {
+		clusterCfg, err = kubetest.TestClusterConfig("")
+		if errors.Is(err, kubetest.ErrKubeConfigNotFound) {
 			Skip(err.Error())
 		}
 		Expect(err).NotTo(HaveOccurred())

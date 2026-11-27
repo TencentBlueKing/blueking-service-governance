@@ -28,7 +28,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/rest"
 
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil/kubetest"
 )
 
 var _ = Describe("PodClient", func() {
@@ -40,8 +40,8 @@ var _ = Describe("PodClient", func() {
 	)
 
 	BeforeEach(func() {
-		cfg, err := testutil.TestClusterConfig("")
-		if errors.Is(err, testutil.ErrKubeConfigNotFound) {
+		cfg, err := kubetest.TestClusterConfig("")
+		if errors.Is(err, kubetest.ErrKubeConfigNotFound) {
 			Skip(err.Error())
 		}
 		Expect(err).NotTo(HaveOccurred())

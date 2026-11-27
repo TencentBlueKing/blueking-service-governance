@@ -30,6 +30,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil/kubetest"
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/cluster"
 )
@@ -56,8 +57,8 @@ var _ = Describe("FeatureEnvNamespaceInitializer against a real cluster", Label(
 
 	BeforeEach(func() {
 		var err error
-		clusterCfg, err = testutil.TestClusterConfig("test-cluster")
-		if errors.Is(err, testutil.ErrKubeConfigNotFound) {
+		clusterCfg, err = kubetest.TestClusterConfig("test-cluster")
+		if errors.Is(err, kubetest.ErrKubeConfigNotFound) {
 			Skip(err.Error())
 		}
 		Expect(err).NotTo(HaveOccurred())

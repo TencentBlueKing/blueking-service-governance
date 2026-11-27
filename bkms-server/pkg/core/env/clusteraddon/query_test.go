@@ -32,6 +32,7 @@ import (
 	"helm.sh/helm/v3/pkg/repo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil/kubetest"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	clusteraddon "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/clusteraddon"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
@@ -68,8 +69,8 @@ var _ = Describe("Query", func() {
 
 		BeforeEach(func() {
 			var err error
-			clusterCfg, err = testutil.TestClusterConfig("")
-			if errors.Is(err, testutil.ErrKubeConfigNotFound) {
+			clusterCfg, err = kubetest.TestClusterConfig("")
+			if errors.Is(err, kubetest.ErrKubeConfigNotFound) {
 				Skip(err.Error())
 			}
 			Expect(err).NotTo(HaveOccurred())

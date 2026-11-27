@@ -46,6 +46,8 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg/appcfgfiledef"
 	appcfghandler "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg/handler"
 	apphandler "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/handler"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/clustertoken"
+	clustertokenhandler "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/clustertoken/handler"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/clusteraddon"
 	clusteraddonhandler "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/clusteraddon/handler"
@@ -247,6 +249,9 @@ func RegisterRouter(ctx context.Context, cfg config.Config, serverRole string) (
 		),
 	)
 	clusteraddon.Register(v1, clusteraddonhandler.New(storereg.G()))
+	if cfg.BCS.AllowWorkspaceClusterTokens {
+		clustertoken.Register(v1, clustertokenhandler.New(storereg.G()))
+	}
 	polaris.Register(v1, polarishandler.New(storereg.G()))
 	if cfg.Polaris.AllowWorkspaceAccessPoints {
 		polarisaccesspoint.Register(v1, polarisaccesspointhandler.New(storereg.G()))

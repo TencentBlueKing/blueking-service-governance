@@ -750,6 +750,12 @@ definitions:
         description: Type 类型，可选项 group、user
         type: string
     type: object
+  clustertoken.CheckStatus:
+    enum:
+    - unchecked
+    type: string
+    x-enum-varnames:
+    - CheckStatusUnchecked
   env.NsType:
     enum:
     - independent
@@ -3309,6 +3315,46 @@ definitions:
       name:
         type: string
     type: object
+  serializer.ClusterCandidateListResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/serializer.ClusterCandidateOutput'
+        type: array
+    type: object
+  serializer.ClusterCandidateOutput:
+    properties:
+      accessed:
+        description: 是否已接入空间
+        type: boolean
+      clusterID:
+        description: 集群 ID
+        type: string
+      clusterName:
+        description: 集群名称
+        type: string
+      environment:
+        description: 集群环境，如 prod
+        type: string
+      isShared:
+        description: 是否为共享集群
+        type: boolean
+      status:
+        description: 集群状态，如 RUNNING
+        type: string
+      type:
+        description: 集群类型，如 virtual（虚拟）、single（独立）
+        type: string
+    type: object
+  serializer.ClusterCheckOutput:
+    properties:
+      status:
+        allOf:
+        - $ref: '#/definitions/clustertoken.CheckStatus'
+        description: 检测状态；权限检测方式确定前固定为 unchecked（未检测）
+        enum:
+        - unchecked
+    type: object
   serializer.ClusterInfoOutput:
     properties:
       businessID:
@@ -3397,6 +3443,47 @@ definitions:
         type: integer
       startTime:
         type: string
+    type: object
+  serializer.ClusterTokenEmptyResponse:
+    type: object
+  serializer.ClusterTokenListResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/serializer.ClusterTokenOutput'
+        type: array
+    type: object
+  serializer.ClusterTokenOutput:
+    properties:
+      clusterCount:
+        description: 使用该 Token 的集群数量
+        type: integer
+      createdAt:
+        description: 创建时间
+        type: string
+      creator:
+        description: 创建人
+        type: string
+      id:
+        description: Token ID
+        type: string
+      isDefault:
+        description: 是否为空间的默认 Token
+        type: boolean
+      masked:
+        description: 脱敏后的 Token
+        type: string
+      updatedAt:
+        description: 最近配置时间
+        type: string
+      updater:
+        description: 最近配置人（新建或更换 Token 值）
+        type: string
+    type: object
+  serializer.ClusterTokenResponse:
+    properties:
+      data:
+        $ref: '#/definitions/serializer.ClusterTokenOutput'
     type: object
   serializer.CompareAppConfigFileVersionsInput:
     properties:
@@ -5497,6 +5584,9 @@ definitions:
         description: |-
           是否允许空间自建北极星接入点并按集群绑定。为 false 时前端隐藏接入点管理、集群绑定、组件安装等入口，
           所有集群都使用平台托管接入点
+        type: boolean
+      workspaceClusterToken:
+        description: 是否由空间登记集群 Token 并接入集群。为 false 时前端隐藏集群管理入口，所有集群都使用平台 Token
         type: boolean
     type: object
   serializer.FrontendFeaturesResponse:
@@ -10033,6 +10123,23 @@ definitions:
         description: 是否启用 GPA。true 时下发 CR，false 时删除 CR
         type: boolean
     type: object
+  serializer.TokenInput:
+    properties:
+      token:
+        description: Token 明文，只能包含可见 ASCII 字符，最长 1024
+        type: string
+    required:
+    - token
+    type: object
+  serializer.TokenRefInput:
+    properties:
+      token:
+        description: 新 Token 的明文
+        type: string
+      tokenID:
+        description: 已有 Token 的 ID
+        type: string
+    type: object
   serializer.TopologyEdgeOutputObj:
     properties:
       id:
@@ -10921,6 +11028,82 @@ definitions:
     properties:
       url:
         description: 访问链接
+        type: string
+    type: object
+  serializer.WorkspaceClusterCreateInput:
+    properties:
+      clusterIDs:
+        description: 待接入的集群 ID，须属于空间关联的 BCS 项目
+        items:
+          type: string
+        minItems: 1
+        type: array
+      token:
+        description: 新 Token 的明文
+        type: string
+      tokenID:
+        description: 已有 Token 的 ID
+        type: string
+    required:
+    - clusterIDs
+    type: object
+  serializer.WorkspaceClusterListResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/serializer.WorkspaceClusterOutput'
+        type: array
+    type: object
+  serializer.WorkspaceClusterOutput:
+    properties:
+      check:
+        allOf:
+        - $ref: '#/definitions/serializer.ClusterCheckOutput'
+        description: 权限检测结果
+      clusterID:
+        description: 集群 ID
+        type: string
+      clusterName:
+        description: 接入时的集群名称
+        type: string
+      createdAt:
+        description: 接入时间
+        type: string
+      creator:
+        description: 接入人
+        type: string
+      envCount:
+        description: 使用该集群的环境数量（含特性环境）
+        type: integer
+      isShared:
+        description: 是否为共享集群
+        type: boolean
+      token:
+        allOf:
+        - $ref: '#/definitions/serializer.WorkspaceClusterTokenOutput'
+        description: 使用的 Token；Token 记录缺失时为 null
+      updatedAt:
+        description: 最近修改时间
+        type: string
+      updater:
+        description: 最近修改人
+        type: string
+    type: object
+  serializer.WorkspaceClusterResponse:
+    properties:
+      data:
+        $ref: '#/definitions/serializer.WorkspaceClusterOutput'
+    type: object
+  serializer.WorkspaceClusterTokenOutput:
+    properties:
+      id:
+        description: Token ID
+        type: string
+      isDefault:
+        description: 是否为空间的默认 Token
+        type: boolean
+      masked:
+        description: 脱敏后的 Token
         type: string
     type: object
   serializer.WorkspaceComponentNameOutputObj:
@@ -23290,6 +23473,302 @@ paths:
       summary: 获取空间的配置开关
       tags:
       - cfgswitch
+  /workspaces/{workspaceID}/cluster-candidates:
+    get:
+      description: |-
+        返回空间关联的 BCS 项目下的全部 k8s 集群（含共享集群），并标记是否已接入；
+        空间未关联 BCS 项目时返回空列表
+      operationId: ListClusterCandidates
+      parameters:
+      - description: 工作空间 ID
+        in: path
+        name: workspaceID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.ClusterCandidateListResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 获取可接入的集群
+      tags:
+      - workspace-clusters
+  /workspaces/{workspaceID}/cluster-tokens:
+    get:
+      description: 按创建时间排序，只返回脱敏后的 Token 与使用它的集群数量
+      operationId: ListClusterTokens
+      parameters:
+      - description: 工作空间 ID
+        in: path
+        name: workspaceID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.ClusterTokenListResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 获取空间的集群 Token 列表
+      tags:
+      - cluster-tokens
+    post:
+      consumes:
+      - application/json
+      description: Token 加密存储；空间内已有相同 Token 时返回 ALREADY_EXISTS；空间内没有默认 Token 时设为默认
+      operationId: CreateClusterToken
+      parameters:
+      - description: 工作空间 ID
+        in: path
+        name: workspaceID
+        required: true
+        type: string
+      - description: Token
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/serializer.TokenInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.ClusterTokenResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 新建集群 Token
+      tags:
+      - cluster-tokens
+  /workspaces/{workspaceID}/cluster-tokens/{tokenID}:
+    delete:
+      description: 仍有集群使用该 Token 时拒绝删除（详情码 CLUSTER_TOKEN_IN_USE，extras.clusters 列出集群）
+      operationId: DeleteClusterToken
+      parameters:
+      - description: 工作空间 ID
+        in: path
+        name: workspaceID
+        required: true
+        type: string
+      - description: Token ID
+        in: path
+        name: tokenID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.ClusterTokenEmptyResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 删除集群 Token
+      tags:
+      - cluster-tokens
+    put:
+      consumes:
+      - application/json
+      description: 使用该 Token 的集群一并生效；新值与空间内其他 Token 相同时返回 ALREADY_EXISTS
+      operationId: ReplaceClusterToken
+      parameters:
+      - description: 工作空间 ID
+        in: path
+        name: workspaceID
+        required: true
+        type: string
+      - description: Token ID
+        in: path
+        name: tokenID
+        required: true
+        type: string
+      - description: 新的 Token
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/serializer.TokenInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.ClusterTokenResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 更换集群 Token
+      tags:
+      - cluster-tokens
+  /workspaces/{workspaceID}/cluster-tokens/{tokenID}/default:
+    put:
+      description: 空间内至多一个默认 Token，原默认 Token 自动取消；并发设置冲突时返回 ABORTED，重试即可
+      operationId: SetDefaultClusterToken
+      parameters:
+      - description: 工作空间 ID
+        in: path
+        name: workspaceID
+        required: true
+        type: string
+      - description: Token ID
+        in: path
+        name: tokenID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.ClusterTokenResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 设为默认集群 Token
+      tags:
+      - cluster-tokens
+  /workspaces/{workspaceID}/clusters:
+    get:
+      description: |-
+        按接入时间排序，包含使用的 Token、使用该集群的环境数量与权限检测状态。
+        tokenID 可选，只返回使用该 Token 的集群
+      operationId: ListWorkspaceClusters
+      parameters:
+      - description: 工作空间 ID
+        in: path
+        name: workspaceID
+        required: true
+        type: string
+      - description: 只返回使用该 Token 的集群
+        in: query
+        name: tokenID
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.WorkspaceClusterListResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 获取已接入的集群
+      tags:
+      - workspace-clusters
+    post:
+      consumes:
+      - application/json
+      description: |-
+        集群须属于空间关联的 BCS 项目，可以是共享集群；已接入的集群返回 ALREADY_EXISTS。
+        tokenID 与 token 必须且只能填一个：tokenID 为已有 Token，token 为新 Token（与已有 Token 相同时复用）
+      operationId: AccessClusters
+      parameters:
+      - description: 工作空间 ID
+        in: path
+        name: workspaceID
+        required: true
+        type: string
+      - description: 待接入的集群与 Token
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/serializer.WorkspaceClusterCreateInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.WorkspaceClusterListResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 接入集群
+      tags:
+      - workspace-clusters
+  /workspaces/{workspaceID}/clusters/{clusterID}:
+    delete:
+      description: |-
+        移除后新建环境时不能再选择这个集群。集群仍被环境（含特性环境）使用或绑定了北极星接入点时拒绝移除
+        （详情码 WORKSPACE_CLUSTER_IN_USE，extras.envs 列出环境，extras.polarisBound 表示是否绑定了北极星接入点）
+      operationId: RemoveWorkspaceCluster
+      parameters:
+      - description: 工作空间 ID
+        in: path
+        name: workspaceID
+        required: true
+        type: string
+      - description: 集群 ID
+        in: path
+        name: clusterID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.ClusterTokenEmptyResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 移除集群
+      tags:
+      - workspace-clusters
   /workspaces/{workspaceID}/clusters/{clusterID}/cluster-addons:
     get:
       description: |-
@@ -23373,6 +23852,47 @@ paths:
       summary: 在空间集群上部署/更新集群插件
       tags:
       - cluster-addon
+  /workspaces/{workspaceID}/clusters/{clusterID}/token:
+    put:
+      consumes:
+      - application/json
+      description: tokenID 与 token 必须且只能填一个：tokenID 为已有 Token，token 为新 Token（与已有 Token
+        相同时复用）
+      operationId: SwitchClusterToken
+      parameters:
+      - description: 工作空间 ID
+        in: path
+        name: workspaceID
+        required: true
+        type: string
+      - description: 集群 ID
+        in: path
+        name: clusterID
+        required: true
+        type: string
+      - description: 新的 Token
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/serializer.TokenRefInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/serializer.WorkspaceClusterResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/bkerrs.GinErrorOutput'
+      security:
+      - BkUserInfo: []
+      - BkUserCredential: []
+      summary: 更换集群使用的 Token
+      tags:
+      - workspace-clusters
   /workspaces/{workspaceID}/components:
     get:
       operationId: ListWorkspaceComponents

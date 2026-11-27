@@ -1,0 +1,18 @@
+[
+  {
+    "dropIndexes": "cluster_tokens",
+    "index": [
+      "idx_workspaceID_fingerprint",
+      "idx_workspaceID_isDefault",
+      "tenantID_1"
+    ]
+  },
+  {
+    "dropIndexes": "workspace_clusters",
+    "index": [
+      "idx_workspaceID_clusterID",
+      "idx_workspaceID_tokenID",
+      "tenantID_1"
+    ]
+  }
+]

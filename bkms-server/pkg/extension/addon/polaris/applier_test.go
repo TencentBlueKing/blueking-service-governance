@@ -35,6 +35,7 @@ import (
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil/dbfactory"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil/kubetest"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
@@ -144,8 +145,8 @@ var _ = Describe("Polaris CR applier", func() {
 
 		BeforeEach(func() {
 			var err error
-			clusterCfg, err = testutil.TestClusterConfig("test-cluster")
-			if errors.Is(err, testutil.ErrKubeConfigNotFound) {
+			clusterCfg, err = kubetest.TestClusterConfig("test-cluster")
+			if errors.Is(err, kubetest.ErrKubeConfigNotFound) {
 				Skip(err.Error())
 			}
 			Expect(err).NotTo(HaveOccurred())
