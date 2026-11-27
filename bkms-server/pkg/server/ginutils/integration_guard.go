@@ -23,6 +23,7 @@ import (
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bscp"
+	bscpapierrs "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bscp/apierrs"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/kubeinsight"
 )
 
@@ -30,7 +31,7 @@ import (
 func RequireBSCP() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if bscp.IsDisabled() {
-			bkerrs.AbortWithErr(c, bscp.ErrDisabled)
+			bkerrs.AbortWithErr(c, bscpapierrs.WrapDisabled(bscp.ErrDisabled))
 			return
 		}
 		c.Next()

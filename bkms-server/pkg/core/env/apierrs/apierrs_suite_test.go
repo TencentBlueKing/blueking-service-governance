@@ -16,28 +16,16 @@
  * to the current version of the project delivered to anyone in the future.
  */
 
-package bkerrs
+package apierrs_test
 
-import "fmt"
+import (
+	"testing"
 
-// WrapEnvClusterNamespaceOccupied 包装为"集群命名空间已被其他环境占用"API 错误。
-func WrapEnvClusterNamespaceOccupied(clusterID, namespace, occupiedByEnvName, occupiedByWorkspaceID string) error {
-	msg := fmt.Sprintf(
-		"cluster %s namespace %s is already bound to environment %q in workspace %s",
-		clusterID, namespace, occupiedByEnvName, occupiedByWorkspaceID,
-	)
-	return New(ErrCodeAlreadyExists, msg).SetDetails(
-		NewDetail(
-			ErrDetailCodeEnvClusterNamespaceOccupied,
-			msg,
-			WithSystem(SystemName),
-			WithModule("env"),
-			WithExtras(map[string]string{
-				"clusterID":             clusterID,
-				"namespace":             namespace,
-				"occupiedByEnvName":     occupiedByEnvName,
-				"occupiedByWorkspaceID": occupiedByWorkspaceID,
-			}),
-		),
-	)
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+)
+
+func TestAPIErrs(t *testing.T) {
+	RegisterFailHandler(Fail)
+	RunSpecs(t, "Env APIErrs Suite")
 }

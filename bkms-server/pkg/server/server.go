@@ -40,6 +40,7 @@ import (
 	buildtriggerhandler "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/build/trigger/handler"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/i18n"
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
@@ -110,6 +111,7 @@ import (
 	platworkspaceimageregh "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/platmgt/workspace/imageregistry/handler"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/basic"
 	basichandler "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/basic/handler"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/ginutils"
 	storereg "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/server/registry"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appdefaults"
 	appdefaultshandler "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appdefaults/handler"
@@ -143,6 +145,7 @@ func RegisterRouter(ctx context.Context, cfg config.Config, serverRole string) (
 		gin.Recovery(),
 		apm.ResponseTraceMiddleware(),
 		metrics.Middleware(),
+		i18n.Middleware(),
 	)
 
 	// Enable the Swagger UI if configured to do so.
@@ -197,7 +200,7 @@ func RegisterRouter(ctx context.Context, cfg config.Config, serverRole string) (
 	// FIXME W1 仅做 header 存在性检查；凭证内容比对与限流由后续子需求实现，合入生产前勿依赖本路由做真实鉴权
 	buildTriggerHandler := buildtriggerhandler.New()
 	callbackGroup := r.Group("/bkms/v1/bkms-server")
-	callbackGroup.Use(bkerrs.ErrorHandler())
+	callbackGroup.Use(bkerrs.ErrorHandler(ginutils.GlobalErrorRules...))
 	buildtrigger.RegisterCallback(callbackGroup, buildTriggerHandler)
 
 	// Register authenticated business APIs under /v1.
@@ -208,7 +211,7 @@ func RegisterRouter(ctx context.Context, cfg config.Config, serverRole string) (
 		return nil, errors.Wrap(err, "new required auth middleware")
 	}
 	v1.Use(
-		bkerrs.ErrorHandler(),
+		bkerrs.ErrorHandler(ginutils.GlobalErrorRules...),
 		requiredAuth,
 		tenant.Required(cfg.Tenant.EnableMultiTenantMode, tenantVerifier),
 	)

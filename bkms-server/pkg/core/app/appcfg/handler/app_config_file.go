@@ -31,8 +31,10 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/i18n"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
+	appcfgapierrs "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg/apierrs"
 	slz "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg/serializer"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime/runtimemod/mods"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
@@ -97,7 +99,11 @@ func (h *Handler) CreateAppConfigFile(c *gin.Context) {
 
 	baseID, err := h.validateBaseAppConfigFileID(ctx, app.ID, input.Type, input.BaseAppConfigFileID)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "validate baseAppConfigFileID"))
+		bkerrs.AbortInvalidArg(
+			c,
+			err,
+			i18n.Msg("the base file must be an existing normal config file of the current app"),
+		)
 		return
 	}
 
@@ -105,7 +111,7 @@ func (h *Handler) CreateAppConfigFile(c *gin.Context) {
 	sourceType := appcfg.ContentSourceType(input.ContentSourceType)
 	bscpCfg, err := h.validateBSCPConfig(ctx, sourceType, input.BscpConfig, fileFormat)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "validate BSCP config"))
+		bkerrs.AbortWithErr(c, pkgerrors.Wrap(err, "validate BSCP config"), appcfgapierrs.BSCPConfigRules)
 		return
 	}
 
@@ -147,7 +153,7 @@ func (h *Handler) CreateAppConfigFile(c *gin.Context) {
 	} else {
 		obj, err = acfService.Create(ctx, params)
 		if err != nil {
-			bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "creating app config file"))
+			bkerrs.AbortWithErr(c, pkgerrors.Wrap(err, "creating app config file"))
 			return
 		}
 	}
@@ -202,7 +208,11 @@ func (h *Handler) UpdateAppConfigFile(c *gin.Context) {
 	if input.BaseAppConfigFileID != "" {
 		baseID, vErr := h.validateBaseAppConfigFileID(ctx, app.ID, string(acf.Type), input.BaseAppConfigFileID)
 		if vErr != nil {
-			bkerrs.AbortWithErr(c, bkerrs.Wrap(vErr, bkerrs.ErrCodeInvalidArgument, "validate baseAppConfigFileID"))
+			bkerrs.AbortInvalidArg(
+				c,
+				vErr,
+				i18n.Msg("the base file must be an existing normal config file of the current app"),
+			)
 			return
 		}
 		acf.BaseAppConfigFileID = baseID
@@ -211,7 +221,7 @@ func (h *Handler) UpdateAppConfigFile(c *gin.Context) {
 	if input.BscpConfig != nil {
 		bscpCfg, vErr := h.validateBSCPConfig(ctx, acf.ContentSourceType, input.BscpConfig, acf.GetConfigFormat())
 		if vErr != nil {
-			bkerrs.AbortWithErr(c, bkerrs.Wrap(vErr, bkerrs.ErrCodeInvalidArgument, "validate BSCP config"))
+			bkerrs.AbortWithErr(c, pkgerrors.Wrap(vErr, "validate BSCP config"), appcfgapierrs.BSCPConfigRules)
 			return
 		}
 		acf.BSCPConfig = bscpCfg
@@ -219,7 +229,7 @@ func (h *Handler) UpdateAppConfigFile(c *gin.Context) {
 
 	def, err := h.configFileDefs().GetByID(ctx, acf.DefID)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get config file def"))
+		bkerrs.AbortInternal(c, pkgerrors.Wrap(err, "get config file def"))
 		return
 	}
 
@@ -239,7 +249,7 @@ func (h *Handler) UpdateAppConfigFile(c *gin.Context) {
 			bkerrs.AbortWithErr(c, bkerrs.WrapAppConfigFileVersionConflict(err, app.ID, acf.ID.Hex()))
 			return
 		}
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "create app config file version"))
+		bkerrs.AbortInternal(c, pkgerrors.Wrap(err, "create app config file version"))
 		return
 	}
 
@@ -299,7 +309,7 @@ func (h *Handler) ListAppConfigFiles(c *gin.Context) {
 		appcfg.DefFilterConfigKind(appcfg.ConfigKindFramework),
 	)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "listing framework defs"))
+		bkerrs.AbortInternal(c, pkgerrors.Wrap(err, "listing framework defs"))
 		return
 	}
 	frameworkDefIDs := make([]bson.ObjectID, 0, len(frameworkDefs))
@@ -316,7 +326,7 @@ func (h *Handler) ListAppConfigFiles(c *gin.Context) {
 
 	appConfigFiles, err := appcfg.ListFiles(ctx, h.configFiles(), app.ID, opts...)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "listing app config files"))
+		bkerrs.AbortInternal(c, pkgerrors.Wrap(err, "listing app config files"))
 		return
 	}
 
@@ -378,7 +388,7 @@ func (h *Handler) DeleteAppConfigFile(c *gin.Context) {
 
 	id, err := uriInput.AppConfigFileObjectID()
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "parse app config file ID"))
+		bkerrs.AbortInvalidArg(c, err, i18n.Msg("invalid config file ID"))
 		return
 	}
 
@@ -404,7 +414,7 @@ func (h *Handler) DeleteAppConfigFile(c *gin.Context) {
 	)
 	oldAcf, err := acfService.DeleteFile(ctx, app.ID, id)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "deleting app config file"))
+		bkerrs.AbortWithErr(c, pkgerrors.Wrapf(err, "deleting app config file %s", id.Hex()))
 		return
 	}
 
@@ -453,12 +463,12 @@ func (h *Handler) GetAppConfigFileDetails(c *gin.Context) {
 		acf,
 	)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "creating values file editor"))
+		bkerrs.AbortInternal(c, pkgerrors.Wrap(err, "creating values file editor"))
 		return
 	}
 	info, err := provider.GetInfo(ctx)
 	if err != nil && !pkgerrors.Is(err, appcfg.ErrBaseContentEmpty) {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "getting base content info"))
+		bkerrs.AbortInternal(c, pkgerrors.Wrap(err, "getting base content info"))
 		return
 	}
 
@@ -475,7 +485,7 @@ func (h *Handler) GetAppConfigFileDetails(c *gin.Context) {
 
 	editor, err := appcfg.NewAppConfigFileEditor(h.registry.DB, acf)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "creating values file editor"))
+		bkerrs.AbortInternal(c, pkgerrors.Wrap(err, "creating values file editor"))
 		return
 	}
 
@@ -605,12 +615,12 @@ func (h *Handler) PreviewOverlayMerge(c *gin.Context) {
 
 	baseID, err := uriInput.AppConfigFileObjectID()
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidArgument, "parse app config file ID"))
+		bkerrs.AbortInvalidArg(c, err, i18n.Msg("invalid config file ID"))
 		return
 	}
 	baseFile, err := h.configFiles().GetByID(ctx, baseID)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get base app config file"))
+		bkerrs.AbortWithErr(c, pkgerrors.Wrapf(err, "get base app config file %s", baseID.Hex()))
 		return
 	}
 
@@ -625,7 +635,7 @@ func (h *Handler) PreviewOverlayMerge(c *gin.Context) {
 		},
 	}
 	if validateErr := validateFileContent(input.OverlayContent, baseFile.GetConfigFormat()); validateErr != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(validateErr, bkerrs.ErrCodeInvalidArgument, "validate overlayContent"))
+		bkerrs.AbortInvalidArg(c, validateErr, i18n.Msg("overlay content is not valid YAML"))
 		return
 	}
 
@@ -634,12 +644,12 @@ func (h *Handler) PreviewOverlayMerge(c *gin.Context) {
 		virtualConfig,
 	)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "create editor"))
+		bkerrs.AbortInternal(c, pkgerrors.Wrap(err, "create editor"))
 		return
 	}
 	compiledContent, err := editor.GetCompiledContent(ctx)
 	if err != nil {
-		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "compile content"))
+		bkerrs.AbortInternal(c, pkgerrors.Wrap(err, "compile content"))
 		return
 	}
 

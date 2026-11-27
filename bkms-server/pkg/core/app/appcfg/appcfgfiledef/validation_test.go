@@ -20,13 +20,17 @@ package appcfgfiledef
 
 import (
 	"context"
+	"errors"
 
+	"github.com/bytedance/mockey"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
+	appcfgapierrs "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg/apierrs"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bscp"
 )
@@ -62,6 +66,86 @@ var _ = Describe("validateBSCPConfig when bscp is disabled", func() {
 		cfg, err := h.validateBSCPConfig(ctx, appcfg.ContentSourceTypeLocal, nil, appcfg.FileFormatYAML)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(cfg).To(BeNil())
+	})
+})
+
+var _ = Describe("validateBSCPConfig", func() {
+	var (
+		ctx context.Context
+		h   *Handler
+	)
+	input := &BSCPConfigInput{BizID: "123", ServiceID: "456", ID: "666"}
+
+	BeforeEach(func() {
+		ctx = auth.WithUser(context.Background(), auth.User{ID: "admin"})
+		h = &Handler{}
+	})
+
+	mockBSCP := func(versions bscp.Versions, content string) {
+		mockey.Mock(bscp.New).Return(&bscp.ApiClient{}, nil).Build()
+		mockey.Mock((*bscp.ApiClient).ListServiceVersions).Return(versions, nil).Build()
+		mockey.Mock((*bscp.ApiClient).GetServiceConfig).Return(bscp.NewKeyValue("stag", content, ""), nil).Build()
+	}
+
+	// apiCode 返回 BSCPConfigRules 映射后的错误码，不命中时为空
+	apiCode := func(err error) bkerrs.ErrCode {
+		var bkErr *bkerrs.Error
+		if errors.As(bkerrs.Match(err, appcfgapierrs.BSCPConfigRules), &bkErr) {
+			return bkErr.Code()
+		}
+		return ""
+	}
+
+	It("should require the bscp config reference", func() {
+		_, err := h.validateBSCPConfig(ctx, appcfg.ContentSourceTypeBSCP, nil, appcfg.FileFormatYAML)
+		Expect(err).To(MatchError(appcfg.ErrBSCPConfigRequired))
+		Expect(apiCode(err)).To(Equal(bkerrs.ErrCodeInvalidArgument))
+	})
+
+	It("should record the latest fully released version", func() {
+		mockey.PatchConvey("released", GinkgoT(), func() {
+			mockBSCP(bscp.Versions{{ID: "91011", IsFullyReleased: true}}, "foo: bar\n")
+
+			cfg, err := h.validateBSCPConfig(ctx, appcfg.ContentSourceTypeBSCP, input, appcfg.FileFormatYAML)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(cfg).To(Equal(&appcfg.BSCPConfig{
+				BizID: "123", ServiceID: "456", VersionID: "91011", ConfigID: "666",
+			}))
+		})
+	})
+
+	It("should reject the service without fully released version", func() {
+		mockey.PatchConvey("not released", GinkgoT(), func() {
+			mockBSCP(bscp.Versions{{ID: "91011", IsFullyReleased: false}}, "")
+
+			_, err := h.validateBSCPConfig(ctx, appcfg.ContentSourceTypeBSCP, input, appcfg.FileFormatYAML)
+			Expect(err).To(MatchError(appcfg.ErrBSCPNoFullyReleasedVersion))
+			Expect(apiCode(err)).To(Equal(bkerrs.ErrCodeInvalidRequest))
+		})
+	})
+
+	It("should validate content only for yaml files", func() {
+		mockey.PatchConvey("invalid yaml", GinkgoT(), func() {
+			mockBSCP(bscp.Versions{{ID: "91011", IsFullyReleased: true}}, "foo: [bar")
+
+			_, err := h.validateBSCPConfig(ctx, appcfg.ContentSourceTypeBSCP, input, appcfg.FileFormatYAML)
+			Expect(err).To(MatchError(appcfg.ErrBSCPContentInvalidYAML))
+			Expect(apiCode(err)).To(Equal(bkerrs.ErrCodeInvalidArgument))
+
+			_, err = h.validateBSCPConfig(ctx, appcfg.ContentSourceTypeBSCP, input, appcfg.FileFormat("ini"))
+			Expect(err).NotTo(HaveOccurred())
+		})
+	})
+
+	It("should leave bscp call failures unmatched", func() {
+		mockey.PatchConvey("call failed", GinkgoT(), func() {
+			mockey.Mock(bscp.New).Return(&bscp.ApiClient{}, nil).Build()
+			mockey.Mock((*bscp.ApiClient).ListServiceVersions).Return(nil, errors.New("connection refused")).Build()
+
+			_, err := h.validateBSCPConfig(ctx, appcfg.ContentSourceTypeBSCP, input, appcfg.FileFormatYAML)
+			Expect(err).To(HaveOccurred())
+			Expect(apiCode(err)).To(BeEmpty())
+		})
 	})
 })
 

@@ -37,6 +37,7 @@ import (
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime"
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
+	envapierrs "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/apierrs"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace/serializer"
@@ -620,12 +621,10 @@ func (h *Handler) CreateWorkspace(c *gin.Context) {
 	defaultEnvs := workspace.BuildDefaultEnvs(auth.MustGetUser(ctx).ID, ws.ID, bkSystem.BkBCSProjectCode)
 	for _, env := range defaultEnvs {
 		if envErr := envSvc.Create(ctx, &env); envErr != nil {
-			if abortIfEnvClusterNamespaceOccupied(c, envErr) {
-				return
-			}
-			bkerrs.AbortWithErr(
-				c,
+			// 默认环境由系统生成，重名属于内部错误，不能按 store 类别返回 409
+			bkerrs.AbortWithErr(c,
 				bkerrs.Wrapf(envErr, bkerrs.ErrCodeInternalServerError, "create default env %s", env.Name),
+				envapierrs.NamespaceOccupied,
 			)
 			return
 		}
@@ -1039,15 +1038,4 @@ func ClassifyEnsureBkSystemsErr(err error) bkerrs.ErrCode {
 	default:
 		return bkerrs.ErrCodeInternalServerError
 	}
-}
-
-func abortIfEnvClusterNamespaceOccupied(c *gin.Context, err error) bool {
-	info, ok := bkmsenv.GetEnvClusterNamespaceConflictInfo(err)
-	if !ok {
-		return false
-	}
-	bkerrs.AbortWithErr(c, bkerrs.WrapEnvClusterNamespaceOccupied(
-		info.ClusterID, info.Namespace, info.OccupiedByEnvName, info.OccupiedByWorkspaceID,
-	))
-	return true
 }

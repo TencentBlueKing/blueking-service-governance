@@ -46,6 +46,9 @@ type Meta[T any] struct {
 	// 读取平台共享给租户的数据时传 TenantWithPlatform
 	TenantScoped bool
 	// NotFound 文档不存在时返回的业务错误，返回的 error 同时满足 errors.Is(err, ErrNotFound)
+	//
+	// NotFound、Duplicate 的错误文本会作为 404/409 响应的用户文案，并被 make i18n 提取为翻译原文：
+	// 须写成面向用户的完整英文句子；修改文本会使已有译文失效，需同步更新 locales/*.po
 	NotFound error
 	// Duplicate 唯一键冲突时返回的业务错误，返回的 error 同时满足 errors.Is(err, ErrDuplicate)
 	Duplicate error

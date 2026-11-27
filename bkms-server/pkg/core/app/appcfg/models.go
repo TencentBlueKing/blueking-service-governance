@@ -19,16 +19,12 @@
 package appcfg
 
 import (
-	"context"
 	"slices"
 	"time"
 
-	"github.com/pkg/errors"
 	"go.mongodb.org/mongo-driver/v2/bson"
 
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/cloudapi/bscp"
 )
 
 // AppConfigFileDef 配置文件的逻辑身份，存储在 app_config_file_defs 集合。
@@ -190,44 +186,6 @@ type BSCPConfig struct {
 	VersionID string `bson:"versionID"`
 	// ConfigID BSCP 配置项 ID。
 	ConfigID string `bson:"configID"`
-}
-
-// FetchContent 获取 BSCP 配置对应的配置内容。
-func (c *BSCPConfig) FetchContent(ctx context.Context) (string, error) {
-	if c == nil {
-		return "", errors.New("bscp config cannot be nil")
-	}
-
-	// 1. 初始化客户端
-	client, err := bscp.New(auth.MustGetUser(ctx))
-	if err != nil {
-		return "", errors.Wrap(err, "initial bscp client")
-	}
-
-	// 2. 获取服务下的版本列表
-	versions, err := client.ListServiceVersions(ctx, c.BizID, c.ServiceID)
-	if err != nil {
-		return "", errors.Wrap(err, "list bscp service versions")
-	}
-
-	// 3. 找到最新的全量发布的已上线版本
-	ver := versions.LatestFullyReleased()
-	if ver == nil {
-		return "", errors.New("no fully released version")
-	}
-
-	// 4. 获取服务版本下的配置 & 提取配置内容
-	cfg, err := client.GetServiceConfig(ctx, c.BizID, c.ServiceID, ver.ID, c.ConfigID)
-	if err != nil {
-		return "", errors.Wrap(err, "get bscp service config")
-	}
-
-	content, err := cfg.Content(ctx)
-	if err != nil {
-		return "", errors.Wrap(err, "get bscp config content")
-	}
-
-	return content, nil
 }
 
 // initializeContentFields 根据文件类型和内容来源初始化 Content / OverlayContent 字段。

@@ -91,6 +91,12 @@ var _ = Describe("GenericStore write operations", func() {
 			// 仍可取到驱动的原始错误，以便查看冲突的键
 			var we mongo.WriteException
 			Expect(errors.As(err, &we)).To(BeTrue())
+
+			var c categorized
+			Expect(errors.As(err, &c)).To(BeTrue())
+			Expect(c.IsAlreadyExists()).To(BeTrue())
+			Expect(c.IsNotFound()).To(BeFalse())
+			Expect(c.DomainError()).To(Equal(ErrWidgetExists))
 		})
 
 		It("should fall back to store.ErrDuplicate when meta has no Duplicate", func() {
