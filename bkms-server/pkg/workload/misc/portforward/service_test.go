@@ -60,9 +60,9 @@ var _ = Describe("Service", func() {
 		pod := runningPodWithLabels("pod-1", "10.0.0.1", map[string]string{"app": "myapp"})
 		podClient := &MockPodClient{}
 		podClient.On("Get", mock.Anything, "default", "pod-1", mock.Anything).Return(&pod, nil)
-		svc := NewService(db, WithPodClientFactory(func(clusterID string) PodClient {
+		svc := NewService(db, WithPodClientFactory(func(_ context.Context, _, clusterID string) (PodClient, error) {
 			Expect(clusterID).To(Equal("BCS-K8S-12345"))
-			return podClient
+			return podClient, nil
 		}))
 
 		target, err := svc.ResolveTarget(ctx, "myapp", "test", "pod-1", 8080)
@@ -88,10 +88,10 @@ var _ = Describe("Service", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		pod := podWithPhaseIPAndLabels("pod-1", "Running", "", map[string]string{"app": "myapp"})
-		svc := NewService(db, WithPodClientFactory(func(clusterID string) PodClient {
+		svc := NewService(db, WithPodClientFactory(func(_ context.Context, _, clusterID string) (PodClient, error) {
 			m := &MockPodClient{}
 			m.On("Get", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(&pod, nil)
-			return m
+			return m, nil
 		}))
 
 		_, err = svc.ResolveTarget(ctx, "myapp", "test", "pod-1", 8080)
@@ -112,10 +112,10 @@ var _ = Describe("Service", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		pod := podWithPhaseIPAndLabels("pod-1", "Running", "not-an-ip", map[string]string{"app": "myapp"})
-		svc := NewService(db, WithPodClientFactory(func(clusterID string) PodClient {
+		svc := NewService(db, WithPodClientFactory(func(_ context.Context, _, clusterID string) (PodClient, error) {
 			m := &MockPodClient{}
 			m.On("Get", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(&pod, nil)
-			return m
+			return m, nil
 		}))
 
 		_, err = svc.ResolveTarget(ctx, "myapp", "test", "pod-1", 8080)
@@ -136,10 +136,10 @@ var _ = Describe("Service", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		pod := podWithPhaseIPAndLabels("pod-1", "Running", "127.0.0.1", map[string]string{"app": "myapp"})
-		svc := NewService(db, WithPodClientFactory(func(clusterID string) PodClient {
+		svc := NewService(db, WithPodClientFactory(func(_ context.Context, _, clusterID string) (PodClient, error) {
 			m := &MockPodClient{}
 			m.On("Get", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(&pod, nil)
-			return m
+			return m, nil
 		}))
 
 		_, err = svc.ResolveTarget(ctx, "myapp", "test", "pod-1", 8080)
@@ -169,11 +169,11 @@ var _ = Describe("Service", func() {
 		})
 		Expect(err).NotTo(HaveOccurred())
 
-		svc := NewService(db, WithPodClientFactory(func(clusterID string) PodClient {
+		svc := NewService(db, WithPodClientFactory(func(_ context.Context, _, clusterID string) (PodClient, error) {
 			m := &MockPodClient{}
 			m.On("Get", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 				Return(nil, errors.New("kube internal error"))
-			return m
+			return m, nil
 		}))
 
 		_, err = svc.ResolveTarget(ctx, "myapp", "test", "pod-1", 8080)
@@ -195,10 +195,10 @@ var _ = Describe("Service", func() {
 
 		// Pod 存在但 labels 不匹配部署记录的 LabelSelector
 		pod := runningPodWithLabels("pod-1", "127.0.0.1", map[string]string{"app": "other-app"})
-		svc := NewService(db, WithPodClientFactory(func(clusterID string) PodClient {
+		svc := NewService(db, WithPodClientFactory(func(_ context.Context, _, clusterID string) (PodClient, error) {
 			m := &MockPodClient{}
 			m.On("Get", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(&pod, nil)
-			return m
+			return m, nil
 		}))
 
 		_, err = svc.ResolveTarget(ctx, "myapp", "test", "pod-1", 8080)
@@ -219,10 +219,10 @@ var _ = Describe("Service", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		pod := podWithPhaseIPAndLabels("pod-1", "Pending", "127.0.0.1", map[string]string{"app": "myapp"})
-		svc := NewService(db, WithPodClientFactory(func(clusterID string) PodClient {
+		svc := NewService(db, WithPodClientFactory(func(_ context.Context, _, clusterID string) (PodClient, error) {
 			m := &MockPodClient{}
 			m.On("Get", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(&pod, nil)
-			return m
+			return m, nil
 		}))
 
 		_, err = svc.ResolveTarget(ctx, "myapp", "test", "pod-1", 8080)

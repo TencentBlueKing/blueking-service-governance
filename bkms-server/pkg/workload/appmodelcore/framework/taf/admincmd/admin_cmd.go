@@ -162,7 +162,11 @@ func (s *TafAdminService) Init(ctx context.Context) error {
 	s.AppModel = appModel
 	s.ClusterID = env.Cluster.ClusterID
 	s.Namespace = env.Cluster.Namespace
-	s.PodClient = k8sclient.NewPodClient(cluster.NewConfig(env.Cluster.ClusterID))
+	clusterCfg, err := cluster.NewConfigForWorkspace(ctx, env.WorkspaceID, env.Cluster.ClusterID)
+	if err != nil {
+		return errors.Wrap(err, "build cluster config")
+	}
+	s.PodClient = k8sclient.NewPodClient(clusterCfg)
 
 	// 从 TAF 配置文件解析 admin 端口
 	_, adminPort, err := s.GetAdminConfig(ctx)

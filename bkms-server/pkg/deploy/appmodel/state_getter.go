@@ -47,6 +47,8 @@ type DeployState struct {
 
 // DeployStateGetter 部署状态获取器，用于获取指定的部署记录的状态
 type DeployStateGetter struct {
+	// workspaceID 工作空间 ID
+	workspaceID string
 	// clusterID 集群 ID
 	clusterID string
 	// namespace 命名空间
@@ -65,12 +67,15 @@ type DeployStateGetter struct {
 	deployID string
 	// batchCount 分批发布的批次总数
 	batchCount int
+	// clusterConfigs 一次状态查询内的集群配置缓存
+	clusterConfigs cluster.ConfigCache
 }
 
 // NewDeployStateGetter 创建部署状态获取器
 func NewDeployStateGetter(record *Record) *DeployStateGetter {
 	kind, _ := record.MainWorkload()
 	getter := &DeployStateGetter{
+		workspaceID:  record.WorkspaceID,
 		clusterID:    record.ClusterID,
 		namespace:    record.Namespace,
 		resourceKeys: record.ResourceKeys,
@@ -90,6 +95,15 @@ func NewDeployStateGetter(record *Record) *DeployStateGetter {
 // 再次部署切换 Rollout 期间，集群中的 Rollout 仍属于上一次发布，此时返回 ErrReleaseSwitching
 func GetLiveBatchReleaseState(ctx context.Context, record *Record) (*DeployState, error) {
 	return NewDeployStateGetter(record).getBatchReleaseState(ctx)
+}
+
+// clusterConfig 获取部署记录所在集群的连接配置
+func (g *DeployStateGetter) clusterConfig(ctx context.Context) (*cluster.Config, error) {
+	clusterCfg, err := g.clusterConfigs.Get(ctx, g.workspaceID, g.clusterID)
+	if err != nil {
+		return nil, errors.Wrap(err, "build cluster config")
+	}
+	return clusterCfg, nil
 }
 
 // Get 获取部署状态
@@ -143,7 +157,10 @@ func (g *DeployStateGetter) Get(ctx context.Context) (*DeployState, error) {
 // - 如果返回 StatusFailed，表示资源真正缺失（如被删除），这是确定的失败状态
 // - 如果返回 StatusDeploying，表示资源存在，继续检查工作负载状态
 func (g *DeployStateGetter) checkDependentResources(ctx context.Context) (Status, string, error) {
-	clusterCfg := cluster.NewConfig(g.clusterID)
+	clusterCfg, err := g.clusterConfig(ctx)
+	if err != nil {
+		return "", "", err
+	}
 
 	// 逐个检查依赖的资源是否存在
 	for _, key := range g.resourceKeys {
@@ -185,7 +202,10 @@ func (g *DeployStateGetter) getWorkloadHealth(ctx context.Context) (*k8sstatus.R
 		return nil, errors.Wrap(err, "get workload driver")
 	}
 
-	clusterCfg := cluster.NewConfig(g.clusterID)
+	clusterCfg, err := g.clusterConfig(ctx)
+	if err != nil {
+		return nil, err
+	}
 	client := k8sclient.NewWithGVR(clusterCfg, driver.GVR())
 	res, err := client.Get(ctx, g.namespace, resName, metav1.GetOptions{})
 	if err != nil {
@@ -211,7 +231,10 @@ func (g *DeployStateGetter) getBatchReleaseState(ctx context.Context) (*DeploySt
 		return nil, errors.Errorf("main workload %s/%s does not support batch release", kind, name)
 	}
 
-	clusterCfg := cluster.NewConfig(g.clusterID)
+	clusterCfg, err := g.clusterConfig(ctx)
+	if err != nil {
+		return nil, err
+	}
 	workload, err := k8sclient.NewWithGVR(clusterCfg, gvr.GameDeploy).Get(ctx, g.namespace, name, metav1.GetOptions{})
 	if errors.Is(err, k8sclient.ErrResourceNotFound) {
 		return &DeployState{Status: StatusFailed, Message: fmt.Sprintf("%s %s is missing", kind, name)}, nil

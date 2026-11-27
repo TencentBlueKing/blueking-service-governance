@@ -14877,6 +14877,7 @@ const docTemplate = `{
                         "BkUserCredential": []
                     }
                 ],
+                "description": "由空间接入集群时只能使用已接入空间的集群，否则返回详情码 CLUSTER_NOT_ACCESSED。",
                 "consumes": [
                     "application/json"
                 ],
@@ -19236,6 +19237,466 @@ const docTemplate = `{
                 }
             }
         },
+        "/workspaces/{workspaceID}/cluster-candidates": {
+            "get": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "description": "返回空间关联的 BCS 项目下的全部 k8s 集群（含共享集群），并标记是否已接入；\n空间未关联 BCS 项目时返回空列表",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "workspace-clusters"
+                ],
+                "summary": "获取可接入的集群",
+                "operationId": "ListClusterCandidates",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.ClusterCandidateListResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
+        "/workspaces/{workspaceID}/cluster-tokens": {
+            "get": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "description": "按创建时间排序，只返回脱敏后的 Token 与使用它的集群数量",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "cluster-tokens"
+                ],
+                "summary": "获取空间的集群 Token 列表",
+                "operationId": "ListClusterTokens",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.ClusterTokenListResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "description": "Token 加密存储；空间内已有相同 Token 时返回 ALREADY_EXISTS；空间内没有默认 Token 时设为默认",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "cluster-tokens"
+                ],
+                "summary": "新建集群 Token",
+                "operationId": "CreateClusterToken",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Token",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/serializer.TokenInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.ClusterTokenResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
+        "/workspaces/{workspaceID}/cluster-tokens/{tokenID}": {
+            "put": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "description": "使用该 Token 的集群一并生效；新值与空间内其他 Token 相同时返回 ALREADY_EXISTS",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "cluster-tokens"
+                ],
+                "summary": "更换集群 Token",
+                "operationId": "ReplaceClusterToken",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Token ID",
+                        "name": "tokenID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "新的 Token",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/serializer.TokenInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.ClusterTokenResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "description": "仍有集群使用该 Token 时拒绝删除（详情码 CLUSTER_TOKEN_IN_USE，extras.clusters 列出集群）",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "cluster-tokens"
+                ],
+                "summary": "删除集群 Token",
+                "operationId": "DeleteClusterToken",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Token ID",
+                        "name": "tokenID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.ClusterTokenEmptyResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
+        "/workspaces/{workspaceID}/cluster-tokens/{tokenID}/default": {
+            "put": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "description": "空间内至多一个默认 Token，原默认 Token 自动取消；并发设置冲突时返回 ABORTED，重试即可",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "cluster-tokens"
+                ],
+                "summary": "设为默认集群 Token",
+                "operationId": "SetDefaultClusterToken",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Token ID",
+                        "name": "tokenID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.ClusterTokenResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
+        "/workspaces/{workspaceID}/clusters": {
+            "get": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "description": "按接入时间排序，包含使用的 Token、使用该集群的环境数量与权限检测状态。\ntokenID 可选，只返回使用该 Token 的集群",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "workspace-clusters"
+                ],
+                "summary": "获取已接入的集群",
+                "operationId": "ListWorkspaceClusters",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "只返回使用该 Token 的集群",
+                        "name": "tokenID",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.WorkspaceClusterListResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "description": "集群须属于空间关联的 BCS 项目，可以是共享集群；已接入的集群返回 ALREADY_EXISTS。\ntokenID 与 token 必须且只能填一个：tokenID 为已有 Token，token 为新 Token（与已有 Token 相同时复用）",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "workspace-clusters"
+                ],
+                "summary": "接入集群",
+                "operationId": "AccessClusters",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "待接入的集群与 Token",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/serializer.WorkspaceClusterCreateInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.WorkspaceClusterListResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
+        "/workspaces/{workspaceID}/clusters/{clusterID}": {
+            "delete": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "description": "移除后新建环境时不能再选择这个集群。集群仍被环境（含特性环境）使用或绑定了北极星接入点时拒绝移除\n（详情码 WORKSPACE_CLUSTER_IN_USE，extras.envs 列出环境，extras.polarisBound 表示是否绑定了北极星接入点）",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "workspace-clusters"
+                ],
+                "summary": "移除集群",
+                "operationId": "RemoveWorkspaceCluster",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "集群 ID",
+                        "name": "clusterID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.ClusterTokenEmptyResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
         "/workspaces/{workspaceID}/clusters/{clusterID}/cluster-addons": {
             "get": {
                 "security": [
@@ -19350,6 +19811,69 @@ const docTemplate = `{
                 "responses": {
                     "201": {
                         "description": "Created"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/bkerrs.GinErrorOutput"
+                        }
+                    }
+                }
+            }
+        },
+        "/workspaces/{workspaceID}/clusters/{clusterID}/token": {
+            "put": {
+                "security": [
+                    {
+                        "BkUserInfo": []
+                    },
+                    {
+                        "BkUserCredential": []
+                    }
+                ],
+                "description": "tokenID 与 token 必须且只能填一个：tokenID 为已有 Token，token 为新 Token（与已有 Token 相同时复用）",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "workspace-clusters"
+                ],
+                "summary": "更换集群使用的 Token",
+                "operationId": "SwitchClusterToken",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "工作空间 ID",
+                        "name": "workspaceID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "集群 ID",
+                        "name": "clusterID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "新的 Token",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/serializer.TokenRefInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/serializer.WorkspaceClusterResponse"
+                        }
                     },
                     "400": {
                         "description": "Bad Request",
@@ -20008,6 +20532,7 @@ const docTemplate = `{
                         "BkUserCredential": []
                     }
                 ],
+                "description": "由空间接入集群时只能使用已接入空间的集群，否则返回详情码 CLUSTER_NOT_ACCESSED。",
                 "consumes": [
                     "application/json"
                 ],
@@ -23016,6 +23541,15 @@ const docTemplate = `{
                     "type": "string"
                 }
             }
+        },
+        "clustertoken.CheckStatus": {
+            "type": "string",
+            "enum": [
+                "unchecked"
+            ],
+            "x-enum-varnames": [
+                "CheckStatusUnchecked"
+            ]
         },
         "env.NsType": {
             "type": "string",
@@ -26773,6 +27307,66 @@ const docTemplate = `{
                 }
             }
         },
+        "serializer.ClusterCandidateListResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/serializer.ClusterCandidateOutput"
+                    }
+                }
+            }
+        },
+        "serializer.ClusterCandidateOutput": {
+            "type": "object",
+            "properties": {
+                "accessed": {
+                    "description": "是否已接入空间",
+                    "type": "boolean"
+                },
+                "clusterID": {
+                    "description": "集群 ID",
+                    "type": "string"
+                },
+                "clusterName": {
+                    "description": "集群名称",
+                    "type": "string"
+                },
+                "environment": {
+                    "description": "集群环境，如 prod",
+                    "type": "string"
+                },
+                "isShared": {
+                    "description": "是否为共享集群",
+                    "type": "boolean"
+                },
+                "status": {
+                    "description": "集群状态，如 RUNNING",
+                    "type": "string"
+                },
+                "type": {
+                    "description": "集群类型，如 virtual（虚拟）、single（独立）",
+                    "type": "string"
+                }
+            }
+        },
+        "serializer.ClusterCheckOutput": {
+            "type": "object",
+            "properties": {
+                "status": {
+                    "description": "检测状态；权限检测方式确定前固定为 unchecked（未检测）",
+                    "enum": [
+                        "unchecked"
+                    ],
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/clustertoken.CheckStatus"
+                        }
+                    ]
+                }
+            }
+        },
         "serializer.ClusterInfoOutput": {
             "type": "object",
             "properties": {
@@ -26903,6 +27497,65 @@ const docTemplate = `{
                 },
                 "startTime": {
                     "type": "string"
+                }
+            }
+        },
+        "serializer.ClusterTokenEmptyResponse": {
+            "type": "object"
+        },
+        "serializer.ClusterTokenListResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/serializer.ClusterTokenOutput"
+                    }
+                }
+            }
+        },
+        "serializer.ClusterTokenOutput": {
+            "type": "object",
+            "properties": {
+                "clusterCount": {
+                    "description": "使用该 Token 的集群数量",
+                    "type": "integer"
+                },
+                "createdAt": {
+                    "description": "创建时间",
+                    "type": "string"
+                },
+                "creator": {
+                    "description": "创建人",
+                    "type": "string"
+                },
+                "id": {
+                    "description": "Token ID",
+                    "type": "string"
+                },
+                "isDefault": {
+                    "description": "是否为空间的默认 Token",
+                    "type": "boolean"
+                },
+                "masked": {
+                    "description": "脱敏后的 Token",
+                    "type": "string"
+                },
+                "updatedAt": {
+                    "description": "最近配置时间",
+                    "type": "string"
+                },
+                "updater": {
+                    "description": "最近配置人（新建或更换 Token 值）",
+                    "type": "string"
+                }
+            }
+        },
+        "serializer.ClusterTokenResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/serializer.ClusterTokenOutput"
                 }
             }
         },
@@ -29221,6 +29874,10 @@ const docTemplate = `{
                     "description": "是否为 BCS 联邦 Host 集群",
                     "type": "boolean"
                 },
+                "isShared": {
+                    "description": "是否为共享集群。仅在由空间接入集群时，由环境列表接口按空间的集群接入记录返回，其余情况为 false。\n空间的集群 Token 不能在共享集群上新建命名空间，特性环境只能沿用来源环境的命名空间",
+                    "type": "boolean"
+                },
                 "namespace": {
                     "description": "集群命名空间",
                     "type": "string"
@@ -29909,6 +30566,10 @@ const docTemplate = `{
                 },
                 "enableWeTerm": {
                     "description": "是否配置了 WeTerm 环境，为 false 时前端隐藏 WeTerm 入口",
+                    "type": "boolean"
+                },
+                "enableWorkspaceClusterToken": {
+                    "description": "是否由空间登记集群 Token 并接入集群。为 false 时前端隐藏集群管理入口，所有集群都使用平台 Token",
                     "type": "boolean"
                 },
                 "polarisWorkspaceAccessPoint": {
@@ -36540,6 +37201,31 @@ const docTemplate = `{
                 }
             }
         },
+        "serializer.TokenInput": {
+            "type": "object",
+            "required": [
+                "token"
+            ],
+            "properties": {
+                "token": {
+                    "description": "Token 明文，只能包含可见 ASCII 字符，最长 1024",
+                    "type": "string"
+                }
+            }
+        },
+        "serializer.TokenRefInput": {
+            "type": "object",
+            "properties": {
+                "token": {
+                    "description": "新 Token 的明文",
+                    "type": "string"
+                },
+                "tokenID": {
+                    "description": "已有 Token 的 ID",
+                    "type": "string"
+                }
+            }
+        },
         "serializer.TopologyEdgeOutputObj": {
             "type": "object",
             "properties": {
@@ -37811,6 +38497,119 @@ const docTemplate = `{
             "properties": {
                 "url": {
                     "description": "访问链接",
+                    "type": "string"
+                }
+            }
+        },
+        "serializer.WorkspaceClusterCreateInput": {
+            "type": "object",
+            "required": [
+                "clusterIDs"
+            ],
+            "properties": {
+                "clusterIDs": {
+                    "description": "待接入的集群 ID，须属于空间关联的 BCS 项目",
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "token": {
+                    "description": "新 Token 的明文",
+                    "type": "string"
+                },
+                "tokenID": {
+                    "description": "已有 Token 的 ID",
+                    "type": "string"
+                }
+            }
+        },
+        "serializer.WorkspaceClusterListResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/serializer.WorkspaceClusterOutput"
+                    }
+                }
+            }
+        },
+        "serializer.WorkspaceClusterOutput": {
+            "type": "object",
+            "properties": {
+                "check": {
+                    "description": "权限检测结果",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/serializer.ClusterCheckOutput"
+                        }
+                    ]
+                },
+                "clusterID": {
+                    "description": "集群 ID",
+                    "type": "string"
+                },
+                "clusterName": {
+                    "description": "接入时的集群名称",
+                    "type": "string"
+                },
+                "createdAt": {
+                    "description": "接入时间",
+                    "type": "string"
+                },
+                "creator": {
+                    "description": "接入人",
+                    "type": "string"
+                },
+                "envCount": {
+                    "description": "使用该集群的环境数量（含特性环境）",
+                    "type": "integer"
+                },
+                "isShared": {
+                    "description": "是否为共享集群",
+                    "type": "boolean"
+                },
+                "token": {
+                    "description": "使用的 Token；Token 记录缺失时为 null",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/serializer.WorkspaceClusterTokenOutput"
+                        }
+                    ]
+                },
+                "updatedAt": {
+                    "description": "最近修改时间",
+                    "type": "string"
+                },
+                "updater": {
+                    "description": "最近修改人",
+                    "type": "string"
+                }
+            }
+        },
+        "serializer.WorkspaceClusterResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/serializer.WorkspaceClusterOutput"
+                }
+            }
+        },
+        "serializer.WorkspaceClusterTokenOutput": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "description": "Token ID",
+                    "type": "string"
+                },
+                "isDefault": {
+                    "description": "是否为空间的默认 Token",
+                    "type": "boolean"
+                },
+                "masked": {
+                    "description": "脱敏后的 Token",
                     "type": "string"
                 }
             }

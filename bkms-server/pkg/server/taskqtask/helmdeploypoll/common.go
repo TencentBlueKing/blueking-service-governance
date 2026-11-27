@@ -37,6 +37,7 @@ func triggerTopologyRefresh(ctx context.Context, args Args, record *helmdeploy.R
 	}
 
 	topology.NewRefresher(storereg.G().DB).TriggerRefresh(ctx, topology.RefreshArgs{
+		WorkspaceID:     record.WorkspaceID,
 		AppID:           args.AppID,
 		EnvName:         args.EnvName,
 		TrafficLaneName: args.TrafficLaneName,

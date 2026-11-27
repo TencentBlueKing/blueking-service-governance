@@ -108,7 +108,12 @@ func (h *Handler) ListEvents(c *gin.Context) {
 		bkerrs.AbortWithErr(c, bkerrs.New(bkerrs.ErrCodeInternalServerError, "deploy record label selector is empty"))
 		return
 	}
-	podClient := k8sclient.NewPodClient(cluster.NewConfig(record.ClusterID))
+	clusterCfg, err := cluster.NewConfigForWorkspace(ctx, record.WorkspaceID, record.ClusterID)
+	if err != nil {
+		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "build cluster config"))
+		return
+	}
+	podClient := k8sclient.NewPodClient(clusterCfg)
 	labelSelector := labels.SelectorFromSet(record.LabelSelector).String()
 	pods, err := podClient.List(ctx, record.Namespace, metav1.ListOptions{LabelSelector: labelSelector})
 	if err != nil {

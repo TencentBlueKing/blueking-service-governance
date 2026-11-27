@@ -253,6 +253,8 @@ svcConf:
     token: masked
     # 联邦 Host 集群 ID 列表。创建/更新环境时 clusterID 命中则视为联邦集群，部署使用原生 Deployment
     federationClusterIDs: []
+    # 是否由空间登记集群 Token 并接入集群；为 true 时集群 API 使用空间分配的 Token，不使用上面的平台 token
+    allowWorkspaceClusterTokens: false
     # BCS 侧分配的 WeTerm 环境 ID（bkBcsEnvID），用于生成 WeTerm 登录容器链接；为空表示不启用 WeTerm
     weTermEnvID: ""
   # 蓝盾配置，用于项目初始化 & 流水线模板加载

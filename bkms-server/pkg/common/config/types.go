@@ -122,6 +122,9 @@ type BCSConfig struct {
 	// WeTermEnvID BCS 侧为当前部署环境分配的 WeTerm 环境 ID（bkBcsEnvID），用于生成 WeTerm 登录容器链接。
 	// 为空表示不启用 WeTerm。
 	WeTermEnvID string
+	// AllowWorkspaceClusterTokens 是否由空间登记集群 Token 并接入集群，缺省为 false。
+	// 为 true 时集群 API 使用空间为集群分配的 Token，未接入的集群不可用，不回退到平台 Token
+	AllowWorkspaceClusterTokens bool
 }
 
 // BKCIProjInitConfig 蓝盾项目初始化默认配置

@@ -89,7 +89,7 @@ func InstallOrUpgradeClusterAddon(
 
 	// 3. 初始化 Helm SDK
 	debugLog := helm.NewHelmDebugLogger(ctx, releaseName, "cluster-addon-deploy")
-	cfg, err := helm.NewActionConfiguration(clusterID, namespace, debugLog)
+	cfg, err := helm.NewActionConfiguration(ctx, target.WorkspaceID, clusterID, namespace, debugLog)
 	if err != nil {
 		return errors.Wrapf(err, "init action configuration for deploy %s", releaseName)
 	}
@@ -125,7 +125,7 @@ func InstallOrUpgradeClusterAddon(
 func UninstallClusterAddon(
 	ctx context.Context,
 	addonDef *ClusterAddonDef,
-	clusterID, namespace string,
+	workspaceID, clusterID, namespace string,
 ) (retErr error) {
 	startedAt := time.Now()
 	defer metrics.ClusterAddonOperationFinished(metrics.ClusterAddonOperationUninstall, startedAt, &retErr)
@@ -134,7 +134,7 @@ func UninstallClusterAddon(
 
 	// 初始化 Helm SDK
 	debugLog := helm.NewHelmDebugLogger(ctx, releaseName, "cluster-addon-uninstall")
-	cfg, err := helm.NewActionConfiguration(clusterID, namespace, debugLog)
+	cfg, err := helm.NewActionConfiguration(ctx, workspaceID, clusterID, namespace, debugLog)
 	if err != nil {
 		return errors.Wrapf(err, "init action configuration for uninstall %s", releaseName)
 	}

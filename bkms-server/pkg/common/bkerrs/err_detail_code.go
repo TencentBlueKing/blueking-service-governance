@@ -75,4 +75,13 @@ const (
 	ErrDetailCodePolarisAccessPointInUse ErrDetailCode = "POLARIS_ACCESS_POINT_IN_USE"
 	// ErrDetailCodePolarisClusterInUse 集群上有环境被北极星配置使用，不能解绑或换绑
 	ErrDetailCodePolarisClusterInUse ErrDetailCode = "POLARIS_CLUSTER_IN_USE"
+
+	// ErrDetailCodeClusterTokenInUse 集群 Token 仍被集群使用，不能删除
+	ErrDetailCodeClusterTokenInUse ErrDetailCode = "CLUSTER_TOKEN_IN_USE"
+	// ErrDetailCodeWorkspaceClusterInUse 集群仍被环境或北极星集群绑定使用，不能移除
+	ErrDetailCodeWorkspaceClusterInUse ErrDetailCode = "WORKSPACE_CLUSTER_IN_USE"
+	// ErrDetailCodeClusterNotAccessed 集群未接入空间，需要先在集群管理中接入
+	ErrDetailCodeClusterNotAccessed ErrDetailCode = "CLUSTER_NOT_ACCESSED"
+	// ErrDetailCodeClusterTokenUnauthorized BCS 网关拒绝了空间的集群 Token：Token 无效，或所属用户没有权限
+	ErrDetailCodeClusterTokenUnauthorized ErrDetailCode = "CLUSTER_TOKEN_UNAUTHORIZED" // #nosec G101 -- 错误详情码，不是凭证
 )

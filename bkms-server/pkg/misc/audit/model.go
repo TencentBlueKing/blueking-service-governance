@@ -267,6 +267,10 @@ const (
 	AttributeBatchRelease Attribute = "batchRelease"
 	// AttributePolarisAccessPoint 空间北极星接入点
 	AttributePolarisAccessPoint Attribute = "polarisAccessPoint"
+	// AttributeClusterToken 空间集群 Token
+	AttributeClusterToken Attribute = "clusterToken"
+	// AttributeWorkspaceCluster 空间接入的集群
+	AttributeWorkspaceCluster Attribute = "workspaceCluster"
 )
 
 // DisplayName 属性展示用名称 TODO 国际化
@@ -324,6 +328,10 @@ func (t Attribute) DisplayName() string {
 		return "分批发布"
 	case AttributePolarisAccessPoint:
 		return "北极星接入点"
+	case AttributeClusterToken:
+		return "集群 Token"
+	case AttributeWorkspaceCluster:
+		return "集群接入"
 	default:
 		// 默认返回原始值
 		return string(t)

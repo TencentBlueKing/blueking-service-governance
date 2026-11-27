@@ -30,6 +30,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil/kubetest"
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/cluster"
 )
@@ -56,8 +57,8 @@ var _ = Describe("FeatureEnvNamespaceInitializer against a real cluster", Label(
 
 	BeforeEach(func() {
 		var err error
-		clusterCfg, err = testutil.TestClusterConfig("test-cluster")
-		if errors.Is(err, testutil.ErrKubeConfigNotFound) {
+		clusterCfg, err = kubetest.TestClusterConfig("test-cluster")
+		if errors.Is(err, kubetest.ErrKubeConfigNotFound) {
 			Skip(err.Error())
 		}
 		Expect(err).NotTo(HaveOccurred())
@@ -93,7 +94,7 @@ var _ = Describe("FeatureEnvNamespaceInitializer against a real cluster", Label(
 			bkmsenv.FeatureEnvNSLabelController:  bkmsenv.FeatureEnvNSControllerValue,
 		}
 
-		Expect(initializer.Initialize(ctx, clusterCfg.ClusterID, namespace, ownerLabels)).To(Succeed())
+		Expect(initializer.Initialize(ctx, workspaceID, clusterCfg.ClusterID, namespace, ownerLabels)).To(Succeed())
 
 		ns, err := clientSet.CoreV1().Namespaces().Get(ctx, namespace, metav1.GetOptions{})
 		Expect(err).NotTo(HaveOccurred())
@@ -105,7 +106,7 @@ var _ = Describe("FeatureEnvNamespaceInitializer against a real cluster", Label(
 		))
 
 		// 再次创建同名 namespace：AlreadyExists 应被视为成功。
-		Expect(initializer.Initialize(ctx, clusterCfg.ClusterID, namespace, ownerLabels)).To(Succeed())
+		Expect(initializer.Initialize(ctx, workspaceID, clusterCfg.ClusterID, namespace, ownerLabels)).To(Succeed())
 
 		_, err = clientSet.CoreV1().Namespaces().Get(ctx, namespace, metav1.GetOptions{})
 		Expect(err).NotTo(HaveOccurred())

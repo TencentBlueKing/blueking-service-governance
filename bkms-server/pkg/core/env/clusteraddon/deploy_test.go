@@ -35,6 +35,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil/kubetest"
 	clusteraddon "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/clusteraddon"
 	helmdeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/helm"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/helm"
@@ -123,7 +124,7 @@ var _ = Describe("UninstallClusterAddon", func() {
 				}).
 				Build()
 			Expect(
-				clusteraddon.UninstallClusterAddon(context.Background(), def, "cluster", "bcs-system"),
+				clusteraddon.UninstallClusterAddon(context.Background(), def, "ws", "cluster", "bcs-system"),
 			).To(Succeed())
 		})
 	})
@@ -148,8 +149,8 @@ var _ = Describe("Deploy", func() {
 
 		// 获取测试集群配置，mock cluster.NewConfig 使所有 k8s/helm 操作走测试集群
 		var err error
-		clusterCfg, err = testutil.TestClusterConfig("")
-		if errors.Is(err, testutil.ErrKubeConfigNotFound) {
+		clusterCfg, err = kubetest.TestClusterConfig("")
+		if errors.Is(err, kubetest.ErrKubeConfigNotFound) {
 			Skip(err.Error())
 		}
 		Expect(err).NotTo(HaveOccurred())
@@ -189,7 +190,7 @@ var _ = Describe("Deploy", func() {
 
 		if namespace != "" {
 			// 先尝试卸载 release（忽略错误，可能测试中已卸载）
-			_ = clusteraddon.UninstallClusterAddon(ctx, addonDef, clusterID, namespace)
+			_ = clusteraddon.UninstallClusterAddon(ctx, addonDef, "", clusterID, namespace)
 			// 回收命名空间
 			clientSet, err := kubernetes.NewForConfig(clusterCfg.Rest)
 			if err == nil {
@@ -255,7 +256,7 @@ var _ = Describe("Deploy", func() {
 			Expect(addon.InstallInfo.CurrentValues).To(ContainSubstring("updatedValue"))
 
 			By("6. 卸载 addon")
-			err = clusteraddon.UninstallClusterAddon(ctx, addonDef, clusterID, namespace)
+			err = clusteraddon.UninstallClusterAddon(ctx, addonDef, "", clusterID, namespace)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("7. 查询卸载后状态，验证回到未安装")

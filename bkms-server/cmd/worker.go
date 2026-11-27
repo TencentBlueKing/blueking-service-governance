@@ -30,7 +30,9 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/clustertoken"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/database"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/cluster"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/perm"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/redis"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/taskq"
@@ -84,6 +86,8 @@ func NewWorkerCmd() *cobra.Command {
 			taskq.InitClient(ctx, cfg.Asynq)
 			// 初始化 worker 侧可复用的 store registry
 			storereg.Init(ctx)
+			// 集群 API 按空间解析集群 Token（必须在 store 初始化之后）
+			cluster.SetTokenResolver(clustertoken.NewResolver(storereg.G().DB).ResolveToken)
 
 			// 启动阶段主动初始化权限管理器，提前暴露 IAM client、角色存储等构造问题，避免延迟到异步任务首次鉴权时才失败
 			_ = perm.NewManager()

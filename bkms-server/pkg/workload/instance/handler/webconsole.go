@@ -73,7 +73,11 @@ func (h *Handler) resolveConsoleTarget(
 	containerName := defaults.WorkloadMainContainerName
 	// 非 AppModel 类应用主容器名称不一定是 main
 	if !appruntime.IsAppModelType(app.Type) {
-		podClient := k8sclient.NewPodClient(cluster.NewConfig(env.Cluster.ClusterID))
+		clusterCfg, err := cluster.NewConfigForWorkspace(ctx, env.WorkspaceID, env.Cluster.ClusterID)
+		if err != nil {
+			return nil, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "build cluster config")
+		}
+		podClient := k8sclient.NewPodClient(clusterCfg)
 		containerName, err = podClient.GetFirstContainerName(ctx, env.Cluster.Namespace, uriInput.InstanceID)
 		if err != nil {
 			return nil, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "get first container name")

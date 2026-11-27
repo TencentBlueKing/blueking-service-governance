@@ -20,6 +20,8 @@
 package helm
 
 import (
+	"context"
+
 	"github.com/pkg/errors"
 	"helm.sh/helm/v3/pkg/action"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -38,7 +40,7 @@ import (
 const helmReleaseStorageDriver = "secret"
 
 // customRESTClientGetter 实现 genericclioptions.RESTClientGetter 接口
-// 封装 cluster.NewConfig(clusterID) 返回的 *rest.Config，为 Helm SDK 提供集群连接能力
+// 封装 cluster.NewConfigForWorkspace 返回的 *rest.Config，为 Helm SDK 提供集群连接能力
 type customRESTClientGetter struct {
 	clusterID  string
 	namespace  string
@@ -46,13 +48,18 @@ type customRESTClientGetter struct {
 }
 
 // newCustomRESTClientGetter 创建自定义 RESTClientGetter
-func newCustomRESTClientGetter(clusterID, namespace string) *customRESTClientGetter {
-	cfg := cluster.NewConfig(clusterID)
+func newCustomRESTClientGetter(
+	ctx context.Context, workspaceID, clusterID, namespace string,
+) (*customRESTClientGetter, error) {
+	cfg, err := cluster.NewConfigForWorkspace(ctx, workspaceID, clusterID)
+	if err != nil {
+		return nil, errors.Wrap(err, "build cluster config")
+	}
 	return &customRESTClientGetter{
 		clusterID:  clusterID,
 		namespace:  namespace,
 		restConfig: cfg.Rest,
-	}
+	}, nil
 }
 
 var _ genericclioptions.RESTClientGetter = &customRESTClientGetter{}
@@ -121,9 +128,14 @@ func (a *clientConfigAdapter) ConfigAccess() clientcmd.ConfigAccess {
 }
 
 // NewActionConfiguration 创建 Helm SDK action.Configuration
-// 通过 clusterID 获取集群连接配置，namespace 指定目标命名空间
-func NewActionConfiguration(clusterID, namespace string, debugLog action.DebugLog) (*action.Configuration, error) {
-	getter := newCustomRESTClientGetter(clusterID, namespace)
+// 通过 workspaceID、clusterID 获取集群连接配置，namespace 指定目标命名空间
+func NewActionConfiguration(
+	ctx context.Context, workspaceID, clusterID, namespace string, debugLog action.DebugLog,
+) (*action.Configuration, error) {
+	getter, err := newCustomRESTClientGetter(ctx, workspaceID, clusterID, namespace)
+	if err != nil {
+		return nil, err
+	}
 	cfg := new(action.Configuration)
 	if err := cfg.Init(getter, namespace, helmReleaseStorageDriver, debugLog); err != nil {
 		return nil, errors.Wrap(err, "init helm action configuration")

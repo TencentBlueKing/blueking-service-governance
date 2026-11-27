@@ -80,7 +80,7 @@ func (s *GPAService) Apply(ctx context.Context, env *bkmsenv.Environment, config
 		return err
 	}
 
-	k8sClient, err := s.newK8sClient(env.Cluster.ClusterID)
+	k8sClient, err := s.newK8sClient(ctx, env.WorkspaceID, env.Cluster.ClusterID)
 	if err != nil {
 		// discovery 阶段无法解析 GeneralPodAutoscaler 资源类型，说明集群未安装 GPA 组件
 		if isComponentNotInstalledErr(err) {
@@ -113,7 +113,7 @@ func (s *GPAService) Apply(ctx context.Context, env *bkmsenv.Environment, config
 
 // Get 回查集群中指定 GPA CR 的运行状态
 func (s *GPAService) Get(ctx context.Context, env *bkmsenv.Environment, name string) (*GPAStatus, error) {
-	clusterClient, err := s.NewClusterClient(env.Cluster.ClusterID)
+	clusterClient, err := s.NewClusterClient(ctx, env.WorkspaceID, env.Cluster.ClusterID)
 	if err != nil {
 		return nil, err
 	}
@@ -128,7 +128,7 @@ func (s *GPAService) Get(ctx context.Context, env *bkmsenv.Environment, name str
 
 // ListByEnv 列出指定环境下所有 GPA CR 的运行状态
 func (s *GPAService) ListByEnv(ctx context.Context, env *bkmsenv.Environment) ([]*GPAStatus, error) {
-	k8sClient, err := s.newK8sClient(env.Cluster.ClusterID)
+	k8sClient, err := s.newK8sClient(ctx, env.WorkspaceID, env.Cluster.ClusterID)
 	if err != nil {
 		return nil, errors.Wrap(err, "create k8s client for gpa")
 	}
@@ -155,7 +155,7 @@ func (s *GPAService) ListByEnv(ctx context.Context, env *bkmsenv.Environment) ([
 
 // Delete 删除集群中指定的 GPA CR
 func (s *GPAService) Delete(ctx context.Context, env *bkmsenv.Environment, name string) error {
-	k8sClient, err := s.newK8sClient(env.Cluster.ClusterID)
+	k8sClient, err := s.newK8sClient(ctx, env.WorkspaceID, env.Cluster.ClusterID)
 	if err != nil {
 		return errors.Wrap(err, "create k8s client for gpa")
 	}
@@ -181,13 +181,14 @@ type ClusterClient struct {
 // NewClusterClient 创建单集群 GPA CR 客户端。
 //
 // Args:
+//   - workspaceID 访问集群的工作空间 ID
 //   - clusterID BCS / 本地集群 ID
 //
 // Returns:
 //   - 集群 GPA CR 客户端
 //   - error，集群未安装 GPA 组件时为 ErrComponentNotInstalled
-func (s *GPAService) NewClusterClient(clusterID string) (*ClusterClient, error) {
-	cli, err := s.newK8sClient(clusterID)
+func (s *GPAService) NewClusterClient(ctx context.Context, workspaceID, clusterID string) (*ClusterClient, error) {
+	cli, err := s.newK8sClient(ctx, workspaceID, clusterID)
 	if err != nil {
 		// discovery 阶段无法解析 GeneralPodAutoscaler 资源类型，说明集群未安装 GPA 组件
 		if isComponentNotInstalledErr(err) {
@@ -224,8 +225,13 @@ func (s *GPAService) resolveScaleTargetName(
 }
 
 // newK8sClient 创建 GeneralPodAutoscaler CR 的 K8s 客户端
-func (s *GPAService) newK8sClient(clusterID string) (*k8sclient.Client, error) {
-	clusterCfg := cluster.NewConfig(clusterID)
+func (s *GPAService) newK8sClient(
+	ctx context.Context, workspaceID, clusterID string,
+) (*k8sclient.Client, error) {
+	clusterCfg, err := cluster.NewConfigForWorkspace(ctx, workspaceID, clusterID)
+	if err != nil {
+		return nil, errors.Wrap(err, "build cluster config")
+	}
 
 	resGVR, err := discovery.GetGroupVersionResource(clusterCfg, gpaKind, gpaGroupVersion)
 	if err != nil {

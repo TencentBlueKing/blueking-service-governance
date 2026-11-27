@@ -175,7 +175,7 @@ func (r *Refresher) doRefreshFromHelmRelease(ctx context.Context, args RefreshAr
 ) {
 	// 1. 获取 Helm Release Manifest
 	debugLog := helm.NewHelmDebugLogger(ctx, args.ReleaseName, "topology-refresh")
-	cfg, err := helm.NewActionConfiguration(args.ClusterID, args.Namespace, debugLog)
+	cfg, err := helm.NewActionConfiguration(ctx, args.WorkspaceID, args.ClusterID, args.Namespace, debugLog)
 	if err != nil {
 		return nil, 0, errors.Wrap(err, "init helm action configuration")
 	}
@@ -198,7 +198,10 @@ func (r *Refresher) doRefreshFromHelmRelease(ctx context.Context, args RefreshAr
 	}
 
 	// 3. 从集群补充资源（ownerRef 链，如 Deployment → ReplicaSet / CronJob → Job）
-	clusterCfg := cluster.NewConfig(args.ClusterID)
+	clusterCfg, err := cluster.NewConfigForWorkspace(ctx, args.WorkspaceID, args.ClusterID)
+	if err != nil {
+		return nil, 0, errors.Wrap(err, "build cluster config")
+	}
 	clusterResources, err := r.supplementFromCluster(ctx, clusterCfg, args.Namespace, entries)
 	if err != nil {
 		return nil, 0, errors.Wrap(err, "supplement from cluster")
@@ -237,7 +240,10 @@ func (r *Refresher) doRefreshFromResourceKeys(ctx context.Context, args RefreshA
 	}
 
 	// 2. 从集群补充 ownerRef 链
-	clusterCfg := cluster.NewConfig(args.ClusterID)
+	clusterCfg, err := cluster.NewConfigForWorkspace(ctx, args.WorkspaceID, args.ClusterID)
+	if err != nil {
+		return nil, 0, errors.Wrap(err, "build cluster config")
+	}
 	clusterResources, err := r.supplementFromCluster(ctx, clusterCfg, args.Namespace, entries)
 	if err != nil {
 		return nil, 0, errors.Wrap(err, "supplement from cluster")
@@ -440,6 +446,7 @@ func (r *Refresher) buildSnapshotWithVersion(
 		AppID:           args.AppID,
 		EnvName:         args.EnvName,
 		TrafficLaneName: args.TrafficLaneName,
+		WorkspaceID:     args.WorkspaceID,
 		ClusterID:       args.ClusterID,
 		Namespace:       args.Namespace,
 		ReleaseName:     args.ReleaseName,

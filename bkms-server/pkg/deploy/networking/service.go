@@ -47,11 +47,15 @@ const (
 )
 
 // NewServiceSyncer 创建 serviceSyncer 实例
-func NewServiceSyncer(env *envmodel.Environment) *serviceSyncer {
-	return &serviceSyncer{
-		client:    k8sclient.NewWithGVR(cluster.NewConfig(env.Cluster.ClusterID), gvr.SVC),
-		namespace: env.Cluster.Namespace,
+func NewServiceSyncer(ctx context.Context, env *envmodel.Environment) (*serviceSyncer, error) {
+	clusterCfg, err := cluster.NewConfigForWorkspace(ctx, env.WorkspaceID, env.Cluster.ClusterID)
+	if err != nil {
+		return nil, errors.Wrap(err, "build cluster config")
 	}
+	return &serviceSyncer{
+		client:    k8sclient.NewWithGVR(clusterCfg, gvr.SVC),
+		namespace: env.Cluster.Namespace,
+	}, nil
 }
 
 // serviceSyncer service 同步器. 负责将应用的 services 部署(同步)到目标环境中.

@@ -60,7 +60,10 @@ func (b *Builder) Build(ctx context.Context, snapshot *ResourceSnapshot) (*Graph
 	}
 
 	// 1. 并发获取 K8s 集群实时状态（仅 snapshot 中记录的静态资源）
-	clusterCfg := cluster.NewConfig(snapshot.ClusterID)
+	clusterCfg, err := cluster.NewConfigForWorkspace(ctx, snapshot.WorkspaceID, snapshot.ClusterID)
+	if err != nil {
+		return nil, errors.Wrap(err, "build cluster config")
+	}
 	clusterResources, fetchWarnings := b.fetchClusterResources(ctx, clusterCfg, snapshot.Resources)
 
 	// 2. 实时发现动态子资源（RS/Job/Pod），这些资源不固化到 snapshot 中，每次查询时实时获取

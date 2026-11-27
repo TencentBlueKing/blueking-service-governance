@@ -72,10 +72,28 @@ func NewService(
 	}
 }
 
+// findSnapshot 获取资源快照，早期快照没有 WorkspaceID 时按应用补齐（仅内存中，不回写）
+func (s *Service) findSnapshot(
+	ctx context.Context, appID, envName, trafficLaneName string,
+) (*ResourceSnapshot, error) {
+	snapshot, err := FindSnapshot(ctx, s.snapshots, appID, envName, trafficLaneName)
+	if err != nil || snapshot == nil || snapshot.WorkspaceID != "" {
+		return snapshot, err
+	}
+	app, err := store.Of(s.db, bkmsapp.AppMeta).Get(ctx, bkmsapp.ByID(appID))
+	if err != nil {
+		// 只影响按空间解析集群 Token，开关关闭时集群配置不依赖空间
+		log.Warnf(ctx, "topology service: get app %s to fill snapshot workspace: %v", appID, err)
+		return snapshot, nil
+	}
+	snapshot.WorkspaceID = app.WorkspaceID
+	return snapshot, nil
+}
+
 // GetTopology 获取指定应用环境的资源拓扑图
 // 流程：从 Store 读取 ResourceSnapshot → 调用 Builder 构建拓扑 → 处理无数据场景
 func (s *Service) GetTopology(ctx context.Context, appID, envName, trafficLaneName string) (*Graph, error) {
-	snapshot, err := FindSnapshot(ctx, s.snapshots, appID, envName, trafficLaneName)
+	snapshot, err := s.findSnapshot(ctx, appID, envName, trafficLaneName)
 	if err != nil {
 		return nil, errors.Wrapf(err, "get resource snapshot for %s/%s/%s", appID, envName, trafficLaneName)
 	}
@@ -278,7 +296,7 @@ func (s *Service) maskManifestSensitiveValues(
 func (s *Service) resolveAndValidateNode(
 	ctx context.Context, appID, envName, trafficLaneName, nodeID string,
 ) (*ResourceSnapshot, *cluster.Config, string, string, string, error) {
-	snapshot, err := FindSnapshot(ctx, s.snapshots, appID, envName, trafficLaneName)
+	snapshot, err := s.findSnapshot(ctx, appID, envName, trafficLaneName)
 	if err != nil {
 		return nil, nil, "", "", "", errors.Wrapf(
 			err,
@@ -304,7 +322,10 @@ func (s *Service) resolveAndValidateNode(
 	}
 
 	// 创建集群配置并执行范围校验
-	clusterCfg := cluster.NewConfig(snapshot.ClusterID)
+	clusterCfg, err := cluster.NewConfigForWorkspace(ctx, snapshot.WorkspaceID, snapshot.ClusterID)
+	if err != nil {
+		return nil, nil, "", "", "", errors.Wrap(err, "build cluster config")
+	}
 	validator := NewScopeValidator(snapshot, clusterCfg)
 	if err = validator.Validate(ctx, kind, ns, name); err != nil {
 		return nil, nil, "", "", "", err

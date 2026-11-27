@@ -29,6 +29,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil/kubetest"
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/cluster"
 )
@@ -60,8 +61,8 @@ var _ = Describe("GPAService against a real cluster", Label("k8s"), func() {
 
 	BeforeEach(func() {
 		var err error
-		clusterCfg, err = testutil.TestClusterConfig("")
-		if errors.Is(err, testutil.ErrKubeConfigNotFound) {
+		clusterCfg, err = kubetest.TestClusterConfig("")
+		if errors.Is(err, kubetest.ErrKubeConfigNotFound) {
 			Skip(err.Error())
 		}
 		Expect(err).NotTo(HaveOccurred())
@@ -80,7 +81,7 @@ var _ = Describe("GPAService against a real cluster", Label("k8s"), func() {
 		env.Cluster.Namespace = testNamespace
 
 		// 测试集群未注册 generalpodautoscalers CRD 时，GVR 解析失败，整组用例直接 Skip
-		if _, err := svc.newK8sClient(env.Cluster.ClusterID); err != nil {
+		if _, err := svc.newK8sClient(context.Background(), env.WorkspaceID, env.Cluster.ClusterID); err != nil {
 			Skip("gpa CRD not registered in test cluster: " + err.Error())
 		}
 	})
@@ -161,7 +162,7 @@ var _ = Describe("GPAService against a real cluster", Label("k8s"), func() {
 		Expect(svc.Apply(ctx, env, config)).To(Succeed())
 
 		// 用底层 client 原始读取，校验 spec 字段确实写入集群
-		k8sClient, err := svc.newK8sClient(env.Cluster.ClusterID)
+		k8sClient, err := svc.newK8sClient(context.Background(), env.WorkspaceID, env.Cluster.ClusterID)
 		Expect(err).NotTo(HaveOccurred())
 		obj, err := k8sClient.Get(ctx, env.Cluster.Namespace, crName, metav1.GetOptions{})
 		Expect(err).NotTo(HaveOccurred())

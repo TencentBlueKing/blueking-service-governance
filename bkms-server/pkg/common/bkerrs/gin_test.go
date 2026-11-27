@@ -40,6 +40,16 @@ func (testUnauthenticatedError) IsUnauthenticated() bool {
 	return true
 }
 
+type notAccessedError struct{}
+
+func (notAccessedError) Error() string {
+	return "cluster is not accessed by the workspace"
+}
+
+func (notAccessedError) APIErrorDetail() (ErrCode, ErrDetailCode, string) {
+	return ErrCodeInvalidRequest, ErrDetailCodeClusterNotAccessed, "cluster"
+}
+
 var _ = Describe("Gin error handling", func() {
 	BeforeEach(func() {
 		gin.SetMode(gin.TestMode)
@@ -118,6 +128,46 @@ var _ = Describe("Gin error handling", func() {
 			))
 			Expect(out.Error.Details).To(HaveLen(1))
 			Expect(out.Error.Details[0]["code"]).To(Equal(string(ErrDetailCodeBSCPDisabled)))
+		})
+	})
+
+	Context("when handler reports an error that declares an API detail", func() {
+		It("restores the declared code when wrapped as an internal error", func() {
+			cause := pkgerrors.Wrap(notAccessedError{}, "cluster BCS-K8S-15638, workspace bkmsstage")
+			cause = pkgerrors.Wrap(cause, "resolve token of cluster BCS-K8S-15638 for workspace bkmsstage")
+			rec := makeRequest(Wrap(cause, ErrCodeInternalServerError, "build cluster config"))
+
+			Expect(rec.Code).To(Equal(http.StatusBadRequest))
+			var out GinErrorOutput
+			Expect(json.Unmarshal(rec.Body.Bytes(), &out)).To(Succeed())
+			Expect(out.Error.Code).To(Equal(ErrCodeInvalidRequest))
+			Expect(out.Error.Message).To(HavePrefix("build cluster config:"))
+			Expect(out.Error.Message).To(ContainSubstring("cluster is not accessed by the workspace"))
+			Expect(out.Error.Details).To(HaveLen(1))
+			Expect(out.Error.Details[0]["code"]).To(Equal(string(ErrDetailCodeClusterNotAccessed)))
+			Expect(out.Error.Details[0]["module"]).To(Equal("cluster"))
+		})
+
+		It("keeps an error that already carries the declared detail", func() {
+			mapped := Wrap(
+				notAccessedError{},
+				ErrCodeInvalidRequest,
+				"check cluster accessed by workspace",
+			).SetDetails(
+				NewDetail(
+					ErrDetailCodeClusterNotAccessed,
+					"already mapped",
+					WithSystem(SystemName),
+					WithModule("cluster"),
+				),
+			)
+			rec := makeRequest(mapped)
+
+			Expect(rec.Code).To(Equal(http.StatusBadRequest))
+			var out GinErrorOutput
+			Expect(json.Unmarshal(rec.Body.Bytes(), &out)).To(Succeed())
+			Expect(out.Error.Message).To(HavePrefix("check cluster accessed by workspace:"))
+			Expect(out.Error.Details[0]["message"]).To(Equal("already mapped"))
 		})
 	})
 

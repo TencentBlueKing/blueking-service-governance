@@ -21,6 +21,7 @@ package handler
 
 import (
 	"cmp"
+	"context"
 
 	"github.com/gin-gonic/gin"
 	"github.com/pkg/errors"
@@ -29,6 +30,7 @@ import (
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/clustertoken"
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/serializer"
@@ -64,10 +66,44 @@ func (h *Handler) newDeployStatusService() *deploystatus.DeployStatusService {
 	return deploystatus.NewDeployStatusService(h.registry.DB)
 }
 
+// checkClusterAccessed 由空间接入集群时（bcs.allowWorkspaceClusterTokens），环境只能使用已接入空间的集群。
+// 返回的错误已包装为 API 错误
+func (h *Handler) checkClusterAccessed(ctx context.Context, workspaceID, clusterID string) error {
+	if clusterID == "" {
+		return nil
+	}
+	err := clustertoken.NewResolver(h.registry.DB).CheckAccessed(ctx, workspaceID, clusterID)
+	if err != nil {
+		return clustertoken.APIError(err, "check cluster accessed by workspace")
+	}
+	return nil
+}
+
+// newEnvOutputs 构造环境列表输出；由空间接入集群时，按空间的集群接入记录标记环境所在集群是否为共享集群
+func (h *Handler) newEnvOutputs(
+	ctx context.Context, workspaceID string, envs []envmodel.Environment,
+) ([]*serializer.EnvOutput, error) {
+	outputs := lo.Map(envs, func(env envmodel.Environment, _ int) *serializer.EnvOutput {
+		return new(serializer.EnvOutput).FromModel(env)
+	})
+	if !clustertoken.Enabled() || len(outputs) == 0 {
+		return outputs, nil
+	}
+	clusters, err := clustertoken.NewResolver(h.registry.DB).AccessedClusters(ctx, workspaceID)
+	if err != nil {
+		return nil, errors.Wrapf(err, "list accessed clusters of workspace %s", workspaceID)
+	}
+	for _, output := range outputs {
+		output.Cluster.IsShared = clusters[output.Cluster.ClusterID].IsShared
+	}
+	return outputs, nil
+}
+
 // CreateEnv 创建部署环境。
 //
 //	@ID				CreateEnv
 //	@Summary		创建部署环境
+//	@Description	由空间接入集群时只能使用已接入空间的集群，否则返回详情码 CLUSTER_NOT_ACCESSED。
 //	@Tags			env
 //	@Accept			json
 //	@Produce		json
@@ -97,6 +133,11 @@ func (h *Handler) CreateEnv(c *gin.Context) {
 
 	if err = perm.NewManager().HasCreateEnvPerm(ctx, ws.ID); err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.WrapIAMNoPermission(err, ws.ID, "check app perm"))
+		return
+	}
+
+	if err = h.checkClusterAccessed(ctx, ws.ID, input.Cluster.ClusterID); err != nil {
+		bkerrs.AbortWithErr(c, err)
 		return
 	}
 
@@ -300,11 +341,12 @@ func (h *Handler) ListEnvs(c *gin.Context) {
 		return
 	}
 
-	ginutils.OK(c, serializer.ListEnvsOutput{
-		Data: lo.Map(envs, func(env envmodel.Environment, _ int) *serializer.EnvOutput {
-			return new(serializer.EnvOutput).FromModel(env)
-		}),
-	})
+	outputs, err := h.newEnvOutputs(ctx, uriInput.WorkspaceID, envs)
+	if err != nil {
+		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "build env outputs"))
+		return
+	}
+	ginutils.OK(c, serializer.ListEnvsOutput{Data: outputs})
 }
 
 // ListAppEnvs 获取应用可用的环境列表。
@@ -340,11 +382,12 @@ func (h *Handler) ListAppEnvs(c *gin.Context) {
 		return
 	}
 
-	ginutils.OK(c, serializer.ListEnvsOutput{
-		Data: lo.Map(envs, func(env envmodel.Environment, _ int) *serializer.EnvOutput {
-			return new(serializer.EnvOutput).FromModel(env)
-		}),
-	})
+	outputs, err := h.newEnvOutputs(ctx, app.WorkspaceID, envs)
+	if err != nil {
+		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "build app env outputs"))
+		return
+	}
+	ginutils.OK(c, serializer.ListEnvsOutput{Data: outputs})
 }
 
 // ListFeatureEnvs 获取应用的特性环境管理列表。
@@ -539,6 +582,7 @@ func (h *Handler) UpdateEnvBasicInfo(c *gin.Context) {
 //
 //	@ID				UpdateEnvCluster
 //	@Summary		更新部署环境集群配置
+//	@Description	由空间接入集群时只能使用已接入空间的集群，否则返回详情码 CLUSTER_NOT_ACCESSED。
 //	@Tags			env
 //	@Accept			json
 //	@Produce		json
@@ -566,6 +610,10 @@ func (h *Handler) UpdateEnvCluster(c *gin.Context) {
 
 	updateData := &envmodel.EnvironmentUpdateData{}
 	if input.ClusterID != "" {
+		if err = h.checkClusterAccessed(ctx, env.WorkspaceID, input.ClusterID); err != nil {
+			bkerrs.AbortWithErr(c, err)
+			return
+		}
 		isFederation := bkmsenv.IsFederationCluster(input.ClusterID)
 		updateData.ClusterID = &input.ClusterID
 		updateData.ClusterType = &input.ClusterType

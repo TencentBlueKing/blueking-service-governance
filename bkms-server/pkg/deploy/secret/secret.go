@@ -102,7 +102,11 @@ func (m *ImagePullSecretSyncer) Sync(ctx context.Context) error {
 		return err
 	}
 
-	client := k8sclient.NewWithGVR(cluster.NewConfig(m.clusterID), gvr.Secret)
+	clusterCfg, err := cluster.NewConfigForWorkspace(ctx, m.workspaceID, m.clusterID)
+	if err != nil {
+		return errors.Wrap(err, "build cluster config")
+	}
+	client := k8sclient.NewWithGVR(clusterCfg, gvr.Secret)
 
 	// 2. 获取镜像仓库凭证信息
 	auths, err := m.genAuthsData(ctx)
@@ -125,9 +129,13 @@ func (m *ImagePullSecretSyncer) Sync(ctx context.Context) error {
 
 // validateNamespace 检查命名空间是否已经存在
 func (m *ImagePullSecretSyncer) validateNamespace(ctx context.Context) error {
-	client := k8sclient.NewWithGVR(cluster.NewConfig(m.clusterID), gvr.NS)
+	clusterCfg, err := cluster.NewConfigForWorkspace(ctx, m.workspaceID, m.clusterID)
+	if err != nil {
+		return errors.Wrap(err, "build cluster config")
+	}
+	client := k8sclient.NewWithGVR(clusterCfg, gvr.NS)
 	// 检查 k8s 命名空间是否存在
-	if _, err := client.Get(ctx, "", m.namespace, metav1.GetOptions{}); err != nil {
+	if _, err = client.Get(ctx, "", m.namespace, metav1.GetOptions{}); err != nil {
 		return errors.Wrapf(err, "get namespace: %s", m.namespace)
 	}
 	return nil

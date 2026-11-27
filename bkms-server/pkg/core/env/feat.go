@@ -34,6 +34,7 @@ import (
 
 	log "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/logging"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/clustertoken"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	k8sclient "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/client"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/cluster"
@@ -89,8 +90,8 @@ type FeatureEnvVarStore interface {
 
 // FeatureEnvNamespaceInitializer 负责初始化特性环境使用的 Kubernetes namespace。
 type FeatureEnvNamespaceInitializer interface {
-	// Initialize 初始化某个集群内的特定命名空间，并写入 ownerLabels 作为托管标识。
-	Initialize(ctx context.Context, clusterID, namespace string, ownerLabels map[string]string) error
+	// Initialize 以空间身份初始化某个集群内的特定命名空间，并写入 ownerLabels 作为托管标识。
+	Initialize(ctx context.Context, workspaceID, clusterID, namespace string, ownerLabels map[string]string) error
 }
 
 type featureEnvNamespaceInitializer struct{}
@@ -106,9 +107,13 @@ func NewFeatureEnvNamespaceInitializer() FeatureEnvNamespaceInitializer {
 //
 // 若命名空间已存在（AlreadyExists），视为成功并打 warning 日志。
 func (*featureEnvNamespaceInitializer) Initialize(
-	ctx context.Context, clusterID, namespace string, ownerLabels map[string]string,
+	ctx context.Context, workspaceID, clusterID, namespace string, ownerLabels map[string]string,
 ) error {
-	client := k8sclient.NewWithGVR(cluster.NewConfig(clusterID), gvr.NS)
+	clusterCfg, err := cluster.NewConfigForWorkspace(ctx, workspaceID, clusterID)
+	if err != nil {
+		return errors.Wrap(err, "build cluster config")
+	}
+	client := k8sclient.NewWithGVR(clusterCfg, gvr.NS)
 	manifest := map[string]any{
 		"apiVersion": "v1",
 		"kind":       k8skind.NS,
@@ -118,7 +123,7 @@ func (*featureEnvNamespaceInitializer) Initialize(
 		},
 	}
 
-	_, err := client.Create(ctx, "", manifest, metav1.CreateOptions{})
+	_, err = client.Create(ctx, "", manifest, metav1.CreateOptions{})
 	if errors.Is(err, k8sclient.ErrResourceAlreadyExists) {
 		log.WarnAttrs(ctx, "feature env namespace already exists, treat as success",
 			slog.String("cluster_id", clusterID),
@@ -170,6 +175,34 @@ func NewFeatureEnvService(
 		namespaceInitializer: namespaceInitializer,
 		trafficManager:       trafficmanager.New(),
 	}
+}
+
+// validateIndependentNamespace 由空间接入集群时（bcs.allowWorkspaceClusterTokens），来源环境位于共享集群
+// 或集群未接入空间的特性环境只能复用来源环境的命名空间（NsTypeShared）。
+//
+// BCS 网关对非 admin 用户只允许查看、列出共享集群上的命名空间，空间配置的 Token 新建命名空间会被拒绝；
+// 开关关闭时使用平台 Token（通常为 BCS admin，不受此限制），因此不校验。
+// 命名空间初始化失败不会使创建失败（见 Create），不在此拦截的话要到首次部署才会报 ErrUnauthorized
+func (s *FeatureEnvService) validateIndependentNamespace(ctx context.Context, input CreateFeatureEnvInput) error {
+	clusterID := input.SourceEnv.Cluster.ClusterID
+	if !clustertoken.Enabled() || clusterID == "" {
+		return nil
+	}
+	wc, err := clustertoken.NewResolver(s.db).GetCluster(ctx, input.App.WorkspaceID, clusterID)
+	if err != nil {
+		if errors.Is(err, clustertoken.ErrClusterNotAccessed) {
+			return errors.Wrapf(ErrInvalidFeatureEnvInput, "source environment %s: %v", input.SourceEnv.Name, err)
+		}
+		return errors.Wrapf(err, "get workspace cluster %s", clusterID)
+	}
+	if wc.IsShared {
+		return errors.Wrapf(
+			ErrInvalidFeatureEnvInput,
+			"source environment %s is on shared cluster %s, nsType must be %s",
+			input.SourceEnv.Name, clusterID, NsTypeShared,
+		)
+	}
+	return nil
 }
 
 // ListAppFeatEnvs 获取应用的全部特性环境及其可用的来源标准环境。
@@ -231,6 +264,8 @@ func (s *FeatureEnvService) Create(ctx context.Context, input CreateFeatureEnvIn
 		if err := validateShareSourceNamespace(input); err != nil {
 			return nil, err
 		}
+	} else if err := s.validateIndependentNamespace(ctx, input); err != nil {
+		return nil, err
 	}
 
 	index, err := s.indexCounter.Next(ctx, input.App.ID)
@@ -272,7 +307,6 @@ func (s *FeatureEnvService) Create(ctx context.Context, input CreateFeatureEnvIn
 			return nil, err
 		}
 	}
-
 	// 复用的 namespace 属于来源环境，不由特性环境初始化或托管。
 	if env.SharesNamespace() {
 		return env, nil
@@ -282,6 +316,7 @@ func (s *FeatureEnvService) Create(ctx context.Context, input CreateFeatureEnvIn
 	// namespace 初始化失败时仍返回已创建的环境记录，仅记录错误日志。
 	if err = s.namespaceInitializer.Initialize(
 		ctx,
+		env.WorkspaceID,
 		env.Cluster.ClusterID,
 		env.Cluster.Namespace,
 		featureEnvOwnerLabels(env),
@@ -295,7 +330,6 @@ func (s *FeatureEnvService) Create(ctx context.Context, input CreateFeatureEnvIn
 			slog.Any("error", err),
 		)
 	}
-
 	return env, nil
 }
 

@@ -77,6 +77,8 @@ type Deployer struct {
 	app *bkmsapp.Application
 
 	podManager *podManager
+	// clusterConfigs 本次操作内的集群配置缓存，与 podManager 共用
+	clusterConfigs *cluster.ConfigCache
 }
 
 // NewDeployer 创建 appmodel 应用部署器
@@ -87,14 +89,25 @@ func NewDeployer(
 	hostPortEnvStateManager *hostport.EnvStateManager,
 	app *bkmsapp.Application,
 ) *Deployer {
+	configs := &cluster.ConfigCache{}
 	return &Deployer{
 		builderService:          builderService,
 		db:                      db,
 		polarisEnvStateManager:  polarisEnvStateManager,
 		hostPortEnvStateManager: hostPortEnvStateManager,
 		app:                     app,
-		podManager:              &podManager{},
+		podManager:              &podManager{workspaceID: app.WorkspaceID, clusterConfigs: configs},
+		clusterConfigs:          configs,
 	}
+}
+
+// clusterConfig 按应用所属工作空间获取集群连接配置
+func (d *Deployer) clusterConfig(ctx context.Context, clusterID string) (*cluster.Config, error) {
+	cfg, err := d.clusterConfigs.Get(ctx, d.app.WorkspaceID, clusterID)
+	if err != nil {
+		return nil, errors.Wrap(err, "build cluster config")
+	}
+	return cfg, nil
 }
 
 // Deploy 执行部署操作，返回部署 ID，执行错误。
@@ -119,9 +132,13 @@ func (d *Deployer) Deploy(
 	extraObjs := buildResult.ExtraObjects
 
 	clusterID, namespace := env.Cluster.ClusterID, env.Cluster.Namespace
+	clusterCfg, err := d.clusterConfig(ctx, clusterID)
+	if err != nil {
+		return "", err
+	}
 	// 主工作负载不支持分批发布时，在创建部署记录、下发任何资源之前拒绝
 	rollout, err := newWorkloadRollout(
-		cluster.NewConfig(clusterID), namespace, buildResult.WorkloadKind, buildResult.Name(), strategy,
+		clusterCfg, namespace, buildResult.WorkloadKind, buildResult.Name(), strategy,
 	)
 	if err != nil {
 		return "", err
@@ -231,7 +248,11 @@ func (d *Deployer) Uninstall(ctx context.Context, env *bkmsenv.Environment, traf
 	}
 
 	// 分批发布下发的 Rollout 不在 ResourceKeys 中；最新记录可能是之后的实例更新记录，不能以发布方式判断是否存在
-	if err = deleteRollout(ctx, cluster.NewConfig(record.ClusterID), record); err != nil {
+	clusterCfg, err := d.clusterConfig(ctx, record.ClusterID)
+	if err != nil {
+		return err
+	}
+	if err = deleteRollout(ctx, clusterCfg, record); err != nil {
 		return errors.Wrap(err, "delete rollout")
 	}
 
@@ -343,7 +364,11 @@ func (d *Deployer) UpdateInstances(
 	}
 	clusterID, namespace := record.ClusterID, record.Namespace
 	// 分批发布结束后 Rollout 与标签仍保留在集群中，修改 Pod 模板前不清理会按旧策略再分批一次
-	rollouts := newRolloutManager(cluster.NewConfig(clusterID))
+	clusterCfg, err := d.clusterConfig(ctx, clusterID)
+	if err != nil {
+		return "", err
+	}
+	rollouts := newRolloutManager(clusterCfg)
 	if err = rollouts.Cleanup(ctx, namespace, gameDeploy.Name); err != nil {
 		return "", errors.Wrap(err, "clean up rollout")
 	}
@@ -663,7 +688,10 @@ func (d *Deployer) verifyOwnership(
 	buildResult *workload.BuildResult,
 	rollout *workloadRollout,
 ) error {
-	clusterCfg := cluster.NewConfig(env.Cluster.ClusterID)
+	clusterCfg, err := d.clusterConfig(ctx, env.Cluster.ClusterID)
+	if err != nil {
+		return err
+	}
 	namespace := env.Cluster.Namespace
 
 	for idx := range buildResult.ExtraObjects {
@@ -715,7 +743,10 @@ func (d *Deployer) upsertExtraObjects(
 	clusterID, namespace string,
 	extraObjs []unstructured.Unstructured,
 ) error {
-	clusterCfg := cluster.NewConfig(clusterID)
+	clusterCfg, err := d.clusterConfig(ctx, clusterID)
+	if err != nil {
+		return err
+	}
 	for idx := range extraObjs {
 		obj := &extraObjs[idx]
 		client, err := newExtraObjectClient(clusterCfg, idx, obj)
@@ -747,7 +778,11 @@ func (d *Deployer) getLatestGameDeployment(ctx context.Context, record *Record) 
 	}
 
 	// 获取 GameDeployment 资源
-	client := k8sclient.NewWithGVR(cluster.NewConfig(record.ClusterID), gvr.GameDeploy)
+	clusterCfg, err := d.clusterConfig(ctx, record.ClusterID)
+	if err != nil {
+		return nil, err
+	}
+	client := k8sclient.NewWithGVR(clusterCfg, gvr.GameDeploy)
 	result, err := client.Get(ctx, record.Namespace, gameDeployName, metav1.GetOptions{})
 	if err != nil {
 		return nil, errors.Wrap(err, "get game deployment")
@@ -773,7 +808,11 @@ func (d *Deployer) upsertWorkload(
 		return nil, errors.Wrap(err, "convert workload to unstructured")
 	}
 
-	client := k8sclient.NewWithGVR(cluster.NewConfig(clusterID), resGVR)
+	clusterCfg, err := d.clusterConfig(ctx, clusterID)
+	if err != nil {
+		return nil, err
+	}
+	client := k8sclient.NewWithGVR(clusterCfg, resGVR)
 	live, err := client.Upsert(ctx, namespace, manifest, metav1.PatchOptions{})
 	if err != nil {
 		return nil, errors.Wrap(err, "upsert workload")
@@ -795,7 +834,11 @@ func (d *Deployer) patchWorkload(
 	if err != nil {
 		return nil, errors.Wrap(err, "marshal workload patches")
 	}
-	client := k8sclient.NewWithGVR(cluster.NewConfig(clusterID), resGVR)
+	clusterCfg, err := d.clusterConfig(ctx, clusterID)
+	if err != nil {
+		return nil, err
+	}
+	client := k8sclient.NewWithGVR(clusterCfg, resGVR)
 	live, err := client.Patch(ctx, namespace, name, types.JSONPatchType, patchesByte, metav1.PatchOptions{})
 	if err != nil {
 		return nil, errors.Wrap(err, "patch workload")
@@ -969,7 +1012,10 @@ func (d *Deployer) deleteDeployedResources(
 	clusterID, namespace string,
 	resourceKeys ResourceKeys,
 ) error {
-	clusterCfg := cluster.NewConfig(clusterID)
+	clusterCfg, err := d.clusterConfig(ctx, clusterID)
+	if err != nil {
+		return err
+	}
 	for _, key := range resourceKeys {
 		// 动态获取资源 GVR（preferred version）
 		resGVR, err := discovery.GetGroupVersionResource(clusterCfg, key.Kind, "")

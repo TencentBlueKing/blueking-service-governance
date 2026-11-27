@@ -31,6 +31,13 @@ type unauthenticatedError interface {
 	IsUnauthenticated() bool
 }
 
+// APIDetailError 声明该错误返回给前端时使用的错误码、详情码和模块。
+// bkerrs.Wrap 会覆盖错误码和详情，WriteError 在输出时按该声明还原。
+type APIDetailError interface {
+	error
+	APIErrorDetail() (code ErrCode, detail ErrDetailCode, module string)
+}
+
 // GinErrorOutput is the standard bkms Gin error response body.
 type GinErrorOutput struct {
 	Error GinError `json:"error"`
@@ -81,6 +88,11 @@ func WriteError(c *gin.Context, err error) {
 	if errors.Is(err, ErrBSCPDisabled) {
 		err = WrapBSCPDisabled(err)
 	}
+	// 领域错误声明了应返回的详情码时，同样在输出时还原，避免被包成内部错误
+	var declared APIDetailError
+	if errors.As(err, &declared) {
+		err = restoreAPIDetail(err, declared)
+	}
 
 	var bkErr *Error
 	if errors.As(err, &bkErr) {
@@ -105,4 +117,34 @@ func WriteError(c *gin.Context, err error) {
 			Module:  ModuleName,
 		},
 	})
+}
+
+// restoreAPIDetail 按错误链中的声明还原错误码和详情。
+// 已经是目标错误码且带有该详情时保持原样，避免重复包装。
+func restoreAPIDetail(err error, declared APIDetailError) error {
+	code, detailCode, module := declared.APIErrorDetail()
+	var bkErr *Error
+	if errors.As(err, &bkErr) && bkErr.Code() == code && hasDetail(bkErr, detailCode) {
+		return err
+	}
+	var promoted *Error
+	if errors.As(err, &bkErr) {
+		promoted = newErr(bkErr.cause, code, bkErr.msg)
+	} else {
+		promoted = Wrap(err, code, declared.Error())
+	}
+	opts := []Option{WithSystem(SystemName)}
+	if module != "" {
+		opts = append(opts, WithModule(module))
+	}
+	return promoted.SetDetails(NewDetail(detailCode, promoted.Error(), opts...))
+}
+
+func hasDetail(err *Error, code ErrDetailCode) bool {
+	for _, detail := range err.details {
+		if detail.code == code {
+			return true
+		}
+	}
+	return false
 }

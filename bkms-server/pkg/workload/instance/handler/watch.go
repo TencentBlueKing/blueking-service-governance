@@ -100,7 +100,12 @@ func (h *Handler) WatchAppInstances(c *gin.Context) {
 	// 作用域与 List 一致：部署记录上的集群 / 命名空间 / LabelSelector
 	// 从 List 带回的 resourceVersion 起只推增量，不推首包快照
 	// 已成流后的集群中断由 Manager 推 ENDED 并收流，这里只处理未成流的失败
-	err = h.newWatchManager(record.ClusterID, app.ID, record.EnvName).Run(ctx, c.Writer, watch.RunParams{
+	clusterCfg, err := cluster.NewConfigForWorkspace(ctx, record.WorkspaceID, record.ClusterID)
+	if err != nil {
+		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "build cluster config"))
+		return
+	}
+	err = h.newWatchManager(clusterCfg, app.ID, record.EnvName).Run(ctx, c.Writer, watch.RunParams{
 		Namespace:       record.Namespace,
 		LabelSelector:   labels.SelectorFromSet(record.LabelSelector).String(),
 		ResourceVersion: queryInput.ResourceVersion,
@@ -122,9 +127,9 @@ func (h *Handler) WatchAppInstances(c *gin.Context) {
 // newWatchManager 绑定目标集群的 Pod Watch，并把附属数据插件（北极星、开发模式发布状态）注册进去
 // 插件注册只发生在这里：Watch 基础层不认识具体附属数据源，附属数据一律走插件层
 // 插件拉取失败由 Runner 跳过本轮，不推事件也不拆流
-func (h *Handler) newWatchManager(clusterID, appID, envName string) *watch.Manager {
+func (h *Handler) newWatchManager(clusterCfg *cluster.Config, appID, envName string) *watch.Manager {
 	return watch.NewManager(
-		k8sclient.NewPodClient(cluster.NewConfig(clusterID)),
+		k8sclient.NewPodClient(clusterCfg),
 		polarisplugin.New(func(ctx context.Context) ([]*polaris.PolarisServiceInstances, error) {
 			mgr := polaris.NewPolarisPlatformManager(h.registry.DB)
 			return mgr.ListPolarisServiceInstances(ctx, appID, envName)

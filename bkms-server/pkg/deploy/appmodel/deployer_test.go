@@ -37,6 +37,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/cluster"
 	k8skind "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/kind"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/store"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/appmodelcore/appmodel"
@@ -273,6 +274,8 @@ var _ = Describe("Deploy tracks app in env", func() {
 			mockey.Mock((*Deployer).buildWorkload).Return(&workload.BuildResult{
 				MainWorkload: newGameDeploy(nil, nil), WorkloadKind: k8skind.GameDeploy,
 			}, nil).Build()
+			// 单测没有 kubeconfig。集群配置在创建部署记录之前获取，不 mock 会在这里 panic
+			mockey.Mock((*Deployer).clusterConfig).Return(&cluster.Config{}, nil).Build()
 			mockey.Mock(newWorkloadRollout).Return(&workloadRollout{}, nil).Build()
 			mockey.Mock((*Deployer).claimOwnership).Return(nil).Build()
 			mockey.Mock((*Deployer).getExpiredResources).Return(nil, nil).Build()

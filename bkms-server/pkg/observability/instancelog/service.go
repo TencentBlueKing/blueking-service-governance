@@ -85,7 +85,11 @@ func NewLogManager(
 	trafficLaneName string,
 	instanceID string,
 ) (*LogManager, error) {
-	podClient := k8sclient.NewPodClient(cluster.NewConfig(env.Cluster.ClusterID))
+	clusterCfg, err := cluster.NewConfigForWorkspace(ctx, env.WorkspaceID, env.Cluster.ClusterID)
+	if err != nil {
+		return nil, errors.Wrap(err, "build cluster config")
+	}
+	podClient := k8sclient.NewPodClient(clusterCfg)
 	namespace := env.Cluster.Namespace
 	containerName := defaults.WorkloadMainContainerName
 	if appruntime.IsAppModelType(app.Type) {

@@ -268,7 +268,7 @@ func (h *Handler) DeleteEnvClusterAddon(c *gin.Context) {
 	}
 	defer installLock.Release(ctx)
 
-	if err = clusteraddon.UninstallClusterAddon(ctx, addonDef, clusterID, namespace); err != nil {
+	if err = clusteraddon.UninstallClusterAddon(ctx, addonDef, env.WorkspaceID, clusterID, namespace); err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrapf(err, bkerrs.ErrCodeInternalServerError,
 			"uninstall cluster addon %s", uriInput.AddonName))
 		return

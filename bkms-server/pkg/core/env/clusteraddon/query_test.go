@@ -32,6 +32,7 @@ import (
 	"helm.sh/helm/v3/pkg/repo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil/kubetest"
 	bkmsapp "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app"
 	clusteraddon "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/clusteraddon"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
@@ -68,8 +69,8 @@ var _ = Describe("Query", func() {
 
 		BeforeEach(func() {
 			var err error
-			clusterCfg, err = testutil.TestClusterConfig("")
-			if errors.Is(err, testutil.ErrKubeConfigNotFound) {
+			clusterCfg, err = kubetest.TestClusterConfig("")
+			if errors.Is(err, kubetest.ErrKubeConfigNotFound) {
 				Skip(err.Error())
 			}
 			Expect(err).NotTo(HaveOccurred())
@@ -180,11 +181,12 @@ var _ = Describe("Query", func() {
 				mockey.PatchConvey("applicable addon queries", GinkgoT(), func() {
 					var queried []string
 					mockey.Mock(helm.NewActionConfiguration).To(
-						func(_, namespace string, _ action.DebugLog) (*action.Configuration, error) {
+						func(_ context.Context, _, _, namespace string, _ action.DebugLog) (*action.Configuration, error) {
 							queried = append(queried, namespace)
 							return &action.Configuration{}, nil
 						},
-					).Build()
+					).
+						Build()
 					mockey.Mock(helm.ListReleases).Return(nil, nil).Build()
 					defs := []*clusteraddon.ClusterAddonDef{
 						{Name: "supported", ChartInfo: clusteraddon.HelmChartInfo{DefaultNamespace: "supported"}},
@@ -333,7 +335,9 @@ var _ = Describe("Query", func() {
 					defs[1].ChartInfo.DefaultNamespace = hookNamespace
 					var namespaces []string
 					mockey.Mock(helm.NewActionConfiguration).To(
-						func(clusterID, namespace string, _ action.DebugLog) (*action.Configuration, error) {
+						func(
+							_ context.Context, _, clusterID, namespace string, _ action.DebugLog,
+						) (*action.Configuration, error) {
 							Expect(clusterID).To(Equal("cluster"))
 							namespaces = append(namespaces, namespace)
 							return &action.Configuration{}, nil

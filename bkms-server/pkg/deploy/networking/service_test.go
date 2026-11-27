@@ -31,7 +31,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/kubernetes"
 
-	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/testutil/kubetest"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/kubernetes/cluster"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/workload/networking"
@@ -50,8 +50,8 @@ var _ = Describe("Test ServiceSyncer", func() {
 		var svc1, svc3 networking.Service
 
 		BeforeEach(func() {
-			cfg, err := testutil.TestClusterConfig("")
-			if errors.Is(err, testutil.ErrKubeConfigNotFound) {
+			cfg, err := kubetest.TestClusterConfig("")
+			if errors.Is(err, kubetest.ErrKubeConfigNotFound) {
 				Skip(err.Error())
 			}
 			Expect(err).NotTo(HaveOccurred())
@@ -59,10 +59,11 @@ var _ = Describe("Test ServiceSyncer", func() {
 			// Set up the mocker to make the syncer always use the test config.
 			mocker = mockey.Mock(cluster.NewConfig).Return(cfg).Build()
 
-			syncer = NewServiceSyncer(&envmodel.Environment{Cluster: envmodel.BizCluster{
+			syncer, err = NewServiceSyncer(context.Background(), &envmodel.Environment{Cluster: envmodel.BizCluster{
 				ClusterID: cfg.ClusterID,
 				Namespace: "default",
 			}})
+			Expect(err).NotTo(HaveOccurred())
 
 			clientSet, err = kubernetes.NewForConfig(cfg.Rest)
 			Expect(err).NotTo(HaveOccurred())

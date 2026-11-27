@@ -311,7 +311,7 @@ func releaseDeployLock(ctx context.Context, args Args) {
 // fetchReleaseStatus 初始化 Helm action 并查询一次 Release 状态
 func fetchReleaseStatus(ctx context.Context, record *helmdeploy.Record) (*helm.Release, error) {
 	debugLog := helm.NewHelmDebugLogger(ctx, record.ReleaseName, "polling-status")
-	cfg, err := helm.NewActionConfiguration(record.ClusterID, record.Namespace, debugLog)
+	cfg, err := helm.NewActionConfiguration(ctx, record.WorkspaceID, record.ClusterID, record.Namespace, debugLog)
 	if err != nil {
 		return nil, errors.Wrapf(err, "init action configuration for polling %s", record.ReleaseName)
 	}
