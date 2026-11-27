@@ -391,6 +391,7 @@
         </TableColumn>
 
         <TableColumn
+          v-if="isDevModeEnabled"
           class-name="instance-publish-col"
           field="latestPublish"
           :label="$t('热更新')"
@@ -737,6 +738,7 @@
   import StatusDotIcon from '~/components/status-dot-icon.vue';
   import StatusIcon from '~/components/status-icon.vue';
   import TableException from '~/components/table-exception.vue';
+  import { useEnvDevMode } from '~/composables/use-env-dev-mode';
   import { envTypeMap, envTypeTagClassMap } from '~/composables/use-env-manager';
   import { useGPAConfigPolling } from '~/composables/use-gpa-config-polling';
   import { useLanguage } from '~/composables/use-language';
@@ -821,14 +823,32 @@
 
   const { getResourceText, getResourceTips } = useResourceSpecDisplay();
 
-  // 列设置：资源规格、热更新列默认不勾选，用户可在表格右上角列设置中主动开启。
-  // 列勾选与行高（size）偏好均持久化，刷新后恢复。
-  // 所有环境共用列设置，任一环境的配置调整都会同步到其他环境表格。
+  const { isDevModeEnabled } = useEnvDevMode({
+    envName: () => props.envName,
+    envType: () => props.envType,
+  });
+
+  // 所有环境共用同一份差异，任一环境的手动勾选/取消都会同步到其他环境。
   // 列合并后字段含义已变，换新 id 避免旧的隐藏/显示偏好错配到合并列上。
   const tableSettingsId = 'instance-table-v2';
+  // 基线固定为表格全部列：热更新列是否渲染由开发模式单独控制。
+  // 基线若随环境变化，跨环境保存会按当前基线重算差异，静默清掉其他环境里用户显式勾选/取消的记录。
+  const defaultChecked = [
+    'id',
+    'status',
+    'isHealthy',
+    'image',
+    'latestPublish',
+    'ip',
+    'restartCount',
+    'age',
+    'resources',
+  ];
   const { settings, handleSettingChange } = useTableSettings(tableSettingsId, {
-    defaultChecked: ['id', 'status', 'isHealthy', 'image', 'ip', 'restartCount', 'age'],
-    disabled: ['id'],
+    defaultChecked,
+    // 非开发模式下热更新列不渲染，列设置面板拿不到它的勾选态：
+    // 必须当作不可操作列，否则任意一次保存都会把它算成 hidden 落盘。
+    disabled: () => (isDevModeEnabled.value ? ['id'] : ['id', 'latestPublish']),
   });
 
   const statusFilterGroups = computed<FilterGroup[]>(() => [

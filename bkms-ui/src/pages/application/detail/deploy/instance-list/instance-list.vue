@@ -70,6 +70,7 @@
       ref="instanceTableRef"
       :data="tableDataMatchSearch"
       :env-name="trpcDeployStore.curEnvItem?.name || ''"
+      :env-type="trpcDeployStore.curEnvItem?.type"
       :filter-options="filterOptions"
       :is-federation="isFederationEnv"
       mode="single"
