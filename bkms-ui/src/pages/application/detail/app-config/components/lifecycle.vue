@@ -359,6 +359,8 @@
   /** 缓存应用级默认配置（用于对比差异） */
   let defaultCache: AppSpecLifecycleOutput | null = null;
   let defaultPreStopSummary = createPreStopSummary();
+  /** 默认 section 未落库时的对比基线，与表单初值一致 */
+  const emptyDefaultLifecycle: AppSpecLifecycleOutput = {};
 
   /** 被环境覆盖过的字段集合（通过 GetEnvAppSpecLifecycle 接口判断） */
   const overriddenFields = ref<Set<FieldKey>>(new Set());
@@ -446,11 +448,10 @@
     if (!appDetailStore.appID) return null;
     try {
       const data = await AppSpecService.getAppDefaultAppSpecLifecycle({ appID: appDetailStore.appID });
-      if (data) {
-        defaultCache = data;
-        cacheDefaults(data);
-      }
-      return data;
+      // 默认 section 从未保存时返回 null。仍写入空基线，指定环境相对基线有差异时才能发出 PUT。
+      defaultCache = data ?? emptyDefaultLifecycle;
+      cacheDefaults(defaultCache);
+      return defaultCache;
     } catch {
       return null;
     }
@@ -665,12 +666,14 @@
 
   /** 判断 terminationGracePeriodSeconds 当前值是否与默认值不同 */
   function isGracePeriodDiffFromDefault(): boolean {
+    // 默认配置请求失败时没有基线，不把当前值当成环境覆盖
     if (!defaultCache) return false;
     return Number(formModel.value.terminationGracePeriodSeconds) !== Number(defaultPreStopSummary.grace);
   }
 
   /** 判断 preStop 字段当前值是否与默认值不同 */
   function isPreStopDiffFromDefault(): boolean {
+    // 默认配置请求失败时没有基线，不把当前值当成环境覆盖
     if (!defaultCache) return false;
     const currentEnabled = preStopEnabled.value;
     const currentMode = preStopMode.value;
