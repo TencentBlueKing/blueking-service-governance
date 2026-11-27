@@ -106,7 +106,7 @@ var _ = Describe("Service build validation", func() {
 	})
 
 	It("should accept python platform build without builder image", func() {
-		app.Type = bkmsapp.AppTypeBKMSApp
+		app.Type = appruntime.AppTypeBKMSApp
 		app.Framework = appruntime.FrameworkBlank
 		app.Language = appruntime.LanguagePython
 		app.TrpcSpec = nil

@@ -302,7 +302,7 @@ var _ = Describe("PreDeployChecker", func() {
 		})
 
 		It("allows an app model app deploying to an env sharing namespace", func() {
-			params.AppType = bkmsapp.AppTypeBKMSApp
+			params.AppType = appruntime.AppTypeBKMSApp
 			Expect(checker.Do(ctx, params)).To(Succeed())
 		})
 	})

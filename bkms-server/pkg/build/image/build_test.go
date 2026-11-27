@@ -507,7 +507,7 @@ var _ = Describe("Build Functions", func() {
 				BkCICredentialID: "cred-123",
 			}, nil).Build()
 
-			testApp.Type = bkmsapp.AppTypeBKMSApp
+			testApp.Type = appruntime.AppTypeBKMSApp
 			testApp.Framework = appruntime.FrameworkBlank
 			testApp.Language = appruntime.LanguagePython
 			testApp.TrpcSpec = nil

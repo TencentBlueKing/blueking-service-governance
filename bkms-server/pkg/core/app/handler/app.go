@@ -40,6 +40,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/serializer"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime/runtimemod/mods"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	appmodeldeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/appmodel"
