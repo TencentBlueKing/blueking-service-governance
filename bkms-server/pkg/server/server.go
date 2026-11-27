@@ -46,6 +46,8 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg/appcfgfiledef"
 	appcfghandler "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/appcfg/handler"
 	apphandler "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/app/handler"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/coderepo"
+	coderepohandler "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/coderepo/handler"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/clusteraddon"
 	clusteraddonhandler "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/clusteraddon/handler"
@@ -236,6 +238,7 @@ func RegisterRouter(ctx context.Context, cfg config.Config, serverRole string) (
 	env.Register(v1, envhandler.New(storereg.G()))
 	audit.Register(v1, audithandler.New(storereg.G()))
 	frontendfeature.Register(v1, frontendfeaturehandler.New())
+	coderepo.Register(v1, coderepohandler.New(storereg.G()))
 	bkintegrations.Register(v1, bkintegrationshandler.New(storereg.G()))
 	bkmusergroup.Register(v1, bkmusergrouphandler.New(storereg.G(), bkmusergroup.New()))
 	bkmalert.Register(v1, bkmalerthandler.New(storereg.G()))

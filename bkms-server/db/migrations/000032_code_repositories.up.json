@@ -1,0 +1,68 @@
+[
+  {
+    "createIndexes": "code_repositories",
+    "indexes": [
+      {
+        "key": {
+          "workspaceID": 1,
+          "alias": 1
+        },
+        "name": "workspaceID_1_alias_1",
+        "unique": true
+      },
+      {
+        "key": {
+          "tenantID": 1
+        },
+        "name": "tenantID_1"
+      }
+    ]
+  },
+  {
+    "aggregate": "bkci_repositories",
+    "pipeline": [
+      {
+        "$project": {
+          "_id": 0,
+          "tenantID": 1,
+          "workspaceID": 1,
+          "alias": 1,
+          "url": 1,
+          "sourceType": "TGit",
+          "creator": 1,
+          "createdAt": 1,
+          "updatedAt": "$createdAt"
+        }
+      },
+      {
+        "$merge": {
+          "into": "code_repositories",
+          "on": ["workspaceID", "alias"],
+          "whenMatched": "keepExisting",
+          "whenNotMatched": "insert"
+        }
+      }
+    ],
+    "cursor": {}
+  },
+  {
+    "update": "build_configs",
+    "updates": [
+      {
+        "q": { "codeRepo.type": "GitHub" },
+        "u": { "$set": { "codeRepo.type": "TGit" } },
+        "multi": true
+      }
+    ]
+  },
+  {
+    "update": "applications",
+    "updates": [
+      {
+        "q": { "helmSpec.helmSource.gitRepoConfig.type": "GitHub" },
+        "u": { "$set": { "helmSpec.helmSource.gitRepoConfig.type": "TGit" } },
+        "multi": true
+      }
+    ]
+  }
+]
