@@ -23,6 +23,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -35,6 +36,7 @@ import (
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/config"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/constant"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/deviceid"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-cli/pkg/version"
 )
 
@@ -45,6 +47,11 @@ const (
 	DefaultListAppInstancesPageSize = 100
 	// writeRequestTimeout 非幂等写请求（如提交异步重启）的超时时间
 	writeRequestTimeout = 30 * time.Second
+
+	// headerDeviceID 上报设备 ID 的请求头，bkms-server 据此统计 CLI 使用情况
+	headerDeviceID = "X-Bkms-Device-Id"
+	// headerTraceID bkms-server 在响应中返回的 trace id
+	headerTraceID = "X-Trace-Id"
 )
 
 // 接口兼容性断言
@@ -70,10 +77,7 @@ func New() Client {
 		IdleConnTimeout:     30 * time.Second,
 	}
 
-	bizCli := resty.New().
-		SetTransport(transport).
-		SetBaseURL(config.G.BkmsBaseURL).
-		SetTimeout(30 * time.Second).
+	bizCli := newRestyClient(transport, 30*time.Second).
 		// 配置重试策略
 		SetRetryCount(2).
 		SetRetryWaitTime(5 * time.Second).
@@ -88,30 +92,36 @@ func New() Client {
 				return response.StatusCode() >= http.StatusInternalServerError
 			},
 		).
-		SetHeaders(map[string]string{
-			"Content-Type":  "application/json",
-			"Authorization": fmt.Sprintf("Bearer %s", config.G.AccessToken),
-			"User-Agent":    version.UserAgent(),
-		})
+		SetHeaders(bizHeaders())
 
 	// 用于 ValidateAccessToken / ExchangeBkTicketForToken 等登录前的鉴权操作
-	authCli := resty.New().
-		SetTransport(transport).
-		SetBaseURL(config.G.BkmsBaseURL).
-		SetTimeout(10*time.Second).
-		SetHeader("User-Agent", version.UserAgent())
+	authCli := newRestyClient(transport, 10*time.Second)
 
-	noRetryCli := resty.New().
-		SetTransport(transport).
-		SetBaseURL(config.G.BkmsBaseURL).
-		SetTimeout(writeRequestTimeout).
-		SetHeaders(map[string]string{
-			"Content-Type":  "application/json",
-			"Authorization": fmt.Sprintf("Bearer %s", config.G.AccessToken),
-			"User-Agent":    version.UserAgent(),
-		})
+	noRetryCli := newRestyClient(transport, writeRequestTimeout).SetHeaders(bizHeaders())
 
 	return &SvcBasedClient{cli: bizCli, authCli: authCli, noRetryCli: noRetryCli}
+}
+
+// newRestyClient 创建访问 bkms-server 的 resty client，设置公共请求头与响应日志
+func newRestyClient(transport http.RoundTripper, timeout time.Duration) *resty.Client {
+	cli := resty.New().
+		SetTransport(transport).
+		SetBaseURL(config.G.BkmsBaseURL).
+		SetTimeout(timeout).
+		SetHeader("User-Agent", version.UserAgent()).
+		OnAfterResponse(logResponse)
+	if deviceID := deviceid.Get(); deviceID != "" {
+		cli.SetHeader(headerDeviceID, deviceID)
+	}
+	return cli
+}
+
+// bizHeaders 业务请求头
+func bizHeaders() map[string]string {
+	return map[string]string{
+		"Content-Type":  "application/json",
+		"Authorization": fmt.Sprintf("Bearer %s", config.G.AccessToken),
+	}
 }
 
 // ValidateAccessToken 通过 AccessToken 获取用户名信息
@@ -123,8 +133,7 @@ func (c *SvcBasedClient) ValidateAccessToken(accessToken string) (string, error)
 		return "", errors.Wrap(err, "failed to connect bkms server, please check your network")
 	}
 	if resp.StatusCode() != http.StatusOK {
-		return "", errors.Errorf("validate access token failed [%d]: %s",
-			resp.StatusCode(), truncateBody(resp.Body()))
+		return "", formatAPIError(resp, "validate access token")
 	}
 	result := map[string]any{}
 	if err = json.Unmarshal(resp.Body(), &result); err != nil {
@@ -149,8 +158,7 @@ func (c *SvcBasedClient) ExchangeBkTicketForToken(username, bkTicket string) (st
 		return "", errors.Wrap(err, "failed to connect bkms server, please check your network")
 	}
 	if resp.StatusCode() != http.StatusOK {
-		return "", errors.Errorf("exchange bk_ticket failed [%d]: %s",
-			resp.StatusCode(), truncateBody(resp.Body()))
+		return "", formatAPIError(resp, "exchange bk_ticket")
 	}
 	result := map[string]any{}
 	if err = json.Unmarshal(resp.Body(), &result); err != nil {
@@ -764,7 +772,7 @@ func (c *SvcBasedClient) CreateAppConfigFile(
 		return nil, err
 	}
 	if resp.StatusCode() != http.StatusOK {
-		return nil, errors.Errorf("create app config file failed: [%d] -> %s", resp.StatusCode(), resp.Body())
+		return nil, formatAPIError(resp, "create app config file")
 	}
 	if respData.Item == nil {
 		return nil, errors.New("create app config file returned empty item")
@@ -1684,9 +1692,31 @@ func truncateBody(body []byte) string {
 // format 与 args 按 fmt.Sprintf 规则构造动作描述，避免调用方手动拼接。
 func formatAPIError(resp *resty.Response, format string, args ...any) error {
 	action := fmt.Sprintf(format, args...)
-	msg := fmt.Sprintf("%s failed: [%d] -> %s", action, resp.StatusCode(), truncateBody(resp.Body()))
-	if traceID := resp.Header().Get("X-Trace-Id"); traceID != "" {
-		msg = fmt.Sprintf("%s (trace_id: %s)", msg, traceID)
+	return errors.Errorf("%s failed: [%d] -> %s%s",
+		action, resp.StatusCode(), truncateBody(resp.Body()), traceIDSuffix(resp.Header()))
+}
+
+// traceIDSuffix 返回附加在错误信息末尾的 trace id 说明，响应未携带 trace id 时返回空字符串。
+func traceIDSuffix(header http.Header) string {
+	if traceID := header.Get(headerTraceID); traceID != "" {
+		return fmt.Sprintf(" (trace_id: %s)", traceID)
 	}
-	return errors.New(msg)
+	return ""
+}
+
+// logResponse 在 debug 级别输出每个请求的状态码与 trace id，便于按 trace id 定位服务端日志。
+// 只输出 URL path，避免 query 中的 access_token 等敏感参数进入日志。
+func logResponse(_ *resty.Client, resp *resty.Response) error {
+	path := ""
+	if raw := resp.Request.RawRequest; raw != nil {
+		path = raw.URL.Path
+	}
+	slog.DebugContext(resp.Request.Context(), "bkms api request",
+		"method", resp.Request.Method,
+		"path", path,
+		"status", resp.StatusCode(),
+		"trace_id", resp.Header().Get(headerTraceID),
+		"duration", resp.Time(),
+	)
+	return nil
 }

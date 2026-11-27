@@ -37,6 +37,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/config"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/apm/apitracking"
 )
 
 // fallbackCounter 用于 crypto/rand 失败时的兜底计数，保证同一进程内每次生成的 TraceID 唯一
@@ -47,9 +48,10 @@ func OTelMiddleware(cfg config.BkMonitorConfig, serverRole string) gin.HandlerFu
 	return otelgin.Middleware(ServiceName(cfg, serverRole))
 }
 
-// HTTPLogMiddleware 创建 slog-gin 请求日志中间件，记录每个 HTTP 请求/响应的结构化日志。
-func HTTPLogMiddleware() gin.HandlerFunc {
-	return sloggin.NewWithConfig(slog.Default(), sloggin.Config{
+// HTTPLogMiddleware 访问日志中间件，附加 API 追踪字段并脱敏 query、referer，须挂在认证之外
+func HTTPLogMiddleware(names *apitracking.HandlerNames) gin.HandlerFunc {
+	logger := slog.New(maskHandler{slog.Default().Handler()})
+	return sloggin.NewWithConfig(logger, sloggin.Config{
 		DefaultLevel:     slog.LevelInfo,
 		ClientErrorLevel: slog.LevelWarn,
 		ServerErrorLevel: slog.LevelError,
@@ -64,8 +66,20 @@ func HTTPLogMiddleware() gin.HandlerFunc {
 		},
 		Filters: []sloggin.Filter{
 			sloggin.IgnorePath("/healthz", "/readyz", "/metrics"),
+			trackingFilter(names),
 		},
 	})
+}
+
+// trackingFilter 附加 API 追踪字段，恒返回 true。
+// sloggin 在 c.Next() 之后、输出日志之前执行 Filters，此时认证结果与状态码均已确定。
+func trackingFilter(names *apitracking.HandlerNames) sloggin.Filter {
+	return func(c *gin.Context) bool {
+		if attrs := apitracking.Attrs(c, names); attrs != nil {
+			sloggin.AddCustomAttributes(c, attrs...)
+		}
+		return true
+	}
 }
 
 // ResponseTraceMiddleware 将 TraceID 写入响应 Header（X-Trace-Id），供前端关联后端链路。
