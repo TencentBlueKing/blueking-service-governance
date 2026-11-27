@@ -17,7 +17,7 @@
  */
 
 import { computed, toValue } from 'vue';
-import type { ComputedRef, Ref } from 'vue';
+import type { ComputedRef, MaybeRefOrGetter, Ref } from 'vue';
 
 import { useUiStore } from '~/stores/ui';
 
@@ -31,10 +31,18 @@ interface TableSettingDiff {
 }
 
 interface UseTableSettingsOptions {
-  /** 默认勾选列（表格列设置的基线） */
-  defaultChecked: string[];
-  /** 不可隐藏列：静态传入，强制并入 checked，不落盘 */
-  disabled?: string[];
+  /**
+   * 默认勾选列（表格列设置的基线）；支持响应式，差异始终相对当前基线计算。
+   * 建议保持稳定：基线随环境变化时，每次保存都会按当前基线重算全部差异，
+   * 会把"仅在另一种基线下有意义"的显式勾选/取消算掉。列是否存在这类动态差异请交给 disabled + 渲染条件。
+   */
+  defaultChecked: MaybeRefOrGetter<string[]>;
+  /**
+   * 用户在当前上下文无法操作的列（不可隐藏、或当前环境根本不渲染该列）：
+   * 强制并入 checked，不写入差异；记录中已存在的这些列的差异原样保留，
+   * 避免别处保存时把它们清掉。
+   */
+  disabled?: MaybeRefOrGetter<string[]>;
 }
 
 /** 偏好命名空间前缀，与其他 UI 偏好在 ui store 中区分。 */
@@ -66,31 +74,48 @@ export function useTableSettings(
     return { hidden: [], shown: [] };
   });
 
-  // 生效的列设置：默认勾选扣除 hidden、补上 shown，并强制并入不可隐藏列。
+  // 生效的列设置：默认勾选扣除 hidden、补上 shown，并强制并入不可操作列。
   // size：'small' 是组件库默认行高，等价于未个性化，不回写；仅回写 medium/mini，脏数据被忽略。
   const settings = computed(() => {
+    const disabledFields = toValue(disabled);
     const checked = [
       ...new Set([
-        ...defaultChecked.filter(field => !diff.value.hidden.includes(field)),
+        ...toValue(defaultChecked).filter(field => !diff.value.hidden.includes(field)),
         ...diff.value.shown,
-        ...disabled,
+        ...disabledFields,
       ]),
     ];
     const size = diff.value.size;
     const validSize = size === 'medium' || size === 'mini' ? size : undefined;
 
-    return { checked, disabled, ...(validSize ? { size: validSize } : {}) };
+    return { checked, disabled: disabledFields, ...(validSize ? { size: validSize } : {}) };
   });
 
   /** 同步列设置勾选状态与行高：计算相对默认勾选的差异后写入 store，无任何差异时自动清除该表记录。 */
   function handleSettingChange(data: ISettings) {
     const current = diff.value;
+    const disabledFields = toValue(disabled);
     const next: TableSettingDiff = { hidden: current.hidden, shown: current.shown, size: current.size };
     // checked 通常随 setting-change 携带；缺失时只同步行高，不改变列勾选差异。
     if (data.checked) {
       const nextChecked = data.checked;
-      next.hidden = defaultChecked.filter(field => !nextChecked.includes(field) && !disabled.includes(field));
-      next.shown = nextChecked.filter(field => !defaultChecked.includes(field) && !disabled.includes(field));
+      const defaults = toValue(defaultChecked);
+      // 不可操作列的面板项不存在或被禁用，回传的 checked 不含它们，
+      // 既不能据此写入差异，也不能把既有记录算掉，故原样保留。
+      const keptHidden = current.hidden.filter(field => disabledFields.includes(field));
+      const keptShown = current.shown.filter(field => disabledFields.includes(field));
+      next.hidden = [
+        ...new Set([
+          ...keptHidden,
+          ...defaults.filter(field => !nextChecked.includes(field) && !disabledFields.includes(field)),
+        ]),
+      ];
+      next.shown = [
+        ...new Set([
+          ...keptShown,
+          ...nextChecked.filter(field => !defaults.includes(field) && !disabledFields.includes(field)),
+        ]),
+      ];
     }
     // 'small' 是组件库默认行高，面板关闭时恒会 emit，视为未个性化不写入；
     // 否则用户只打开一次面板（未碰行高）也会被持久化，且破坏"无差异自动清除"。

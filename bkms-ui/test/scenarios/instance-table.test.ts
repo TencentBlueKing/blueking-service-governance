@@ -33,10 +33,10 @@
  * 不渲染真实 Popover / Dropdown 内部实现。
  */
 import { defineComponent, h } from 'vue';
-import type { VNodeChild } from 'vue';
+import type { MaybeRefOrGetter, Ref, VNodeChild } from 'vue';
 
 import { fireEvent, render, screen, within } from '@testing-library/vue';
-import { beforeAll, describe, expect, it, vi } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { I18nTStub } from '../helpers/mock-i18n';
 
@@ -44,6 +44,11 @@ import type { AppInstanceOutputObj } from '~/@types/v1/instance';
 
 /* 场景测试需要多个内联组件桩，非单文件单组件约束范围。 */
 /* eslint-disable vue/one-component-per-file */
+
+const devModeState = vi.hoisted(() => ({ isDevModeEnabled: undefined as Ref<boolean> | undefined }));
+const tableSettingsCalls = vi.hoisted(() => ({
+  options: [] as { defaultChecked: string[]; disabled: string[] }[],
+}));
 
 type TableColumnVNode = {
   children?: null | {
@@ -55,6 +60,12 @@ type TableColumnVNode = {
     field?: string;
   };
 };
+
+/** mock 工厂在组件模块首次导入时才执行，beforeAll 里已提前导入组件，这里必然就绪。 */
+function devModeRef(): Ref<boolean> {
+  if (!devModeState.isDevModeEnabled) throw new Error('开发模式 mock 尚未初始化');
+  return devModeState.isDevModeEnabled;
+}
 
 vi.mock('@blueking/table', async () => {
   const { defineComponent, h } = await import('vue');
@@ -157,8 +168,27 @@ vi.mock('~/composables/use-resource-spec-display', () => ({
   useResourceSpecDisplay: () => ({ getResourceText: () => '--', getResourceTips: () => '' }),
 }));
 vi.mock('~/composables/use-table-settings', async () => {
+  const { ref, toValue } = await import('vue');
+  return {
+    useTableSettings: (
+      _tableId: string,
+      options: { defaultChecked: string[]; disabled: MaybeRefOrGetter<string[]> },
+    ) => {
+      // 记录调用时刻的基线与不可操作列，避免 getter 被断言时的状态覆盖。
+      tableSettingsCalls.options.push({
+        defaultChecked: options.defaultChecked,
+        disabled: toValue(options.disabled),
+      });
+      return { settings: ref({ checked: [] }), handleSettingChange: vi.fn() };
+    },
+  };
+});
+vi.mock('~/composables/use-env-dev-mode', async () => {
   const { ref } = await import('vue');
-  return { useTableSettings: () => ({ settings: ref({ checked: [] }), handleSettingChange: vi.fn() }) };
+  devModeState.isDevModeEnabled = ref(true);
+  return {
+    useEnvDevMode: () => ({ isDevModeEnabled: devModeState.isDevModeEnabled }),
+  };
 });
 vi.mock('~/pages/application/detail/deploy/instance-list/composables/use-instance-list-watch', async () => {
   const { ref } = await import('vue');
@@ -193,8 +223,15 @@ vi.mock('~/pages/application/detail/deploy/instance-list/components/instance-gro
 }));
 vi.mock('vue-i18n', async () => (await import('../helpers/mock-i18n')).i18nMockFactory());
 
-beforeAll(() => {
+beforeAll(async () => {
   (window as Window & { i18n?: { t: (value: string) => string } }).i18n = { t: (value: string) => value };
+  // 先导入组件，让 vi.mock 工厂在首个用例前执行，后续 beforeEach 可直接操作 ref。
+  await import('~/pages/application/detail/deploy/instance-list/components/instance-table.vue');
+});
+
+beforeEach(() => {
+  devModeRef().value = true;
+  tableSettingsCalls.options = [];
 });
 
 async function renderTable(data: AppInstanceOutputObj[]) {
@@ -303,6 +340,29 @@ describe('实例列表：WeTerm 入口', () => {
     await fireEvent.click(screen.getByText('WeTERM'));
 
     expect(emitted()['row-action']).toBeUndefined();
+  });
+});
+
+describe('实例列表：热更新列与列设置基线', () => {
+  it('开发模式未开启时不渲染热更新列', async () => {
+    devModeRef().value = false;
+    await renderTable([{ id: 'pod-a' }]);
+
+    expect(screen.queryByText('热更新')).not.toBeInTheDocument();
+  });
+
+  it('基线固定含热更新列，非开发模式改为按不可操作列处理', async () => {
+    await renderTable([{ id: 'pod-a' }]);
+    devModeRef().value = false;
+    await renderTable([{ id: 'pod-b' }]);
+
+    expect(tableSettingsCalls.options).toHaveLength(2);
+    const [enabledOptions, disabledOptions] = tableSettingsCalls.options;
+    for (const { defaultChecked } of tableSettingsCalls.options) {
+      expect(defaultChecked).toContain('latestPublish');
+    }
+    expect(enabledOptions.disabled).toEqual(['id']);
+    expect(disabledOptions.disabled).toEqual(['id', 'latestPublish']);
   });
 });
 
