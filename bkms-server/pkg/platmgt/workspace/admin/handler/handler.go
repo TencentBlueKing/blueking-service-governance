@@ -24,6 +24,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkiam/role"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/common/bkerrs"
 	bkmsworkspace "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
@@ -151,6 +152,8 @@ func toAPIError(err error, internalMessage string) error {
 	switch {
 	case errors.Is(err, bkmsworkspace.ErrWorkspaceNotFound):
 		return bkerrs.Wrap(err, bkerrs.ErrCodeNotFound, "platform workspace not found")
+	case errors.Is(err, role.ErrRoleNotFound):
+		return bkerrs.Wrap(err, bkerrs.ErrCodeNotFound, "workspace role not found")
 	case errors.Is(err, workspaceadmin.ErrWorkspaceAdminAlreadyExists):
 		return bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, "workspace admin already exists")
 	case errors.Is(err, workspaceadmin.ErrWorkspaceAdminNotFound):

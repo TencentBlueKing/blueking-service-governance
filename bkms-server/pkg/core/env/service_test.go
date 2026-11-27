@@ -187,6 +187,37 @@ var _ = Describe("Test EnvService", func() {
 			Eventually(hookCalled).Should(Receive())
 		})
 
+		It(
+			"syncs child feature env types when standard env type changes and rejects changing feature env type directly",
+			func() {
+				envStore := testutil.NewStore(GinkgoT(), model.EnvMeta)
+				featEnv := &model.Environment{
+					Name:        "feat-app-1",
+					DisplayName: "feat",
+					Type:        envType,
+					WorkspaceID: workspaceID,
+					Kind:        model.EnvironmentKindFeature,
+					OwnerAppID:  "app-1",
+					SourceEnvID: envID,
+					Cluster: model.BizCluster{
+						ClusterID:   Cluster.ClusterID,
+						ClusterType: Cluster.ClusterType,
+						Namespace:   "feat-app-1",
+					},
+				}
+				Expect(envStore.Create(ctx, featEnv)).To(Succeed())
+
+				prodType := "production"
+				Expect(envSvc.Update(ctx, featEnv.ID, &model.EnvironmentUpdateData{Type: &prodType})).NotTo(Succeed())
+
+				stagingType := "staging"
+				Expect(envSvc.Update(ctx, envID, &model.EnvironmentUpdateData{Type: &stagingType})).To(Succeed())
+				reloadedFeat, getErr := envStore.GetByID(ctx, featEnv.ID)
+				Expect(getErr).NotTo(HaveOccurred())
+				Expect(reloadedFeat.Type).To(Equal(stagingType))
+			},
+		)
+
 		It("resets delete and update hooks together", func() {
 			Expect(RegisterDeleteHook("test.delete_env", func(context.Context, model.Environment) error {
 				return nil

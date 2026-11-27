@@ -31,6 +31,8 @@ const (
 	AppResourceType ResourceType = "app"
 	// EnvResourceType 表示环境资源类型
 	EnvResourceType ResourceType = "env"
+	// EnvTypeResourceType 表示环境类型资源类型，位于空间与环境之间
+	EnvTypeResourceType ResourceType = "env_type"
 
 	// BKCI 资源类型
 

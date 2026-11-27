@@ -43,6 +43,7 @@ import (
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/appruntime/runtimemod/mods"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace/customrole"
 	appmodeldeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/appmodel"
 	helmdeploy "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/helm"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/overview"
@@ -608,6 +609,12 @@ func (h *Handler) DeleteApp(c *gin.Context) {
 			))
 			return
 		}
+	}
+
+	// 从自定义角色的指定应用中去掉该应用，避免之后新建同 ID 的应用继承旧授权
+	if err = customrole.PruneApp(ctx, h.registry.DB, perm.NewManager(), app.WorkspaceID, app.ID); err != nil {
+		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInternalServerError, "prune app from custom roles"))
+		return
 	}
 
 	// 清理应用关联资源

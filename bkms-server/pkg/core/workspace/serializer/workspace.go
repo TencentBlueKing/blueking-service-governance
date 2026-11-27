@@ -40,14 +40,6 @@ type WorkspaceURIInput struct {
 	WorkspaceID string `uri:"workspaceID" binding:"required,uri_slug"`
 }
 
-// WorkspaceRoleURIInput is the path input for workspace role APIs.
-type WorkspaceRoleURIInput struct {
-	// 工作空间 ID
-	WorkspaceID string `uri:"workspaceID" binding:"required,uri_slug"`
-	// 角色 Code
-	RoleCode string `uri:"roleCode" binding:"required,oneof=admin sre developer operator"`
-}
-
 // WorkspaceUserURIInput is the path input for workspace user APIs.
 type WorkspaceUserURIInput struct {
 	// 工作空间 ID
@@ -194,12 +186,16 @@ type WorkspaceDetailOutputObj struct {
 	Updater string `json:"updater"`
 	// 更新时间
 	UpdatedAt time.Time `json:"updatedAt"`
+	// 当前用户是否为空间管理员，只有空间管理员能管理角色和成员
+	CurrentUserIsSpaceAdmin bool `json:"currentUserIsSpaceAdmin"`
 }
 
 // FromModel fills output fields from a Workspace model and ImageRegistry.
+// currentUserIsSpaceAdmin 为当前用户是否为空间管理员。
 func (o *WorkspaceDetailOutputObj) FromModel(
 	ws workspace.Workspace,
 	imageRegistry *bkmsreg.ImageRegistry,
+	currentUserIsSpaceAdmin bool,
 ) *WorkspaceDetailOutputObj {
 	irOutput := &ImageRegistryOutputObj{}
 	if imageRegistry != nil {
@@ -208,17 +204,18 @@ func (o *WorkspaceDetailOutputObj) FromModel(
 		irOutput.Password = imageRegistry.Password
 	}
 	*o = WorkspaceDetailOutputObj{
-		ID:                ws.ID,
-		DisplayName:       ws.DisplayName,
-		Description:       ws.Description,
-		ImageRegistryType: string(ws.ImageRegistryType),
-		BkSystems:         new(BkSystemsOutputObj).FromModel(ws.BkSystems),
-		ImageRegistry:     irOutput,
-		State:             string(ws.State),
-		Creator:           ws.Creator,
-		CreatedAt:         ws.CreatedAt,
-		Updater:           ws.Updater,
-		UpdatedAt:         ws.UpdatedAt,
+		ID:                      ws.ID,
+		DisplayName:             ws.DisplayName,
+		Description:             ws.Description,
+		ImageRegistryType:       string(ws.ImageRegistryType),
+		BkSystems:               new(BkSystemsOutputObj).FromModel(ws.BkSystems),
+		ImageRegistry:           irOutput,
+		State:                   string(ws.State),
+		Creator:                 ws.Creator,
+		CreatedAt:               ws.CreatedAt,
+		Updater:                 ws.Updater,
+		UpdatedAt:               ws.UpdatedAt,
+		CurrentUserIsSpaceAdmin: currentUserIsSpaceAdmin,
 	}
 	return o
 }
@@ -362,29 +359,6 @@ type UserWorkspaceStatisticsOutputObj struct {
 }
 
 // -----------------------------------------------------------------------------
-// ListWorkspaceRoleMemberGroups
-// -----------------------------------------------------------------------------
-
-// ListWorkspaceRoleMemberGroupsOutput is the JSON response for ListWorkspaceRoleMemberGroups.
-type ListWorkspaceRoleMemberGroupsOutput struct {
-	Data []*RoleMemberGroupOutputObj `json:"data"`
-}
-
-// RoleMemberGroupOutputObj is the JSON representation of a role member group.
-type RoleMemberGroupOutputObj struct {
-	// 角色 ID
-	RoleID string `json:"roleID"`
-	// 角色 Code
-	RoleCode string `json:"roleCode"`
-	// 角色名称
-	RoleName string `json:"roleName"`
-	// 用户组 ID
-	UserGroupID int64 `json:"userGroupID,string"`
-	// 用户组成员
-	Members []string `json:"members"`
-}
-
-// -----------------------------------------------------------------------------
 // CreateWorkspace
 // -----------------------------------------------------------------------------
 
@@ -428,11 +402,11 @@ type UpdateWorkspaceInfoInput struct {
 }
 
 // -----------------------------------------------------------------------------
-// AddWorkspaceUser
+// AddWorkspaceRoleUser
 // -----------------------------------------------------------------------------
 
-// AddWorkspaceUserInput is the JSON body for adding workspace users.
-type AddWorkspaceUserInput struct {
+// AddWorkspaceRoleUserInput is the JSON body for adding users to a workspace role.
+type AddWorkspaceRoleUserInput struct {
 	// 用户列表
 	UserIDs []string `json:"userIDs" binding:"required,min=1"`
 }

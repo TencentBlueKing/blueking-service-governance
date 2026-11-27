@@ -132,9 +132,10 @@ var _ = Describe("Workspace serializer", func() {
 				Password: "secret",
 			}
 
-			output := new(serializer.WorkspaceDetailOutputObj).FromModel(ws, ir)
+			output := new(serializer.WorkspaceDetailOutputObj).FromModel(ws, ir, true)
 
 			Expect(output.ID).To(Equal("ws-detail"))
+			Expect(output.CurrentUserIsSpaceAdmin).To(BeTrue())
 			Expect(output.DisplayName).To(Equal("详情空间"))
 			Expect(output.Description).To(Equal("详情描述"))
 			Expect(output.ImageRegistryType).To(Equal("external"))
@@ -156,7 +157,7 @@ var _ = Describe("Workspace serializer", func() {
 				State:             workspace.StateReady,
 			}
 
-			output := new(serializer.WorkspaceDetailOutputObj).FromModel(ws, nil)
+			output := new(serializer.WorkspaceDetailOutputObj).FromModel(ws, nil, false)
 
 			Expect(output.ImageRegistryType).To(Equal("builtin"))
 			Expect(output.ImageRegistry).NotTo(BeNil())
@@ -189,9 +190,6 @@ var _ = Describe("Workspace serializer", func() {
 			Entry("UserStatisticsOutputObj envCount",
 				serializer.UserStatisticsOutputObj{EnvCount: 30},
 				"envCount", `"30"`),
-			Entry("RoleMemberGroupOutputObj userGroupID",
-				serializer.RoleMemberGroupOutputObj{UserGroupID: 1234567890123},
-				"userGroupID", `"1234567890123"`),
 		)
 
 		It("deserializes JSON string to int64 for CreateWorkspaceInput bkCCBizID", func() {
@@ -253,10 +251,10 @@ var _ = Describe("Workspace serializer", func() {
 				`{"state":"Disabled"}`,
 				&serializer.SetWorkspaceStateInput{},
 				&serializer.SetWorkspaceStateInput{State: "Disabled"}),
-			Entry("AddWorkspaceUserInput",
+			Entry("AddWorkspaceRoleUserInput",
 				`{"userIDs":["u1","u2","u3"]}`,
-				&serializer.AddWorkspaceUserInput{},
-				&serializer.AddWorkspaceUserInput{UserIDs: []string{"u1", "u2", "u3"}}),
+				&serializer.AddWorkspaceRoleUserInput{},
+				&serializer.AddWorkspaceRoleUserInput{UserIDs: []string{"u1", "u2", "u3"}}),
 			Entry("UpdateWorkspaceInfoInput",
 				`{"displayName":"新名称","description":"新描述"}`,
 				&serializer.UpdateWorkspaceInfoInput{},

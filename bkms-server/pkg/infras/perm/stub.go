@@ -24,6 +24,8 @@ import (
 	"sync"
 
 	"github.com/TencentBlueKing/gopkg/collection/set"
+	"github.com/google/uuid"
+	"github.com/pkg/errors"
 	"github.com/samber/lo"
 
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkiam"
@@ -39,6 +41,7 @@ import (
 type StubAllowAnyManager struct {
 	mu          sync.Mutex
 	roleMembers map[string][]string
+	customRoles []*role.Role
 }
 
 // 编译期检查
@@ -179,6 +182,14 @@ func (m *StubAllowAnyManager) FilterViewableApps(
 
 // ListRoles 返回预设角色信息
 func (m *StubAllowAnyManager) ListRoles(_ context.Context, workspaceID string) ([]*role.Role, error) {
+	m.mu.Lock()
+	customRoles := lo.Filter(m.customRoles, func(r *role.Role, _ int) bool { return r.WorkspaceID == workspaceID })
+	m.mu.Unlock()
+	return append(stubBuiltinRoles(workspaceID), customRoles...), nil
+}
+
+// stubBuiltinRoles 返回预设的内置角色信息
+func stubBuiltinRoles(workspaceID string) []*role.Role {
 	return []*role.Role{
 		{
 			ID:             stubAdminRoleID,
@@ -232,37 +243,23 @@ func (m *StubAllowAnyManager) ListRoles(_ context.Context, workspaceID string) (
 			},
 			UserGroupID: stubOperatorUserGroupID,
 		},
-	}, nil
+	}
 }
 
-// GetRole 返回预设角色信息
+// GetRole 返回工作空间下指定角色码的角色信息
 func (m *StubAllowAnyManager) GetRole(
-	_ context.Context, workspaceID, roleCode string,
+	ctx context.Context, workspaceID, roleCode string,
 ) (*role.Role, error) {
-	var stubRoleID string
-	switch roleCode {
-	case RoleCodeAdmin:
-		stubRoleID = stubAdminRoleID
-	case RoleCodeDeveloper:
-		stubRoleID = stubDeveloperRoleID
-	case RoleCodeSre:
-		stubRoleID = stubSRERoleID
-	case RoleCodeOperator:
-		stubRoleID = stubOperatorRoleID
+	roles, err := m.ListRoles(ctx, workspaceID)
+	if err != nil {
+		return nil, err
 	}
-	return &role.Role{
-		ID:             stubRoleID,
-		Name:           roleCode + stubRoleNameSuffix,
-		RoleCode:       roleCode,
-		Description:    roleCode + stubRoleDescSuffix,
-		WorkspaceID:    stubWorkspaceID,
-		IsGradeManager: true,
-		Scope: role.PermissionScope{
-			ResourceType: role.WorkspaceResourceType,
-			ResourceID:   workspaceID,
-		},
-		UserGroupID: stubAdminUserGroupID,
-	}, nil
+	for _, r := range roles {
+		if r.RoleCode == roleCode {
+			return r, nil
+		}
+	}
+	return nil, errors.Wrapf(role.ErrRoleNotFound, "role %s in workspace %s", roleCode, workspaceID)
 }
 
 // ListRoleMembers 列出指定角色的成员
@@ -290,6 +287,62 @@ func defaultStubRoleMembers(roleID string) []string {
 	case stubOperatorRoleID:
 		return []string{"operator"}
 	}
+	return nil
+}
+
+// CreateCustomRole 在进程内创建自定义角色并加入初始成员
+func (m *StubAllowAnyManager) CreateCustomRole(
+	_ context.Context, displayName, description string, data bkiam.CustomRoleData, members []string,
+) (*role.Role, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	roleCode := role.GenCustomRoleCode()
+	r := &role.Role{
+		ID:          uuid.NewString(),
+		Name:        role.GenWorkspaceRoleName(data.WorkspaceID, roleCode),
+		RoleCode:    roleCode,
+		Description: description,
+		WorkspaceID: data.WorkspaceID,
+		Scope:       role.PermissionScope{ResourceType: role.WorkspaceResourceType, ResourceID: data.WorkspaceID},
+		DisplayName: displayName,
+		Permissions: data.Permissions,
+		AppScope:    &data.AppScope,
+		EnvScope:    &data.EnvScope,
+	}
+	m.customRoles = append(m.customRoles, r)
+	if len(members) > 0 {
+		if m.roleMembers == nil {
+			m.roleMembers = make(map[string][]string)
+		}
+		m.roleMembers[r.ID] = lo.Uniq(members)
+	}
+	return r, nil
+}
+
+// UpdateCustomRole 更新进程内的自定义角色
+func (m *StubAllowAnyManager) UpdateCustomRole(
+	_ context.Context, roleID, displayName, description string, data bkiam.CustomRoleData,
+) (*role.Role, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	r, ok := lo.Find(m.customRoles, func(r *role.Role) bool { return r.ID == roleID })
+	if !ok {
+		return nil, errors.Wrapf(bkiam.ErrNotCustomRole, "update role %s", roleID)
+	}
+	r.DisplayName, r.Description = displayName, description
+	r.Permissions, r.AppScope, r.EnvScope = data.Permissions, &data.AppScope, &data.EnvScope
+	return r, nil
+}
+
+// DeleteCustomRole 删除进程内的自定义角色
+func (m *StubAllowAnyManager) DeleteCustomRole(_ context.Context, roleID string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if !lo.ContainsBy(m.customRoles, func(r *role.Role) bool { return r.ID == roleID }) {
+		return errors.Wrapf(bkiam.ErrNotCustomRole, "delete role %s", roleID)
+	}
+	m.customRoles = lo.Reject(m.customRoles, func(r *role.Role, _ int) bool { return r.ID == roleID })
+	delete(m.roleMembers, roleID)
 	return nil
 }
 
@@ -341,8 +394,16 @@ func (m *StubAllowAnyManager) DeleteRoleForUsers(_ context.Context, roleID strin
 	return nil
 }
 
-// DeleteAllRolesByWorkspaceID stub 函数不做实际删除动作
-func (m *StubAllowAnyManager) DeleteAllRolesByWorkspaceID(_ context.Context, _ string) error {
+// DeleteAllRolesByWorkspaceID 清理进程内属于该工作空间的自定义角色及成员
+func (m *StubAllowAnyManager) DeleteAllRolesByWorkspaceID(_ context.Context, workspaceID string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, r := range m.customRoles {
+		if r.WorkspaceID == workspaceID {
+			delete(m.roleMembers, r.ID)
+		}
+	}
+	m.customRoles = lo.Reject(m.customRoles, func(r *role.Role, _ int) bool { return r.WorkspaceID == workspaceID })
 	return nil
 }
 

@@ -100,6 +100,8 @@ type UserRoleManager interface {
 		userGroupID int,
 		authScopes []types.AuthorizationScope,
 	) error
+	// RevokeUserGroupActions 撤销用户组在 system 下指定 actions 的全部授权（不区分资源）。
+	RevokeUserGroupActions(ctx context.Context, userGroupID int, system string, actionIDs []string) error
 	// AddUserGroupMembers 添加用户组成员，其中 expiredAt 为过期时间戳。
 	AddUserGroupMembers(
 		ctx context.Context,

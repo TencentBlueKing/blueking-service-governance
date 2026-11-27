@@ -74,6 +74,10 @@ func (s *EnvService) Update(
 		return errors.Wrap(err, "get environment")
 	}
 
+	if updateData.Type != nil && *updateData.Type != environment.Type && environment.IsFeatureEnv() {
+		return errors.New("cannot update type of feature environment")
+	}
+
 	finalCluster := applyClusterUpdate(environment.Cluster, updateData)
 
 	// 更新集群信息时, 需要检查环境是否有部署应用
@@ -93,6 +97,20 @@ func (s *EnvService) Update(
 			err = rewriteWriteErrIfClusterOccupied(ctx, s.db, finalCluster, envID, err)
 		}
 		return errors.Wrap(err, "update environment")
+	}
+
+	// 标准环境类型变更时，同步刷新其名下特性环境继承的 type 冗余展示字段
+	if !environment.IsFeatureEnv() && updateData.Type != nil && *updateData.Type != environment.Type {
+		if _, syncErr := store.Of(s.db, model.EnvMeta).UpdateMany(
+			ctx,
+			bson.M{"type": *updateData.Type},
+			model.InWorkspace(environment.WorkspaceID),
+			store.Where("kind", model.EnvironmentKindFeature),
+			store.Where("sourceEnvID", envID),
+			store.KeepUpdatedAt(),
+		); syncErr != nil {
+			return errors.Wrap(syncErr, "sync feature environment types")
+		}
 	}
 
 	updatedEnv, err := store.Of(s.db, model.EnvMeta).GetByID(ctx, envID)

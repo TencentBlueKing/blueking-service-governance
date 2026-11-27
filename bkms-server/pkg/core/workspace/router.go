@@ -27,13 +27,21 @@ type WorkspaceHandler interface {
 	ListWorkspacesOverview(c *gin.Context)
 	GetWorkspace(c *gin.Context)
 	GetUserStatistics(c *gin.Context)
-	ListWorkspaceRoleMemberGroups(c *gin.Context)
 	// 创建与更新
 	CreateWorkspace(c *gin.Context)
 	UpdateWorkspaceInfo(c *gin.Context)
+	// 角色管理
+	ListWorkspaceRoles(c *gin.Context)
+	CreateWorkspaceRole(c *gin.Context)
+	UpdateWorkspaceRole(c *gin.Context)
+	DeleteWorkspaceRole(c *gin.Context)
 	// 成员管理
-	AddWorkspaceUser(c *gin.Context)
+	ListWorkspaceRoleUsers(c *gin.Context)
+	AddWorkspaceRoleUser(c *gin.Context)
+	RemoveWorkspaceRoleUser(c *gin.Context)
+	ListWorkspaceUsers(c *gin.Context)
 	RemoveWorkspaceUser(c *gin.Context)
+	ListWorkspaceEnvDeployers(c *gin.Context)
 	// 状态与删除
 	SetWorkspaceState(c *gin.Context)
 	DeleteWorkspace(c *gin.Context)
@@ -51,16 +59,28 @@ func Register(rg *gin.RouterGroup, h WorkspaceHandler) {
 	rg.GET("/workspaces", h.ListWorkspaces)
 	rg.GET("/workspaces-overview", h.ListWorkspacesOverview)
 	rg.GET("/workspaces/:workspaceID", h.GetWorkspace)
-	rg.GET("/workspaces/:workspaceID/role-member-groups", h.ListWorkspaceRoleMemberGroups)
 	rg.GET("/user-statistics", h.GetUserStatistics)
 
 	// 创建与更新
 	rg.POST("/workspaces", h.CreateWorkspace)
 	rg.PUT("/workspaces/:workspaceID/info", h.UpdateWorkspaceInfo)
 
+	// 角色管理
+	rg.GET("/workspaces/:workspaceID/roles", h.ListWorkspaceRoles)
+	rg.POST("/workspaces/:workspaceID/roles", h.CreateWorkspaceRole)
+	rg.PUT("/workspaces/:workspaceID/roles/:roleCode", h.UpdateWorkspaceRole)
+	rg.DELETE("/workspaces/:workspaceID/roles/:roleCode", h.DeleteWorkspaceRole)
+
 	// 成员管理
-	rg.POST("/workspaces/:workspaceID/roles/:roleCode/users", h.AddWorkspaceUser)
+	rg.GET("/workspaces/:workspaceID/roles/:roleCode/users", h.ListWorkspaceRoleUsers)
+	rg.POST("/workspaces/:workspaceID/roles/:roleCode/users", h.AddWorkspaceRoleUser)
+	rg.DELETE("/workspaces/:workspaceID/roles/:roleCode/users/:userID", h.RemoveWorkspaceRoleUser)
+	// 按成员查看角色
+	rg.GET("/workspaces/:workspaceID/users", h.ListWorkspaceUsers)
+	// 退出空间：移出该用户在空间内的全部角色
 	rg.DELETE("/workspaces/:workspaceID/users/:userID", h.RemoveWorkspaceUser)
+	// 各标准环境的可部署人员
+	rg.GET("/workspaces/:workspaceID/env-deployers", h.ListWorkspaceEnvDeployers)
 
 	// 状态与删除
 	rg.PATCH("/workspaces/:workspaceID/state", h.SetWorkspaceState)

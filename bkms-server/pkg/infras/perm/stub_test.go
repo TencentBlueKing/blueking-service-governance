@@ -23,6 +23,10 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/pkg/errors"
+
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkiam"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/bkintegrations/bkiam/role"
 )
 
 var _ = Describe("StubAllowAnyManager", func() {
@@ -107,6 +111,41 @@ var _ = Describe("StubAllowAnyManager", func() {
 			Expect(stub.CreateWorkspaceAdmin(ctx, "ws", "name", []string{"u"}, "ci", "bcs", "repo")).To(Succeed())
 			Expect(stub.CreateWorkspaceScopeBuiltinRoles(ctx, "ws", "name", "ci", "bcs", "repo")).To(Succeed())
 			Expect(stub.DeleteAllRolesByWorkspaceID(ctx, "ws")).To(Succeed())
+		})
+
+		It("keeps custom roles in memory through create, update and delete", func() {
+			data := bkiam.CustomRoleData{
+				WorkspaceID: "ws-1",
+				Permissions: []role.Permission{role.Perm.SpaceView},
+				AppScope:    role.AppScope{Mode: role.AppScopeAll},
+				EnvScope:    role.EnvScope{Mode: role.EnvScopeTypes, EnvTypes: []string{"test"}},
+			}
+			created, err := stub.CreateCustomRole(ctx, "non-prod", "", data, []string{"bob"})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(created.IsCustom()).To(BeTrue())
+			Expect(stub.ListRoleMembers(ctx, created.ID)).To(ConsistOf("bob"))
+
+			roles, err := stub.ListRoles(ctx, "ws-1")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(roles).To(HaveLen(5))
+			otherRoles, err := stub.ListRoles(ctx, "ws-2")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(otherRoles).To(HaveLen(4))
+
+			updated, err := stub.UpdateCustomRole(ctx, created.ID, "renamed", "", data)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(updated.DisplayName).To(Equal("renamed"))
+
+			got, err := stub.GetRole(ctx, "ws-1", created.RoleCode)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(got.ID).To(Equal(created.ID))
+			Expect(got.DisplayName).To(Equal("renamed"))
+			_, err = stub.GetRole(ctx, "ws-2", created.RoleCode)
+			Expect(errors.Is(err, role.ErrRoleNotFound)).To(BeTrue())
+
+			Expect(stub.DeleteCustomRole(ctx, created.ID)).To(Succeed())
+			_, err = stub.GetRole(ctx, "ws-1", created.RoleCode)
+			Expect(errors.Is(err, role.ErrRoleNotFound)).To(BeTrue())
 		})
 	})
 })

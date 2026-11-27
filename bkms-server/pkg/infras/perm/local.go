@@ -51,6 +51,14 @@ type iamServicer interface {
 	ListRoleMembers(ctx context.Context, roleID string) ([]string, error)
 	DeleteAllRolesByWorkspaceID(ctx context.Context, workspaceID string) error
 
+	CreateCustomRole(
+		ctx context.Context, displayName, description string, data bkiam.CustomRoleData, members []string,
+	) (*role.Role, error)
+	UpdateCustomRole(
+		ctx context.Context, roleID, displayName, description string, data bkiam.CustomRoleData,
+	) (*role.Role, error)
+	DeleteCustomRole(ctx context.Context, roleID string) error
+
 	WorkspaceCreateIsAllowed(ctx context.Context, username string) (bool, error)
 	WorkspaceActionIsAllowed(ctx context.Context, username, workspaceID, actionID string) (bool, error)
 	WorkspacesMultiActionsAllowed(
@@ -391,7 +399,7 @@ func (m *LocalManager) ListRoles(ctx context.Context, workspaceID string) ([]*ro
 // GetRole 获取指定工作空间下指定角色的详细信息
 //
 // 行为保持稳定：先列举工作空间的角色，再基于 RoleCode 匹配，找不到时返回
-// "role not found"。
+// role.ErrRoleNotFound。
 func (m *LocalManager) GetRole(ctx context.Context, workspaceID, roleCode string) (*role.Role, error) {
 	roles, err := m.ListRoles(ctx, workspaceID)
 	if err != nil {
@@ -402,7 +410,7 @@ func (m *LocalManager) GetRole(ctx context.Context, workspaceID, roleCode string
 			return r, nil
 		}
 	}
-	return nil, errors.New("role not found")
+	return nil, errors.Wrapf(role.ErrRoleNotFound, "role %s in workspace %s", roleCode, workspaceID)
 }
 
 // ListRoleMembers 列出指定角色的成员
@@ -416,6 +424,36 @@ func (m *LocalManager) ListRoleMembers(ctx context.Context, roleID string) ([]st
 		members = lo.Without(members, account.ID)
 	}
 	return members, nil
+}
+
+// CreateCustomRole 创建自定义角色、授权并加入初始成员
+func (m *LocalManager) CreateCustomRole(
+	ctx context.Context, displayName, description string, data bkiam.CustomRoleData, members []string,
+) (*role.Role, error) {
+	r, err := m.svc.CreateCustomRole(ctx, displayName, description, data, members)
+	if err != nil {
+		return nil, errors.Wrap(err, "create custom role")
+	}
+	return r, nil
+}
+
+// UpdateCustomRole 修改自定义角色并重新授权
+func (m *LocalManager) UpdateCustomRole(
+	ctx context.Context, roleID, displayName, description string, data bkiam.CustomRoleData,
+) (*role.Role, error) {
+	r, err := m.svc.UpdateCustomRole(ctx, roleID, displayName, description, data)
+	if err != nil {
+		return nil, errors.Wrap(err, "update custom role")
+	}
+	return r, nil
+}
+
+// DeleteCustomRole 删除自定义角色及其 IAM 用户组
+func (m *LocalManager) DeleteCustomRole(ctx context.Context, roleID string) error {
+	if err := m.svc.DeleteCustomRole(ctx, roleID); err != nil {
+		return errors.Wrap(err, "delete custom role")
+	}
+	return nil
 }
 
 // CreateWorkspaceAdmin 创建工作空间管理员

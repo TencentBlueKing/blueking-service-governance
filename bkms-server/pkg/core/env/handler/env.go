@@ -30,8 +30,10 @@ import (
 	bkmsenv "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env"
 	envmodel "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/model"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/env/serializer"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/core/workspace/customrole"
 	deploystatus "github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/deploy/status"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/account/auth"
+	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/perm"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/infras/trafficmanager"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/misc/audit"
 	"github.com/TencentBlueKing/blueking-service-governance/bkms-server/pkg/observability/bkmonitor"
@@ -159,6 +161,11 @@ func (h *Handler) CreateEnv(c *gin.Context) {
 				bkerrs.AbortWithErr(c, bkerrs.Wrap(cErr, bkerrs.ErrCodeInternalError, "bind apm to env"))
 				return
 			}
+		}
+		// 按环境类型覆盖新环境的自定义角色，需要补上新环境 APM 应用的查看权限。环境已经创建成功，
+		// 这里失败只记录日志，重新保存这些角色即可补齐
+		if rErr := customrole.ReapplyEnvApm(ctx, h.registry.DB, perm.NewManager(), envData); rErr != nil {
+			log.Errorf(ctx, "reapply custom roles covering new env %s/%s failed: %v", ws.ID, input.Name, rErr)
 		}
 	}
 
@@ -512,6 +519,22 @@ func (h *Handler) UpdateEnvBasicInfo(c *gin.Context) {
 		return
 	}
 
+	typeChanged := input.Type != nil && *input.Type != env.Type
+	if typeChanged {
+		if env.IsFeatureEnv() {
+			bkerrs.AbortWithErr(
+				c, bkerrs.New(bkerrs.ErrCodeInvalidRequest, "cannot update type of feature environment"),
+			)
+			return
+		}
+		// 修改环境类型还会改变该环境在 IAM 中的 env_type 归属，要求调用方对目标环境类型同样具备编辑权限，
+		// 防止仅拥有单环境或部分环境类型的角色借修改类型越权或将自己锁死。
+		if err = perm.NewManager().HasEditEnvPerm(ctx, env.WorkspaceID, *input.Type, env.ID.Hex()); err != nil {
+			bkerrs.AbortWithErr(c, bkerrs.WrapIAMNoPermission(err, env.WorkspaceID, "check target env type perm"))
+			return
+		}
+	}
+
 	updateData := &envmodel.EnvironmentUpdateData{}
 	if input.DisplayName != nil {
 		updateData.DisplayName = input.DisplayName
@@ -524,6 +547,14 @@ func (h *Handler) UpdateEnvBasicInfo(c *gin.Context) {
 	if err = svc.Update(ctx, env.ID, updateData); err != nil {
 		bkerrs.AbortWithErr(c, bkerrs.Wrap(err, bkerrs.ErrCodeInvalidRequest, "update env basic info"))
 		return
+	}
+	if typeChanged {
+		after := *env
+		after.Type = *input.Type
+		if rErr := customrole.ReapplyEnv(ctx, h.registry.DB, perm.NewManager(), env, &after); rErr != nil {
+			log.Errorf(ctx, "reapply custom roles after env %s/%s type changed from %s to %s failed: %v",
+				env.WorkspaceID, env.Name, env.Type, *input.Type, rErr)
+		}
 	}
 
 	go audit.AddOperationRecordAsync(
