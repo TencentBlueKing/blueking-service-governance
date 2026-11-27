@@ -27,7 +27,7 @@ type FrontendFeaturesOutput struct {
 	// 所有集群都使用平台托管接入点
 	PolarisWorkspaceAccessPoint bool `json:"polarisWorkspaceAccessPoint"`
 	// 是否由空间登记集群 Token 并接入集群。为 false 时前端隐藏集群管理入口，所有集群都使用平台 Token
-	WorkspaceClusterToken bool `json:"workspaceClusterToken"`
+	EnableWorkspaceClusterToken bool `json:"enableWorkspaceClusterToken"`
 	// 是否为多租户模式。为 true 时前端需要展示租户信息、按用户所属租户选择和展示用户
 	EnableMultiTenantMode bool `json:"enableMultiTenantMode"`
 	// 制品库是否为独立部署（不接入权限中心，改用制品库账号认证）
@@ -46,7 +46,7 @@ type FrontendFeaturesOutput struct {
 func NewFrontendFeaturesOutput(cfg *config.Config) *FrontendFeaturesOutput {
 	return &FrontendFeaturesOutput{
 		PolarisWorkspaceAccessPoint: cfg.Polaris.AllowWorkspaceAccessPoints,
-		WorkspaceClusterToken:       cfg.BCS.AllowWorkspaceClusterTokens,
+		EnableWorkspaceClusterToken: cfg.BCS.AllowWorkspaceClusterTokens,
 		EnableMultiTenantMode:       cfg.Tenant.EnableMultiTenantMode,
 		EnableIndependentBkRepo:     cfg.FeatureIntegrations.EnableIndependentBkRepo,
 		EnableWeTerm:                cfg.BCS.WeTermEnvID != "",

@@ -30568,12 +30568,12 @@ const docTemplate = `{
                     "description": "是否配置了 WeTerm 环境，为 false 时前端隐藏 WeTerm 入口",
                     "type": "boolean"
                 },
-                "polarisWorkspaceAccessPoint": {
-                    "description": "是否允许空间自建北极星接入点并按集群绑定。为 false 时前端隐藏接入点管理、集群绑定、组件安装等入口，\n所有集群都使用平台托管接入点",
+                "enableWorkspaceClusterToken": {
+                    "description": "是否由空间登记集群 Token 并接入集群。为 false 时前端隐藏集群管理入口，所有集群都使用平台 Token",
                     "type": "boolean"
                 },
-                "workspaceClusterToken": {
-                    "description": "是否由空间登记集群 Token 并接入集群。为 false 时前端隐藏集群管理入口，所有集群都使用平台 Token",
+                "polarisWorkspaceAccessPoint": {
+                    "description": "是否允许空间自建北极星接入点并按集群绑定。为 false 时前端隐藏接入点管理、集群绑定、组件安装等入口，\n所有集群都使用平台托管接入点",
                     "type": "boolean"
                 }
             }
